@@ -1,0 +1,25 @@
+# Milestone-1 baseline: a plain 3D U-Net. No fusion, no extra heads.
+# This is the number the fusion model has to beat, so keep it honest and
+# reasonably tuned rather than deliberately weak.
+
+# Selected by string through neurovision.models.registry.
+name: unet3d
+
+in_channels: ${data.in_channels} # 4 MRI modalities
+out_channels: ${data.num_classes} # 3 overlapping BraTS regions
+
+# Encoder widths per resolution level. 32 base channels is the usual 3D U-Net
+# starting point and fits 96^3 patches at batch_size 2 inside 16 GB.
+channels: [32, 64, 128, 256, 320]
+strides: [2, 2, 2, 2]
+num_res_units: 2
+
+norm: instance # instance norm, not batch norm — batch_size 2 is far too small for BN statistics
+activation: leakyrelu
+
+# Dropout is not only regularization here: MC-dropout uncertainty at inference
+# reuses these same layers, so a model trained at p=0.0 has no uncertainty to
+# estimate later. Keep it non-zero.
+dropout: 0.1
+
+deep_supervision: false

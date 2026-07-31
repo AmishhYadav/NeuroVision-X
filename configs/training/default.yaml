@@ -1,0 +1,52 @@
+# Default training recipe.
+
+epochs: 300
+batch_size: 2 # 96^3 patches, 16 GB VRAM. Raise only after checking memory.
+grad_accum_steps: 1 # effective batch = batch_size * grad_accum_steps
+
+# Requested, not guaranteed. neurovision.utils.device.amp_enabled(device) is the
+# final gate: AMP runs on CUDA only, and is ignored on CPU/MPS.
+amp: true
+
+optimizer:
+  name: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-5
+  betas: [0.9, 0.999]
+
+scheduler:
+  name: cosine
+  warmup_epochs: 10 # linear ramp from ~0; stops early transformer blocks diverging
+  min_lr: 1.0e-6
+
+loss:
+  name: dice_ce # MONAI DiceCELoss
+  dice_weight: 1.0
+  ce_weight: 1.0
+  sigmoid: true # overlapping BraTS regions — sigmoid per channel, not softmax
+
+grad_clip_norm: 1.0
+
+# --- Validation and logging ---
+val_interval: 1 # epochs between validation passes
+log_interval: 20 # optimizer steps between W&B logs
+sliding_window:
+  roi_size: ${data.patch_size}
+  sw_batch_size: 4
+  overlap: 0.5
+
+# --- Checkpointing ---
+# Kaggle kills sessions at 12 hours, so resume is the foundation, not a feature.
+# A checkpoint carries model, optimizer, scheduler, AMP scaler, epoch, global
+# step, RNG states, and the W&B run id.
+checkpoint:
+  dir: ${output_dir}/checkpoints
+  save_every_n_epochs: 1
+  keep_last_n: 2 # Kaggle working-dir quota is small; do not keep every epoch
+  monitor: val/dice_mean
+  mode: max
+  resume: null # path to a checkpoint, or null to start fresh
+
+# Wall-clock stop, in hours. Set below Kaggle's 12h limit so the run saves a
+# final checkpoint and exits cleanly instead of being killed mid-epoch.
+max_hours: 11.0

@@ -1,6 +1,45 @@
 # Hydra root config.
 #
-# Placeholder — intentionally empty. The `defaults:` list is added once the
-# config groups below it exist (configs/data, configs/model, configs/training).
-# Hydra errors on a defaults entry pointing at a missing group file, so nothing
-# is listed yet.
+# Compose order matters: _self_ comes LAST so that values defined in this file
+# override anything the groups above set. Put it first and the groups would win.
+
+defaults:
+  - data: brats
+  - model: unet3d
+  - training: default
+  - _self_
+
+# --- Run identity ---
+experiment_name: baseline_unet3d
+seed: 42
+
+# Resolved once, by neurovision.utils.device.get_device.
+# "auto" -> cuda if available else cpu. Never mps unless asked explicitly.
+device: auto
+
+# Relative on purpose. Combined with hydra.job.chdir=false below, this stays
+# stable whether the code runs from the repo root on macOS or /kaggle/working.
+output_dir: outputs/${experiment_name}
+
+# --- Experiment tracking ---
+wandb:
+  project: neurovision-x
+  entity: null # null -> your default W&B entity
+  mode: online # online | offline | disabled ("disabled" for local smoke tests)
+  tags: []
+  group: null # set to group seeds of the same experiment together
+  # Populated at runtime and written into the checkpoint, so a resumed run
+  # continues logging to the SAME W&B run instead of starting a new one.
+  run_id: null
+
+hydra:
+  job:
+    # Hydra 1.1 chdir'd into the run dir by default; 1.2+ does not. Pinning it
+    # explicitly because every relative path in this project assumes the cwd
+    # does not move out from under it mid-run.
+    chdir: false
+  run:
+    dir: outputs/hydra/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: outputs/hydra/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
