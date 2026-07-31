@@ -1,0 +1,37 @@
+# NeuroVision-X — fixed stack, exact pins.
+# Resolved for Python 3.11 on 2026-07-31.
+#
+# Kaggle note: Kaggle images ship their own CUDA-matched torch/torchvision.
+# On Kaggle, install this file WITHOUT torch/torchvision (use the notebook's
+# preinstalled build) or you will pull a CPU wheel and lose the GPU.
+
+# --- Core deep learning ---
+torch==2.13.0
+torchvision==0.28.0
+monai==1.6.0
+
+# --- Medical imaging I/O ---
+nibabel==5.4.2
+SimpleITK==2.5.6
+
+# --- Numerics / volumetric ops ---
+numpy==2.4.6
+pandas==3.0.5
+scipy==1.17.1
+scikit-image==0.26.0
+
+# --- Config and experiment tracking ---
+hydra-core==1.3.4
+wandb==0.28.1
+
+# --- Explainability ---
+captum==0.9.0
+
+# --- Visualization and CLI ---
+matplotlib==3.11.1
+tqdm==4.70.0
+
+# --- Dev tooling ---
+pytest==9.1.1
+ruff==0.16.1
+black==26.5.1

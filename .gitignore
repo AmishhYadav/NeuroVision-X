@@ -1,0 +1,23 @@
+# Data and experiment artifacts — never committed
+data/
+outputs/
+checkpoints/
+wandb/
+*.npy
+*.nii.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

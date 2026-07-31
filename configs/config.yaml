@@ -1,0 +1,6 @@
+# Hydra root config.
+#
+# Placeholder — intentionally empty. The `defaults:` list is added once the
+# config groups below it exist (configs/data, configs/model, configs/training).
+# Hydra errors on a defaults entry pointing at a missing group file, so nothing
+# is listed yet.
