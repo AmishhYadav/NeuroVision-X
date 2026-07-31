@@ -1,0 +1,35 @@
+# SwinUNETR baseline: a Swin Transformer encoder with a CNN-style decoder.
+# The second Milestone-1 baseline, alongside unet3d — the fusion model has to
+# beat both.
+
+# Selected by string through neurovision.models.registry.
+name: swinunetr
+
+in_channels: ${data.in_channels} # 4 MRI modalities
+out_channels: ${data.num_classes} # 3 overlapping BraTS regions
+
+# Base embedding width. feature_size=48 is "SwinUNETR-B", the configuration
+# most BraTS papers report, and measures at 62.19M parameters here. It must
+# be divisible by 12: internally it is split evenly across the attention
+# heads (3, 6, 12, 24 below), and an indivisible value would leave a
+# fractional per-head width.
+feature_size: 48
+depths: [2, 2, 2, 2] # number of Swin transformer blocks per encoder stage
+num_heads: [3, 6, 12, 24] # attention heads per stage, doubling with depth
+
+norm_name: instance # instance norm in the decoder, same reasoning as unet3d.yaml: batch_size 2 is too small for batch norm statistics
+
+# Regularization inside the Swin blocks. All 0.0 for now, same caveat as
+# unet3d.yaml's dropout: MC-dropout uncertainty at inference needs a non-zero
+# dropout to actually produce a spread of predictions, so this will need
+# revisiting once uncertainty estimation is implemented.
+drop_rate: 0.0 # standard dropout after the MLP layers
+attn_drop_rate: 0.0 # dropout on attention weights
+dropout_path_rate: 0.0 # stochastic depth (randomly skips whole blocks during training)
+
+# Gradient checkpointing: recomputes activations during the backward pass
+# instead of storing them from the forward pass. This trades roughly 20-30%
+# extra compute time for a large reduction in activation memory. On by
+# default because 62M parameters at a 96^3 patch is tight against the 16 GB
+# P100 budget.
+use_checkpoint: true

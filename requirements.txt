@@ -9,6 +9,11 @@
 torch==2.13.0
 torchvision==0.28.0
 monai==1.6.0
+# MONAI optional extra, not pulled in by monai itself. SwinUNETR's forward pass
+# calls einops.rearrange, so without this the Swin encoder raises
+# OptionalImportError at run time rather than at import time. Pure Python, no
+# native deps, and the Kaggle image already ships it.
+einops==0.8.2
 
 # --- Medical imaging I/O ---
 nibabel==5.4.2
