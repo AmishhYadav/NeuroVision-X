@@ -32,3 +32,7 @@ known-first-party = ["neurovision"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Put src/ on sys.path so `pytest` works from the repo root without an
+# editable install and without PYTHONPATH juggling. Keeps the Kaggle notebook
+# driver simple too — it can run the suite before training with one command.
+pythonpath = ["src"]

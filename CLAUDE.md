@@ -186,7 +186,18 @@ neurovision-x/
 
 > Update this section as the project moves. Claude Code reads it to know where we are.
 
-- **Phase:** 0 — repository scaffolding
+- **Phase:** 0 — repository scaffolding (utils complete)
 - **Milestone:** 1 (baselines)
-- **Working:** nothing yet
-- **Next:** subagent setup, then repo skeleton, config system, utils
+- **Working:**
+  - Repo skeleton, `.gitignore`, `pyproject.toml` (Ruff E/F/I/UP, line length 100, Black), `requirements.txt` (exact pins), README
+  - Local env: `.venv` on Python 3.11.15, full stack installed (torch 2.13.0, MONAI 1.6.0)
+  - `src/neurovision/utils/` — `device.py` (`get_device`, `amp_enabled`), `seed.py` (`set_seed`), `logging.py` (`setup_logging`), `io.py` (json/yaml/`ensure_dir`)
+  - `tests/test_utils.py` — 34 tests, CPU, ~2s. Bare `pytest` works from repo root (`pythonpath = ["src"]`)
+- **Next:** Hydra config system — `configs/config.yaml` is a comment-only placeholder with no `defaults:` list until the first group configs (`data/`, `model/`, `training/`) exist
+- **Not done yet:** repo is **not under git** — no `git init` has been run
+
+### Decisions worth remembering
+
+- `get_device` raises on an explicit `"cuda"` request when CUDA is absent rather than falling back to CPU — a silent fallback would burn a 12-hour Kaggle session at CPU speed. `"auto"` never resolves to MPS.
+- `set_seed` restores `cudnn.benchmark = True` after MONAI's `set_determinism` turns it off. 3D conv backward kernels are nondeterministic regardless, so the project reports mean ± std across seeds; disabling autotuning cost throughput on fixed 96³ patches without buying a guarantee we never claimed. Pass `cudnn_benchmark=False` for variable-shape work such as sliding-window inference.
+- On Kaggle, install `requirements.txt` **without** `torch`/`torchvision` — the image ships a CUDA-matched build, and pip would replace it with a wheel that loses the GPU.
