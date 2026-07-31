@@ -196,8 +196,12 @@ neurovision-x/
   - `src/neurovision/data/brats.py` — `scan_brats_root` handles both BraTS 2020 (`_t1`) and 2023+ (`-t1n`) naming, `write_case_index`
   - `src/neurovision/data/preprocessing.py` — nonzero z-score, nonzero-bbox crop, label remap, float16 image / uint8 label `.npy` + per-case `meta.json`
   - `scripts/preprocess.py` — Hydra-driven, multiprocessing + tqdm, resumable (skips processed cases), writes `metadata.csv`, prints total output size with a Kaggle-limit warning
-  - **91 tests, CPU, ~3s.** Bare `pytest` works from repo root (`pythonpath = ["src"]`)
-- **Next:** MONAI transform pipeline (`BratsCase`/`.npy` → `{"image", "label"}` dicts, region derivation ET/TC/WT, patch sampling), then the train/val splitter
+  - `src/neurovision/visualization/qc.py` — `plot_case_slices` (4 modalities × 3 planes, colour label overlay), `plot_intensity_histograms` (before/after normalization)
+  - `notebooks/01_verify_preprocessing.ipynb` — visual QC on 3 cases. Reads BOTH the raw tree (for "before" histograms) and the preprocessed output. Set `BRATS_RAW`, optionally `NEUROVISION_PREP_DIR`
+  - `src/neurovision/data/dataset.py` — `build_data_dicts`, `make_splits` (frozen seeded 70/15/15), `load_splits`, `build_dataset` (Dataset / CacheDataset / PersistentDataset by config string)
+  - `src/neurovision/data/transforms.py` — `ConvertToRegionsd` (labels → ET/TC/WT), `build_train_transforms`, `build_val_transforms`
+  - **145 tests, CPU, ~3.5s.** Bare `pytest` works from repo root (`pythonpath = ["src"]`)
+- **Next:** losses (`DiceCELoss` wired through a registry, sigmoid for overlapping regions), metrics (per-region Dice, HD95), then the U-Net baseline model
 - **Not done yet:** repo is **not under git** — no `git init` has been run
 
 ### Decisions worth remembering
@@ -209,3 +213,7 @@ neurovision-x/
 - The preprocessing crop bbox is computed from the **raw** image, not the normalized one. A channel with constant foreground has `std == 0`, so `normalize_nonzero` zeros it out and its support would vanish from the union bbox — cropping away most of the brain.
 - `meta.json`'s `bbox` + `original_shape` are load-bearing: predictions must be un-cropped back into original geometry to be a valid BraTS submission.
 - **Dataset size:** ~38 MB/case preprocessed (float16 image + uint8 label). The full 1251-case BraTS 2021 is roughly 48 GB, over Kaggle's per-dataset guideline. Plan on a subset via `data.preprocessing.limit=N`; the script prints actual size and warns past 20 GB.
+- **Never use MONAI's `ConvertToMultiChannelBasedOnBratsClassesd`.** It tests for enhancing tumor at raw label `4`, but preprocessing already remapped labels to `{0,1,2,3}`. It would produce an all-zero ET channel silently — a model that never learns enhancing tumor, with no error anywhere. Use `neurovision.data.transforms.ConvertToRegionsd`.
+- **Transform order:** crop before converting to regions. `RandCropByPosNegLabeld` needs the single-channel integer label to find foreground; a 3-channel binary mask breaks its sampling.
+- **Kaggle uses `dataset_type: dataset` (no caching).** Offline preprocessing already removed the expensive work, so the cacheable prefix is just an `.npy` memmap read. `CacheDataset` costs ~120 MB RAM per case (float32 after region expansion) against ~13 GB total; `PersistentDataset` writes a float32 cache ~3x larger than the float16 source. Use `cache` locally on a small subset when iterating on transforms.
+- **Splits are frozen once written** (`configs/data/splits.yaml`). Adding cases later raises rather than reshuffling val/test under an already-reported result; regenerating takes an explicit `overwrite=True`.
