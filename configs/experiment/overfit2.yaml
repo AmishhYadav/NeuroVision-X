@@ -1,0 +1,93 @@
+# @package _global_
+#
+# Overfit sanity check — the first thing to run against real data, and the
+# first thing to re-run whenever the data pipeline, model, or loss changes.
+#
+#   python scripts/train.py +experiment=overfit2 data.root_dir=/path/to/brats
+#
+# The goal is MEMORIZATION, not generalization. Two cases, no augmentation,
+# a high learning rate, and validation on those same two cases. A correct
+# pipeline drives Dice to ~0.95+ on every region. A pipeline with a wiring
+# bug plateaus low no matter how long it trains, and does so without raising
+# anything — which is exactly why this config exists.
+#
+# Nothing measured here may be reported. Train and val are the same cases.
+
+experiment_name: overfit2
+
+data:
+  # First 2 cases of the frozen train split, used for BOTH train and val.
+  # See the `overfit_n` comment in configs/data/brats.yaml.
+  overfit_n: 2
+
+  # Every crop is tumor-centred. With only 2 cases, background crops waste
+  # most of the (already tiny) step budget on empty patches and make the
+  # signal noisier — this is a debugging run, not a realistic sampling regime.
+  pos_neg_ratio: [1, 0]
+  samples_per_volume: 4
+
+  # 2 cases fit in RAM trivially, and caching removes the .npy read from the
+  # inner loop — worth it here specifically because the dataset is 2 items
+  # being read several hundred times.
+  dataset_type: cache
+  cache_rate: 1.0
+  num_workers: 0 # 2 items; worker processes only make failures harder to read
+
+  # Augmentation OFF. Note the mechanism: build_train_transforms hardcodes
+  # prob=1.0 on the two intensity transforms, so setting a probability to 0
+  # would NOT disable them. Setting their magnitudes to 0.0 makes them exact
+  # no-ops instead — `v * (1 + 0)` and `v + 0`.
+  #
+  # Augmentation is disabled because it is regularization, and regularization
+  # is the enemy of a memorization test: it actively prevents the model from
+  # fitting 2 cases exactly, which would blur the pass/fail signal.
+  augment:
+    flip_prob: 0.0
+    rot90_prob: 0.0
+    noise_prob: 0.0
+    noise_std: 0.0
+    scale_intensity_factor: 0.0
+    shift_intensity_offset: 0.0
+
+model:
+  # Dropout OFF for the same reason as augmentation. Non-zero dropout is
+  # required later for MC-dropout uncertainty, but here it just caps how well
+  # the model can memorize and would make a healthy run look broken.
+  dropout: 0.0
+
+training:
+  # 2 cases x samples_per_volume 4 / batch_size 1 = 2 optimizer steps/epoch,
+  # so "epochs" here is small. 400 epochs is ~800 steps, comfortably enough
+  # to memorize 2 volumes with a correct pipeline.
+  epochs: 400
+  batch_size: 1
+  grad_accum_steps: 1
+
+  optimizer:
+    # 10x the default 1e-4. Memorizing 2 cases does not need careful
+    # optimization, and a high LR makes a broken pipeline fail fast and
+    # obviously rather than creeping upward for an hour.
+    lr: 1.0e-3
+
+  scheduler:
+    # Short warmup: with only 2 steps/epoch the default 10 epochs of warmup
+    # would be a meaningful slice of the whole run.
+    warmup_epochs: 5
+    min_lr: 1.0e-5
+
+  # Validation is full sliding-window inference over whole volumes and is the
+  # expensive part here, so it does not need to run every epoch.
+  val_interval: 20
+
+  # Regularization off, matching the reasoning above.
+  grad_clip_norm: 1.0
+
+  checkpoint:
+    save_every_n_epochs: 100
+    keep_last_n: 1
+    monitor: val/dice_mean
+    mode: max
+
+wandb:
+  tags: [sanity, overfit]
+  group: sanity

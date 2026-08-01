@@ -16,6 +16,7 @@ regardless of where the repo is checked out.
 from __future__ import annotations
 
 import importlib.util
+import logging
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -281,3 +282,62 @@ def test_select_resume_checkpoint_explicit_path_takes_precedence(tmp_path: Path)
 
     assert selected == explicit_path
     assert selected != auto_discovered
+
+
+# ---------------------------------------------------------------------------
+# 5. overfit_n: train and val collapse onto the same N cases
+# ---------------------------------------------------------------------------
+
+
+def test_overfit_n_uses_same_cases_for_train_and_val(tmp_path: Path, caplog):
+    """`data.overfit_n=N` must select N train cases and validate on those same ones.
+
+    This backs configs/experiment/overfit2.yaml. If it silently kept the real
+    val split, the sanity check would measure generalization on unseen cases
+    instead of memorization, and a pipeline bug would no longer be separable
+    from ordinary underfitting.
+    """
+    prep_dir = tmp_path / "preprocessed"
+    for case_id in ("case_000", "case_001", "case_002"):
+        _write_case(prep_dir, case_id)
+    splits_path = tmp_path / "splits.yaml"
+    _write_splits(
+        splits_path,
+        train=["case_000", "case_001", "case_002"],
+        val=["case_002"],
+        test=["case_002"],
+    )
+
+    cfg = _make_cfg(tmp_path, prep_dir, splits_path, batch_size=1)
+    cfg.data.overfit_n = 2
+
+    with caplog.at_level(logging.WARNING):
+        train_loader, val_loader = build_dataloaders(cfg, torch.device("cpu"))
+
+    # 2 train cases, and val is those same 2 -- not the 1-case real val split.
+    assert len(train_loader.dataset) == 2
+    assert len(val_loader.dataset) == 2
+
+    # Validating on training data must never be silent.
+    assert any("overfit_n" in record.message for record in caplog.records)
+
+
+def test_overfit_n_absent_leaves_splits_untouched(tmp_path: Path):
+    """Without `overfit_n`, the frozen splits must be used exactly as written."""
+    prep_dir = tmp_path / "preprocessed"
+    for case_id in ("case_000", "case_001", "case_002"):
+        _write_case(prep_dir, case_id)
+    splits_path = tmp_path / "splits.yaml"
+    _write_splits(
+        splits_path,
+        train=["case_000", "case_001"],
+        val=["case_002"],
+        test=["case_002"],
+    )
+
+    cfg = _make_cfg(tmp_path, prep_dir, splits_path, batch_size=1)
+
+    train_loader, val_loader = build_dataloaders(cfg, torch.device("cpu"))
+
+    assert len(train_loader.dataset) == 2
+    assert len(val_loader.dataset) == 1

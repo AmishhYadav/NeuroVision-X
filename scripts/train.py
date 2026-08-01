@@ -73,8 +73,27 @@ def build_dataloaders(cfg: DictConfig, device: torch.device) -> tuple[DataLoader
     splits = load_splits(cfg.data.splits.path)
     prep_dir = cfg.data.preprocessing.out_dir
 
-    train_dicts = build_data_dicts(splits["train"], prep_dir)
-    val_dicts = build_data_dicts(splits["val"], prep_dir)
+    train_ids = splits["train"]
+    val_ids = splits["val"]
+
+    # Overfit sanity check: train and validate on the same handful of cases.
+    # Deliberately loud, because silently validating on training data would
+    # invalidate any number reported from this run.
+    overfit_n = cfg.data.get("overfit_n")
+    if overfit_n:
+        train_ids = list(train_ids[:overfit_n])
+        val_ids = list(train_ids)
+        logger.warning(
+            "data.overfit_n=%d: training AND validating on the same %d case(s): %s. "
+            "This is a pipeline sanity check -- the resulting metrics are memorization, "
+            "not performance, and must never be reported.",
+            overfit_n,
+            len(train_ids),
+            train_ids,
+        )
+
+    train_dicts = build_data_dicts(train_ids, prep_dir)
+    val_dicts = build_data_dicts(val_ids, prep_dir)
 
     train_transform = build_train_transforms(cfg)
     val_transform = build_val_transforms(cfg)

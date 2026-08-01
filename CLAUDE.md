@@ -206,8 +206,10 @@ neurovision-x/
   - `src/neurovision/training/checkpoint.py` — `save_checkpoint` (atomic, writes `last.pt` + optional `best.pt` + pruned `epoch_NNNN.pt`), `load_checkpoint` → `ResumeState`, `find_resume_checkpoint`. Persists model / optimizer / scheduler / AMP scaler / epoch / global step / best metric + name + mode / python+numpy+torch+CUDA RNG / W&B run ID / resolved config
   - `src/neurovision/training/trainer.py` — `Trainer` (AMP autocast + GradScaler, gradient accumulation with end-of-epoch flush, gradient clipping, linear-warmup→cosine `LambdaLR` stepped per epoch, sliding-window validation, per-epoch checkpointing, best-tracking on `cfg.training.checkpoint.monitor`, predictive `max_hours` stop, tqdm, optional W&B)
   - `scripts/train.py` — Hydra entry point. `build_dataloaders` / `init_wandb` / `select_resume_checkpoint` / `run_training` / `main`. Auto-resumes from `last.pt` in the checkpoint dir; `python scripts/train.py` is the command for BOTH starting and resuming
-  - **235 tests, CPU, ~3s.** Bare `pytest` works from repo root (`pythonpath = ["src"]`)
-- **Next:** first CPU smoke run on a few preprocessed cases, then the Kaggle baseline run
+  - `scripts/smoke_test.py` — end-to-end CPU gate. Generates 2 synthetic preprocessed cases (nested ET⊂TC⊂WT labels), composes the REAL Hydra config programmatically, runs `run_training`, asserts `last.pt`/`best.pt` exist and load under `weights_only=True`, `start_epoch == 2`, and `val/dice_mean` is finite. **~4s, exit 0/1.** Run it before every Kaggle session
+  - `tests/test_resume.py` — 7 tests, one per silent resume failure: exact weights, epoch off-by-one, Adam moment buffers, scheduler-curve continuity, `best_metric` carry-over, no in-process dependency, RNG continuity
+  - **242 tests, CPU, ~4s.** Bare `pytest` works from repo root (`pythonpath = ["src"]`)
+- **Next:** set `training.batch_size=1` (see effective-batch note above), then the Kaggle baseline run
 - **Not done yet:** repo is **not under git** — no `git init` has been run
 
 ### Decisions worth remembering

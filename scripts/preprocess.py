@@ -32,7 +32,12 @@ from tqdm import tqdm
 
 from neurovision.data.brats import BratsCase, scan_brats_root, write_case_index
 from neurovision.data.preprocessing import preprocess_case
-from neurovision.utils.io import ensure_dir
+from neurovision.utils.io import (
+    KAGGLE_DATASET_WARN_GB,
+    directory_size_bytes,
+    ensure_dir,
+    format_size,
+)
 from neurovision.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -41,10 +46,11 @@ logger = logging.getLogger(__name__)
 # any machine -- no absolute paths. Copied from scripts/show_config.py.
 _CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
 
-# Kaggle's free-tier per-dataset upload limit is roughly this many GB. This is
-# a rough planning guide, not an exact figure pulled from Kaggle's API/docs,
-# so treat crossing it as "go check", not as a hard failure.
-_KAGGLE_DATASET_LIMIT_GB = 20.0
+# directory_size_bytes / format_size / KAGGLE_DATASET_WARN_GB now live in
+# neurovision.utils.io (imported above) so that scripts/package_for_kaggle.py
+# can share the exact same size arithmetic instead of a second, possibly
+# drifting, implementation. Re-exported here as module attributes (via the
+# import above) so tests/test_preprocess_script.py keeps working unchanged.
 
 
 def _process_one(args: tuple[BratsCase, str, bool]) -> dict[str, Any]:
@@ -71,41 +77,6 @@ def _process_one(args: tuple[BratsCase, str, bool]) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - any failure must become a record, not crash the pool
         logger.warning("Case %s failed: %s", case.case_id, exc)
         return {"case_id": case.case_id, "error": str(exc)}
-
-
-def directory_size_bytes(path: str | Path) -> int:
-    """Sum the size of every file under a directory, recursively.
-
-    Args:
-        path: Directory to measure. Need not exist.
-
-    Returns:
-        Total size in bytes of all files found under `path` (including
-        nested subdirectories), or 0 if `path` does not exist or is empty.
-    """
-    root = Path(path)
-    if not root.is_dir():
-        return 0
-    return sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
-
-
-def format_size(num_bytes: int) -> str:
-    """Render a byte count as a human-readable size string.
-
-    Args:
-        num_bytes: Size in bytes.
-
-    Returns:
-        A string like `"512.00 B"`, `"3.40 MB"`, or `"12.34 GB"`, scaling by
-        1024 through B, KB, MB, GB, TB, PB (stopping at PB regardless of
-        magnitude).
-    """
-    size = float(num_bytes)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if size < 1024.0:
-            return f"{size:.2f} {unit}"
-        size /= 1024.0
-    return f"{size:.2f} PB"
 
 
 def summarize(summaries: Sequence[dict[str, Any]], out_dir: str | Path) -> dict[str, Any]:
@@ -217,12 +188,12 @@ def _print_summary(stats: dict[str, Any]) -> None:
     # Kaggle datasets have a rough per-dataset upload size ceiling. Warn loudly
     # rather than let someone discover this only after a failed upload.
     total_gb = stats["total_size_bytes"] / (1024**3)
-    if total_gb > _KAGGLE_DATASET_LIMIT_GB:
+    if total_gb > KAGGLE_DATASET_WARN_GB:
         print()
         print("!" * 70)
         print(
             f"WARNING: total output size ({stats['total_size_str']}) exceeds the "
-            f"~{_KAGGLE_DATASET_LIMIT_GB:.0f} GB Kaggle dataset guideline. "
+            f"~{KAGGLE_DATASET_WARN_GB:.0f} GB Kaggle dataset guideline. "
             "Uploading this in one Kaggle dataset will likely fail -- consider "
             "processing a subset (data.preprocessing.limit=N) or splitting the "
             "output across multiple Kaggle datasets."

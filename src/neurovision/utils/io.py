@@ -18,6 +18,13 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
+# Kaggle's free-tier per-dataset upload limit is roughly this many GB. This is
+# a rough planning guide, not an exact figure pulled from Kaggle's API/docs,
+# so treat crossing it as "go check", not as a hard failure. Shared by
+# scripts/preprocess.py and scripts/package_for_kaggle.py so the two scripts
+# can never silently disagree about what "too big" means.
+KAGGLE_DATASET_WARN_GB = 20.0
+
 
 def ensure_dir(path: str | Path) -> Path:
     """Create a directory (and any missing parents) if it does not exist.
@@ -113,3 +120,38 @@ def write_yaml(obj: Any, path: str | Path) -> None:
         # which matters for config readability (grouped, not alphabetized).
         yaml.safe_dump(obj, f, sort_keys=False, default_flow_style=False)
     logger.debug("Wrote YAML to %s", path)
+
+
+def directory_size_bytes(path: str | Path) -> int:
+    """Sum the size of every file under a directory, recursively.
+
+    Args:
+        path: Directory to measure. Need not exist.
+
+    Returns:
+        Total size in bytes of all files found under `path` (including
+        nested subdirectories), or 0 if `path` does not exist or is empty.
+    """
+    root = Path(path)
+    if not root.is_dir():
+        return 0
+    return sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+
+
+def format_size(num_bytes: int) -> str:
+    """Render a byte count as a human-readable size string.
+
+    Args:
+        num_bytes: Size in bytes.
+
+    Returns:
+        A string like `"512.00 B"`, `"3.40 MB"`, or `"12.34 GB"`, scaling by
+        1024 through B, KB, MB, GB, TB, PB (stopping at PB regardless of
+        magnitude).
+    """
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024.0:
+            return f"{size:.2f} {unit}"
+        size /= 1024.0
+    return f"{size:.2f} PB"

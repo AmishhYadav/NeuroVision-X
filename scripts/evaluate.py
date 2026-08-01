@@ -1,0 +1,427 @@
+"""Hydra entry point for evaluating a trained checkpoint on a frozen split.
+
+Runs sliding-window inference and BraTS-style region metrics (Dice, IoU,
+HD95) over every case of a split, and writes everything an evaluation report
+needs to disk as it goes: per-case metrics, a summary table, uncropped
+prediction volumes, and (optionally) probability maps for later calibration
+analysis. Device is resolved once from config via
+`neurovision.utils.device.get_device`, exactly like `scripts/train.py`.
+
+Example usage:
+
+    python scripts/evaluate.py inference.evaluation.split=test
+
+The wiring is split into small functions (`build_eval_dataloader`,
+`resolve_checkpoint`, `load_eval_model`, `evaluate_case`, `run_evaluation`)
+mirroring `scripts/train.py`'s decomposition, so each piece can be unit
+tested without going through Hydra -- see tests/test_evaluate_script.py.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Any
+
+import hydra
+import numpy as np
+import pandas as pd
+import torch
+from monai.data import list_data_collate
+from omegaconf import DictConfig, OmegaConf
+from torch import Tensor, nn
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from neurovision.data.dataset import build_data_dicts, build_dataset, load_splits
+from neurovision.data.transforms import build_val_transforms
+from neurovision.inference.postprocess import (
+    postprocess_logits,
+    regions_to_classes,
+    uncrop_to_original,
+)
+from neurovision.inference.sliding_window import sliding_window_predict
+
+# Importing these registers the "unet3d"/"swinunetr" and "dice_ce" builders
+# (the @register_model / @register_loss decorators run on import) before
+# build_model is ever called below. evaluate.py never calls build_loss
+# itself, but a checkpoint's stored config (see ResumeState.config) still
+# names a loss under cfg.training.loss.name, and importing the module here
+# keeps that name resolvable and this script's registry side effects
+# identical to scripts/train.py's, rather than depending on train.py having
+# been imported first in the same process. Copied from scripts/train.py.
+from neurovision.losses import segmentation  # noqa: F401
+from neurovision.models import baseline  # noqa: F401
+from neurovision.models.registry import build_model
+from neurovision.metrics.segmentation import MetricAggregator
+from neurovision.training.checkpoint import ResumeState, load_checkpoint
+from neurovision.utils.device import get_device
+from neurovision.utils.io import ensure_dir, read_json
+from neurovision.utils.logging import setup_logging
+from neurovision.utils.seed import set_seed
+
+logger = logging.getLogger(__name__)
+
+# Relative to this file, so the script works from any working directory and on
+# any machine -- no absolute paths. Copied from scripts/train.py.
+_CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
+
+
+def build_eval_dataloader(cfg: DictConfig, split: str) -> tuple[DataLoader, list[str]]:
+    """Builds the evaluation `DataLoader` for one frozen split.
+
+    `batch_size=1` is mandatory here, not a tunable default: whole volumes
+    have different shapes per case (each was cropped to its own nonzero
+    bounding box in preprocessing), and they will not collate at any batch
+    size above 1.
+
+    Args:
+        cfg: The full composed Hydra config.
+        split: Which frozen split to load -- `"train"`, `"val"`, or
+            `"test"`, as written by `neurovision.data.dataset.make_splits`.
+
+    Returns:
+        `(loader, case_ids)`. `case_ids` is in the SAME order the loader
+        yields batches in (the split file's list order, unshuffled), so a
+        caller can `zip(case_ids, loader)` to know which case each batch is.
+
+    Raises:
+        ValueError: If `split` is not one of the split file's keys, or if
+            the requested split has zero cases -- an empty split would
+            otherwise silently produce an empty CSV and an all-NaN summary
+            that looks like a model failure rather than a config mistake.
+    """
+    splits = load_splits(cfg.data.splits.path)
+    if split not in splits:
+        raise ValueError(
+            f"Unknown split {split!r}. Available splits: {sorted(splits.keys())}."
+        )
+
+    case_ids = list(splits[split])
+    if not case_ids:
+        raise ValueError(
+            f"Split {split!r} has 0 cases (splits file: {cfg.data.splits.path}). Evaluating "
+            "an empty split would silently produce an empty per_case_metrics.csv and an "
+            "all-NaN summary.csv that looks like a model failure rather than a config error."
+        )
+
+    prep_dir = cfg.data.preprocessing.out_dir
+    data_dicts = build_data_dicts(case_ids, prep_dir)
+    transform = build_val_transforms(cfg)
+
+    # dataset_type="dataset" (never "cache"/"persistent"): each case in an
+    # evaluation pass is visited exactly once, so there is nothing to reuse
+    # and caching would only add memory/disk overhead for no benefit.
+    dataset = build_dataset(data_dicts, transform, dataset_type="dataset")
+
+    loader = DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=cfg.data.num_workers,
+        collate_fn=list_data_collate,
+    )
+    return loader, case_ids
+
+
+def resolve_checkpoint(cfg: DictConfig) -> Path:
+    """Decides which checkpoint file to evaluate.
+
+    Args:
+        cfg: The full composed Hydra config.
+
+    Returns:
+        `Path(cfg.inference.evaluation.checkpoint)` if that is set, else
+        `Path(cfg.training.checkpoint.dir) / "best.pt"`.
+
+    Raises:
+        FileNotFoundError: If the resolved path does not exist. The message
+            lists whatever `.pt` files ARE present in that directory, since
+            the common mistake this guards against is evaluating before any
+            `best.pt` has been written yet.
+    """
+    explicit = cfg.inference.evaluation.checkpoint
+    if explicit is not None:
+        checkpoint_path = Path(explicit)
+    else:
+        checkpoint_path = Path(cfg.training.checkpoint.dir) / "best.pt"
+
+    if not checkpoint_path.is_file():
+        checkpoint_dir = checkpoint_path.parent
+        if checkpoint_dir.is_dir():
+            available = sorted(p.name for p in checkpoint_dir.glob("*.pt"))
+        else:
+            available = []
+        raise FileNotFoundError(
+            f"No checkpoint found at {checkpoint_path.resolve()}. "
+            f".pt files present in {checkpoint_dir.resolve()}: "
+            f"{available if available else '(none -- directory is empty or does not exist)'}."
+        )
+    return checkpoint_path
+
+
+def load_eval_model(
+    cfg: DictConfig, checkpoint_path: Path, device: torch.device
+) -> tuple[nn.Module, ResumeState]:
+    """Builds the model from config and loads a checkpoint's weights into it.
+
+    Args:
+        cfg: The full composed Hydra config.
+        checkpoint_path: Path to the checkpoint, as returned by
+            `resolve_checkpoint`.
+        device: The resolved torch device to move the model to.
+
+    Returns:
+        `(model, resume_state)`. `resume_state` is returned (not just the
+        model) so the caller -- and this function's own architecture check --
+        can read the checkpoint's stored training config and metadata.
+
+    Raises:
+        ValueError: If `cfg.inference.evaluation.strict_arch_check` is True,
+            the checkpoint has a stored config, and that config's
+            `model.name` disagrees with the current `cfg.model.name`.
+            `load_state_dict(strict=True)` (used internally by
+            `load_checkpoint`) only catches a gross architecture swap --
+            e.g. `unet3d` weights loaded into a `swinunetr` module raise
+            immediately. It does NOT catch a checkpoint trained under one
+            `model.*` config (e.g. a different `feature_size` or
+            `channels`) being evaluated under a config that merely claims
+            the same `model.name`: that can load partially (silently
+            dropping mismatched-shape parameters under some MONAI model
+            classes) or run to completion and produce numbers that are
+            quietly not what the current config says was evaluated.
+    """
+    model = build_model(cfg)
+    model = model.to(device)
+
+    # restore_rng=False: evaluation is deterministic (no training-time random
+    # transforms, no optimizer step) and has no reason to perturb the
+    # process's RNG state. Restoring a TRAINING run's RNG state here would
+    # just be a confusing side effect with no benefit to inference.
+    resume_state = load_checkpoint(
+        checkpoint_path, model, map_location=str(device), restore_rng=False
+    )
+
+    eval_cfg = cfg.inference.evaluation
+    if eval_cfg.strict_arch_check and resume_state.config is not None:
+        checkpoint_model_name = resume_state.config.model.name
+        current_model_name = cfg.model.name
+        if checkpoint_model_name != current_model_name:
+            raise ValueError(
+                f"Checkpoint {checkpoint_path} was trained with model.name="
+                f"{checkpoint_model_name!r}, but the current config has model.name="
+                f"{current_model_name!r}. Refusing to evaluate: load_state_dict(strict=True) "
+                "only catches a gross architecture swap, not a checkpoint trained under "
+                "different model settings being scored under a config that claims something "
+                "else. Set inference.evaluation.strict_arch_check=false to override."
+            )
+
+    # This line is how a user confirms in the log which checkpoint actually
+    # got scored: epoch, and the metric/value it was selected as "best" on.
+    logger.info(
+        "Loaded checkpoint %s for evaluation: epoch=%d, best_metric_name=%s, best_metric=%s",
+        checkpoint_path,
+        resume_state.start_epoch - 1,
+        resume_state.best_metric_name,
+        resume_state.best_metric,
+    )
+    return model, resume_state
+
+
+def evaluate_case(
+    model: nn.Module, batch: dict[str, Any], cfg: DictConfig, device: torch.device
+) -> tuple[Tensor, Tensor | None]:
+    """Runs sliding-window inference and postprocessing for one case.
+
+    Args:
+        model: The segmentation model, already on `device`.
+        batch: One collated batch from `build_eval_dataloader`'s loader,
+            containing `"image"` of shape `(1, 4, D, H, W)`.
+        cfg: The full composed Hydra config.
+        device: The resolved torch device.
+
+    Returns:
+        `(regions, probabilities)`. `regions` is a binary float tensor,
+        shape `(1, 3, D, H, W)`, channel order `(ET, TC, WT)`.
+        `probabilities` is `torch.sigmoid(logits)`, same shape, when
+        `cfg.inference.evaluation.save_probabilities` is True; otherwise
+        `None`, so a ~53 MB-per-case tensor is never materialized when it is
+        not going to be written to disk.
+    """
+    image = batch["image"]
+    logits = sliding_window_predict(model, image, cfg, device)
+    regions = postprocess_logits(logits, cfg)
+
+    probabilities = (
+        torch.sigmoid(logits) if cfg.inference.evaluation.save_probabilities else None
+    )
+    return regions, probabilities
+
+
+def _log_and_print_summary(
+    summary_df: pd.DataFrame, split: str, n_cases: int, n_skipped_unlabeled: int
+) -> None:
+    """Logs and prints a compact end-of-run summary table.
+
+    Args:
+        summary_df: The `MetricAggregator.summary()` DataFrame.
+        split: The split name that was evaluated.
+        n_cases: Total number of cases in the split.
+        n_skipped_unlabeled: Number of cases skipped for metrics because
+            `meta["has_label"]` was False.
+    """
+    lines = [
+        "=" * 70,
+        f"Evaluation summary -- split={split!r}, {n_cases} case(s), "
+        f"{n_skipped_unlabeled} skipped (unlabeled)",
+        "=" * 70,
+    ]
+
+    if summary_df.empty:
+        lines.append("No cases were scored (every case was unlabeled or the split was empty).")
+    else:
+        for region in ("ET", "TC", "WT"):
+            dice_key, iou_key, hd95_key = f"dice_{region}", f"iou_{region}", f"hd95_{region}"
+            if dice_key in summary_df.index:
+                lines.append(
+                    f"  {region}: dice={summary_df.loc[dice_key, 'mean']:.4f}  "
+                    f"iou={summary_df.loc[iou_key, 'mean']:.4f}  "
+                    f"hd95={summary_df.loc[hd95_key, 'mean']:.4f} mm"
+                )
+        for mean_key in ("dice_mean", "iou_mean", "hd95_mean"):
+            if mean_key in summary_df.index:
+                lines.append(f"  {mean_key} = {summary_df.loc[mean_key, 'mean']:.4f}")
+
+        # gt_empty_ET moves headline ET Dice by several points and is rarely
+        # reported -- printed explicitly so it is never invisible.
+        if "gt_empty_ET" in summary_df.index:
+            lines.append(
+                "  fraction of cases with empty ground-truth ET (gt_empty_ET mean) = "
+                f"{summary_df.loc['gt_empty_ET', 'mean']:.4f}"
+            )
+
+    summary_text = "\n".join(lines)
+    logger.info("%s", summary_text)
+    print(summary_text)  # noqa: T201 -- final human-facing summary, not diagnostics
+
+
+def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
+    """Evaluates a checkpoint over one split and writes every result to disk.
+
+    Per case: read `meta.json` (for `bbox`/`original_shape`/`spacing`/
+    `has_label`), run `evaluate_case`, optionally save an uncropped
+    prediction and/or a cropped probability map, and -- for labeled cases
+    only -- score it against the ground truth and record the metrics.
+    Metrics are computed in CROPPED space: the ground-truth `label.npy` on
+    disk is already cropped, and uncropping both prediction and target
+    would add identical background to both, changing nothing about Dice or
+    HD95 except making the computation slower. This is a deliberate choice,
+    not an oversight.
+
+    The per-case CSV is rewritten after EVERY case (not once at the end):
+    a full-split sliding-window evaluation can take minutes, and a Kaggle
+    session dying partway through should not lose everything that had
+    already been scored.
+
+    Args:
+        cfg: The full composed Hydra config.
+
+    Returns:
+        The per-case metrics DataFrame (also written to
+        `<out_dir>/per_case_metrics.csv`), indexed by `case_id`. Cases
+        skipped because `meta["has_label"]` is False do not appear in it.
+    """
+    device = get_device(cfg)
+
+    checkpoint_path = resolve_checkpoint(cfg)
+    model, _resume_state = load_eval_model(cfg, checkpoint_path, device)
+
+    eval_cfg = cfg.inference.evaluation
+    split = eval_cfg.split
+    loader, case_ids = build_eval_dataloader(cfg, split)
+
+    out_dir = ensure_dir(eval_cfg.out_dir)
+    prep_dir = Path(cfg.data.preprocessing.out_dir)
+
+    predictions_dir = out_dir / "predictions"
+    probabilities_dir = out_dir / "probabilities"
+    if eval_cfg.save_predictions:
+        ensure_dir(predictions_dir)
+    if eval_cfg.save_probabilities:
+        ensure_dir(probabilities_dir)
+
+    per_case_csv_path = out_dir / "per_case_metrics.csv"
+    summary_csv_path = out_dir / "summary.csv"
+
+    aggregator = MetricAggregator()
+    n_skipped_unlabeled = 0
+
+    model.eval()
+    with torch.no_grad():
+        progress = tqdm(
+            zip(case_ids, loader), total=len(case_ids), desc=f"Evaluating ({split})"
+        )
+        for case_id, batch in progress:
+            meta = read_json(prep_dir / case_id / "meta.json")
+
+            regions, probabilities = evaluate_case(model, batch, cfg, device)
+
+            if eval_cfg.save_predictions:
+                classes = regions_to_classes(regions)  # (1, D, H, W)
+                classes_np = classes[0].cpu().numpy().astype(np.uint8)
+                uncropped = uncrop_to_original(classes_np, meta["bbox"], meta["original_shape"])
+                np.save(predictions_dir / f"{case_id}.npy", uncropped)
+
+            if eval_cfg.save_probabilities:
+                # Saved in CROPPED geometry, deliberately not uncropped:
+                # these exist for calibration/ECE analysis, which must be
+                # done in the frame the model actually predicted in.
+                probs_np = probabilities[0].cpu().numpy().astype(np.float16)
+                np.save(probabilities_dir / f"{case_id}.npy", probs_np)
+
+            if not meta["has_label"]:
+                # Real: the BraTS validation set ships without segmentations.
+                # Scoring such a case against an all-zero label would drag
+                # the reported mean toward whatever the model happens to
+                # predict there, so it gets inference and a saved
+                # prediction but never reaches the metric aggregator.
+                n_skipped_unlabeled += 1
+                logger.info(
+                    "Case %s has no ground-truth label (has_label=False); skipping metrics.",
+                    case_id,
+                )
+            else:
+                target = batch["label"]
+                aggregator.add_case(case_id, regions, target, spacing=meta["spacing"])
+
+            # Rewritten every iteration, not just at the end: cheap for a
+            # per-case table this small, and it means a killed run still has
+            # every already-scored case on disk instead of losing all of them.
+            aggregator.per_case().to_csv(per_case_csv_path)
+
+    per_case_df = aggregator.per_case()
+    summary_df = aggregator.summary()
+    summary_df.to_csv(summary_csv_path)
+
+    eval_config_path = out_dir / "eval_config.yaml"
+    eval_config_path.write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
+
+    _log_and_print_summary(summary_df, split, len(case_ids), n_skipped_unlabeled)
+
+    return per_case_df
+
+
+@hydra.main(version_base="1.3", config_path=_CONFIG_DIR, config_name="config")
+def main(cfg: DictConfig) -> None:
+    """Evaluate a checkpoint against a frozen split, per the composed config.
+
+    Args:
+        cfg: The config Hydra composed from configs/ plus any CLI overrides.
+    """
+    setup_logging(level="INFO")
+    set_seed(cfg.seed)
+    run_evaluation(cfg)
+
+
+if __name__ == "__main__":
+    main()

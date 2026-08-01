@@ -1,0 +1,61 @@
+# Evaluation-time inference. Deliberately separate from
+# training.sliding_window: that block is tuned for speed inside the epoch
+# loop, and a final evaluation should not silently inherit that trade-off.
+
+sliding_window:
+  roi_size: ${data.patch_size}
+  sw_batch_size: 4
+  # Higher than training's 0.5. Overlap costs wall time linearly but reduces
+  # the seam artifacts at window boundaries that inflate HD95.
+  overlap: 0.5
+  # gaussian weights a window's center voxels above its edges when blending
+  # overlapping windows; "constant" weights them equally and leaves visible
+  # seams. Costs nothing measurable.
+  mode: gaussian
+  # Fraction of roi_size used as the gaussian sigma. MONAI's default.
+  sigma_scale: 0.125
+  # Where the stitched full-volume output buffer is assembled -- MONAI's
+  # `device` kwarg, NOT its `sw_device` kwarg (which is where each cropped
+  # window is run through the model, and stays wherever the model already
+  # lives). Named `output_device` here precisely because reusing MONAI's
+  # `sw_device` name for its `device` parameter is a trap.
+  # "cpu" keeps the buffer off the GPU, which matters for a 240^3 volume with
+  # 3 channels on a 16 GB card; null means "same device as the input", and a
+  # "cpu" value means sliding_window_predict returns a CPU tensor.
+  output_device: null
+  padding_mode: constant
+
+postprocess:
+  threshold: 0.5
+  # Restores ET <= TC <= WT after the component filters break it. Leave on:
+  # the nesting is anatomy, not a modelling convenience.
+  enforce_nesting: true
+  # Voxels. Drops speckle false positives that cost HD95 far more than Dice.
+  min_component_size: 50
+  # 1 = 6-neighbourhood (face-adjacent), 3 = 26-neighbourhood.
+  connectivity: 1
+  # Aggressive: collapses multifocal tumors to one lesion. Off by default.
+  keep_largest_only: false
+  # 0 disables. See postprocess_logits' docstring before turning this on --
+  # it trades calibration honesty for ET Dice.
+  et_min_volume: 0
+
+evaluation:
+  # Which frozen split to evaluate. "test" is the one that backs a reported
+  # number; "val" is for iterating without touching test.
+  split: test
+  # Checkpoint to evaluate. null resolves to <training.checkpoint.dir>/best.pt.
+  checkpoint: null
+  # Root for everything this script writes.
+  out_dir: ${output_dir}/eval_${inference.evaluation.split}
+  # uint8 class map {0,1,2,3} per case, in ORIGINAL uncropped geometry.
+  # ~8.9 MB/case at 240x240x155; ~1.3 GB for a 150-case split.
+  save_predictions: true
+  # float16 sigmoid probabilities (3, D, H, W) in CROPPED geometry. ~53 MB per
+  # case, ~8 GB for a 150-case split -- past Kaggle's 20 GB working quota on
+  # its own. Only needed for the calibration/ECE phase, which runs on a
+  # subset. Default off deliberately.
+  save_probabilities: false
+  # Refuse to run if the checkpoint's model.name disagrees with the current
+  # config's. See resolve_checkpoint's docstring.
+  strict_arch_check: true
