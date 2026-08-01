@@ -336,7 +336,18 @@ class Trainer:
 
                     pred = binarize(logits)
                     case_id = batch.get("case_id", [str(case_idx)])[0]
-                    aggregator.add_case(str(case_id), pred[0], labels[0])
+                    # .cpu() on BOTH, and it is not optional. hd95() calls
+                    # MONAI's compute_hausdorff_distance, which computes its
+                    # distance transform via CuPy whenever the tensors are on
+                    # CUDA. On Kaggle that CuPy JIT fails outright:
+                    #   CompileException: Thrust requires at least C++17
+                    # (measured 2026-08-01, T4 image). The CPU path uses scipy
+                    # and has no such dependency. Moving to CPU also keeps
+                    # HD95's intermediate buffers over a full ~240^3 volume off
+                    # the 16 GB VRAM budget, which the model and the
+                    # sliding-window output already share. scripts/evaluate.py
+                    # does the same thing for the same reason.
+                    aggregator.add_case(str(case_id), pred[0].cpu(), labels[0].cpu())
         finally:
             # Restore train mode even if inference raises, so a caller that
             # catches the exception does not end up with a model stuck in
