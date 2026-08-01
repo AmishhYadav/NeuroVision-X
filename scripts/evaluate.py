@@ -51,9 +51,9 @@ from neurovision.inference.sliding_window import sliding_window_predict
 # identical to scripts/train.py's, rather than depending on train.py having
 # been imported first in the same process. Copied from scripts/train.py.
 from neurovision.losses import segmentation  # noqa: F401
+from neurovision.metrics.segmentation import MetricAggregator
 from neurovision.models import baseline  # noqa: F401
 from neurovision.models.registry import build_model
-from neurovision.metrics.segmentation import MetricAggregator
 from neurovision.training.checkpoint import ResumeState, load_checkpoint
 from neurovision.utils.device import get_device
 from neurovision.utils.io import ensure_dir, read_json
@@ -93,9 +93,7 @@ def build_eval_dataloader(cfg: DictConfig, split: str) -> tuple[DataLoader, list
     """
     splits = load_splits(cfg.data.splits.path)
     if split not in splits:
-        raise ValueError(
-            f"Unknown split {split!r}. Available splits: {sorted(splits.keys())}."
-        )
+        raise ValueError(f"Unknown split {split!r}. Available splits: {sorted(splits.keys())}.")
 
     case_ids = list(splits[split])
     if not case_ids:
@@ -252,9 +250,7 @@ def evaluate_case(
     logits = sliding_window_predict(model, image, cfg, device)
     regions = postprocess_logits(logits, cfg)
 
-    probabilities = (
-        torch.sigmoid(logits) if cfg.inference.evaluation.save_probabilities else None
-    )
+    probabilities = torch.sigmoid(logits) if cfg.inference.evaluation.save_probabilities else None
     return regions, probabilities
 
 
@@ -358,9 +354,7 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
 
     model.eval()
     with torch.no_grad():
-        progress = tqdm(
-            zip(case_ids, loader), total=len(case_ids), desc=f"Evaluating ({split})"
-        )
+        progress = tqdm(zip(case_ids, loader), total=len(case_ids), desc=f"Evaluating ({split})")
         for case_id, batch in progress:
             meta = read_json(prep_dir / case_id / "meta.json")
 
@@ -391,8 +385,22 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
                     case_id,
                 )
             else:
-                target = batch["label"]
-                aggregator.add_case(case_id, regions, target, spacing=meta["spacing"])
+                # Both moved to CPU explicitly. `regions` is on `device`
+                # while `batch["label"]` came straight off the DataLoader and
+                # is on CPU, so passing them as-is raises a device mismatch
+                # inside MONAI's compute_dice -- but only on CUDA. On a CPU
+                # box the two agree by accident and every test passes, which
+                # is exactly why this is pinned by a comment rather than left
+                # to the suite to catch.
+                #
+                # CPU rather than `device` because HD95 over a full ~240^3
+                # volume allocates several intermediate buffers, and the
+                # 16 GB VRAM budget is already committed to the model and
+                # the sliding-window output. The per-case transfer is
+                # negligible against the sliding-window pass itself.
+                aggregator.add_case(
+                    case_id, regions.cpu(), batch["label"].cpu(), spacing=meta["spacing"]
+                )
 
             # Rewritten every iteration, not just at the end: cheap for a
             # per-case table this small, and it means a killed run still has
