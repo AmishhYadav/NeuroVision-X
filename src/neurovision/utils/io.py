@@ -18,12 +18,20 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-# Kaggle's free-tier per-dataset upload limit is roughly this many GB. This is
-# a rough planning guide, not an exact figure pulled from Kaggle's API/docs,
-# so treat crossing it as "go check", not as a hard failure. Shared by
-# scripts/preprocess.py and scripts/package_for_kaggle.py so the two scripts
-# can never silently disagree about what "too big" means.
-KAGGLE_DATASET_WARN_GB = 20.0
+# Size past which an upload is worth a second look, in GB. Deliberately well
+# under Kaggle's actual per-dataset ceiling (200 GB for both private and
+# public datasets as of 2026-08) -- crossing this means "this will take a long
+# time to upload and is worth confirming", NOT "this will be rejected".
+#
+# Do not confuse the dataset ceiling with the ~20 GB /kaggle/working OUTPUT
+# quota, which is a genuinely hard limit and the one that constrains how many
+# checkpoints a session can keep (see training.checkpoint.keep_last_n). An
+# earlier version of this constant conflated the two and would have pushed us
+# into needlessly subsetting BraTS 2021.
+#
+# Shared by scripts/preprocess.py and scripts/package_for_kaggle.py so the two
+# scripts can never silently disagree about what "too big" means.
+KAGGLE_DATASET_WARN_GB = 60.0
 
 
 def ensure_dir(path: str | Path) -> Path:

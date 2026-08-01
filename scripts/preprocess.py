@@ -185,18 +185,18 @@ def _print_summary(stats: dict[str, Any]) -> None:
         for failure in stats["failures"]:
             print(f"  {failure['case_id']}: {failure['error']}")
 
-    # Kaggle datasets have a rough per-dataset upload size ceiling. Warn loudly
-    # rather than let someone discover this only after a failed upload.
+    # Not a hard ceiling -- Kaggle allows 200 GB per dataset. This is a
+    # "that is a long upload, confirm you meant it" nudge, so it says so
+    # rather than claiming the upload will fail.
     total_gb = stats["total_size_bytes"] / (1024**3)
     if total_gb > KAGGLE_DATASET_WARN_GB:
         print()
         print("!" * 70)
         print(
-            f"WARNING: total output size ({stats['total_size_str']}) exceeds the "
-            f"~{KAGGLE_DATASET_WARN_GB:.0f} GB Kaggle dataset guideline. "
-            "Uploading this in one Kaggle dataset will likely fail -- consider "
-            "processing a subset (data.preprocessing.limit=N) or splitting the "
-            "output across multiple Kaggle datasets."
+            f"NOTE: total output size ({stats['total_size_str']}) is over the "
+            f"{KAGGLE_DATASET_WARN_GB:.0f} GB review threshold. Kaggle's per-dataset "
+            "limit is 200 GB, so this should still upload -- but budget the time, "
+            "and use data.preprocessing.limit=N if you only meant to process a subset."
         )
         print("!" * 70)
 
