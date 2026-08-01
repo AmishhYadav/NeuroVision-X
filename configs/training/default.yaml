@@ -1,8 +1,18 @@
 # Default training recipe.
 
 epochs: 300
-batch_size: 2 # 96^3 patches, 16 GB VRAM. Raise only after checking memory.
-grad_accum_steps: 1 # effective batch = batch_size * grad_accum_steps
+
+# 1, NOT 2. The real number of patches per optimizer step is
+# batch_size * data.samples_per_volume, not batch_size: RandCropByPosNegLabeld
+# returns a LIST of samples_per_volume crops per case, and list_data_collate
+# flattens that list before batching. So batch_size: 1 with the default
+# samples_per_volume: 4 already sends 4 patches of 96^3 per step; batch_size: 2
+# would send 8, which is ~4x the activation memory the old "# 16 GB VRAM"
+# comment assumed and OOMs SwinUNETR-B on a P100. batch_size: 1 with
+# samples_per_volume: 4 is also the standard MONAI BraTS recipe.
+# Raise this only after measuring, and remember to divide by samples_per_volume.
+batch_size: 1
+grad_accum_steps: 1 # effective batch = batch_size * samples_per_volume * grad_accum_steps
 
 # Requested, not guaranteed. neurovision.utils.device.amp_enabled(device) is the
 # final gate: AMP runs on CUDA only, and is ignored on CPU/MPS.

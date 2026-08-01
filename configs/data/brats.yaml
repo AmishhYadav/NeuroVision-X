@@ -1,0 +1,101 @@
+# BraTS multi-modal MRI dataset.
+
+name: brats
+
+# Mandatory — Hydra's "???" means the run fails loudly if this is not supplied.
+# That is deliberate: it enforces the no-hardcoded-paths rule. Pass it on the
+# CLI (data.root_dir=/kaggle/input/brats2021) or in an experiment config.
+root_dir: ???
+
+# The four MRI sequences, stacked as input channels in this order.
+modalities: [t1, t1ce, t2, flair]
+in_channels: 4
+
+# BraTS is evaluated on three NESTED regions, not the raw label values:
+#   ET (enhancing tumor), TC (tumor core), WT (whole tumor).
+# They overlap, so the heads use sigmoid + per-channel Dice, NOT softmax.
+regions: [ET, TC, WT]
+num_classes: 3
+
+# --- Preprocessing ---
+spacing: [1.0, 1.0, 1.0] # BraTS ships already co-registered at 1mm isotropic
+normalize: nonzero_z_score # z-score over the brain only; background is ~0 and would skew stats
+crop_foreground: true
+
+# --- Patch sampling ---
+# 96^3 is the project default. Raising it hits the 16 GB VRAM budget fast:
+# activation memory scales with the cube of the edge length.
+patch_size: [96, 96, 96]
+pos_neg_ratio: [1, 1] # tumor-centred vs. random crops per sample
+samples_per_volume: 4
+
+# --- Training augmentation ---
+# Deliberately mild and label-preserving. Brain MRI is co-registered and
+# roughly canonically oriented, so aggressive spatial warping mostly
+# manufactures anatomy that does not occur.
+augment:
+  flip_prob: 0.5 # applied independently on each of the 3 axes
+  rot90_prob: 0.5
+  scale_intensity_factor: 0.1 # multiplicative, +/- 10%
+  shift_intensity_offset: 0.1 # additive, in z-scored units
+  noise_prob: 0.15
+  noise_std: 0.01
+
+# --- Splits ---
+# Written once by make_splits() and then frozen. Regenerating changes which
+# cases are in val/test, which invalidates every number measured before it —
+# so it takes an explicit overwrite, never a silent rewrite.
+splits:
+  path: configs/data/splits.yaml
+  fractions: [0.7, 0.15, 0.15] # train / val / test
+  seed: 42
+  # Regenerating a split changes which cases are in val/test and invalidates
+  # every number measured against the old one. Must be set explicitly on the
+  # CLI (data.splits.overwrite=true) -- never flipped to true in this file.
+  overwrite: false
+
+# Debug knob for the overfit sanity check (configs/experiment/overfit2.yaml).
+# When set to N, the first N training cases are used as BOTH the train and the
+# validation set, and the real val split is ignored. null = normal training.
+#
+# Training and validating on the same cases is meaningless as a *result*, but
+# it is the single most informative debugging signal available: a model that
+# cannot memorize 2 cases has a pipeline bug, not a learning-rate problem. It
+# also turns any train/val gap into a pipeline bug rather than overfitting,
+# since the two sets are identical by construction.
+overfit_n: null
+
+# --- Loading ---
+num_workers: 4
+
+# How the training set is held in memory:
+#   dataset    - no caching. Reads an .npy per item. The recommended default:
+#                offline preprocessing already did the expensive work, so the
+#                per-item cost is one memmap read.
+#   cache      - MONAI CacheDataset, holds transformed items in RAM. Fast, but
+#                ~120 MB per cached case after region expansion to float32.
+#   persistent - MONAI PersistentDataset, caches to disk under cache_dir.
+dataset_type: dataset
+cache_dir: outputs/cache
+
+# Fraction of the dataset held in RAM by MONAI's CacheDataset.
+# 0.0 on Kaggle: ~13 GB RAM cannot hold cached 4-channel float32 volumes.
+# Raise locally if you have the headroom.
+cache_rate: 0.0
+
+# --- Offline preprocessing (scripts/preprocess.py) ---
+# Runs once on the Mac. Training then reads only the .npy files written here.
+preprocessing:
+  out_dir: data/preprocessed/brats
+  # Worker processes. Each holds a few full-resolution volumes in RAM, so this
+  # trades memory for wall time — lower it if the machine starts swapping.
+  num_workers: 8
+  overwrite: false
+  # Segmentation masks are required by default. Set false to preprocess the
+  # BraTS validation/test sets, which ship without them.
+  require_seg: true
+  # Process only the first N cases. null = all. Hydra owns the CLI, so this is
+  # set as data.preprocessing.limit=5, not as a --limit flag.
+  limit: null
+  # Written under out_dir. One row per case: shapes, spacing, tumor voxel counts.
+  metadata_csv: metadata.csv

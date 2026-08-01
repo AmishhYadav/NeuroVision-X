@@ -119,7 +119,12 @@ def test_dataset_metadata_json_written_with_slug_and_title(tmp_path: Path):
     meta = json.loads(meta_path.read_text())
     assert meta["id"] == "myuser/neurovision-brats-prep"
     assert meta["title"] == "neurovision-brats-prep"
-    assert meta["licenses"] == [{"name": "CC0-1.0"}]
+    # "other", never "CC0-1.0". CC0 declares public domain / no rights
+    # reserved, which is neither BraTS's license nor ours to grant -- BraTS
+    # ships under a data use agreement that forbids public redistribution of
+    # the imaging data. This assertion exists so nobody "tidies" the license
+    # back to a permissive-looking default.
+    assert meta["licenses"] == [{"name": "other"}]
 
 
 def test_dataset_metadata_json_absent_without_slug(tmp_path: Path):

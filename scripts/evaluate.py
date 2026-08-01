@@ -296,9 +296,10 @@ def _log_and_print_summary(
                 f"{summary_df.loc['gt_empty_ET', 'mean']:.4f}"
             )
 
-    summary_text = "\n".join(lines)
-    logger.info("%s", summary_text)
-    print(summary_text)  # noqa: T201 -- final human-facing summary, not diagnostics
+    # print only, not logger.info as well: setup_logging's StreamHandler
+    # already targets stdout, so doing both emits this block twice and reads
+    # like the evaluation ran twice. Matches scripts/preprocess.py's summary.
+    print("\n".join(lines))
 
 
 def run_evaluation(cfg: DictConfig) -> pd.DataFrame:

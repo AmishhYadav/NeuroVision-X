@@ -371,11 +371,24 @@ def assemble_package(
 
     if slug is not None:
         resolved_title = title or slug.rsplit("/", 1)[-1]
+        # License is "other", NOT CC0-1.0. CC0 means "public domain, no rights
+        # reserved", which is neither BraTS's license nor ours to grant: BraTS
+        # is distributed under its own data use agreement, and that agreement
+        # does not permit public redistribution of the imaging data. Declaring
+        # CC0 on a derived copy is a false license statement even when the
+        # Kaggle dataset is private. Keep the dataset private (which is what
+        # `kaggle datasets create` does by default) and leave the real terms
+        # to the BraTS DUA.
         write_json(
-            {"title": resolved_title, "id": slug, "licenses": [{"name": "CC0-1.0"}]},
+            {"title": resolved_title, "id": slug, "licenses": [{"name": "other"}]},
             out_dir / "dataset-metadata.json",
         )
-        logger.info("Wrote dataset-metadata.json (id=%s, title=%s)", slug, resolved_title)
+        logger.info(
+            "Wrote dataset-metadata.json (id=%s, title=%s, license=other -- BraTS DUA applies, "
+            "keep this dataset PRIVATE)",
+            slug,
+            resolved_title,
+        )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

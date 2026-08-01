@@ -1,8 +1,20 @@
-# Data and experiment artifacts — never committed
-data/
-outputs/
-checkpoints/
-wandb/
+# Data and experiment artifacts — never committed.
+#
+# The leading slash matters and is not decoration: an unanchored `data/`
+# matches a directory named `data` at ANY depth, which silently excluded the
+# whole of `configs/data/` -- including `brats.yaml` (without which Hydra
+# cannot compose at all, since configs/config.yaml lists `defaults: - data:
+# brats`) and `splits.yaml` (the frozen record of which cases back every
+# reported number). Both were missing from GitHub entirely, so a fresh clone
+# could not run. Anchor directory rules that mean "the one at the repo root".
+/data/
+/outputs/
+/checkpoints/
+/wandb/
+
+# These stay unanchored on purpose -- preprocessed arrays and NIfTI volumes
+# are artifacts wherever they appear. Note this means a test fixture must not
+# be committed as .npy.
 *.npy
 *.nii.gz
 
