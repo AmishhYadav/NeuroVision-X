@@ -1,9 +1,20 @@
 # NeuroVision-X — fixed stack, exact pins.
 # Resolved for Python 3.11 on 2026-07-31.
 #
-# Kaggle note: Kaggle images ship their own CUDA-matched torch/torchvision.
-# On Kaggle, install this file WITHOUT torch/torchvision (use the notebook's
-# preinstalled build) or you will pull a CPU wheel and lose the GPU.
+# KAGGLE: this is a DEV lockfile for Python 3.11. Kaggle runs 3.12 and ships a
+# curated, mutually ABI-compatible scientific stack. Installing our pins over
+# it breaks things in ways that do not look like install failures:
+#   - torch      -> a CPU wheel replaces the CUDA build, silently losing the GPU
+#   - numpy      -> Kaggle's scipy is compiled against ITS numpy, so replacing
+#                   numpy gives "ImportError: cannot import name '_center' from
+#                   numpy._core.umath" from scipy.ndimage (measured 2026-08-01)
+# So the notebook installs this file MINUS the line below. Everything excluded
+# is either already in the Kaggle image or dev-only (never needed to train).
+# Keeping the list here, rather than in a second requirements-kaggle.txt, is
+# deliberate: a duplicate pinned file drifts from this one, and the failure
+# mode of that drift is a dead GPU session.
+#
+# kaggle-exclude: torch torchvision numpy pandas scipy scikit-image matplotlib captum pytest ruff black
 
 # --- Core deep learning ---
 torch==2.13.0
