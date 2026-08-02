@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import random
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -454,3 +455,68 @@ def test_missing_best_metric_falls_back_per_mode(tmp_path):
     state = load_checkpoint(last_path, _make_model(), torch.optim.Adam(_make_model().parameters()))
     assert state.best_metric == float("inf")
     assert state.best_metric_mode == "min"
+
+
+class _NonCpuTensor:
+    """Stand-in for a tensor sitting on a non-CPU device.
+
+    `torch.load(..., map_location="cuda")` materializes EVERY tensor in the
+    payload on CUDA -- including the numpy RNG state and the torch RNG state,
+    neither of which has anything to do with the model. Calling `.numpy()` on
+    such a tensor raises, and `torch.set_rng_state` rejects anything that is
+    not a CPU ByteTensor.
+
+    That fault is CUDA-only, so no CPU test can reproduce it with a real
+    tensor -- which is exactly why a real GPU resume at epoch 130 hit it after
+    the whole suite passed. This class reproduces the contract that matters:
+    `.numpy()` fails until `.cpu()` has been called.
+    """
+
+    def __init__(self, real: torch.Tensor) -> None:
+        self._real = real
+
+    def cpu(self) -> torch.Tensor:
+        return self._real
+
+    def numpy(self):
+        raise TypeError(
+            "can't convert cuda:0 device type tensor to numpy. "
+            "Use Tensor.cpu() to copy the tensor to host memory first."
+        )
+
+
+def test_numpy_rng_state_restore_survives_a_non_cpu_tensor():
+    """`_safe_dict_to_numpy_rng_state` must .cpu() before .numpy()."""
+    from neurovision.training.checkpoint import (
+        _numpy_rng_state_to_safe_dict,
+        _safe_dict_to_numpy_rng_state,
+    )
+
+    np.random.seed(1234)
+    saved = _numpy_rng_state_to_safe_dict(np.random.get_state())
+    saved["state"] = _NonCpuTensor(saved["state"])
+
+    restored = _safe_dict_to_numpy_rng_state(saved)
+    np.random.set_state(restored)
+    after_restore = np.random.rand(5)
+
+    np.random.seed(1234)
+    expected = np.random.rand(5)
+    np.testing.assert_allclose(after_restore, expected)
+
+
+def test_torch_rng_state_restore_survives_a_non_cpu_tensor():
+    """`_restore_rng_state` must .cpu() the torch RNG state before setting it."""
+    from neurovision.training.checkpoint import _restore_rng_state
+
+    torch.manual_seed(4321)
+    checkpoint = {"torch_rng_state": _NonCpuTensor(torch.get_rng_state())}
+
+    # Perturb the global RNG so a no-op restore would be visible.
+    torch.manual_seed(9999)
+    _restore_rng_state(checkpoint, Path("dummy.pt"))
+    after_restore = torch.rand(5)
+
+    torch.manual_seed(4321)
+    expected = torch.rand(5)
+    torch.testing.assert_close(after_restore, expected)

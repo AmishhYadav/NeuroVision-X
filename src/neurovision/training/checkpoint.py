@@ -122,9 +122,18 @@ def _safe_dict_to_numpy_rng_state(saved: dict[str, Any]) -> tuple:
     Returns:
         A 5-tuple usable with `np.random.set_state`.
     """
+    # .cpu() before .numpy(), and it is load-bearing. The numpy RNG state is
+    # stored as a torch tensor so the payload stays weights_only=True-loadable,
+    # but load_checkpoint is called with map_location=str(device) -- so on a GPU
+    # run EVERY tensor in the payload, this one included, is materialized on
+    # CUDA. `.numpy()` then raises:
+    #   TypeError: can't convert cuda:0 device type tensor to numpy.
+    # Measured on Kaggle 2026-08-02, resuming a real run at epoch 130. Invisible
+    # on the Mac: with map_location="cpu" the tensor is already on CPU, so every
+    # CPU test passes either way. The tensor is 624 uint32s -- the copy is free.
     return (
         saved["bit_generator"],
-        saved["state"].numpy().astype("uint32"),
+        saved["state"].cpu().numpy().astype("uint32"),
         saved["pos"],
         saved["has_gauss"],
         saved["cached_gaussian"],
@@ -550,13 +559,18 @@ def _restore_rng_state(checkpoint: dict[str, Any], path: Path) -> None:
 
     torch_state = checkpoint.get("torch_rng_state")
     if torch_state is not None:
-        torch.set_rng_state(torch_state)
+        # .cpu() for the same reason as the numpy state above: map_location
+        # puts it on CUDA, and torch.set_rng_state requires a CPU ByteTensor.
+        # Without this, resuming on GPU raises immediately after the numpy
+        # state is fixed -- two separate faults on consecutive lines.
+        torch.set_rng_state(torch_state.cpu())
     else:
         logger.warning("Checkpoint %s has no 'torch_rng_state'; torch RNG not restored.", path)
 
     cuda_state = checkpoint.get("torch_cuda_rng_state_all")
     if cuda_state is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(cuda_state)
+        # set_rng_state_all likewise wants CPU ByteTensors, one per device.
+        torch.cuda.set_rng_state_all([s.cpu() for s in cuda_state])
     elif cuda_state is not None:
         logger.debug(
             "Checkpoint %s has CUDA RNG state but no CUDA device is available; skipping.", path
