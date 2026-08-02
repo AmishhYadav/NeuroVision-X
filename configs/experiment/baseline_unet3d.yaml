@@ -1,0 +1,18 @@
+# @package _global_
+#
+# Milestone-1 baseline A: plain 3D U-Net.
+#
+#   python scripts/train.py +experiment=baseline_unet3d data.root_dir=/path/to/prep
+#
+# Paired with baseline_swinunetr.yaml. Both include _baseline_common.yaml, so
+# data, augmentation, optimizer, LR schedule, seed, and stopping rule are
+# identical by construction and the ONLY difference is the architecture.
+#
+# Record the result in docs/experiments.md before starting the next run.
+
+defaults:
+  - _baseline_common
+  - override /model: unet3d
+  - _self_
+
+experiment_name: baseline_unet3d

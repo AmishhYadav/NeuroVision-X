@@ -1,0 +1,27 @@
+# @package _global_
+#
+# Milestone-1 baseline B: SwinUNETR-B (62.19M params).
+#
+#   python scripts/train.py +experiment=baseline_swinunetr data.root_dir=/path/to/prep
+#
+# Paired with baseline_unet3d.yaml. Both include _baseline_common.yaml, so
+# data, augmentation, optimizer, LR schedule, seed, and stopping rule are
+# identical by construction and the ONLY difference is the architecture.
+#
+# Note this deliberately does NOT retune the optimizer for the transformer.
+# A transformer-specific LR or weight decay would very likely help SwinUNETR,
+# but it would also mean the two runs no longer differ in one variable, and a
+# tuned-vs-untuned comparison is not a baseline comparison. If SwinUNETR is
+# later retuned, it becomes a THIRD row in docs/experiments.md, not an edit
+# to this one.
+#
+# Cost warning: roughly 3x the GPU hours of baseline_unet3d at the same
+# schedule (62M params, plus ~20-30% for gradient checkpointing). Expect 3-4
+# Kaggle sessions. Record the result in docs/experiments.md.
+
+defaults:
+  - _baseline_common
+  - override /model: swinunetr
+  - _self_
+
+experiment_name: baseline_swinunetr

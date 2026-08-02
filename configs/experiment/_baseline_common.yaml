@@ -1,0 +1,128 @@
+# @package _global_
+#
+# Shared body of the two Milestone-1 baseline runs.
+#
+# This file exists so that `baseline_unet3d` and `baseline_swinunetr` cannot
+# drift apart. Everything that is NOT the architecture lives here exactly once:
+# data, augmentation, optimizer, LR schedule, seed, checkpointing, stopping.
+# The two experiment files that include it differ in exactly two lines each --
+# `experiment_name` and the `override /model:` -- so any Dice/HD95/ECE gap
+# between the runs is attributable to the encoder-decoder and to nothing else.
+#
+# Do not run this file directly; it sets no experiment_name.
+# Do not add a model: block here. That is the one thing the children own.
+
+# --- The controlled variables -------------------------------------------
+
+# Same seed for both runs. This does NOT make them bit-identical (3D conv
+# backward kernels are nondeterministic on CUDA regardless), but it does make
+# them see the same split, the same case order, and the same crop positions
+# for the same case, which removes data-order as an explanation for any gap.
+seed: 42
+
+data:
+  # Explicitly restated rather than inherited, so that a later edit to
+  # configs/data/brats.yaml cannot silently change what "the baseline" meant
+  # halfway through the experiment table in docs/experiments.md.
+  patch_size: [96, 96, 96]
+  pos_neg_ratio: [1, 1]
+  samples_per_volume: 4
+
+  augment:
+    flip_prob: 0.5
+    rot90_prob: 0.5
+    scale_intensity_factor: 0.1
+    shift_intensity_offset: 0.1
+    noise_prob: 0.15
+    noise_std: 0.01
+
+  # Kaggle: ~13 GB RAM cannot cache 4-channel float32 volumes, and offline
+  # preprocessing already removed the expensive part of the pipeline.
+  dataset_type: dataset
+  cache_rate: 0.0
+  num_workers: 4
+
+  overfit_n: null # never set on a reportable run
+
+training:
+  # 100 epochs x 875 train cases x 4 patches/case = 350,000 patch presentations.
+  # For scale, nnU-Net's reference budget is 1000 epochs x 250 iterations x
+  # batch 2 = 500,000. So this is ~70% of a standard full-length 3D
+  # segmentation schedule -- chosen because it has to fit twice inside a
+  # ~30 GPU-hour week, and SwinUNETR-B is roughly 3x the cost per epoch of the
+  # U-Net at the same schedule.
+  #
+  # PICK THIS ONCE AND DO NOT CHANGE IT MID-RUN. The cosine schedule is defined
+  # over `epochs`, so raising it on a resumed run silently rewrites the LR curve
+  # the earlier epochs were trained under, and the run is then no longer any
+  # single schedule.
+  epochs: 100
+
+  batch_size: 1 # x samples_per_volume 4 = 4 patches of 96^3 per optimizer step
+  grad_accum_steps: 1
+  amp: true
+
+  optimizer:
+    name: adamw
+    lr: 1.0e-4
+    weight_decay: 1.0e-5
+    betas: [0.9, 0.999]
+
+  scheduler:
+    name: cosine
+    warmup_epochs: 5 # 5% of the run, scaled down from the 10/300 default
+    min_lr: 1.0e-6
+
+  loss:
+    name: dice_ce
+    dice_weight: 1.0
+    ce_weight: 1.0
+    sigmoid: true
+    softmax: false
+    include_background: true # channel 0 is ET, a real region -- never false here
+    squared_pred: false
+    smooth_nr: 1.0e-5
+    smooth_dr: 1.0e-5
+    deep_supervision:
+      enabled: false
+      weights: null
+
+  grad_clip_norm: 1.0
+
+  # Validation is full sliding-window inference over all 187 val cases and is
+  # NOT cheap -- for SwinUNETR it is on the order of 10 minutes. At
+  # val_interval: 1 that would cost more GPU time than the training itself.
+  # Every 5 epochs gives 20 validation points across the run, which is plenty
+  # to see the curve and to pick a best checkpoint, and costs ~5x less.
+  val_interval: 5
+  log_interval: 20
+
+  sliding_window:
+    roi_size: ${data.patch_size}
+    sw_batch_size: 4
+    # 0.25, not the 0.5 used for final evaluation. Halving the stride overlap
+    # roughly halves the number of windows per volume. This makes the monitored
+    # val Dice very slightly pessimistic relative to the number that
+    # scripts/evaluate.py will report, which is fine: this is a monitoring
+    # signal, it is identical for both baselines, and nothing here is reported.
+    # cfg.inference.sliding_window (overlap 0.5) is what produces paper numbers.
+    overlap: 0.25
+
+  checkpoint:
+    dir: ${output_dir}/checkpoints
+    save_every_n_epochs: 1 # resume is epoch-granular; a kill costs at most 1 epoch
+    keep_last_n: 2 # SwinUNETR checkpoints are ~754 MB against a 20 GB /kaggle/working quota
+    monitor: val/dice_mean
+    mode: max
+    resume: null # scripts/train.py auto-finds last.pt; only set to force a specific file
+
+  # Under Kaggle's 12h wall clock. The trainer predicts whether the next epoch
+  # fits and exits cleanly with a saved checkpoint rather than being SIGKILLed.
+  max_hours: 11.0
+
+wandb:
+  project: neurovision-x
+  mode: online
+  # Same group for both runs so W&B overlays their curves on one chart.
+  group: milestone1_baselines
+  tags: [baseline, milestone1]
