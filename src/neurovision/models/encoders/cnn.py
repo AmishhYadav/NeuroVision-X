@@ -171,6 +171,9 @@ class CNNEncoder(nn.Module):
         dropout: `Dropout3d` probability used in every residual block.
         use_checkpoint: If True, wrap each stage in gradient checkpointing
             during training to trade compute for activation memory.
+        zero_init_residual: If True, zero-initialize the second GroupNorm's
+            scale in every residual block so each block starts as an exact
+            identity function. See `_init_weights`.
 
     Raises:
         ValueError: If `blocks_per_stage` and `channels` have different
@@ -186,6 +189,7 @@ class CNNEncoder(nn.Module):
         num_groups: int = 8,
         dropout: float = 0.1,
         use_checkpoint: bool = False,
+        zero_init_residual: bool = True,
     ) -> None:
         super().__init__()
 
@@ -227,6 +231,63 @@ class CNNEncoder(nn.Module):
 
         self.stages = nn.ModuleList(stages)
 
+        self._init_weights(zero_init_residual)
+
+    def _init_weights(self, zero_init_residual: bool) -> None:
+        """Initializes conv and norm parameters.
+
+        PyTorch's own `Conv3d` default is `kaiming_uniform_` with
+        `a=sqrt(5)`, a legacy value that corresponds to no activation
+        function actually used here. Since every conv in this encoder is
+        followed by a LeakyReLU with negative slope 0.01, the initialization
+        is matched to that instead.
+
+        Args:
+            zero_init_residual: If True, set `norm2.weight` to zero in every
+                `ResidualBlock`.
+        """
+        for module in self.modules():
+            if isinstance(module, nn.Conv3d):
+                # `a` is the LeakyReLU negative slope, so the gain accounts
+                # for how much signal the activation lets through. `fan_out`
+                # preserves activation variance in the BACKWARD pass
+                # (`fan_in` does so in the forward pass); with a GroupNorm
+                # immediately after every conv the forward scale is
+                # renormalized regardless, so this choice mostly affects
+                # gradient magnitude at step 0.
+                nn.init.kaiming_normal_(
+                    module.weight, a=0.01, mode="fan_out", nonlinearity="leaky_relu"
+                )
+            elif isinstance(module, nn.GroupNorm):
+                nn.init.ones_(module.weight)
+                nn.init.zeros_(module.bias)
+
+        if not zero_init_residual:
+            return
+
+        # Zero the SECOND norm's scale in each block (never the shortcut's).
+        # GroupNorm computes `weight * normalized + bias`, so weight == 0
+        # makes the block's residual branch output exactly 0, and the block
+        # reduces to `LeakyReLU(shortcut(x))` -- an identity function
+        # wherever the shortcut is `nn.Identity`. The network therefore
+        # starts out passing its input straight through instead of through a
+        # stack of randomly-initialized transforms, which is a well
+        # established stabilizer for early training of residual nets.
+        #
+        # Consequence worth knowing, because it looks like a bug: on the very
+        # first optimizer step `conv2` receives a gradient of exactly zero,
+        # since the gradient reaching it is scaled by `norm2.weight == 0`.
+        # `norm2.weight` itself does get a non-zero gradient, so it moves off
+        # zero immediately and `conv2` starts learning from step 2 onward.
+        # This is expected behaviour of zero-init residual, not a dead layer.
+        #
+        # The benefit scales with depth and this encoder is shallow (a
+        # handful of blocks), so the effect here is modest -- hence the flag,
+        # which makes it ablatable rather than an unexamined default.
+        for module in self.modules():
+            if isinstance(module, ResidualBlock):
+                nn.init.zeros_(module.norm2.weight)
+
     def forward(self, x: Tensor) -> list[Tensor]:
         """Runs the encoder, returning a fine-to-coarse feature pyramid.
 
@@ -264,7 +325,8 @@ def build_cnn_encoder(cfg: Any) -> CNNEncoder:
     Args:
         cfg: The full composed Hydra config, exposing `cfg.data.in_channels`
             and `cfg.model.encoder.cnn` with keys `channels`,
-            `blocks_per_stage`, `num_groups`, `dropout`, `use_checkpoint`.
+            `blocks_per_stage`, `num_groups`, `dropout`, `use_checkpoint`,
+            `zero_init_residual`.
 
     Returns:
         A constructed `CNNEncoder`.
@@ -278,6 +340,7 @@ def build_cnn_encoder(cfg: Any) -> CNNEncoder:
         num_groups=cnn_cfg.num_groups,
         dropout=cnn_cfg.dropout,
         use_checkpoint=cnn_cfg.use_checkpoint,
+        zero_init_residual=cnn_cfg.zero_init_residual,
     )
 
     logger.info(
