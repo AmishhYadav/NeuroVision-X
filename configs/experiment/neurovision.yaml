@@ -23,6 +23,12 @@ experiment_name: neurovision
 
 training:
   loss:
+    # multitask scores the segmentation, confidence and boundary heads
+    # together in one weighted-sum objective. See
+    # neurovision.losses.multitask.build_multitask and
+    # training.loss.multitask below (defined in configs/training/default.yaml)
+    # for the per-term weights.
+    name: multitask
     deep_supervision:
       # MUST be true whenever model.deep_supervision_levels > 1. With more than
       # one supervised level the model returns a LIST of logits in training

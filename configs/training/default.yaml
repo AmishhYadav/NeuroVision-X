@@ -68,6 +68,41 @@ loss:
     # null -> auto halving weights (1, 0.5, 0.25, ...), normalized to sum 1.
     weights: null
 
+  # Settings for `neurovision.losses.multitask.MultiTaskLoss`, selected by
+  # `name: multitask` (see configs/experiment/neurovision.yaml). Inert unless
+  # `name` is actually "multitask" -- present here so the key composes for
+  # every experiment, but only the neurovision model has the heads these
+  # terms score against.
+  multitask:
+    seg_weight: 1.0
+    boundary:
+      enabled: true
+      weight: 0.3
+      kernel_size: 3
+      # The shell is a few percent of voxels, so the Dice term carries this
+      # one; squaring the prediction in the denominator makes an already
+      # thin-structure Dice even sharper. Left off to match the seg term.
+      squared_pred: false
+    confidence:
+      enabled: true
+      weight: 0.05
+      threshold: 0.5
+    surface:
+      # OFF by default and this is a measured decision, not a preference.
+      # MONAI's HausdorffDTLoss computes a Euclidean distance transform for
+      # BOTH prediction and target on EVERY forward. On CUDA that path goes
+      # through cuCIM/CuPy, which is the exact backend that already failed on
+      # the Kaggle T4 image with "CompileException: Thrust requires at least
+      # C++17" for HD95 (see CLAUDE.md). Without cuCIM it falls back to scipy,
+      # which means a host round-trip: measured 0.72 s per step for the 24
+      # transforms a 4-patch, 3-channel, 96^3 batch needs. That roughly doubles
+      # step time on rationed Kaggle hours. The boundary HEAD above gets the
+      # same signal for the price of two max_pool3d kernels.
+      enabled: false
+      weight: 0.1
+      alpha: 2.0
+      log: false # true -> LogHausdorffDTLoss
+
 grad_clip_norm: 1.0
 
 # --- Validation and logging ---

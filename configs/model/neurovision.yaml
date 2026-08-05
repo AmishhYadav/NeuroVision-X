@@ -87,7 +87,29 @@ decoder:
   use_checkpoint: false
 
 head:
+  # Segmentation head dropout. Non-zero is what makes MC-dropout uncertainty
+  # possible later: a model trained at p=0.0 has no predictive spread to measure.
   dropout: 0.0
+
+  # The confidence head predicts, per voxel and per region, whether the
+  # segmentation head's own prediction is correct there. Its target is built at
+  # loss time from the (detached) segmentation output, so it is a read-out, not
+  # a second segmenter. MUST agree with training.loss.name == multitask --
+  # build_neurovision raises if they disagree.
+  confidence:
+    enabled: true
+    hidden_channels: null   # null -> max(decoder_width // 2, out_channels, 8)
+    num_groups: 8
+    dropout: 0.0
+
+  # The boundary head predicts the 1-voxel shell at each region's surface,
+  # derived from the ground-truth label by a morphological gradient inside the
+  # loss (no dataloader change). Auxiliary task for the boundary-accuracy claim.
+  boundary:
+    enabled: true
+    hidden_channels: null
+    num_groups: 8
+    dropout: 0.0
 
 # Number of decoder stages (fine to coarse, starting at full resolution) that get a
 # segmentation head attached, i.e. how many outputs deep supervision produces. 1 disables

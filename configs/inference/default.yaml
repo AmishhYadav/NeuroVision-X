@@ -25,6 +25,25 @@ sliding_window:
   output_device: null
   padding_mode: constant
 
+mc_dropout:
+  # Off by default: it multiplies evaluation cost by num_samples for a signal
+  # nothing in the pipeline consumes yet. Turn on for the calibration phase.
+  enabled: false
+  # 10x the evaluation budget. The median case needs 12 sliding windows at
+  # roi 96 / overlap 0.5 (max 36 across all 1251 cases), so this is ~120
+  # windows per case. N=50+ appears in the literature and is not affordable
+  # on ~30 rationed Kaggle hours a week. Note that mutual information is
+  # biased LOW at small N, so never compare MI across runs with different N.
+  num_samples: 10
+  # null -> leave the global torch RNG alone. An int seeds it before the N
+  # passes and restores the previous state afterwards, so a per-case loop is
+  # reproducible and does not depend on how many cases ran before it.
+  seed: null
+  # Refuse to run when the model has no dropout module with p > 0. Every pass
+  # would then be identical, mutual information would be exactly 0 everywhere,
+  # and the returned uncertainty map would look plausible and mean nothing.
+  require_dropout: true
+
 postprocess:
   threshold: 0.5
   # Restores ET <= TC <= WT after the component filters break it. Leave on:

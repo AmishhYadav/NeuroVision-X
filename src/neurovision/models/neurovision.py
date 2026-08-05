@@ -13,7 +13,9 @@ This file wires together every piece built elsewhere in `neurovision.models` int
   (adaptive gated cross-attention vs. concat vs. add) is a config string, not a code change.
 - `neurovision.models.decoder.unet_decoder.UNetDecoder` — walks the fused pyramid back up to
   full resolution.
-- `neurovision.models.heads.segmentation.SegmentationHead` — one per deep-supervision level.
+- `neurovision.models.heads.multitask.MultiTaskHead` — one `SegmentationHead` per
+  deep-supervision level, plus optional confidence / boundary `AuxiliaryHead`s attached only
+  to the full-resolution decoder feature. See that module's docstring.
 
 ## The skip pyramid this model builds
 
@@ -41,7 +43,7 @@ from neurovision.models.decoder.unet_decoder import UNetDecoder
 from neurovision.models.encoders.cnn import build_cnn_encoder
 from neurovision.models.encoders.swin import build_swin_encoder
 from neurovision.models.fusion.registry import build_fusion
-from neurovision.models.heads.segmentation import SegmentationHead
+from neurovision.models.heads.multitask import MultiTaskHead, MultiTaskOutput
 from neurovision.models.registry import register_model
 
 logger = logging.getLogger(__name__)
@@ -92,7 +94,13 @@ class NeuroVisionX(nn.Module):
             counted fine to coarse starting at the full-resolution stage. Must be in
             `1 .. decoder.num_stages`. `1` disables deep supervision (a single head, the
             full-resolution one).
-        head_dropout: `Dropout3d` probability inside every `SegmentationHead`.
+        head_dropout: `Dropout3d` probability inside every `SegmentationHead`. Unread when
+            `heads` is supplied directly.
+        heads: A pre-built `MultiTaskHead`, or `None` (the default) to build a
+            segmentation-only one from `out_channels` / `deep_supervision_levels` /
+            `head_dropout`. Keyword-only and optional so every existing direct construction
+            of `NeuroVisionX` (throughout `tests/`) keeps working unchanged. When supplied,
+            `len(heads.seg_heads)` must equal `deep_supervision_levels`.
 
     Raises:
         ValueError: If any of the construction-time consistency checks below fails. Each
@@ -108,6 +116,8 @@ class NeuroVisionX(nn.Module):
         out_channels: int,
         deep_supervision_levels: int = 3,
         head_dropout: float = 0.0,
+        *,
+        heads: MultiTaskHead | None = None,
     ) -> None:
         super().__init__()
 
@@ -179,60 +189,51 @@ class NeuroVisionX(nn.Module):
                 f"head)."
             )
 
+        # --- 6. A supplied MultiTaskHead was built for this exact deep_supervision_levels. ---
+        if heads is not None and len(heads.seg_heads) != deep_supervision_levels:
+            raise ValueError(
+                f"heads.seg_heads has {len(heads.seg_heads)} entries but "
+                f"deep_supervision_levels is {deep_supervision_levels} -- they must agree. "
+                f"Build heads with the same deep_supervision_levels passed here, or omit "
+                f"heads and let NeuroVisionX build a segmentation-only MultiTaskHead itself."
+            )
+
         self.cnn_encoder = cnn_encoder
         self.swin_encoder = swin_encoder
         self.fusion_blocks = fusion_blocks
         self.decoder = decoder
         self.deep_supervision_levels = deep_supervision_levels
 
-        # Head i reads decoder.out_channels[i] -- decoder features are fine-to-coarse, so
-        # head 0 is the full-resolution head and heads 1.. read progressively coarser
-        # (lower-resolution) decoder features.
-        self.heads = nn.ModuleList(
-            [
-                SegmentationHead(decoder.out_channels[i], out_channels, head_dropout)
-                for i in range(deep_supervision_levels)
-            ]
+        # self.heads is a MultiTaskHead (owns the segmentation heads AND the optional
+        # confidence / boundary heads), not a bare nn.ModuleList of segmentation heads --
+        # see neurovision.models.heads.multitask's module docstring. Head i reads
+        # decoder.out_channels[i] -- decoder features are fine-to-coarse, so head 0 is the
+        # full-resolution head and heads 1.. read progressively coarser decoder features.
+        self.heads = (
+            heads
+            if heads is not None
+            else MultiTaskHead(
+                decoder_channels=decoder.out_channels,
+                out_channels=out_channels,
+                deep_supervision_levels=deep_supervision_levels,
+                seg_dropout=head_dropout,
+            )
         )
 
-    def forward(self, x: Tensor) -> Tensor | list[Tensor]:
-        """Runs the full network.
+    def _encode_decode(self, x: Tensor) -> list[Tensor]:
+        """Shared encoder -> fusion -> decoder body used by every forward path.
+
+        Factored out so `forward`, `forward_multitask`, and `forward_with_gates` do not each
+        duplicate the fusion loop; `forward_with_gates` additionally needs the per-block gate
+        maps, which this method does not return, so it has its own near-identical body
+        instead of reusing this one (see that method's docstring).
 
         Args:
             x: Input MRI volume, shape `(B, in_channels, D, H, W)`.
 
         Returns:
-            In eval mode, or in training mode with `deep_supervision_levels == 1`: a single
-            logits `Tensor`, shape `(B, out_channels, D, H, W)`, matching the input's spatial
-            shape.
-
-            In training mode with `deep_supervision_levels > 1`: a `list` of logits tensors,
-            ordered **highest resolution first** (index 0 is full resolution, index 1 is
-            stride 2, and so on) — element `i` has spatial shape `(D // 2**i, H // 2**i, W //
-            2**i)` and `out_channels` channels.
-
-            THE RETURN-TYPE SWITCH IS DELIBERATE AND LOAD-BEARING, for two independent
-            reasons:
-
-            1. `neurovision.inference.sliding_window` and MONAI's sliding-window inferer call
-               `model(patch)` and expect a plain `Tensor`. Returning a list in eval mode would
-               silently break every evaluation path — there is no shape error, just a wrong
-               Python type flowing into code that assumes a tensor.
-            2. `neurovision.losses.segmentation.DeepSupervisionLoss.forward` takes a sequence
-               ordered highest-resolution-first and internally upsamples each entry to the
-               target's resolution to match. `self.heads[0]` reads `feats[0]` (the decoder's
-               full-resolution output, since `UNetDecoder.forward` returns fine-to-coarse
-               features), so `logits[0]` is already full resolution and `logits[1:]` are
-               already the coarser ones — the natural construction order here IS the order
-               the loss wants. Do not reverse it.
-
-            MC-DROPOUT HAZARD: uncertainty estimation re-runs this network with dropout
-            active to measure predictive spread. Do NOT do that by calling `model.train()` —
-            that flips this method's return type to a list (when `deep_supervision_levels >
-            1`) and breaks sliding-window inference, which expects a tensor. Instead, enable
-            the `Dropout3d` modules individually (e.g. `module.train()` on each `Dropout3d`
-            found via `self.modules()`) while leaving the rest of the model, and this method,
-            in `eval()` mode.
+            Fine-to-coarse decoder features (no heads applied), length
+            `decoder.num_stages`.
         """
         # Fine-to-coarse pyramid from the CNN branch (always present).
         cnn_pyramid = self.cnn_encoder(x)
@@ -250,15 +251,90 @@ class NeuroVisionX(nn.Module):
             # passes to the decoder unfused.
             skips = cnn_pyramid
 
-        feats = self.decoder(skips)  # fine-to-coarse decoder features, no heads applied yet
+        return self.decoder(skips)  # fine-to-coarse decoder features, no heads applied yet
 
-        logits = [head(feats[i]) for i, head in enumerate(self.heads)]
+    def forward(self, x: Tensor) -> Tensor | list[Tensor] | MultiTaskOutput:
+        """Runs the full network.
 
-        # See the docstring above: list only in training with more than one head, tensor
-        # otherwise. This is the one place the switch happens.
-        if self.training and len(logits) > 1:
-            return logits
-        return logits[0]
+        Args:
+            x: Input MRI volume, shape `(B, in_channels, D, H, W)`.
+
+        Returns:
+            One of THREE possible types, chosen by `self.training` and `self.heads`:
+
+            1. A single logits `Tensor`, shape `(B, out_channels, D, H, W)`, matching the
+               input's spatial shape. Returned in eval mode always, and in training mode
+               when there is exactly one segmentation head and no auxiliary head enabled.
+            2. A `list[Tensor]`, ordered **highest resolution first** (index 0 is full
+               resolution, index 1 is stride 2, and so on) — element `i` has spatial shape
+               `(D // 2**i, H // 2**i, W // 2**i)` and `out_channels` channels. Returned only
+               in training mode, with `deep_supervision_levels > 1` and no auxiliary head
+               enabled.
+            3. A `MultiTaskOutput` (see `neurovision.models.heads.multitask`). Returned only
+               in training mode, whenever either the confidence or the boundary head is
+               enabled (`self.heads.has_auxiliary`) — regardless of
+               `deep_supervision_levels`, since `MultiTaskOutput.seg` already carries
+               whatever the segmentation case above would have returned.
+
+            THE RETURN-TYPE SWITCH IS DELIBERATE AND LOAD-BEARING, for three independent
+            reasons:
+
+            1. `neurovision.inference.sliding_window` and MONAI's sliding-window inferer call
+               `model(patch)` and expect a plain `Tensor`. Returning anything else in eval
+               mode would silently break every evaluation path — there is no shape error,
+               just a wrong Python type flowing into code that assumes a tensor.
+            2. `neurovision.losses.segmentation.DeepSupervisionLoss.forward` takes a sequence
+               ordered highest-resolution-first and internally upsamples each entry to the
+               target's resolution to match. `self.heads.seg_heads[0]` reads `feats[0]` (the
+               decoder's full-resolution output, since `UNetDecoder.forward` returns
+               fine-to-coarse features), so `logits[0]` is already full resolution and
+               `logits[1:]` are already the coarser ones — the natural construction order
+               here IS the order the loss wants. Do not reverse it.
+            3. When either auxiliary head is enabled, training returns a `MultiTaskOutput`,
+               which only `neurovision.losses.multitask.MultiTaskLoss` knows how to consume.
+               No other loss should be pointed at a model built this way — see
+               `build_neurovision`'s auxiliary-head/loss-name guard.
+
+            MC-DROPOUT HAZARD: uncertainty estimation re-runs this network with dropout
+            active to measure predictive spread. Do NOT do that by calling `model.train()` —
+            that flips this method's return type (to a list, or to a `MultiTaskOutput`) and
+            breaks sliding-window inference, which expects a tensor. Instead, enable the
+            `Dropout3d` modules individually (e.g. `module.train()` on each `Dropout3d` found
+            via `self.modules()`) while leaving the rest of the model, and this method, in
+            `eval()` mode. The auxiliary heads contain `Dropout3d` too (see
+            `AuxiliaryHead`), so this applies to them exactly as it does to the segmentation
+            heads.
+        """
+        feats = self._encode_decode(x)
+        out = self.heads(feats)
+
+        # See the docstring above: MultiTaskOutput only when an aux head is enabled and only
+        # in training; list only in training with more than one segmentation head and no aux
+        # head; a single tensor otherwise. This is the one place the switch happens.
+        if self.training and self.heads.has_auxiliary:
+            return out
+        if self.training and len(out.seg) > 1:
+            return out.seg
+        return out.seg[0]
+
+    def forward_multitask(self, x: Tensor) -> MultiTaskOutput:
+        """Runs the network and always returns a `MultiTaskOutput`, regardless of mode.
+
+        Unlike `forward`, this method never switches return type — it is the hook for
+        uncertainty and calibration code (not yet written) that always wants segmentation
+        logits alongside whatever auxiliary heads are enabled, whether the model is in train
+        or eval mode. Nothing consumes this yet.
+
+        Args:
+            x: Input MRI volume, shape `(B, in_channels, D, H, W)`.
+
+        Returns:
+            A `MultiTaskOutput` with `seg` of length `deep_supervision_levels` and
+            `confidence` / `boundary` populated according to which auxiliary heads are
+            enabled (`None` for a disabled one).
+        """
+        feats = self._encode_decode(x)
+        return self.heads(feats)
 
     def forward_with_gates(self, x: Tensor) -> tuple[Tensor, list[Tensor | None]]:
         """Runs the network and also returns each fusion block's gate map.
@@ -299,7 +375,7 @@ class NeuroVisionX(nn.Module):
             gates = []
 
         feats = self.decoder(skips)
-        logits = self.heads[0](feats[0])
+        logits = self.heads.seg_heads[0](feats[0])
         return logits, gates
 
 
@@ -395,6 +471,78 @@ def build_neurovision(cfg: Any) -> nn.Module:
                 f"two agree."
             )
 
+    # head_cfg.get(...) with defaults (rather than head_cfg.confidence, which would raise
+    # on a config predating these keys) so existing model-only test configs -- built before
+    # the auxiliary heads existed -- still build a segmentation-only model.
+    head_cfg = cfg.model.head
+    conf_cfg = head_cfg.get("confidence", None)
+    bnd_cfg = head_cfg.get("boundary", None)
+    confidence_enabled = bool(conf_cfg.get("enabled", False)) if conf_cfg is not None else False
+    boundary_enabled = bool(bnd_cfg.get("enabled", False)) if bnd_cfg is not None else False
+
+    # Guard: an auxiliary head is enabled only if training.loss.name == "multitask", and vice
+    # versa. Modelled on the deep-supervision guard directly above -- same reasoning, a
+    # different silent-mismatch shape. Skipped entirely when there is no training group at
+    # all (e.g. a model-only test config), same as the deep-supervision guard.
+    aux_enabled = confidence_enabled or boundary_enabled
+    loss_name = OmegaConf.select(cfg, "training.loss.name", default=None)
+    if loss_name is not None:
+        if aux_enabled and loss_name != "multitask":
+            raise ValueError(
+                f"model.head.confidence.enabled ({confidence_enabled}) or "
+                f"model.head.boundary.enabled ({boundary_enabled}) is True, but "
+                f"training.loss.name is '{loss_name}', not 'multitask'. With an auxiliary "
+                f"head enabled the model returns a MultiTaskOutput in training mode, which "
+                f"only MultiTaskLoss knows how to consume. Set training.loss.name to "
+                f"'multitask', or disable both model.head.confidence.enabled and "
+                f"model.head.boundary.enabled."
+            )
+        if loss_name == "multitask" and not aux_enabled:
+            raise ValueError(
+                "training.loss.name is 'multitask' but both model.head.confidence.enabled "
+                "and model.head.boundary.enabled are False. MultiTaskLoss would be "
+                "configured with auxiliary loss terms that have no head to supervise, "
+                "silently reducing to the plain segmentation loss while the config claims "
+                "otherwise. Enable at least one of model.head.confidence.enabled / "
+                "model.head.boundary.enabled, or set training.loss.name to a "
+                "non-multitask loss."
+            )
+
+    # Each auxiliary head reads its OWN config sub-block. They currently carry identical
+    # values in configs/model/neurovision.yaml, which makes it tempting to collapse them into
+    # one shared parameter set -- do not. `model.head.boundary.hidden_channels` would then be
+    # read and thrown away, building a head of a different width with no error anywhere.
+    def _aux_kwargs(block: Any, prefix: str) -> dict[str, Any]:
+        """Pulls one auxiliary head's hyperparameters out of its config sub-block.
+
+        Args:
+            block: The `model.head.confidence` / `model.head.boundary` sub-block, or `None`
+                when the key is absent (older model-only test configs predate it).
+            prefix: `"confidence"` or `"boundary"` -- the MultiTaskHead argument prefix.
+
+        Returns:
+            Keyword arguments for `MultiTaskHead`, falling back to that class's own defaults
+            when the sub-block is absent.
+        """
+        if block is None:
+            return {}
+        return {
+            f"{prefix}_hidden_channels": block.get("hidden_channels", None),
+            f"{prefix}_num_groups": block.get("num_groups", 8),
+            f"{prefix}_dropout": block.get("dropout", 0.0),
+        }
+
+    heads = MultiTaskHead(
+        decoder_channels=decoder.out_channels,
+        out_channels=cfg.model.out_channels,
+        deep_supervision_levels=deep_supervision_levels,
+        seg_dropout=head_cfg.dropout,
+        confidence=confidence_enabled,
+        boundary=boundary_enabled,
+        **_aux_kwargs(conf_cfg if confidence_enabled else None, "confidence"),
+        **_aux_kwargs(bnd_cfg if boundary_enabled else None, "boundary"),
+    )
+
     model = NeuroVisionX(
         cnn_encoder=cnn_encoder,
         swin_encoder=swin_encoder,
@@ -402,15 +550,19 @@ def build_neurovision(cfg: Any) -> nn.Module:
         decoder=decoder,
         out_channels=cfg.model.out_channels,
         deep_supervision_levels=deep_supervision_levels,
-        head_dropout=cfg.model.head.dropout,
+        head_dropout=head_cfg.dropout,
+        heads=heads,
     )
 
     n_params = sum(p.numel() for p in model.parameters())
     logger.info(
-        "Built NeuroVisionX: %d parameters, fusion='%s', deep_supervision_levels=%d",
+        "Built NeuroVisionX: %d parameters, fusion='%s', deep_supervision_levels=%d, "
+        "confidence_head=%s, boundary_head=%s",
         n_params,
         cfg.model.fusion.name,
         deep_supervision_levels,
+        confidence_enabled,
+        boundary_enabled,
     )
 
     return model

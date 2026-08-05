@@ -27,6 +27,7 @@ from neurovision.models.decoder.unet_decoder import UNetDecoder
 from neurovision.models.encoders.cnn import CNNEncoder
 from neurovision.models.encoders.swin import SwinEncoder
 from neurovision.models.fusion.adaptive_fusion import AdaptiveGatedFusion, AddFusion, ConcatFusion
+from neurovision.models.heads.multitask import MultiTaskHead, MultiTaskOutput
 from neurovision.models.neurovision import NeuroVisionX, build_neurovision
 from neurovision.models.registry import available_models, build_model
 
@@ -575,6 +576,190 @@ def test_builder_swin_disabled_omits_swin_and_fusion_params() -> None:
     n_full = sum(p.numel() for p in model_full.parameters())
     n_cnn_only = sum(p.numel() for p in model_cnn_only.parameters())
     assert n_cnn_only < n_full
+
+
+# ---------------------------------------------------------------------------
+# 13. auxiliary heads (confidence / boundary) -- return-type switch and builder guards
+# ---------------------------------------------------------------------------
+
+
+def _build_model_with_heads(
+    deep_supervision_levels: int = 3,
+    confidence: bool = False,
+    boundary: bool = False,
+) -> NeuroVisionX:
+    cnn = _build_cnn()
+    swin = _build_swin()
+    fusion_blocks = _build_fusion_blocks(cnn, swin)
+    decoder = _build_decoder(cnn)
+    heads = MultiTaskHead(
+        decoder_channels=decoder.out_channels,
+        out_channels=3,
+        deep_supervision_levels=deep_supervision_levels,
+        confidence=confidence,
+        boundary=boundary,
+        confidence_num_groups=NUM_GROUPS,
+        boundary_num_groups=NUM_GROUPS,
+    )
+    return NeuroVisionX(
+        cnn_encoder=cnn,
+        swin_encoder=swin,
+        fusion_blocks=fusion_blocks,
+        decoder=decoder,
+        out_channels=3,
+        deep_supervision_levels=deep_supervision_levels,
+        head_dropout=0.0,
+        heads=heads,
+    )
+
+
+def test_eval_mode_returns_tensor_even_with_both_aux_heads_and_deep_supervision() -> None:
+    # THE CRITICAL TEST: this is what keeps sliding-window inference working.
+    model = _build_model_with_heads(deep_supervision_levels=3, confidence=True, boundary=True)
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        out = model(x)
+
+    assert isinstance(out, Tensor)
+    assert out.shape == (1, 3, 32, 32, 32)
+
+
+def test_train_mode_with_aux_head_returns_multitask_output() -> None:
+    model = _build_model_with_heads(deep_supervision_levels=3, confidence=True, boundary=False)
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    out = model(x)
+
+    assert isinstance(out, MultiTaskOutput)
+    assert len(out.seg) == 3
+    assert out.confidence is not None
+    assert out.boundary is None
+
+
+def test_train_mode_no_aux_head_deep_supervision_returns_list_unchanged() -> None:
+    model = _build_model_with_heads(deep_supervision_levels=3, confidence=False, boundary=False)
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    out = model(x)
+
+    assert isinstance(out, list)
+    assert len(out) == 3
+
+
+def test_train_mode_no_aux_head_single_level_returns_tensor_unchanged() -> None:
+    model = _build_model_with_heads(deep_supervision_levels=1, confidence=False, boundary=False)
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    out = model(x)
+
+    assert isinstance(out, Tensor)
+    assert not isinstance(out, list)
+
+
+def test_forward_multitask_returns_multitask_output_in_both_modes() -> None:
+    model = _build_model_with_heads(deep_supervision_levels=2, confidence=True, boundary=True)
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    model.train()
+    out_train = model.forward_multitask(x)
+    assert isinstance(out_train, MultiTaskOutput)
+
+    model.eval()
+    with torch.no_grad():
+        out_eval = model.forward_multitask(x)
+    assert isinstance(out_eval, MultiTaskOutput)
+    assert out_eval.confidence is not None
+    assert out_eval.boundary is not None
+
+
+def test_forward_with_gates_still_works_with_aux_heads_enabled() -> None:
+    model = _build_model_with_heads(deep_supervision_levels=3, confidence=True, boundary=True)
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        logits, gates = model.forward_with_gates(x)
+
+    assert isinstance(logits, Tensor)
+    assert isinstance(gates, list)
+    assert logits.shape == (1, 3, 32, 32, 32)
+    assert len(gates) == SWIN_NUM_LEVELS
+
+
+def test_gradients_flow_to_both_auxiliary_heads() -> None:
+    model = _build_model_with_heads(deep_supervision_levels=1, confidence=True, boundary=True)
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    out = model(x)
+    assert isinstance(out, MultiTaskOutput)
+    total = out.seg[0].sum() + out.confidence.sum() + out.boundary.sum()
+    total.backward()
+
+    conf_weight = model.heads.confidence.conv1.weight
+    bnd_weight = model.heads.boundary.conv1.weight
+
+    for name, weight in [("confidence", conf_weight), ("boundary", bnd_weight)]:
+        assert weight.grad is not None, f"{name} head weight has no grad"
+        assert torch.any(weight.grad != 0.0), f"{name} head weight grad is all zero"
+
+
+def _full_cfg_with_aux(
+    confidence_enabled: bool,
+    boundary_enabled: bool,
+    loss_name: str,
+    deep_supervision_levels: int = 3,
+) -> object:
+    """Same shape as `_full_cfg`, extended with `model.head.confidence` /
+    `model.head.boundary` blocks and a training.loss.name so the aux-head/loss-name
+    builder guard can be exercised."""
+    cfg = _full_cfg(deep_supervision_levels=deep_supervision_levels, ds_loss_enabled=True)
+    cfg.model.head.confidence = {
+        "enabled": confidence_enabled,
+        "hidden_channels": None,
+        "num_groups": NUM_GROUPS,
+        "dropout": 0.0,
+    }
+    cfg.model.head.boundary = {
+        "enabled": boundary_enabled,
+        "hidden_channels": None,
+        "num_groups": NUM_GROUPS,
+        "dropout": 0.0,
+    }
+    cfg.training.loss.name = loss_name
+    return cfg
+
+
+def test_builder_raises_when_aux_head_enabled_but_loss_is_not_multitask() -> None:
+    cfg = _full_cfg_with_aux(confidence_enabled=True, boundary_enabled=False, loss_name="dice_ce")
+
+    with pytest.raises(ValueError, match="multitask"):
+        build_neurovision(cfg)
+
+
+def test_builder_raises_when_loss_is_multitask_but_no_aux_head_enabled() -> None:
+    cfg = _full_cfg_with_aux(
+        confidence_enabled=False, boundary_enabled=False, loss_name="multitask"
+    )
+
+    with pytest.raises(ValueError, match="multitask"):
+        build_neurovision(cfg)
+
+
+def test_builder_aux_head_and_multitask_loss_agree_builds_fine() -> None:
+    cfg = _full_cfg_with_aux(confidence_enabled=True, boundary_enabled=True, loss_name="multitask")
+
+    model = build_neurovision(cfg)
+
+    assert isinstance(model, NeuroVisionX)
+    assert model.heads.has_auxiliary is True
+    assert model.heads.confidence is not None
+    assert model.heads.boundary is not None
 
 
 def test_builder_swin_enabled_defaults_true_when_key_absent() -> None:

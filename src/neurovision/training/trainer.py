@@ -248,9 +248,22 @@ class Trainer:
             n_batches += 1
 
             if (batch_idx + 1) % grad_accum_steps == 0:
+                grad_norm: float | None = None
                 if grad_clip_norm is not None and grad_clip_norm > 0:
                     self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_norm)
+                    # clip_grad_norm_ returns the total norm BEFORE clipping, so
+                    # logging it is free. Worth watching under a multi-task loss:
+                    # extra terms inflate the norm, and once it routinely exceeds
+                    # grad_clip_norm the WHOLE gradient is scaled down -- which
+                    # changes the effective LR of the segmentation term too, and
+                    # silently confounds "did the auxiliary head help?" with "did
+                    # the segmentation LR change?". If this runs consistently
+                    # above the clip threshold where the seg-only baseline did
+                    # not, raise grad_clip_norm rather than rescaling the loss
+                    # weights.
+                    grad_norm = float(
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_norm)
+                    )
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
                 self.optimizer.zero_grad(set_to_none=True)
@@ -263,10 +276,20 @@ class Trainer:
                 self.global_step += 1
 
                 if self.wandb_run is not None and self.global_step % log_interval == 0:
-                    self.wandb_run.log(
-                        {"train/loss": raw_loss.item(), "train/lr": self._current_lr()},
-                        step=self.global_step,
-                    )
+                    payload = {"train/loss": raw_loss.item(), "train/lr": self._current_lr()}
+                    if grad_norm is not None:
+                        payload["train/grad_norm"] = grad_norm
+                    # A multi-task loss exposes its UNWEIGHTED per-term values as
+                    # detached floats. Without them the total is uninterpretable:
+                    # the terms converge to different magnitudes (region Dice+BCE
+                    # settles ~0.25, the thin-shell boundary Dice stays ~0.7), so
+                    # a flat total can hide the boundary term quietly taking over
+                    # late in training. Any loss lacking this attribute -- every
+                    # baseline -- logs exactly what it did before.
+                    components = getattr(self.loss_fn, "last_components", None)
+                    if components is not None:
+                        payload.update({f"train/loss_{k}": v for k, v in components.items()})
+                    self.wandb_run.log(payload, step=self.global_step)
 
             progress.set_postfix(loss=f"{raw_loss.item():.4f}", lr=f"{self._current_lr():.2e}")
 
