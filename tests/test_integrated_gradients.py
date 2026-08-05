@@ -66,6 +66,17 @@ def _make_model(cls: type[nn.Module] = TinyIGNet) -> nn.Module:
     return model
 
 
+def _gen(seed: int = 1234) -> torch.Generator:
+    """A freshly seeded generator for the default Gaussian-noise baseline.
+
+    `integrated_gradients` requires an explicit generator whenever `baseline` is
+    None, so that the drawn baseline -- and therefore the whole attribution -- is
+    reproducible from a seed. Reusing one seed here also keeps the baseline
+    IDENTICAL between two calls, which the comparison tests below depend on.
+    """
+    return torch.Generator().manual_seed(seed)
+
+
 def _make_image(size: int = 8, channels: int = 4, seed: int = 1) -> Tensor:
     generator = torch.Generator().manual_seed(seed)
     return torch.randn(1, channels, size, size, size, generator=generator)
@@ -80,7 +91,7 @@ def test_shapes_and_modality_keys() -> None:
     model = _make_model()
     image = _make_image()
 
-    out = integrated_gradients(model, image, region_index=0, n_steps=8)
+    out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
     assert isinstance(out, IntegratedGradientsOutput)
     assert out.attributions.shape == image.shape
@@ -92,7 +103,7 @@ def test_modality_attribution_sums_to_one() -> None:
     model = _make_model()
     image = _make_image()
 
-    out = integrated_gradients(model, image, region_index=0, n_steps=8)
+    out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
     assert sum(out.modality_attribution.values()) == pytest.approx(1.0)
 
@@ -116,7 +127,7 @@ def test_completeness_axiom_holds() -> None:
     model = _make_model()
     image = _make_image()
 
-    out = integrated_gradients(model, image, region_index=0, n_steps=32)
+    out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=32)
 
     expected = out.target_score - out.baseline_score
     assert out.attributions.sum().item() == pytest.approx(expected, rel=1e-3, abs=1e-3)
@@ -131,7 +142,7 @@ def test_relative_delta_is_small_when_converged() -> None:
     model = _make_model()
     image = _make_image()
 
-    out = integrated_gradients(model, image, region_index=0, n_steps=32)
+    out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=32)
 
     assert out.relative_delta < 0.05
 
@@ -140,8 +151,8 @@ def test_relative_delta_shrinks_with_more_steps() -> None:
     model = _make_model()
     image = _make_image()
 
-    coarse = integrated_gradients(model, image, region_index=0, n_steps=2)
-    fine = integrated_gradients(model, image, region_index=0, n_steps=64)
+    coarse = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=2)
+    fine = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=64)
 
     # Pins that relative_delta genuinely tracks convergence quality rather than being a
     # constant -- measured directly: ~1.3e-3 at n_steps=2 vs ~0.0 at n_steps=64 on this stub.
@@ -153,7 +164,9 @@ def test_convergence_warning_fires_with_tiny_tolerance(caplog: pytest.LogCapture
     image = _make_image()
 
     with caplog.at_level(logging.WARNING):
-        integrated_gradients(model, image, region_index=0, n_steps=8, delta_tolerance=1e-12)
+        integrated_gradients(
+            model, image, generator=_gen(), region_index=0, n_steps=8, delta_tolerance=1e-12
+        )
 
     assert "relative convergence delta" in caplog.text
 
@@ -191,7 +204,7 @@ def test_completeness_holds_when_baseline_and_input_masks_genuinely_differ() -> 
     assert baseline_mask_would_be_empty
     assert image_mask_is_nonempty
 
-    out = integrated_gradients(model, image, region_index=0, n_steps=32)
+    out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=32)
 
     assert out.n_target_voxels > 0
     expected = out.target_score - out.baseline_score
@@ -223,11 +236,13 @@ def test_explicit_target_mask_is_honoured() -> None:
     model = _make_model()
     image = _make_image()
 
-    default_out = integrated_gradients(model, image, region_index=0, n_steps=8)
+    default_out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
     mask = torch.zeros(8, 8, 8, dtype=torch.bool)
     mask[:2, :2, :2] = True
-    masked_out = integrated_gradients(model, image, region_index=0, target_mask=mask, n_steps=8)
+    masked_out = integrated_gradients(
+        model, image, generator=_gen(), region_index=0, target_mask=mask, n_steps=8
+    )
 
     assert masked_out.n_target_voxels == 8
     assert not torch.equal(default_out.attributions, masked_out.attributions)
@@ -240,7 +255,7 @@ def test_empty_predicted_mask_falls_back_to_whole_volume(
     image = _make_image()
 
     with caplog.at_level(logging.WARNING):
-        out = integrated_gradients(model, image, region_index=0, n_steps=8)
+        out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
     assert out.n_target_voxels == 8 * 8 * 8
     assert "falling back to the whole spatial extent" in caplog.text
@@ -255,14 +270,14 @@ def test_custom_baseline_is_honoured() -> None:
     model = _make_model()
     image = _make_image()
 
-    zero_out = integrated_gradients(model, image, region_index=0, n_steps=8)
+    default_out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
     custom_baseline = torch.full_like(image, 0.5)
     custom_out = integrated_gradients(
         model, image, region_index=0, baseline=custom_baseline, n_steps=8
     )
 
-    assert custom_out.baseline_score != zero_out.baseline_score
-    assert not torch.equal(custom_out.attributions, zero_out.attributions)
+    assert custom_out.baseline_score != default_out.baseline_score
+    assert not torch.equal(custom_out.attributions, default_out.attributions)
 
 
 def test_wrong_shaped_baseline_raises() -> None:
@@ -271,7 +286,9 @@ def test_wrong_shaped_baseline_raises() -> None:
     wrong_baseline = torch.zeros(1, 4, 4, 4, 4)  # wrong spatial size
 
     with pytest.raises(ValueError, match="baseline shape"):
-        integrated_gradients(model, image, region_index=0, baseline=wrong_baseline, n_steps=8)
+        integrated_gradients(
+            model, image, generator=_gen(), region_index=0, baseline=wrong_baseline, n_steps=8
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +302,7 @@ def test_raises_when_model_is_in_train_mode() -> None:
     image = _make_image()
 
     with pytest.raises(ValueError, match="eval"):
-        integrated_gradients(model, image, region_index=0, n_steps=8)
+        integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
 
 def test_raises_on_out_of_range_region_index() -> None:
@@ -293,7 +310,7 @@ def test_raises_on_out_of_range_region_index() -> None:
     image = _make_image()
 
     with pytest.raises(ValueError, match="region_index"):
-        integrated_gradients(model, image, region_index=7, n_steps=8)
+        integrated_gradients(model, image, generator=_gen(), region_index=7, n_steps=8)
 
 
 # ---------------------------------------------------------------------------
@@ -305,7 +322,7 @@ def test_accepts_unbatched_input() -> None:
     model = _make_model()
     image = _make_image()[0]  # (C, D, H, W)
 
-    out = integrated_gradients(model, image, region_index=0, n_steps=8)
+    out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
     assert out.attributions.shape == (1, 4, 8, 8, 8)
 
@@ -320,7 +337,7 @@ def test_works_under_enclosing_no_grad() -> None:
     image = _make_image()
 
     with torch.no_grad():
-        out = integrated_gradients(model, image, region_index=0, n_steps=8)
+        out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
     assert torch.isfinite(out.attributions).all()
 
@@ -335,7 +352,7 @@ def test_does_not_pollute_parameter_grads() -> None:
     image = _make_image()
     assert all(p.grad is None for p in model.parameters())
 
-    integrated_gradients(model, image, region_index=0, n_steps=8)
+    integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
     # Measured directly against captum 0.9.0: IntegratedGradients uses torch.autograd.grad
     # internally, never .backward(), so no parameter's .grad should be populated. A future
@@ -352,7 +369,7 @@ def test_modality_ranking_sorted_descending_and_matches_argmax() -> None:
     model = _make_model()
     image = _make_image()
 
-    out = integrated_gradients(model, image, region_index=0, n_steps=8)
+    out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
     ranking = modality_ranking(out)
 
     assert len(ranking) == 4
@@ -374,8 +391,101 @@ def test_repeated_calls_are_bitwise_identical() -> None:
     model = _make_model()
     image = _make_image()
 
-    first = integrated_gradients(model, image, region_index=0, n_steps=8)
-    second = integrated_gradients(model, image, region_index=0, n_steps=8)
+    first = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
+    second = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
 
     assert torch.equal(first.attributions, second.attributions)
     assert first.target_score == second.target_score
+
+
+# ---------------------------------------------------------------------------
+# The default baseline must not be spatially constant
+#
+# Measured on the production NeuroVisionX (ET, 64^3): an all-zeros baseline makes
+# the completeness identity recover a ratio of 0.002, with 99.9% of the path's
+# change inside alpha < 0.1, and raising n_steps does NOT help (relative delta
+# 0.3436 / 0.3526 / 0.3599 at 32 / 64 / 128 steps -- it converges to the wrong
+# value). A Gaussian-noise baseline recovers 0.993 on the same setup. The cause is
+# the network, not the data: a constant input drives every normalization layer's
+# per-group std to exactly 0.
+# ---------------------------------------------------------------------------
+
+
+def test_generator_is_required_when_baseline_is_none() -> None:
+    model = _make_model()
+    image = _make_image()
+
+    with pytest.raises(ValueError, match="generator"):
+        integrated_gradients(model, image, region_index=0, n_steps=8)
+
+
+def test_default_baseline_is_noise_not_constant() -> None:
+    model = _make_model()
+    image = _make_image()
+
+    out = integrated_gradients(model, image, generator=_gen(), region_index=0, n_steps=8)
+
+    # A zeros baseline would give F(baseline) equal to the model's response to a
+    # constant volume; the noise baseline must differ from that.
+    from neurovision.explainability.integrated_gradients import build_region_score_fn
+
+    with torch.no_grad():
+        mask = torch.sigmoid(model(image)[0, 0]) >= 0.5
+        if not mask.any():
+            mask = torch.ones_like(mask)
+        zeros_score = float(build_region_score_fn(model, 0, mask)(torch.zeros_like(image)).item())
+
+    assert out.baseline_score != pytest.approx(zeros_score)
+
+
+def test_constant_baseline_warns(caplog: pytest.LogCaptureFixture) -> None:
+    model = _make_model()
+    image = _make_image()
+
+    with caplog.at_level(logging.WARNING):
+        integrated_gradients(
+            model, image, region_index=0, baseline=torch.zeros_like(image), n_steps=8
+        )
+
+    assert "spatially CONSTANT" in caplog.text
+
+
+def test_constant_nonzero_baseline_also_warns(caplog: pytest.LogCaptureFixture) -> None:
+    # The guard is on spatial constancy, not on the value being zero -- a
+    # constant-but-nonzero baseline collapses the normalization statistics in
+    # exactly the same way and must not sail through.
+    model = _make_model()
+    image = _make_image()
+
+    with caplog.at_level(logging.WARNING):
+        integrated_gradients(
+            model, image, region_index=0, baseline=torch.full_like(image, 0.5), n_steps=8
+        )
+
+    assert "spatially CONSTANT" in caplog.text
+
+
+def test_noise_baseline_is_reproducible_from_its_seed() -> None:
+    model = _make_model()
+    image = _make_image()
+
+    a = integrated_gradients(model, image, generator=_gen(99), region_index=0, n_steps=8)
+    b = integrated_gradients(model, image, generator=_gen(99), region_index=0, n_steps=8)
+    c = integrated_gradients(model, image, generator=_gen(100), region_index=0, n_steps=8)
+
+    assert torch.equal(a.attributions, b.attributions)
+    assert not torch.equal(a.attributions, c.attributions)
+
+
+def test_noise_scale_changes_the_baseline() -> None:
+    model = _make_model()
+    image = _make_image()
+
+    small = integrated_gradients(
+        model, image, generator=_gen(7), region_index=0, n_steps=8, noise_scale=0.1
+    )
+    large = integrated_gradients(
+        model, image, generator=_gen(7), region_index=0, n_steps=8, noise_scale=2.0
+    )
+
+    assert small.baseline_score != large.baseline_score

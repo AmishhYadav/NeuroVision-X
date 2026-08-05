@@ -9,17 +9,42 @@ predicted-positive voxels for that region), then runs ordinary IG against that s
 is attributed back to the four input MRI MODALITY channels (T1, T1CE, T2, FLAIR), answering
 "which modality did this prediction rely on" rather than "which voxel".
 
-## Why the all-zeros baseline is defensible here, unlike in natural-image IG
+## The baseline must NOT be spatially constant. Measured, and it is the whole ballgame.
 
 IG needs a baseline representing "the absence of information" -- the point the integration path
-starts from. In natural-image work an all-zeros baseline is a degenerate black image and is
-routinely criticized: black is not "no information", it is a specific, recognizable image the
-network may respond to in its own right. This project's preprocessing (`neurovision.data.
-preprocessing.normalize_nonzero`) z-scores every modality over its own nonzero (brain-tissue)
-region, so a voxel value of exactly 0 is, by construction, the MEAN intensity of that tissue.
-The all-zeros baseline used here is therefore "average brain tissue", a genuinely meaningful
-reference point -- not a degenerate corner case. This distinction is worth one sentence in the
-paper wherever this module's figures are used.
+starts from. There is a tempting argument for all-zeros here: this project's preprocessing
+(`neurovision.data.preprocessing.normalize_nonzero`) z-scores every modality over its own
+nonzero (brain-tissue) region, so a voxel value of exactly 0 is by construction the MEAN
+intensity of that tissue. On intensity semantics alone, zero looks like "average brain tissue"
+rather than the degenerate black image an all-zeros baseline is in natural-image work.
+
+That argument is WRONG for this architecture, and the reason has nothing to do with intensity
+semantics. An all-zeros volume is spatially CONSTANT, and this network is full of normalization
+layers (GroupNorm throughout the CNN encoder and decoder, LayerNorm inside Swin). At a
+spatially constant input the per-group statistics collapse -- the standard deviation is exactly
+0 -- so the normalized output is governed entirely by the epsilon floor in the denominator. The
+instant the interpolation coefficient `alpha` leaves 0, the input acquires real variance and
+every normalization layer behaves completely differently. The zero baseline sits on a
+singularity of the network, not of the data.
+
+Measured on `NeuroVisionX` (production config, 64^3 input, region ET), sampling `F` and
+`dF/dalpha` at 11 points along the path and integrating by hand:
+
+    baseline           F(1)-F(0)    trapz(dF/dalpha)   ratio    fraction of change in [0, 0.1]
+    all zeros            29199.9                48.0   0.002                             0.999
+    Gaussian noise       19955.7             19811.7   0.993                             0.044
+
+With the zero baseline, 99.9% of the total change in `F` happens in the first tenth of the
+path, in a near-discontinuity no uniformly-spaced sampling can resolve -- and completeness
+recovers 0.2% of its own identity. Raising `n_steps` does NOT help and slightly hurts: measured
+relative deltas of 0.3436 / 0.3526 / 0.3599 at `n_steps` 32 / 64 / 128, i.e. the integral
+converges cleanly to the WRONG value. With a Gaussian-noise baseline the same quantity recovers
+99.3%.
+
+Hence `baseline=None` draws a Gaussian-noise baseline (from a caller-supplied `generator`, per
+CLAUDE.md's no-global-RNG rule) rather than using zeros, and `integrated_gradients` logs a
+WARNING whenever a SUPPLIED baseline is spatially constant per channel -- which is the actual
+degeneracy condition, and catches the constant-nonzero case too, not just literal zeros.
 
 ## Hazards this module exists to navigate
 
@@ -208,6 +233,8 @@ def integrated_gradients(
     region_index: int = 0,
     target_mask: Tensor | None = None,
     baseline: Tensor | None = None,
+    generator: torch.Generator | None = None,
+    noise_scale: float = 1.0,
     n_steps: int = 32,
     internal_batch_size: int = 1,
     threshold: float = 0.5,
@@ -225,10 +252,13 @@ def integrated_gradients(
        that predicted set is empty, fall back to the whole spatial extent and log a warning
        (normal in BraTS -- many cases have no enhancing tumor, see CLAUDE.md's measured 2.6%
        figure). Record `n_target_voxels`.
-    3. Baseline: `torch.zeros_like(image)` when `baseline is None` -- see this module's
-       top-of-file docstring for why an all-zeros baseline is a meaningful "average tissue"
-       reference here, unlike in natural-image IG. A supplied baseline must match `image`'s
-       shape exactly.
+    3. Baseline: when `baseline is None`, a Gaussian-noise baseline
+       `torch.randn(image.shape, generator=generator) * noise_scale` -- NOT zeros. See this
+       module's top-of-file docstring for the measurements: an all-zeros (spatially constant)
+       baseline sits on a singularity of this architecture's normalization layers and makes
+       completeness recover 0.2% of its own identity. A supplied baseline must match `image`'s
+       shape exactly, and is checked for spatial constancy (warned about, not rejected -- a
+       caller reproducing someone else's zero-baseline number must still be able to).
     4. Build the scalar wrapper via `build_region_score_fn`, closing over the FIXED mask from
        step 2 -- see this module's top-of-file docstring, hazard 2, for why recomputing the mask
        per integration step would break IG's completeness axiom.
@@ -264,9 +294,19 @@ def integrated_gradients(
         target_mask: The region of interest to sum the target score over, `(D, H, W)` or
             broadcastable to it. `None` (the default) uses the model's own predicted positives
             for `region_index` -- see algorithm step 2.
-        baseline: The IG baseline, same shape as `image`. `None` (the default) uses an
-            all-zeros image -- see this module's top-of-file docstring for why that is
-            meaningful here rather than degenerate.
+        baseline: The IG baseline, same shape as `image`. `None` (the default) draws a
+            Gaussian-noise baseline from `generator`, which is then REQUIRED. Do not pass zeros
+            (or any spatially constant volume) unless you are deliberately reproducing someone
+            else's number -- see this module's top-of-file docstring for the measurements
+            showing a constant baseline makes completeness recover 0.2% of its identity.
+        generator: `torch.Generator` used to draw the default noise baseline. Required when
+            `baseline is None`; ignored when an explicit `baseline` is given. No default and no
+            global-RNG fallback, so an IG figure is always reproducible from its seed
+            (CLAUDE.md: "randomness only through the seeded generator").
+        noise_scale: Standard deviation of the default Gaussian-noise baseline. 1.0 matches the
+            unit variance that `normalize_nonzero`'s z-scoring gives the brain-tissue region,
+            so the baseline is noise of the same scale as the data rather than an
+            out-of-distribution spike.
         n_steps: Riemann-sum step count for the path integral. See hazard 4 above for measured
             per-step cost; this function's default (32) trades some convergence accuracy for
             keeping a single figure-generation call in the low minutes.
@@ -313,9 +353,23 @@ def integrated_gradients(
         )
 
     if baseline is None:
-        # See this module's top-of-file docstring: preprocessing z-scores each modality over
-        # its nonzero region, so 0 is "average brain tissue", not a degenerate black image.
-        baseline = torch.zeros_like(image)
+        # Gaussian noise, NOT zeros. See this module's top-of-file docstring for the measured
+        # reason: a spatially constant baseline collapses every normalization layer's per-group
+        # statistics (std == 0, so the epsilon floor decides the output), putting the start of
+        # the integration path on a singularity of the network. Measured on the production
+        # model, ET, 64^3: zeros recovers ratio 0.002 of the completeness identity with 99.9%
+        # of the path's change crammed into alpha < 0.1; Gaussian noise recovers 0.993.
+        if generator is None:
+            raise ValueError(
+                "integrated_gradients: `generator` is required when `baseline` is None, because "
+                "the default baseline is Gaussian noise and this project takes randomness only "
+                "from an explicitly seeded torch.Generator (CLAUDE.md) -- an IG figure must be "
+                "reproducible from its seed. Pass generator=torch.Generator().manual_seed(...), "
+                "or pass an explicit `baseline` tensor. Note that an all-zeros baseline is a "
+                "poor choice on this architecture; see this module's docstring."
+            )
+        baseline = torch.randn(image.shape, generator=generator, dtype=image.dtype) * noise_scale
+        baseline = baseline.to(device=image.device)
     else:
         if baseline.ndim == 4:
             baseline = baseline.unsqueeze(0)
@@ -323,6 +377,28 @@ def integrated_gradients(
             raise ValueError(
                 f"baseline shape {tuple(baseline.shape)} does not match image shape "
                 f"{tuple(image.shape)}."
+            )
+        # Warn on the ACTUAL degeneracy condition -- spatial constancy per channel -- rather
+        # than special-casing literal zeros. A constant-but-nonzero baseline collapses the
+        # normalization statistics in exactly the same way, and would otherwise sail through.
+        constant_channels = [
+            int(c)
+            for c in range(baseline.shape[1])
+            if bool(torch.all(baseline[0, c] == baseline[0, c].flatten()[0]))
+        ]
+        if constant_channels:
+            logger.warning(
+                "integrated_gradients: the supplied baseline is spatially CONSTANT on "
+                "channel(s) %s. This architecture normalizes activations (GroupNorm in the CNN "
+                "encoder/decoder, LayerNorm in Swin), and a constant input makes those layers' "
+                "per-group standard deviation exactly 0, so their output is decided by the "
+                "epsilon floor -- the start of the integration path sits on a singularity of "
+                "the network. Measured consequence on the production model (ET, 64^3): the "
+                "completeness identity recovers a ratio of 0.002, with 99.9%% of the path's "
+                "change inside alpha < 0.1, and RAISING n_steps does not help (relative delta "
+                "0.3436 / 0.3526 / 0.3599 at 32 / 64 / 128 steps). Pass baseline=None to get a "
+                "Gaussian-noise baseline instead, which measured 0.993 on the same setup.",
+                constant_channels,
             )
 
     # Pre-pass, no_grad: this is where the FIXED target mask is built -- see this module's
