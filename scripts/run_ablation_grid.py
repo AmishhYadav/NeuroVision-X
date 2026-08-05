@@ -70,11 +70,18 @@ DEFAULT_RELATIVE_COST: dict[str, float] = {
     # costlier per-parameter than convolution), so this removes more compute
     # than its ~6% share of total params (2.0M Swin + 1.0M fusion / 34.9M).
     "ablation_cnn_only": 0.55,
-    # UNMEASURED. Reasoning: the CNN branch (the parameter bulk, 18.9M of
-    # 34.9M) is gone, but Swin's shifted-window attention costs more per
-    # parameter than the CNN's convolutions, so this is not as cheap as the
-    # removed-parameter fraction alone would suggest.
-    "ablation_transformer_only": 0.70,
+    # UNMEASURED, and note this row is MORE expensive than the reference, not
+    # less -- it is the only multiplier above 1.0. Reasoning: this row is not
+    # "NeuroVision-X minus the CNN branch" (see the long warning in
+    # configs/experiment/ablation_transformer_only.yaml); it is MONAI's
+    # SwinUNETR-B, 62.19M params against NeuroVision-X's 34.88M. It runs the
+    # FULL 5-stage SwinViT, whereas our Swin branch is only 2.04M because
+    # num_levels=4 drops layers4 (75% of the backbone). It also defaults to
+    # use_checkpoint: true, which trades ~20-30% step time for activation
+    # memory. _baseline_common.yaml puts SwinUNETR-B at ~3x baseline_unet3d
+    # (12.87M); NeuroVision-X sits between those two, so ~1.4x is the
+    # consistent reading. This is the single most expensive row in the grid.
+    "ablation_transformer_only": 1.40,
     # UNMEASURED. Reasoning: removes two of three 1x1x1 segmentation heads
     # (681 params total across all three -- negligible) and the deep
     # supervision loss terms. Almost the full architecture still runs.
