@@ -1,0 +1,32 @@
+# @package _global_
+#
+# Ablation grid, row 3 of 6: additive fusion. The floor of the fusion axis.
+#
+#   python scripts/train.py +experiment=ablation_fusion_add data.root_dir=/path/to/prep
+#
+# AddFusion is the cheapest merge that can exist here: a 1x1x1 conv to fix the
+# unavoidable channel mismatch between the branches, then a plain residual add.
+# No norm, no nonlinearity, no gate, no attention.
+#
+# It exists so the grid can separate two claims that concat alone conflates:
+#
+#   full  vs concat -> "does gating + cross-attention beat concatenation"
+#   concat vs add    -> "is concatenation's conv doing real work, or is any
+#                        channel-matched injection of Swin features enough"
+#
+# Without this row, a full > concat gap has no scale to be read against. If
+# add is already close to concat, then the fusion axis matters less than the
+# dual encoder itself, and that is a finding worth reporting honestly rather
+# than burying.
+#
+# Changed relative to ablation_full: model.fusion.name only.
+
+defaults:
+  - _ablation_common
+  - _self_
+
+experiment_name: ablation_fusion_add
+
+model:
+  fusion:
+    name: add

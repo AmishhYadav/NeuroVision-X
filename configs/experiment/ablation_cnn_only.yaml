@@ -1,0 +1,51 @@
+# @package _global_
+#
+# Ablation grid, row 4 of 6: the CNN branch alone. No transformer, no fusion.
+#
+#   python scripts/train.py +experiment=ablation_cnn_only data.root_dir=/path/to/prep
+#
+# The CNN encoder's five levels pass straight to the decoder as skips, exactly
+# as they are. The Swin branch is NOT BUILT and NOT RUN -- this is not
+# "fusion turned down to zero", it is the transformer physically absent.
+#
+# WHY IT IS NOT `fusion.layer_scale_init: 0.0`. That looks like the obvious
+# way to express this and it is wrong. `layer_scale` is a learnable
+# `nn.Parameter`, so an init of 0.0 makes the block an exact identity at step
+# 0 and then lets gradient descent move it off zero -- by the end of training
+# the fusion module is fully active and the row is not an ablation of
+# anything. It also would not save the GPU time, since both branches still run.
+#
+# WHAT THIS ROW ANSWERS. Every other fusion row (full / concat / add) varies
+# the merge OPERATOR while keeping both encoders. This one removes the second
+# encoder outright, and is the only row that answers the prior question a
+# reviewer asks first: does the dual encoder buy anything at all? If
+# ablation_full does not clear this row, no comparison among the merge
+# operators matters.
+#
+# READ THE PARAMETER COUNT WITH THIS ROW. It drops the Swin encoder (2.04M)
+# and all four fusion blocks (1.05M) from the measured 34.88M total, landing
+# near 31.8M. So this row is also SMALLER, and a gap between it and
+# ablation_full is confounded with capacity. That confound is bounded and
+# worth stating: the removed 3.1M is ~9% of the model, and the CNN encoder
+# (18.85M) and decoder (12.93M) -- which do the bulk of the work -- are
+# untouched and bit-identical in width. Do not "fix" this by widening the CNN
+# encoder to compensate; that would change the decoder's skip widths and make
+# it a different network rather than the same network minus a branch.
+#
+# Changed relative to ablation_full: model.encoder.swin.enabled only.
+
+defaults:
+  - _ablation_common
+  - _self_
+
+experiment_name: ablation_cnn_only
+
+model:
+  encoder:
+    swin:
+      # false -> build_neurovision passes swin_encoder=None and an empty
+      # fusion_blocks list, and NeuroVisionX.forward never calls the Swin
+      # branch. The rest of model.encoder.swin below is left untouched and
+      # simply unread, so this file stays a one-key diff against
+      # ablation_full and flipping it back is a one-key edit.
+      enabled: false

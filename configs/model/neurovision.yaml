@@ -1,0 +1,98 @@
+# The full NeuroVision-X model: dual encoder (CNN + Swin Transformer) -> adaptive gated
+# cross-attention fusion -> U-Net decoder -> segmentation heads. This is the novel
+# architecture; unet3d.yaml and swinunetr.yaml are the baselines it has to beat.
+
+# Selected by string through neurovision.models.registry.
+name: neurovision
+
+in_channels: ${data.in_channels} # 4 MRI modalities
+out_channels: ${data.num_classes} # 3 overlapping BraTS regions (ET/TC/WT), never 4
+
+encoder:
+  cnn:
+    # FIVE levels (strides 1, 2, 4, 8, 16), one more than the Swin branch below. The Swin
+    # branch's patch embedding merges 2x2x2 voxels before any attention runs, so it cannot
+    # produce a stride-1 feature -- its pyramid starts at stride 2. CNN level 0 (stride 1)
+    # therefore has no transformer counterpart and passes to the decoder UNFUSED; CNN
+    # levels 1..4 fuse with Swin levels 0..3. See neurovision.models.encoders.swin's module
+    # docstring for the full reasoning. NeuroVisionX.__init__ checks this offset at
+    # construction time and refuses to build a mismatched pair.
+    channels: [32, 64, 128, 256, 320]
+    blocks_per_stage: [2, 2, 2, 2, 2]
+    num_groups: 8
+    dropout: 0.1
+    use_checkpoint: false
+    zero_init_residual: true
+  swin:
+    # The ablation switch for the whole transformer branch. false -> the Swin encoder is
+    # NOT BUILT and NOT RUN, no fusion blocks are built, and the CNN pyramid passes to the
+    # decoder unfused at every level. That is the cnn-only ablation
+    # (configs/experiment/ablation_cnn_only.yaml), and it is a real removal, not a
+    # turned-down fusion: `fusion.layer_scale_init: 0.0` would NOT work, because layer_scale
+    # is a learnable parameter that starts at identity and then trains away from it.
+    # Every other key in this block is simply unread when this is false.
+    enabled: true
+    # feature_size=48 must stay divisible by every entry of num_heads for per-head widths
+    # to be integral (feature_size * 2**i / num_heads[i]).
+    feature_size: 48
+    depths: [2, 2, 2, 2]
+    num_heads: [3, 6, 12, 24]
+    window_size: 7
+    patch_size: 2
+    # FOUR levels, one fewer than the CNN branch above -- see the note there. Swin's own
+    # fifth stage (stride 32) is deliberately never built here; see
+    # neurovision.models.encoders.swin's module docstring for why it buys little at typical
+    # patch sizes.
+    num_levels: 4
+    drop_rate: 0.0
+    attn_drop_rate: 0.0
+    dropout_path_rate: 0.0
+    use_checkpoint: true
+    normalize: true
+
+fusion:
+  # This is the ablation switch: adaptive_gated (the novel module) vs. concat (the standard
+  # "everyone does this" baseline) vs. add (the floor -- a width-matching conv then a plain
+  # residual add, no norm, no nonlinearity, no gating). Same four levels regardless of which
+  # variant runs; every variant outputs the CNN branch's channel width at that level, so the
+  # decoder below is identical across the ablation.
+  name: adaptive_gated # adaptive_gated | concat | add
+  num_heads: 4
+  window_size: 4
+  full_attention_max_tokens: 512
+  gate_channels: scalar # scalar | channel
+  gate_reduction: 4
+  num_groups: 8
+  attn_dropout: 0.0
+  proj_dropout: 0.0
+  layer_scale_init: 1.0e-4
+  use_checkpoint: false
+
+decoder:
+  # null -> mirror the skip widths (UNetDecoder's own default: decoder_channels =
+  # skip_channels[:-1]), so each decoder stage comes back out at the width of the skip it
+  # merged with. Set explicit channels here only to deliberately narrow or widen the decoder
+  # relative to the encoder pyramid.
+  channels: null
+  blocks_per_stage: 2
+  num_groups: 8
+  dropout: 0.0
+  upsample: deconv # deconv | interp -- see unet_decoder.py's module docstring for the trade-off
+  # Off by default, deliberately. This project's one novel contribution is the fusion module
+  # between the two encoder branches; if the decoder also ran a second attention mechanism by
+  # default, any improvement over a baseline could not be cleanly attributed to fusion alone.
+  # Ablate this flag separately ("does decoder attention help on top of fusion") rather than
+  # leaving it on.
+  use_attention_gates: false
+  use_checkpoint: false
+
+head:
+  dropout: 0.0
+
+# Number of decoder stages (fine to coarse, starting at full resolution) that get a
+# segmentation head attached, i.e. how many outputs deep supervision produces. 1 disables
+# deep supervision (a single full-resolution head). MUST agree with
+# training.loss.deep_supervision.enabled -- neurovision.models.neurovision.build_neurovision
+# raises if they disagree, because a value > 1 makes the model return a LIST of logits
+# tensors in training mode, and only DeepSupervisionLoss knows how to consume that.
+deep_supervision_levels: 3

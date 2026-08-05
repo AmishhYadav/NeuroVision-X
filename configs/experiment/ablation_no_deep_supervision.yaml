@@ -1,0 +1,45 @@
+# @package _global_
+#
+# Ablation grid, row 6 of 6: deep supervision off.
+#
+#   python scripts/train.py +experiment=ablation_no_deep_supervision data.root_dir=/path/to/prep
+#
+# One segmentation head, at full resolution only, and the plain DiceBCELoss
+# rather than the DeepSupervisionLoss wrapper. Everything else -- both
+# encoders, adaptive gated fusion, the decoder -- is exactly ablation_full.
+#
+# Why this row is in a fusion-focused grid: deep supervision applies loss
+# directly to the stride-2 and stride-4 decoder stages, which are fed by
+# fused skips. It is therefore a plausible alternative explanation for any
+# boundary-accuracy (HD95) gain the fusion module claims -- a reviewer can
+# reasonably ask whether the gain came from the gated attention or from
+# supervising the intermediate resolutions at all. This row answers that.
+#
+# TWO KEYS MOVE HERE, AND THEY MUST MOVE TOGETHER.
+# model.deep_supervision_levels controls how many heads the model builds and
+# therefore whether forward() returns a Tensor or a list; the loss key
+# controls whether the loss expects one tensor or a sequence.
+# build_neurovision cross-checks them and raises if they disagree, so a
+# half-edit of this file fails loudly at construction rather than training
+# something the config does not describe. Do not "simplify" this to one key.
+#
+# Note this changes the number of parameters slightly (two 1x1x1 heads
+# disappear -- 681 params total across all three heads, so the effect on
+# capacity is nil). The variable being tested is the training signal, not
+# model size.
+
+defaults:
+  - _ablation_common
+  - _self_
+
+experiment_name: ablation_no_deep_supervision
+
+model:
+  # 1 = a single full-resolution head, i.e. deep supervision disabled.
+  deep_supervision_levels: 1
+
+training:
+  loss:
+    deep_supervision:
+      enabled: false
+      weights: null

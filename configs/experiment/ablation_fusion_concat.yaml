@@ -1,0 +1,32 @@
+# @package _global_
+#
+# Ablation grid, row 2 of 6: concat fusion instead of adaptive gated fusion.
+#
+#   python scripts/train.py +experiment=ablation_fusion_concat data.root_dir=/path/to/prep
+#
+# ConcatFusion is the "what everyone does" merge: concatenate the CNN and Swin
+# features, 1x1x1 conv back down to the CNN width, norm, activation. No gate,
+# no cross-attention.
+#
+# THIS IS THE MOST IMPORTANT ROW IN THE GRID. A reviewer's first question about
+# a novel fusion module is "would concatenation have done the same thing", and
+# ablation_full minus this row is the entire answer. If the gap here is within
+# noise, the contribution claim is in trouble regardless of how the model
+# scores against the baselines.
+#
+# Note what stays constant: both branches still run, the decoder still sees
+# CNN channel widths at every level (every fusion variant outputs
+# cnn_channels), and the parameter count moves only by the fusion blocks'
+# own difference. So this isolates the merge OPERATOR, not the dual encoder.
+#
+# Changed relative to ablation_full: model.fusion.name only.
+
+defaults:
+  - _ablation_common
+  - _self_
+
+experiment_name: ablation_fusion_concat
+
+model:
+  fusion:
+    name: concat

@@ -1,0 +1,29 @@
+# @package _global_
+#
+# Layer 2 of 2 of the ablation grid's shared body: the NeuroVision-X
+# ARCHITECTURE, on top of the schedule in _ablation_schedule.yaml. Do not run
+# this file directly; it sets no experiment_name.
+#
+# Included by the five rows that are the NeuroVision-X architecture:
+# ablation_full, ablation_fusion_concat, ablation_fusion_add,
+# ablation_cnn_only, ablation_no_deep_supervision. The sixth row
+# (ablation_transformer_only) is SwinUNETR and therefore includes
+# _ablation_schedule directly instead, skipping this file.
+#
+# Each child changes EXACTLY ONE thing relative to ablation_full.yaml. That is
+# the whole point: if two knobs move, the table row means nothing.
+
+defaults:
+  - _ablation_schedule
+  - override /model: neurovision
+  - _self_
+
+training:
+  loss:
+    deep_supervision:
+      # On for every NeuroVision-X row, because model.deep_supervision_levels
+      # is 3 for every NeuroVision-X row. build_neurovision raises if these two
+      # disagree. `ablation_no_deep_supervision` is the one child that flips
+      # BOTH of them together.
+      enabled: true
+      weights: null

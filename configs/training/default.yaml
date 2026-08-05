@@ -56,7 +56,13 @@ loss:
   smooth_dr: 1.0e-5
 
   # Deep supervision: loss also applied to lower-resolution decoder outputs.
-  # Off until the decoder actually emits them (model.deep_supervision).
+  # Off HERE because the default model (unet3d) emits only one output. The
+  # neurovision model emits several -- see model.deep_supervision_levels, and
+  # note that build_neurovision RAISES if these two keys disagree, since a
+  # model returning a list of logits into a loss that expects one tensor is a
+  # crash at best and a silently mis-weighted objective at worst. Turned on in
+  # configs/experiment/neurovision.yaml rather than flipped here, so the
+  # baselines keep composing unchanged.
   deep_supervision:
     enabled: false
     # null -> auto halving weights (1, 0.5, 0.25, ...), normalized to sum 1.

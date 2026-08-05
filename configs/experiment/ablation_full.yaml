@@ -1,0 +1,23 @@
+# @package _global_
+#
+# Ablation grid, row 1 of 6: the full model. THE REFERENCE ROW.
+#
+#   python scripts/train.py +experiment=ablation_full data.root_dir=/path/to/prep
+#
+# Dual encoder (CNN + Swin) -> AdaptiveGatedFusion -> U-Net decoder -> 3 deep
+# supervision heads. Identical to `+experiment=neurovision` in architecture and
+# differing from it ONLY in the schedule (40 epochs, see _ablation_common.yaml).
+#
+# Every other row in this grid is this file with exactly one knob moved, and
+# every claim of the form "X helps" is a comparison against THIS row's number.
+# So this row is not optional and cannot be substituted with the 100-epoch
+# `neurovision` run -- a 100-epoch reference against 40-epoch variants would
+# attribute the schedule difference to the ablated component.
+#
+# This file deliberately overrides nothing. Its entire content is its name.
+
+defaults:
+  - _ablation_common
+  - _self_
+
+experiment_name: ablation_full

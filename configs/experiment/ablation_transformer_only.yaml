@@ -1,0 +1,65 @@
+# @package _global_
+#
+# Ablation grid, row 5 of 6: the transformer alone. SwinUNETR-B.
+#
+#   python scripts/train.py +experiment=ablation_transformer_only data.root_dir=/path/to/prep
+#
+# The mirror of ablation_cnn_only: a pure transformer segmentation network, no
+# CNN feature pyramid feeding the decoder.
+#
+# ---------------------------------------------------------------------------
+# THIS ROW IS CONFOUNDED, DELIBERATELY, AND THE CONFOUND MUST BE STATED
+# WHEREVER THE NUMBER APPEARS.
+# ---------------------------------------------------------------------------
+#
+# ablation_cnn_only is NeuroVision-X minus one branch: same CNN encoder, same
+# decoder, same heads. There is no equivalent construction on this side.
+# Removing the CNN branch from NeuroVision-X is not a matter of deleting it --
+# the Swin branch cannot produce a stride-1 feature (its patch embedding merges
+# 2x2x2 voxels before any attention runs), so the decoder's full-resolution
+# skip would have nothing to connect to, and the decoder's skip widths are
+# derived from the CNN encoder's widths throughout. A true "NeuroVision-X minus
+# the CNN branch" needs a stride-1 conv stem plus a decoder rebuilt on Swin
+# widths -- a different network, not this one with a part missing.
+#
+# So this row uses MONAI's SwinUNETR-B instead, which is the standard,
+# published, transformer-only 3D segmentation network and already a
+# Milestone-1 baseline here. Its decoder and heads differ from ours. That means:
+#
+#   READ IT AS:     "is a pure-transformer network competitive at this budget"
+#   DO NOT READ IT AS: "dropping the CNN branch from NeuroVision-X costs X Dice"
+#
+# The asymmetry is real and belongs in the paper's ablation caption, not hidden.
+# If a reviewer needs the symmetric version, it is a stem + Swin-width decoder
+# and roughly one module of work -- deliberately not done for an exploration
+# grid.
+#
+# ---------------------------------------------------------------------------
+# Why this is a FRESH 40-epoch run rather than citing baseline_swinunetr.
+# ---------------------------------------------------------------------------
+#
+# baseline_swinunetr runs 100 epochs. Every other row here runs 40. Pasting a
+# 100-epoch number into a 40-epoch table is exactly the error ablation_full
+# exists to prevent -- it would credit the schedule to the architecture. This
+# row therefore costs real GPU hours; `scripts/run_ablation_grid.py` prices it,
+# and it is the single most droppable row in the grid if the budget is tight
+# (`--variants` excludes it) precisely because the 100-epoch baseline already
+# says something about pure transformers, just not in this table's units.
+#
+# Note SwinUNETR-B is 62.19M params against NeuroVision-X's 34.88M, so unlike
+# ablation_cnn_only this row is LARGER than the reference, not smaller.
+#
+# Deep supervision stays OFF (inherited from _baseline_common): SwinUNETR emits
+# a single output tensor, and DeepSupervisionLoss over one output silently
+# reduces to the plain loss. Do not turn it on here.
+#
+# Changed relative to ablation_full: the architecture, wholesale. This is the
+# one row of the grid that is not a one-knob diff, which is why it carries the
+# longest warning.
+
+defaults:
+  - _ablation_schedule
+  - override /model: swinunetr
+  - _self_
+
+experiment_name: ablation_transformer_only

@@ -1,0 +1,36 @@
+# @package _global_
+#
+# The full NeuroVision-X model: dual encoder (3D CNN + Swin) -> adaptive gated
+# cross-attention fusion -> U-Net decoder -> segmentation head, with deep
+# supervision.
+#
+#   python scripts/train.py +experiment=neurovision data.root_dir=/path/to/prep
+#
+# Includes _baseline_common.yaml, exactly like baseline_unet3d.yaml and
+# baseline_swinunetr.yaml, so data, augmentation, optimizer, LR schedule, seed
+# and stopping rule are identical to both baselines by construction and the
+# ONLY difference is the architecture. That is what makes the comparison in the
+# paper a fair one.
+#
+# Record the result in docs/experiments.md before starting the next run.
+
+defaults:
+  - _baseline_common
+  - override /model: neurovision
+  - _self_
+
+experiment_name: neurovision
+
+training:
+  loss:
+    deep_supervision:
+      # MUST be true whenever model.deep_supervision_levels > 1. With more than
+      # one supervised level the model returns a LIST of logits in training
+      # mode, and DeepSupervisionLoss is the only loss that knows how to
+      # consume one. build_neurovision cross-checks these two keys and raises
+      # if they disagree, so this is not an optional convenience -- composing
+      # `model=neurovision` against the stock training config fails without it.
+      enabled: true
+      # null -> halving weights (1, 0.5, 0.25) normalized to sum 1.0, which is
+      # what the three supervised levels (strides 1, 2, 4) want.
+      weights: null

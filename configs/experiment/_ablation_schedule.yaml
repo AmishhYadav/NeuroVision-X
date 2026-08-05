@@ -1,0 +1,74 @@
+# @package _global_
+#
+# Layer 1 of 2 of the ablation grid's shared body: THE SCHEDULE, and nothing
+# about the architecture. Do not run this file directly; it sets no
+# experiment_name.
+#
+# Split out from _ablation_common.yaml for the same reason _baseline_common.yaml
+# owns no `model:` block: one row of this grid (ablation_transformer_only) is
+# not the NeuroVision-X architecture at all, and it still has to run the exact
+# same schedule as every other row or its number means nothing. Anything that
+# must be identical across ALL SIX rows regardless of architecture lives here
+# exactly once.
+#
+# Layering:
+#   _baseline_common   -> data, augmentation, optimizer, checkpointing, stopping
+#   _ablation_schedule -> this file: the shortened schedule + run identity
+#   _ablation_common   -> + the NeuroVision-X architecture and deep supervision
+#
+# ---------------------------------------------------------------------------
+# The schedule is 40 epochs, NOT the baselines' 100. Read this before using
+# any number from this grid.
+# ---------------------------------------------------------------------------
+#
+# 100 epochs x 6 variants does not fit in a ~30 GPU-hour week -- see
+# `python scripts/run_ablation_grid.py` for the arithmetic, which is why that
+# script exists. 40 epochs is the longest schedule that lets the whole grid
+# run inside a small number of weeks.
+#
+# Consequences, all of which must be stated wherever these numbers appear:
+#
+#   1. Ablation rows are comparable to EACH OTHER and to nothing else. An
+#      `ablation_full` Dice is NOT comparable to `baseline_unet3d`,
+#      `baseline_swinunetr`, or `+experiment=neurovision`, all of which run
+#      100 epochs. The headline table is produced by those runs, not by this
+#      grid. This is also why `ablation_transformer_only` is a fresh 40-epoch
+#      SwinUNETR run rather than a citation of the existing 100-epoch
+#      `baseline_swinunetr` number.
+#   2. The cosine schedule is defined over `epochs`, so a 40-epoch run anneals
+#      to min_lr in 40 epochs. It is a complete, self-consistent schedule --
+#      not a truncated 100-epoch run. Do not "extend" one of these by resuming
+#      with a higher `epochs`; that silently rewrites the LR curve the earlier
+#      epochs trained under.
+#   3. A variant that is slower to converge is penalised more at 40 epochs
+#      than at 100. If two rows come out within noise of each other, the
+#      honest conclusion is "not separated at this budget", not "equivalent".
+#
+# ONE SEED (42). This is an exploration grid: it is for deciding which
+# variants are worth the full-length, multi-seed treatment, not for the paper.
+# 3D conv backward kernels are nondeterministic on CUDA, so two runs of the
+# SAME config differ by a non-zero amount that this grid does not measure.
+# Treat gaps smaller than roughly a Dice point as unresolved until the
+# surviving variants are re-run at 3 seeds.
+
+defaults:
+  - _baseline_common
+  - _self_
+
+seed: 42
+
+training:
+  # See the long note above. Changing this changes every row's meaning, so
+  # change it HERE (once, for the whole grid) or not at all.
+  epochs: 40
+
+  scheduler:
+    # 5 epochs of warmup was 5% of the baselines' 100-epoch run; at 40 epochs
+    # that same 5 would be 12.5%, a materially different schedule shape.
+    # Scaled down to keep the warmup FRACTION the same as the baselines'.
+    warmup_epochs: 2
+
+wandb:
+  # One W&B group so all six curves overlay on a single chart.
+  group: ablation_fusion
+  tags: [ablation, fusion]
