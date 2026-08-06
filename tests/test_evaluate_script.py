@@ -157,6 +157,7 @@ def _make_cfg(
         "out_dir": str(out_dir),
         "save_predictions": True,
         "save_probabilities": False,
+        "save_logits": False,
         "strict_arch_check": True,
     }
     evaluation.update(evaluation_overrides)
@@ -512,6 +513,60 @@ def test_run_evaluation_save_probabilities_flag(tmp_path: Path):
     probs = np.load(prob_path)
     assert probs.dtype == np.float16
     assert probs.shape == (3, *CROPPED_SHAPE)
+
+
+def test_run_evaluation_save_logits_flag(tmp_path: Path):
+    """save_logits writes raw logits, and they are NOT probabilities.
+
+    Temperature scaling needs logits: fp16 saturates any probability above
+    ~0.99976 to exactly 1.0, whose logit is +inf, so the most-confident
+    voxels -- the ones that drive miscalibration -- could not be fit from
+    saved probabilities. This test pins that logits/ holds pre-sigmoid
+    values by asserting they leave [0, 1], which probabilities never do.
+    """
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000"]
+    _write_case(prep_dir, "case_000", seed=0, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=case_ids)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+
+    cfg_off = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        out_dir=tmp_path / "eval_off",
+        save_logits=False,
+    )
+    _save_model_checkpoint(checkpoint_dir, cfg_off)
+    run_evaluation(cfg_off)
+    assert not (Path(cfg_off.inference.evaluation.out_dir) / "logits").exists()
+
+    cfg_on = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        out_dir=tmp_path / "eval_on",
+        save_logits=True,
+        save_probabilities=True,
+    )
+    run_evaluation(cfg_on)
+    out_dir = Path(cfg_on.inference.evaluation.out_dir)
+
+    logits_path = out_dir / "logits" / "case_000.npy"
+    assert logits_path.is_file()
+    assert np.load(logits_path).dtype == np.float16
+    logits = np.load(logits_path).astype(np.float32)
+    assert logits.shape == (3, *CROPPED_SHAPE)
+
+    # The decisive assertion: sigmoid(logits) must reproduce the saved
+    # probabilities. Equality of shape alone would also hold if the writer
+    # had accidentally saved probabilities into logits/.
+    probs = np.load(out_dir / "probabilities" / "case_000.npy").astype(np.float32)
+    np.testing.assert_allclose(1.0 / (1.0 + np.exp(-logits)), probs, atol=2e-3)
 
 
 def test_run_evaluation_unlabeled_case_skipped_for_metrics_but_predicted(tmp_path: Path):

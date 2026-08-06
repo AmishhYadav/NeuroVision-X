@@ -286,12 +286,18 @@ class CaseOutput:
             `cfg.inference.evaluation.save_probabilities` is True;
             otherwise `None` so a ~53 MB-per-case tensor is never
             materialized when it is not going to be written to disk.
+        logits: The RAW logits from the deterministic pass, same shape as
+            `regions`, when `cfg.inference.evaluation.save_logits` is True;
+            otherwise `None`. Kept separately from `probabilities` because
+            temperature scaling needs logits and cannot recover them from
+            fp16-saved probabilities -- see that config key's comment.
         mc: The `MCDropoutOutput` from the extra stochastic passes, when
             `cfg.inference.mc_dropout.enabled` is True; otherwise `None`.
     """
 
     regions: Tensor
     probabilities: Tensor | None
+    logits: Tensor | None
     mc: MCDropoutOutput | None
 
 
@@ -363,7 +369,11 @@ def evaluate_case(
     logits = sliding_window_predict(model, image, cfg, device)
     regions = postprocess_logits(logits, cfg)
 
-    probabilities = torch.sigmoid(logits) if cfg.inference.evaluation.save_probabilities else None
+    eval_cfg = cfg.inference.evaluation
+    probabilities = torch.sigmoid(logits) if eval_cfg.save_probabilities else None
+    # The deterministic logits, kept before any `mc_mean` branch below can
+    # rebind `regions`: `logits/` always means the deterministic pass.
+    saved_logits = logits if eval_cfg.save_logits else None
 
     mc_cfg = cfg.inference.mc_dropout
     mc_output: MCDropoutOutput | None = None
@@ -384,7 +394,9 @@ def evaluate_case(
             # to `mc_dropout.save_fields` to get the matching probabilities
             # in `mc_mean_prob/` instead.
 
-    return CaseOutput(regions=regions, probabilities=probabilities, mc=mc_output)
+    return CaseOutput(
+        regions=regions, probabilities=probabilities, logits=saved_logits, mc=mc_output
+    )
 
 
 def _log_and_print_summary(
@@ -488,10 +500,13 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
 
     predictions_dir = out_dir / "predictions"
     probabilities_dir = out_dir / "probabilities"
+    logits_dir = out_dir / "logits"
     if eval_cfg.save_predictions:
         ensure_dir(predictions_dir)
     if eval_cfg.save_probabilities:
         ensure_dir(probabilities_dir)
+    if eval_cfg.save_logits:
+        ensure_dir(logits_dir)
 
     # One output directory per requested MC-dropout field, built up front so
     # the per-case loop below never has to check "does this dir exist yet".
@@ -544,6 +559,15 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
                 # done in the frame the model actually predicted in.
                 probs_np = probabilities[0].cpu().numpy().astype(np.float16)
                 np.save(probabilities_dir / f"{case_id}.npy", probs_np)
+
+            if eval_cfg.save_logits:
+                # CROPPED geometry, like probabilities/ above. These are the
+                # input to temperature scaling: fp16 probabilities saturate to
+                # exactly 1.0 above ~0.99976 (logit +inf), which would silently
+                # exclude the most-confident voxels from the fit. Logits are
+                # ~+/-20 and round-trip through fp16 intact.
+                logits_np = case_output.logits[0].cpu().numpy().astype(np.float16)
+                np.save(logits_dir / f"{case_id}.npy", logits_np)
 
             if case_output.mc is not None:
                 mc = case_output.mc

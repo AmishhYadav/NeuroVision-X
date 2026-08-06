@@ -1,0 +1,45 @@
+# Fusion gate map extraction (scripts/extract_gates.py). This is the primary
+# evidence for the project's central claim -- that the adaptive gated fusion
+# module actually fires, and fires near tumor margins, rather than being a
+# decorative extra parameter block.
+#
+# PATCH-BASED, NOT SLIDING-WINDOW: `forward_with_gates` emits a pyramid of
+# gate maps at 4 different strides, and MONAI's sliding-window inferer only
+# knows how to stitch ONE output. Reimplementing four-level stitching is out
+# of scope for what this produces -- a qualitative figure plus a per-case
+# correlation over a few dozen cases, not a full-split artifact -- so this
+# takes exactly one patch_size crop per case and runs it through
+# forward_with_gates in a single forward pass.
+
+gates:
+  # Which frozen split to draw cases from. "test" backs a reported figure;
+  # "val" is for iterating without touching test.
+  split: test
+  # Checkpoint to load. null resolves to <training.checkpoint.dir>/best.pt,
+  # the same convention as inference.evaluation.checkpoint.
+  checkpoint: null
+  out_dir: ${output_dir}/gates_${explainability.gates.split}
+  # A handful of cases for a qualitative figure, not a full-split run --
+  # null processes every case in the split instead.
+  num_cases: 32
+  # Explicit case ids override num_cases entirely. null selects the first
+  # num_cases cases in split-file order (NOT a random sample), so a rerun
+  # against the same split file always picks the same cases without
+  # threading a seed through this script.
+  case_ids: null
+  patch_size: ${data.patch_size}
+  # "label" centres the crop on the ground-truth whole-tumor (WT) centroid --
+  # only valid for cases that actually have a segmentation. "prediction"
+  # exists because the BraTS VALIDATION set ships with no segmentation at all
+  # (meta["has_label"] is False there), so a label centroid is unavailable;
+  # it centres on the model's OWN predicted WT instead (an initial pass at
+  # the volume's geometric centre locates the tumor, then a second,
+  # correctly-centred crop is what actually gets saved -- still two ordinary
+  # patch forward passes, never a sliding-window stitch). "label" on a case
+  # with no ground truth raises naming the case, rather than silently
+  # falling back to "prediction" and reporting a different quantity than the
+  # config claims.
+  center_on: label
+  # Also save the 4-modality patch alongside the gate maps, so the
+  # qualitative figure needs no second read of the preprocessed data.
+  save_image: true

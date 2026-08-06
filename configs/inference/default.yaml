@@ -92,6 +92,20 @@ evaluation:
   # its own. Only needed for the calibration/ECE phase, which runs on a
   # subset. Default off deliberately.
   save_probabilities: false
+  # float16 RAW LOGITS (3, D, H, W) in CROPPED geometry, same size and
+  # geometry as save_probabilities. This is the artifact TEMPERATURE SCALING
+  # needs, and probabilities cannot substitute for it. Measured: fp16's gap
+  # below 1.0 is 0.000488, so any probability above ~0.99976 round-trips to
+  # exactly 1.0 and its logit is +inf. A trained segmentation net is that
+  # confident across most of the tumor core, so fitting a temperature from
+  # saved probabilities would have to drop or clamp precisely the voxels that
+  # drive miscalibration -- biasing the fitted temperature toward 1.0 and
+  # understating overconfidence, with nothing failing anywhere. Logits sit
+  # around +/-20, nowhere near fp16's +/-65504 limit, so they survive intact.
+  # (The saturation is one-sided: near 0, fp16 subnormals reach 6e-8, so
+  # p -> 0 is fine. Only p -> 1 collapses.) ECE/MCE/Brier and the reliability
+  # diagram are unaffected either way -- 0.9998 and 1.0 fall in the same bin.
+  save_logits: false
   # Refuse to run if the checkpoint's model.name disagrees with the current
   # config's. See resolve_checkpoint's docstring.
   strict_arch_check: true
