@@ -93,14 +93,12 @@ def escape_latex(text: str) -> str:
     Returns:
         The escaped text, safe to place in a LaTeX cell.
     """
-    # Backslash first, otherwise the replacements introduced by later rules get
-    # escaped a second time.
-    out = text.replace("\\", _LATEX_ESCAPES["\\"])
-    for char, replacement in _LATEX_ESCAPES.items():
-        if char == "\\":
-            continue
-        out = out.replace(char, replacement)
-    return out
+    # ONE pass over the characters, not a sequence of `str.replace` calls. The
+    # replacements themselves contain special characters -- `\` becomes
+    # `\textbackslash{}` -- so a second pass would escape the braces that the
+    # first pass just emitted, turning a lone backslash into
+    # `\textbackslash\{\}`. Pinned by a test.
+    return "".join(_LATEX_ESCAPES.get(char, char) for char in text)
 
 
 def _precision_for(metric: str, precision: Mapping[str, int] | int | None) -> int:
@@ -230,6 +228,10 @@ def _best_models(table: pd.DataFrame) -> dict[tuple[str, str], str]:
     failing anywhere, so guessing is not an option.
     """
     winners: dict[tuple[str, str], str] = {}
+    if table["model"].nunique() < 2:
+        # "Best per column" with one model bolds every cell, which reads as an
+        # emphasis the table has not earned. Nothing to compare, nothing to bold.
+        return winners
     for (region, metric), group in table.groupby(["region", "metric"], sort=False):
         higher_is_better = metric_direction(f"{metric}_{region}")
         means = group.set_index("model")["mean"]
@@ -334,7 +336,8 @@ def _footnote(table: pd.DataFrame, show_median: bool) -> str:
     missing = table[table["n_missing"] > 0]
     if not missing.empty:
         detail = ", ".join(
-            f"{row['model']} {row['region']} {row['metric']}: {int(row['n_missing'])}/{int(row['n'])}"
+            f"{row['model']} {row['region']} {row['metric']}: "
+            f"{int(row['n_missing'])}/{int(row['n'])}"
             for _, row in missing.iterrows()
         )
         parts.append(

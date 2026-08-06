@@ -447,6 +447,52 @@ def _normalize01(values: np.ndarray) -> np.ndarray:
     return (finite - lo) / (hi - lo)
 
 
+def _normalize_mri(
+    values: np.ndarray, percentiles: tuple[float, float] = (1.0, 99.0)
+) -> np.ndarray:
+    """Scale an MRI slice for display: robust window, background forced to black.
+
+    Two things a plain min-max gets wrong on this project's data, both visible in
+    the figure rather than in any number:
+
+    1. Preprocessing z-scores each modality over its NONZERO voxels, so brain
+       interior values are routinely negative. A min-max therefore maps the
+       zero-valued air OUTSIDE the head to some mid-grey, and the panel renders
+       every brain on a grey card. Voxels that are exactly zero are the
+       preprocessing's own background marker, so they are pinned to black after
+       scaling.
+    2. A single bright voxel (an enhancing rim, a scanner artefact) sets the
+       maximum and washes out everything else. The window is therefore taken
+       from percentiles of the nonzero voxels, not from the extremes.
+
+    Args:
+        values: A 2D slice.
+        percentiles: Lower/upper percentile bounds of the display window,
+            computed over nonzero voxels only.
+
+    Returns:
+        A float array in `[0, 1]`, same shape.
+    """
+    array = np.asarray(values, dtype=np.float64)
+    foreground = array[array != 0]
+    if foreground.size == 0:
+        # An all-zero slice is legitimately all background (e.g. a slice past
+        # the end of the head), not an error.
+        return np.zeros_like(array)
+
+    lo, hi = np.percentile(foreground, percentiles)
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        # Constant foreground: there is no window to compute. Render it as a
+        # silhouette rather than falling back to a plain min-max, which would
+        # put the MINIMUM at black -- and since the constant foreground can be
+        # negative, that minimum is the brain, leaving the background WHITE.
+        return (array != 0).astype(np.float64)
+
+    scaled = np.clip((array - lo) / (hi - lo), 0.0, 1.0)
+    scaled[array == 0] = 0.0
+    return scaled
+
+
 def _label_overlay(label_slice: np.ndarray) -> np.ma.MaskedArray:
     """Mask background (class 0) so it renders transparent over the MRI beneath."""
     return np.ma.masked_where(label_slice == 0, label_slice)
@@ -598,7 +644,7 @@ def plot_qualitative_panel(
             index = case.slice_index
         else:
             index = pick_slice(case.ground_truth, plane)
-        background = _normalize01(take_slice(case.image[modality_index], index, plane))
+        background = _normalize_mri(take_slice(case.image[modality_index], index, plane))
         gt_slice = take_slice(case.ground_truth, index, plane)
 
         crop: tuple[slice, slice] | None = None
@@ -681,13 +727,12 @@ def plot_qualitative_panel(
         axes[0][col].set_title(title, fontsize=8)
 
     handles = [Patch(facecolor=CLASS_COLORS[k], label=CLASS_NAMES[k]) for k in sorted(CLASS_NAMES)]
-    fig.legend(
-        handles=handles,
-        loc="lower center",
-        ncol=len(handles),
-        bbox_to_anchor=(0.5, -0.02),
-        fontsize=7,
-    )
+    # "outside lower center" makes constrained_layout RESERVE space for the
+    # legend instead of drawing it on top of the bottom row. A plain
+    # `loc="lower center"` with a negative bbox_to_anchor lands the class labels
+    # across the last row's images, which is the kind of thing that survives all
+    # the way into a submitted PDF because every test still passes.
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), fontsize=7)
     return fig
 
 

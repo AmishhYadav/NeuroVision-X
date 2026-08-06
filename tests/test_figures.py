@@ -393,6 +393,57 @@ def test_qualitative_panel_crop_shrinks_the_displayed_extent() -> None:
         plt.close(full)
 
 
+def test_qualitative_panel_renders_background_as_black() -> None:
+    """Preprocessing z-scores over nonzero voxels, so brain interiors go negative.
+
+    A plain min-max would map the zero-valued air outside the head to mid-grey and
+    render every brain on a grey card. Exact zeros are the preprocessing's own
+    background marker and must come out at 0.0.
+    """
+    case = _roomy_case()
+    # Negative interior values, exactly as z-scoring produces.
+    case.image[:, 10:16, 12:18, 14:20] = -2.0
+    case.image[:, 12:14, 14:16, 16:18] = 3.0
+    with paper_style():
+        fig = plot_qualitative_panel([case], crop_to_brain=False)
+    try:
+        displayed = _grid_axes(fig)[0].get_images()[0].get_array()
+        assert float(displayed[0, 0]) == 0.0  # a corner is outside the head
+        assert float(displayed.max()) > 0.0  # and the brain is not black too
+    finally:
+        plt.close(fig)
+
+
+def test_qualitative_panel_crop_survives_negative_intensities() -> None:
+    """Regression: the brain bbox is found on the DISPLAY array, not the raw one.
+
+    With a min-max normalization the background is nonzero, so the bounding box
+    covered the whole slice and `crop_to_brain` silently did nothing.
+    """
+    case = _roomy_case()
+    case.image[:, 10:16, 12:18, 14:20] = -2.0
+    with paper_style():
+        cropped = plot_qualitative_panel([case], crop_to_brain=True)
+        full = plot_qualitative_panel([_roomy_case()], crop_to_brain=False)
+    try:
+        cropped_shape = _grid_axes(cropped)[0].get_images()[0].get_array().shape
+        full_shape = _grid_axes(full)[0].get_images()[0].get_array().shape
+        assert cropped_shape[0] < full_shape[0]
+        assert cropped_shape[1] < full_shape[1]
+    finally:
+        plt.close(cropped)
+        plt.close(full)
+
+
+def test_qualitative_panel_tolerates_an_all_zero_slice() -> None:
+    """A slice past the end of the head is all background, not an error."""
+    case = _roomy_case()
+    case.image[:] = 0.0
+    with paper_style():
+        fig = plot_qualitative_panel([case])
+    plt.close(fig)
+
+
 def test_qualitative_panel_validates_before_drawing_anything() -> None:
     """A bad input must not leave a half-drawn figure the caller might save."""
     bad = _case("BAD")
