@@ -109,3 +109,22 @@ evaluation:
   # Refuse to run if the checkpoint's model.name disagrees with the current
   # config's. See resolve_checkpoint's docstring.
   strict_arch_check: true
+  # Distance-to-boundary bands, in MILLIMETRES (spacing comes from each case's
+  # meta.json, same as HD95's). Half-open [lo, hi), so they tile [0, inf)
+  # exactly once. `null` turns the whole analysis off.
+  #
+  # This is the quantitative form of the project's boundary-accuracy claim:
+  # HD95 is one scalar summary of boundary error, while these columns give
+  # error as a FUNCTION of distance to the true margin -- "the model errs less
+  # in the 0-2 mm shell around the true boundary than the baseline does".
+  #
+  # The bands stratify on the GROUND-TRUTH distance field, never the
+  # prediction's, so two models are always binned by the same partition of
+  # space and their per-band numbers are comparable. Adds `berr_/bfnr_/bfpr_/
+  # bn_<REGION>_<band>` columns to per_case_metrics.csv; it only ADDS columns,
+  # so an already-reported Dice/HD95 row is unchanged by turning this on.
+  #
+  # Cost: two Euclidean distance transforms per region per case on CPU (~3-6 s
+  # for a median 137x171x140 cropped volume), against a sliding-window pass
+  # that takes far longer. Cheap enough to leave on.
+  boundary_bands: [[0.0, 2.0], [2.0, 5.0], [5.0, 10.0], [10.0, .inf]]

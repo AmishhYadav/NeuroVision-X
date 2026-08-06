@@ -72,7 +72,8 @@ from neurovision.inference.sliding_window import sliding_window_predict
 # identical to scripts/train.py's, rather than depending on train.py having
 # been imported first in the same process. Copied from scripts/train.py.
 from neurovision.losses import segmentation  # noqa: F401
-from neurovision.metrics.segmentation import MetricAggregator
+from neurovision.metrics.boundary import boundary_stratified_errors
+from neurovision.metrics.segmentation import MetricAggregator, compute_case_metrics
 from neurovision.models import baseline  # noqa: F401
 from neurovision.models.registry import build_model
 from neurovision.training.checkpoint import ResumeState, load_checkpoint
@@ -340,6 +341,41 @@ def _validate_mc_dropout_config(mc_cfg: DictConfig) -> None:
         )
 
 
+def resolve_boundary_bands(eval_cfg: DictConfig) -> tuple[tuple[float, float], ...] | None:
+    """Reads and validates `cfg.inference.evaluation.boundary_bands`.
+
+    Args:
+        eval_cfg: `cfg.inference.evaluation`. The key is read with a default
+            of `None` rather than attribute access, so a config composed
+            before this key existed (an older saved `eval_config.yaml`, a
+            minimal test config) still runs with the analysis simply off.
+
+    Returns:
+        The bands as a tuple of `(lo, hi)` float pairs, or `None` when the
+        analysis is disabled.
+
+    Raises:
+        ValueError: If an entry is not a 2-element pair. Band ordering and
+            overlap are validated downstream by
+            `neurovision.metrics.boundary.boundary_band_masks`, which owns
+            that rule -- duplicating it here would let the two drift apart.
+    """
+    raw = eval_cfg.get("boundary_bands", None)
+    if raw is None:
+        return None
+
+    bands: list[tuple[float, float]] = []
+    for i, entry in enumerate(raw):
+        pair = list(entry)
+        if len(pair) != 2:
+            raise ValueError(
+                f"cfg.inference.evaluation.boundary_bands[{i}] must be a [lo, hi] pair, got "
+                f"{pair!r}. Use `.inf` for an unbounded final band."
+            )
+        bands.append((float(pair[0]), float(pair[1])))
+    return tuple(bands)
+
+
 def evaluate_case(
     model: nn.Module, batch: dict[str, Any], cfg: DictConfig, device: torch.device
 ) -> CaseOutput:
@@ -493,6 +529,7 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
 
     eval_cfg = cfg.inference.evaluation
     split = eval_cfg.split
+    boundary_bands = resolve_boundary_bands(eval_cfg)
     loader, case_ids = build_eval_dataloader(cfg, split)
 
     out_dir = ensure_dir(eval_cfg.out_dir)
@@ -656,9 +693,26 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
                 # 16 GB VRAM budget is already committed to the model and
                 # the sliding-window output. The per-case transfer is
                 # negligible against the sliding-window pass itself.
-                aggregator.add_case(
-                    case_id, regions.cpu(), batch["label"].cpu(), spacing=meta["spacing"]
-                )
+                pred_cpu = regions.cpu()
+                label_cpu = batch["label"].cpu()
+                case_metrics = compute_case_metrics(pred_cpu, label_cpu, spacing=meta["spacing"])
+                if boundary_bands is not None:
+                    # Merged into the SAME per-case record rather than added
+                    # through a second aggregator: these are columns of the
+                    # same table, and MetricAggregator.update raises on a
+                    # duplicate case_id, so add_case + a second write is not
+                    # available. Additive only -- no existing Dice/HD95 column
+                    # moves when this is on, which is what keeps an already
+                    # published results row valid.
+                    case_metrics.update(
+                        boundary_stratified_errors(
+                            pred_cpu,
+                            label_cpu,
+                            spacing=meta["spacing"],
+                            bands=boundary_bands,
+                        )
+                    )
+                aggregator.update(case_id, case_metrics)
 
             # Rewritten every iteration, not just at the end: cheap for a
             # per-case table this small, and it means a killed run still has

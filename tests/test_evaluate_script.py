@@ -159,6 +159,7 @@ def _make_cfg(
         "save_probabilities": False,
         "save_logits": False,
         "strict_arch_check": True,
+        "boundary_bands": [[0.0, 2.0], [2.0, 5.0], [5.0, 10.0], [10.0, float("inf")]],
     }
     evaluation.update(evaluation_overrides)
 
@@ -448,6 +449,62 @@ def test_run_evaluation_writes_per_case_and_summary_csv(tmp_path: Path):
 
     on_disk_df = pd.read_csv(out_dir / "per_case_metrics.csv", index_col="case_id")
     assert len(on_disk_df) == 2
+
+
+def test_run_evaluation_boundary_bands_add_columns_and_null_omits_them(tmp_path: Path):
+    """Boundary stratification is ADDITIVE -- it must not move an existing metric.
+
+    An already-published results row (docs/experiments.md's baseline_unet3d)
+    stays valid only if turning this on changes nothing but the column set.
+    """
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    _write_case(prep_dir, "case_000", seed=0, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=["case_000"])
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    cfg_on = _make_cfg(
+        tmp_path, prep_dir, splits_path, checkpoint_dir, out_dir=tmp_path / "eval_on"
+    )
+    _save_model_checkpoint(checkpoint_dir, cfg_on)
+    df_on = run_evaluation(cfg_on)
+
+    cfg_off = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        out_dir=tmp_path / "eval_off",
+        boundary_bands=None,
+    )
+    df_off = run_evaluation(cfg_off)
+
+    # The band labels come from metrics.boundary.band_label, not from a
+    # string re-derived here -- a drift in that format must fail this test.
+    for region in ("ET", "TC", "WT"):
+        for prefix in ("berr", "bfnr", "bfpr", "bn"):
+            assert f"{prefix}_{region}_0-2" in df_on.columns
+            assert f"{prefix}_{region}_10-inf" in df_on.columns
+    assert not [c for c in df_off.columns if c.startswith("berr_")]
+
+    # Every pre-existing metric is bit-identical between the two runs.
+    shared = [c for c in df_off.columns if c in df_on.columns]
+    assert shared, "the off-run produced no columns to compare"
+    pd.testing.assert_frame_equal(df_on[shared], df_off[shared])
+
+    # berr == bfnr + bfpr, on real evaluation output rather than a synthetic
+    # array -- the identity that makes the over/under-segmentation split
+    # trustworthy.
+    for region in ("ET", "TC", "WT"):
+        for label in ("0-2", "2-5", "5-10", "10-inf"):
+            err = df_on[f"berr_{region}_{label}"].iloc[0]
+            fnr = df_on[f"bfnr_{region}_{label}"].iloc[0]
+            fpr = df_on[f"bfpr_{region}_{label}"].iloc[0]
+            if pd.isna(err):
+                assert pd.isna(fnr) and pd.isna(fpr)
+                assert df_on[f"bn_{region}_{label}"].iloc[0] == 0.0
+            else:
+                assert err == pytest.approx(fnr + fpr)
 
 
 def test_run_evaluation_prediction_shape_is_original_not_cropped(tmp_path: Path):
