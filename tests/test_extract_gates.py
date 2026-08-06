@@ -16,9 +16,9 @@ from __future__ import annotations
 import importlib.util
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -128,12 +128,14 @@ def _write_case(prep_dir: Path, case_id: str, seed: int, has_label: bool = True)
     image = rng.standard_normal((4, *CROPPED_SHAPE)).astype(np.float16)
     np.save(case_dir / "image.npy", image)
 
-    # A real label.npy is always written, even for has_label=False cases --
-    # matching scripts/preprocess.py's real BraTS validation-set output and
-    # tests/test_evaluate_script.py's fixture convention: build_val_transforms'
-    # LoadImaged has no allow_missing_keys=True, so a case with no label.npy
-    # at all cannot pass through the shared transform pipeline. Whether a
-    # case counts as "labeled" is decided purely by meta["has_label"].
+    # A real label.npy is always written, even for has_label=False cases,
+    # because build_val_transforms' LoadImaged has no allow_missing_keys=True
+    # and a case with no label.npy cannot pass through the shared pipeline at
+    # all. NOTE this is NOT what scripts/preprocess.py produces for a genuinely
+    # unlabeled case -- it writes no label.npy there -- so a has_label=False
+    # fixture here exercises the meta-flag branch only, never the real
+    # unlabeled-data path (which _validate_center_on now rejects up front).
+    # Same convention as tests/test_evaluate_script.py's fixture.
     label = _build_synthetic_label(CROPPED_SHAPE)
     np.save(case_dir / "label.npy", label)
 
@@ -507,9 +509,39 @@ def test_gates_manifest_has_one_row_per_case_with_all_documented_columns(
         "n_gate_levels",
         "gate_levels",
         "has_label",
+        "center_on",
         "wt_empty",
     }
     assert expected_columns.issubset(set(df.columns))
+    # `wt_empty` means two different things depending on this, so a reader of
+    # the manifest alone must be able to tell which one it got.
+    assert set(df["center_on"]) == {"label"}
+
+
+def test_run_extraction_raises_naming_cases_with_no_label_file_on_disk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A case with no label.npy cannot pass build_val_transforms' LoadImaged.
+
+    scripts/preprocess.py writes no label.npy for a genuinely unlabeled case,
+    and the shared val pipeline is not built with allow_missing_keys=True, so
+    such a case dies several frames deep inside MONAI without naming itself.
+    Both center_on modes must reject it up front instead.
+    """
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    _write_case(prep_dir, "no_label_file", seed=0, has_label=False)
+    (prep_dir / "no_label_file" / "label.npy").unlink()
+    _write_splits(splits_path, train=[], val=[], test=["no_label_file"])
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    _save_stub_checkpoint(checkpoint_dir, _StubGateModel())
+    monkeypatch.setattr(extract_gates_script, "build_model", lambda cfg: _StubGateModel())
+
+    # center_on="prediction" is the mode that used to claim it supported this.
+    cfg = _make_cfg(tmp_path, prep_dir, splits_path, checkpoint_dir, center_on="prediction")
+    with pytest.raises(ValueError, match="no_label_file"):
+        run_extraction(cfg)
 
 
 # ---------------------------------------------------------------------------

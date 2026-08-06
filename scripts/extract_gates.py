@@ -149,7 +149,9 @@ def tumor_centroid(label: Tensor, region_index: int, case_id: str | None = None)
         ValueError: If `label` is not 4-dimensional.
     """
     if label.ndim != 4:
-        raise ValueError(f"tumor_centroid expects a (C, D, H, W) tensor, got shape {tuple(label.shape)}.")
+        raise ValueError(
+            f"tumor_centroid expects a (C, D, H, W) tensor, got shape {tuple(label.shape)}."
+        )
 
     channel = label[region_index]
     nonzero = torch.nonzero(channel > 0, as_tuple=False)  # (N, 3)
@@ -197,7 +199,9 @@ def crop_patch(
         ValueError: If `volume` is not 4-dimensional.
     """
     if volume.ndim != 4:
-        raise ValueError(f"crop_patch expects a (C, D, H, W) tensor, got shape {tuple(volume.shape)}.")
+        raise ValueError(
+            f"crop_patch expects a (C, D, H, W) tensor, got shape {tuple(volume.shape)}."
+        )
 
     spatial_shape = tuple(volume.shape[1:])
 
@@ -382,6 +386,22 @@ def _validate_center_on(cfg: DictConfig, case_ids: list[str], prep_dir: Path) ->
     data/config mismatch here should fail in the first second, not after
     minutes of forward passes.
 
+    Both `center_on` modes require a `label.npy` on disk, and that is not an
+    oversight in this script. `build_gates_dataloader` reuses the SHARED
+    `build_val_transforms` pipeline, whose `LoadImaged` is built without
+    `allow_missing_keys=True`; a case with no `label.npy` therefore dies
+    inside MONAI's loader with a message about a missing dict key, several
+    frames from anything that names the case. `scripts/preprocess.py` writes
+    no `label.npy` at all when a case has no segmentation, so an unlabeled
+    BraTS validation case really is unusable here today -- this check just
+    says so in the first second instead.
+
+    What `center_on="prediction"` is actually for, then, is not unlabeled
+    data: it centres the saved patch on the model's OWN predicted whole
+    tumor, so the figure's crop is chosen without consulting the ground
+    truth. That removes an obvious "you picked the window using the answer"
+    objection to the gate figure.
+
     Args:
         cfg: The full composed Hydra config.
         case_ids: Cases selected by `select_cases`.
@@ -389,15 +409,27 @@ def _validate_center_on(cfg: DictConfig, case_ids: list[str], prep_dir: Path) ->
             `meta.json`).
 
     Raises:
-        ValueError: If `center_on` is not one of `_VALID_CENTER_ON`, or if
-            it is `"label"` and any selected case has `meta["has_label"] ==
-            False` (names the offending case ids).
+        ValueError: If `center_on` is not one of `_VALID_CENTER_ON`; if it
+            is `"label"` and any selected case has `meta["has_label"] ==
+            False`; or if any selected case has no `label.npy` on disk
+            (names the offending case ids in every instance).
     """
     center_on = cfg.explainability.gates.center_on
     if center_on not in _VALID_CENTER_ON:
         raise ValueError(
             f"explainability.gates.center_on must be one of {_VALID_CENTER_ON}, got "
             f"{center_on!r}."
+        )
+
+    missing_label_file = [
+        case_id for case_id in case_ids if not (prep_dir / case_id / "label.npy").is_file()
+    ]
+    if missing_label_file:
+        raise ValueError(
+            f"The following selected case(s) have no label.npy on disk: {missing_label_file}. "
+            "build_gates_dataloader reuses build_val_transforms, whose LoadImaged is not built "
+            "with allow_missing_keys=True, so such a case cannot be loaded at all -- by either "
+            "center_on mode. Select cases from a labelled split."
         )
 
     if center_on == "label":
@@ -409,9 +441,9 @@ def _validate_center_on(cfg: DictConfig, case_ids: list[str], prep_dir: Path) ->
         if unlabeled:
             raise ValueError(
                 "explainability.gates.center_on='label' but the following selected case(s) "
-                f"have no ground-truth label (meta['has_label'] is False): {unlabeled}. The "
-                "BraTS validation set ships without segmentations -- use "
-                "center_on='prediction' for such cases."
+                f"have no ground-truth label (meta['has_label'] is False): {unlabeled}. Use "
+                "center_on='prediction', which centres the crop on the model's own predicted "
+                "whole tumor instead."
             )
 
 
@@ -555,6 +587,13 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
                 "n_gate_levels": len(gate_level_indices),
                 "gate_levels": ";".join(str(i) for i in gate_level_indices),
                 "has_label": bool(meta["has_label"]),
+                # Which quantity the crop centre came from. Recorded per case
+                # rather than left implicit in gates_config.yaml because a
+                # figure caption has to say whether the window was chosen
+                # using the ground truth, and `wt_empty` below means two
+                # different things ("no ground-truth WT" vs "the model
+                # predicted no WT") depending on it.
+                "center_on": str(gates_cfg.center_on),
                 "wt_empty": wt_empty,
             }
 
