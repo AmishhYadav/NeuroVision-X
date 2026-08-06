@@ -25,14 +25,20 @@ import pytest  # noqa: E402
 from neurovision.visualization import figures  # noqa: E402
 from neurovision.visualization.figures import (  # noqa: E402
     MODEL_COLOR_CYCLE,
+    AttributionCase,
+    GateCase,
     QualitativeCase,
     TrainingPanel,
     model_style,
     paper_rc,
     paper_style,
     pick_slice,
+    plot_attribution_panel,
+    plot_band_profile,
     plot_comparison_forest,
+    plot_gate_maps,
     plot_metric_distributions,
+    plot_modality_attribution,
     plot_qualitative_panel,
     plot_reliability_diagram,
     plot_risk_coverage,
@@ -793,3 +799,334 @@ def test_figures_module_does_not_import_torch() -> None:
     source = Path(figures.__file__).read_text(encoding="utf-8")
     assert "import torch" not in source
     assert "import monai" not in source
+
+
+# --------------------------------------------------------------------------- #
+# Gate maps
+# --------------------------------------------------------------------------- #
+def _gate_case(case_id: str = "G_A", *, gates: dict | None = None) -> GateCase:
+    if gates is None:
+        rng = np.random.default_rng(0)
+        gates = {
+            "stride2": rng.uniform(0.4, 0.6, size=(6, 7, 8)).astype(np.float32),
+            "stride4": rng.uniform(0.4, 0.6, size=(3, 4, 4)).astype(np.float32),
+        }
+    return GateCase(
+        case_id=case_id,
+        image=_synthetic_image(),
+        ground_truth=_synthetic_label(),
+        gates=gates,
+    )
+
+
+def test_gate_case_validate_accepts_a_well_formed_case() -> None:
+    _gate_case().validate()  # must not raise
+
+
+def test_gate_case_validate_rejects_an_oversized_gate_map() -> None:
+    case = _gate_case()
+    case.gates["stride2"] = np.zeros((13, 7, 8), dtype=np.float32)  # SHAPE is (12, 14, 16)
+    with pytest.raises(ValueError, match="G_A.*stride2"):
+        case.validate()
+
+
+def test_gate_case_validate_rejects_empty_gates() -> None:
+    case = _gate_case()
+    case.gates = {}
+    with pytest.raises(ValueError, match="gates.* is empty"):
+        case.validate()
+
+
+def test_gate_maps_has_one_axes_per_grid_cell() -> None:
+    with paper_style():
+        fig = plot_gate_maps([_gate_case("A"), _gate_case("B")])
+    try:
+        # 2 rows x (modality + 2 gate keys) = 6 image-bearing axes.
+        assert len(_grid_axes(fig)) == 6
+    finally:
+        plt.close(fig)
+
+
+def test_gate_maps_rejects_differing_gate_keys() -> None:
+    a = _gate_case("A")
+    b = _gate_case("B")
+    b.gates = {"stride2": b.gates["stride2"]}
+    with pytest.raises(ValueError, match="gate keys"):
+        plot_gate_maps([a, b])
+
+
+def test_gate_maps_rejects_reordered_gate_keys() -> None:
+    a = _gate_case("A")
+    b = _gate_case("B")
+    b.gates = {"stride4": b.gates["stride4"], "stride2": b.gates["stride2"]}
+    with pytest.raises(ValueError, match="gate keys"):
+        plot_gate_maps([a, b])
+
+
+def test_gate_maps_upsample_is_nearest_neighbour_only() -> None:
+    """Pins the "do not imply voxel precision" decision.
+
+    A coarse gate split sharply into two halves must render as exactly two
+    values -- any interpolated intermediate would be a value the data never
+    had.
+    """
+    coarse = np.full((4, 4, 4), 0.2, dtype=np.float32)
+    coarse[2:] = 0.8  # split along an axis orthogonal to the (axial) plane axis
+    case = _gate_case("A", gates={"stride8": coarse})
+    case.slice_index = 6
+    with paper_style():
+        fig = plot_gate_maps([case], crop_to_brain=False)
+    try:
+        images = _grid_axes(fig)
+        drawn = images[1].get_images()[0].get_array()
+        assert np.all(np.isclose(drawn, 0.2) | np.isclose(drawn, 0.8))
+        assert np.any(np.isclose(drawn, 0.2))
+        assert np.any(np.isclose(drawn, 0.8))
+    finally:
+        plt.close(fig)
+
+
+def test_gate_maps_colour_limits_are_fixed_to_zero_one() -> None:
+    """A gate hovering near 0.5 must not be rescaled to look dramatic."""
+    rng = np.random.default_rng(1)
+    gates = {"stride8": rng.uniform(0.49, 0.51, size=(3, 4, 4)).astype(np.float32)}
+    with paper_style():
+        fig = plot_gate_maps([_gate_case("A", gates=gates)])
+    try:
+        for ax in _grid_axes(fig)[1:]:
+            image = ax.get_images()[0]
+            assert image.get_clim() == (0.0, 1.0)
+    finally:
+        plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# Band profile
+# --------------------------------------------------------------------------- #
+_BANDS = ("0-2", "2-5", "5-10", "10-inf")
+
+
+def _band_table(values: list, errors: list | None = None) -> pd.DataFrame:
+    data = {"band": list(_BANDS), "mean": values}
+    if errors is not None:
+        data["std"] = errors
+    return pd.DataFrame(data)
+
+
+def test_band_profile_rejects_empty_input() -> None:
+    with pytest.raises(ValueError, match="at least one entry"):
+        plot_band_profile({})
+
+
+def test_band_profile_names_a_missing_column() -> None:
+    table = _band_table([0.1, 0.2, 0.3, 0.4])  # no "std" column: errors=None
+    with pytest.raises(ValueError, match="'std'"):
+        plot_band_profile({"m": table})
+
+
+def test_band_profile_rejects_mismatched_band_labels() -> None:
+    a = _band_table([0.1, 0.2, 0.3, 0.4], errors=[0.0] * 4)
+    b = a.copy()
+    b["band"] = ["0-2", "2-5", "5-10", "10-99"]
+    with pytest.raises(ValueError, match="has bands"):
+        plot_band_profile({"A": a, "B": b})
+
+
+def test_band_profile_rejects_reordered_band_labels() -> None:
+    a = _band_table([0.1, 0.2, 0.3, 0.4], errors=[0.0] * 4)
+    b = a.iloc[::-1].reset_index(drop=True)
+    with pytest.raises(ValueError, match="has bands"):
+        plot_band_profile({"A": a, "B": b})
+
+
+def test_band_profile_xticks_match_band_labels_in_order() -> None:
+    table = _band_table([0.1, 0.2, 0.3, 0.4], errors=[0.02] * 4)
+    with paper_style():
+        fig = plot_band_profile({"m": table})
+    try:
+        ax = fig.axes[0]
+        assert [t.get_text() for t in ax.get_xticklabels()] == list(_BANDS)
+    finally:
+        plt.close(fig)
+
+
+def test_band_profile_draws_no_fill_without_an_error_column() -> None:
+    table = _band_table([0.1, 0.2, 0.3, 0.4])
+    with paper_style():
+        fig = plot_band_profile({"m": table}, error_column=None)
+    try:
+        assert len(fig.axes[0].collections) == 0
+    finally:
+        plt.close(fig)
+
+
+def test_band_profile_draws_a_fill_with_an_error_column() -> None:
+    table = _band_table([0.1, 0.2, 0.3, 0.4], errors=[0.02] * 4)
+    with paper_style():
+        fig = plot_band_profile({"m": table})
+    try:
+        assert len(fig.axes[0].collections) == 1
+    finally:
+        plt.close(fig)
+
+
+def test_band_profile_higher_is_better_annotates_ylabel() -> None:
+    table = _band_table([0.1, 0.2, 0.3, 0.4])
+    with paper_style():
+        up = plot_band_profile(
+            {"m": table}, ylabel="Gate value", higher_is_better=True, error_column=None
+        )
+        down = plot_band_profile(
+            {"m": table}, ylabel="Error rate", higher_is_better=False, error_column=None
+        )
+    try:
+        assert "better" in up.axes[0].get_ylabel()
+        assert "better" in down.axes[0].get_ylabel()
+    finally:
+        plt.close(up)
+        plt.close(down)
+
+
+# --------------------------------------------------------------------------- #
+# Modality attribution
+# --------------------------------------------------------------------------- #
+def _modality_attribution_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "region": ["ET", "TC", "WT"],
+            "attr_T1": [0.1, 0.15, 0.2],
+            "attr_T1CE": [0.5, 0.3, 0.2],
+            "attr_T2": [0.1, 0.2, 0.2],
+            "attr_FLAIR": [0.3, 0.35, 0.4],
+        }
+    )
+
+
+def test_modality_attribution_rejects_empty_input() -> None:
+    with pytest.raises(ValueError, match="must not be empty"):
+        plot_modality_attribution(pd.DataFrame())
+
+
+def test_modality_attribution_names_a_missing_column() -> None:
+    df = _modality_attribution_df().drop(columns=["attr_FLAIR"])
+    with pytest.raises(ValueError, match="attr_FLAIR"):
+        plot_modality_attribution(df)
+
+
+def test_modality_attribution_averages_rows_sharing_a_region() -> None:
+    df = pd.DataFrame(
+        {
+            "region": ["ET", "ET"],
+            "attr_T1": [0.2, 0.6],
+            "attr_T1CE": [0.5, 0.5],
+            "attr_T2": [0.1, 0.1],
+            "attr_FLAIR": [0.2, 0.2],
+        }
+    )
+    with paper_style():
+        fig = plot_modality_attribution(df)
+    try:
+        ax = fig.axes[0]
+        # One region -> one bar per modality's `ax.bar()` call, so `ax.patches`
+        # is in MODALITY_NAMES order; T1 is first.
+        assert ax.patches[0].get_height() == pytest.approx(0.4)
+    finally:
+        plt.close(fig)
+
+
+def test_modality_attribution_accepts_integer_region_values() -> None:
+    df = pd.DataFrame(
+        {
+            "region": [0, 2],  # REGION_ORDER = ("WT", "TC", "ET") -> WT, ET
+            "attr_T1": [0.1, 0.1],
+            "attr_T1CE": [0.2, 0.5],
+            "attr_T2": [0.1, 0.1],
+            "attr_FLAIR": [0.4, 0.2],
+        }
+    )
+    with paper_style():
+        fig = plot_modality_attribution(df)
+    try:
+        labels = [t.get_text() for t in fig.axes[0].get_xticklabels()]
+        assert labels == ["WT", "ET"]
+    finally:
+        plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# Attribution panel
+# --------------------------------------------------------------------------- #
+def _attribution_case(case_id: str = "A", *, maps: dict | None = None) -> AttributionCase:
+    if maps is None:
+        rng = np.random.default_rng(0)
+        maps = {
+            "IG": rng.normal(0.0, 1.0, size=SHAPE).astype(np.float32),
+            "GradCAM": np.abs(rng.normal(0.0, 1.0, size=SHAPE)).astype(np.float32),
+        }
+    return AttributionCase(
+        case_id=case_id,
+        image=_synthetic_image(),
+        ground_truth=_synthetic_label(),
+        maps=maps,
+        region_label="ET",
+    )
+
+
+def test_attribution_case_validate_accepts_a_well_formed_case() -> None:
+    _attribution_case().validate()  # must not raise
+
+
+def test_attribution_case_validate_rejects_a_shape_mismatch() -> None:
+    """The geometry trap: a map saved at patch resolution overlaid on the whole volume."""
+    case = _attribution_case()
+    case.maps["IG"] = np.zeros((32, 32, 32), dtype=np.float32)
+    with pytest.raises(ValueError, match="A.*IG"):
+        case.validate()
+
+
+def test_attribution_case_validate_rejects_empty_maps() -> None:
+    case = _attribution_case()
+    case.maps = {}
+    with pytest.raises(ValueError, match="maps.* is empty"):
+        case.validate()
+
+
+def test_attribution_panel_has_one_axes_per_grid_cell() -> None:
+    with paper_style():
+        fig = plot_attribution_panel([_attribution_case("A"), _attribution_case("B")])
+    try:
+        # 2 rows x (modality + 2 maps) = 6 image-bearing axes.
+        assert len(_grid_axes(fig)) == 6
+    finally:
+        plt.close(fig)
+
+
+def test_attribution_panel_rejects_differing_map_keys() -> None:
+    a = _attribution_case("A")
+    b = _attribution_case("B")
+    b.maps = {"IG": b.maps["IG"]}
+    with pytest.raises(ValueError, match="map keys"):
+        plot_attribution_panel([a, b])
+
+
+def test_attribution_panel_signed_key_gets_symmetric_limits() -> None:
+    maps = {
+        "IG": np.full(SHAPE, -2.0, dtype=np.float32),
+        "GradCAM": np.full(SHAPE, 1.5, dtype=np.float32),
+    }
+    maps["IG"][0, 0, 0] = 3.0  # asymmetric raw range: min -2, max 3
+    case = _attribution_case("A", maps=maps)
+    case.slice_index = 0  # the axial slice that actually contains voxel (0, 0, 0)
+    with paper_style():
+        fig = plot_attribution_panel([case], signed_keys=("IG",), crop_to_brain=False)
+    try:
+        images = _grid_axes(fig)
+        ig_vmin, ig_vmax = images[1].get_images()[0].get_clim()
+        assert ig_vmin == -ig_vmax
+        assert ig_vmax == pytest.approx(3.0)
+
+        cam_vmin, cam_vmax = images[2].get_images()[0].get_clim()
+        assert cam_vmin == 0.0
+        assert cam_vmax != -cam_vmin
+    finally:
+        plt.close(fig)

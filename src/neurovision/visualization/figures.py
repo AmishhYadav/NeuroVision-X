@@ -1307,3 +1307,731 @@ def plot_comparison_forest(
     handles = [Patch(facecolor=_VERDICT_COLORS.get(v, "#999999"), label=v) for v in seen]
     ax.legend(handles=handles, loc="best", ncol=min(len(handles), 3))
     return fig
+
+
+# --------------------------------------------------------------------------- #
+# Fusion gate maps
+# --------------------------------------------------------------------------- #
+def _upsample_nearest_2d(coarse: np.ndarray, target_shape: tuple[int, int]) -> np.ndarray:
+    """Nearest-neighbour upsample a 2D array to `target_shape`.
+
+    Gate maps (and, elsewhere, attribution maps saved at patch resolution) can
+    have a real resolution far coarser than the volume they are drawn over --
+    a gate at stride 8 has a true resolution of 12 voxels across a 96-voxel
+    patch. A smooth interpolation would render it as if it had voxel
+    precision, a claim the data does not support -- the same hazard
+    `explainability/gradcam.py`'s docstring flags for an upsampled CAM.
+    Replicating each coarse cell into a block instead makes the true
+    resolution visible as blocks. The index-array construction works for any
+    (non-integer) size ratio, not just clean powers of two.
+
+    Args:
+        coarse: A 2D array at its own, coarse resolution.
+        target_shape: The `(rows, cols)` shape to upsample to.
+
+    Returns:
+        A `target_shape` array holding only values already present in
+        `coarse`.
+    """
+    row_idx = np.floor(np.arange(target_shape[0]) * coarse.shape[0] / target_shape[0]).astype(int)
+    col_idx = np.floor(np.arange(target_shape[1]) * coarse.shape[1] / target_shape[1]).astype(int)
+    row_idx = np.clip(row_idx, 0, coarse.shape[0] - 1)
+    col_idx = np.clip(col_idx, 0, coarse.shape[1] - 1)
+    return coarse[row_idx][:, col_idx]
+
+
+@dataclass
+class GateCase:
+    """One row of the gate-map panel: a case and the fusion gate at every fused stride.
+
+    This is the paper's P1 figure's input -- evidence the adaptive fusion
+    module actually fires, and fires near tumour margins.
+
+    Attributes:
+        case_id: Identifier, drawn as the row label.
+        image: `(4, D, H, W)` float, channel order `MODALITY_NAMES`.
+        ground_truth: `(D, H, W)` integer class map in `{0, 1, 2, 3}`.
+        gates: Display label -> `(d, h, w)` gate map, one per fused stride.
+            COARSER than `image`'s spatial shape: a gate lives at the fusion
+            block's own resolution (e.g. stride 8 of a 96-voxel patch is 12
+            voxels across). Insertion order becomes the column order and must
+            be identical across cases.
+        slice_index: Explicit display slice, or `None` to use `pick_slice`.
+    """
+
+    case_id: str
+    image: np.ndarray
+    ground_truth: np.ndarray
+    gates: dict[str, np.ndarray]
+    slice_index: int | None = None
+
+    def validate(self) -> None:
+        """Check geometry agreement, raising with the case id if not.
+
+        Mirrors `QualitativeCase.validate`. A gate map larger than the volume
+        on some axis means these arrays came from different runs, not a
+        rounding effect -- a gate is always a downsampled feature map, never
+        upsampled ahead of time.
+
+        Raises:
+            ValueError: Any shape disagreement, or an empty `gates`.
+        """
+        cid = self.case_id
+        if self.image.ndim != 4 or self.image.shape[0] != len(MODALITY_NAMES):
+            raise ValueError(
+                f"{cid}: `image` must have shape (4, D, H, W) with channels {MODALITY_NAMES}, "
+                f"got {self.image.shape}."
+            )
+        spatial = tuple(self.image.shape[1:])
+        if tuple(self.ground_truth.shape) != spatial:
+            raise ValueError(
+                f"{cid}: `ground_truth` shape {self.ground_truth.shape} does not match the "
+                f"image's spatial shape {spatial}."
+            )
+        if not self.gates:
+            raise ValueError(f"{cid}: `gates` is empty; the panel needs at least one gate map.")
+        for label, gate in self.gates.items():
+            if gate.ndim != 3:
+                raise ValueError(
+                    f"{cid}: gate {label!r} must be a 3D (d, h, w) array, got shape {gate.shape}."
+                )
+            if any(g > s for g, s in zip(gate.shape, spatial, strict=True)):
+                raise ValueError(
+                    f"{cid}: gate {label!r} has shape {gate.shape}, larger than the volume's "
+                    f"spatial shape {spatial} on some axis. A gate map is a downsampled feature "
+                    "map -- one larger than the volume means these arrays came from different "
+                    "runs."
+                )
+
+
+def plot_gate_maps(
+    cases: Sequence[GateCase],
+    *,
+    modality: str = "FLAIR",
+    plane: str = "axial",
+    gate_cmap: str = "viridis",
+    show_gt_contour: bool = True,
+    panel_size: float = 1.9,
+    crop_to_brain: bool = True,
+) -> Figure:
+    """The paper's P1 figure: evidence the fusion gate fires near tumour margins.
+
+    Rows are cases, columns are the modality backdrop then one column per gate
+    key (one fused stride), in the first case's key order.
+
+    Args:
+        cases: One `GateCase` per row. Every case must expose the same gate
+            keys, in the same order.
+        modality: Which of `MODALITY_NAMES` to draw as the greyscale backdrop.
+        plane: `"sagittal"`, `"coronal"` or `"axial"`.
+        gate_cmap: Colormap for the gate heatmaps.
+        show_gt_contour: Draw the ground-truth whole-tumour outline on every
+            gate cell. The figure's entire claim is about the gate's behaviour
+            RELATIVE to the tumour margin, so the margin has to be on the same
+            image as the gate.
+        panel_size: Side length in inches of one cell.
+        crop_to_brain: Crop every cell in a row to that row's brain bounding
+            box, computed once from the modality slice.
+
+    Returns:
+        The assembled `Figure`.
+
+    Raises:
+        ValueError: `cases` is empty, `modality` is not in `MODALITY_NAMES`,
+            any case fails `validate()`, or two cases disagree on their gate
+            keys (content or order).
+    """
+    if not cases:
+        raise ValueError("plot_gate_maps: `cases` must contain at least one case.")
+    if modality not in MODALITY_NAMES:
+        raise ValueError(
+            f"plot_gate_maps: unknown modality {modality!r}; expected one of {MODALITY_NAMES}."
+        )
+
+    # Validate everything BEFORE drawing anything, matching `plot_qualitative_panel`.
+    for case in cases:
+        case.validate()
+
+    reference = cases[0]
+    gate_keys = list(reference.gates)
+    for case in cases[1:]:
+        if list(case.gates) != gate_keys:
+            raise ValueError(
+                f"plot_gate_maps: case {case.case_id!r} has gate keys {list(case.gates)} but "
+                f"case {reference.case_id!r} has {gate_keys}. Columns are positional, so a "
+                "reordered or differing key set would attribute one fusion stride's gate to "
+                "another."
+            )
+
+    modality_index = MODALITY_NAMES.index(modality)
+    axis = _validate_plane(plane, "plot_gate_maps")
+    column_titles = [modality, *gate_keys]
+
+    n_rows = len(cases)
+    n_cols = len(column_titles)
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(panel_size * n_cols, panel_size * n_rows),
+        squeeze=False,
+        constrained_layout=True,
+    )
+
+    last_image = None
+    for row, case in enumerate(cases):
+        if case.slice_index is not None:
+            index = case.slice_index
+        else:
+            index = pick_slice(case.ground_truth, plane)
+        background = _normalize_mri(take_slice(case.image[modality_index], index, plane))
+        gt_slice = take_slice(case.ground_truth, index, plane)
+
+        crop: tuple[slice, slice] | None = None
+        if crop_to_brain:
+            crop = _brain_bbox(background)
+
+        background_view = _apply_crop(background, crop)
+        gt_view = _apply_crop(gt_slice, crop)
+
+        # Column 0 -- the modality alone, no overlay.
+        ax = axes[row][0]
+        _blank_axes(ax)
+        ax.imshow(background_view, cmap="gray", vmin=0.0, vmax=1.0, rasterized=True)
+        ax.set_ylabel(case.case_id, fontsize=7, rotation=90, labelpad=3)
+
+        full_extent = case.image.shape[1:][axis]
+        for offset, key in enumerate(gate_keys):
+            gate_array = case.gates[key]
+            gate_extent = gate_array.shape[axis]
+            # Proportional slice index: the coarse map covers the SAME physical
+            # volume at a coarser sampling, so its matching index scales by the
+            # extent ratio, not by the raw full-resolution index.
+            coarse_index = int(np.floor(index * gate_extent / full_extent))
+            coarse_index = min(max(coarse_index, 0), gate_extent - 1)
+            coarse_slice = take_slice(gate_array, coarse_index, plane)
+            # NEAREST-NEIGHBOUR upsample, never a smooth interpolation -- see
+            # `_upsample_nearest_2d` for why a smoother map would misrepresent
+            # this figure's central claim.
+            upsampled = _upsample_nearest_2d(coarse_slice, background.shape)
+            gate_view = _apply_crop(upsampled, crop)
+
+            ax = axes[row][1 + offset]
+            _blank_axes(ax)
+            # Colour scale fixed to [0, 1] across EVERY panel: the gate is a
+            # sigmoid output, so [0, 1] is its true range, and `GateGenerator`
+            # is centred on sigmoid(0) = 0.5. A per-panel min-max would make a
+            # gate that barely moves off 0.5 look dramatic, and would make two
+            # levels with completely different behaviour look identical.
+            image = ax.imshow(gate_view, cmap=gate_cmap, vmin=0.0, vmax=1.0, rasterized=True)
+            last_image = image
+            if show_gt_contour and np.any(gt_view > 0):
+                # Vector, not rasterized -- stays crisp at any zoom, same as
+                # `plot_qualitative_panel`'s contour.
+                ax.contour(
+                    (gt_view > 0).astype(float),
+                    levels=[0.5],
+                    colors="#FFFFFF",
+                    linewidths=0.6,
+                )
+
+    for col, title in enumerate(column_titles):
+        axes[0][col].set_title(title, fontsize=8)
+
+    if last_image is not None:
+        bar = fig.colorbar(
+            last_image,
+            ax=list(axes[:, 1:].ravel()),
+            fraction=0.025,
+            pad=0.02,
+            label="Gate value",
+        )
+        bar.set_ticks([0.0, 0.5, 1.0])
+        # Mark 0.5 explicitly: it is the gate's own "no information" baseline
+        # (GateGenerator's zero-inited bias centres sigmoid(0) = 0.5), not an
+        # arbitrary midpoint.
+        bar.ax.axhline(0.5, color="#333333", linewidth=0.8)
+    return fig
+
+
+# --------------------------------------------------------------------------- #
+# Boundary-distance band profiles
+# --------------------------------------------------------------------------- #
+def plot_band_profile(
+    series: Mapping[str, pd.DataFrame],
+    *,
+    value_column: str = "mean",
+    error_column: str | None = "std",
+    band_column: str = "band",
+    ylabel: str = "",
+    title: str | None = None,
+    higher_is_better: bool | None = None,
+    figsize: tuple[float, float] | None = None,
+) -> Figure:
+    """Generic "quantity vs. distance-to-boundary band" plot.
+
+    One function serves two callers so they cannot drift apart visually:
+    boundary-stratified error rates from `scripts/evaluate.py`, and gate value
+    against distance-to-boundary from `scripts/extract_gates.py`.
+
+    Args:
+        series: Model/quantity display label -> a DataFrame with one row per
+            band, holding `band_column` (a string label like `"0-2"` or
+            `"10-inf"`), `value_column`, and optionally `error_column`.
+            Insertion order drives `model_style`.
+        value_column: Column plotted as each line's y value.
+        error_column: Column plotted as a `fill_between` band around the line,
+            or `None` to draw no band.
+        band_column: Column holding the band label.
+        ylabel: Y-axis label.
+        title: Axes title.
+        higher_is_better: `True` marks the y label "higher is better",
+            `False` marks it "lower is better", `None` (the default) adds no
+            direction marker -- boundary error rate is lower-is-better and a
+            gate value has no direction at all, which is exactly why this is a
+            tri-state rather than a bool with a default.
+        figsize: Explicit size.
+
+    Returns:
+        The assembled `Figure`.
+
+    Raises:
+        ValueError: `series` is empty, a DataFrame is missing a required
+            column (named, alongside its series label), or two series do not
+            share the same band labels in the same order.
+    """
+    if not series:
+        raise ValueError("plot_band_profile: `series` must contain at least one entry.")
+
+    for label, table in series.items():
+        required = [band_column, value_column, *([error_column] if error_column else [])]
+        missing = [c for c in required if c not in table.columns]
+        if missing:
+            raise ValueError(f"plot_band_profile: series {label!r} is missing column(s) {missing}.")
+
+    labels = list(series)
+    reference_label = labels[0]
+    reference_bands = series[reference_label][band_column].astype(str).tolist()
+    for label in labels[1:]:
+        bands = series[label][band_column].astype(str).tolist()
+        if bands != reference_bands:
+            raise ValueError(
+                f"plot_band_profile: series {label!r} has bands {bands} but series "
+                f"{reference_label!r} has {reference_bands}. The x axis is shared across series, "
+                "so mismatched bands would plot different quantities at the same tick."
+            )
+
+    if figsize is None:
+        figsize = (max(3.6, 0.6 * len(reference_bands) + 2.0), 3.0)
+    fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
+
+    # The x axis is CATEGORICAL, not a continuous distance axis. The final band
+    # is `[10, inf)`, which has no finite midpoint -- placing it on a
+    # continuous mm axis would require inventing a position for an unbounded
+    # bin, compressing or stretching every other band's spacing relative to
+    # it. Integer tick positions with the band label as the tick TEXT sidestep
+    # that entirely.
+    positions = np.arange(len(reference_bands))
+
+    for index, label in enumerate(labels):
+        table = series[label]
+        style = model_style(index)
+        values = table[value_column].to_numpy(dtype=float)
+        ax.plot(positions, values, marker="o", markersize=3.5, label=label, **style)
+        if error_column is not None:
+            errors = table[error_column].to_numpy(dtype=float)
+            # A filled band, not error bars: with only 3-4 bands, error bars
+            # clutter, and a band reads as exactly the spread it represents.
+            ax.fill_between(
+                positions, values - errors, values + errors, color=style["color"], alpha=0.15
+            )
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(reference_bands)
+    ax.set_xlabel("Distance to ground-truth boundary (mm)")
+
+    y_text = ylabel
+    if higher_is_better is True:
+        y_text = f"{ylabel} (↑ better)" if ylabel else "↑ better"
+    elif higher_is_better is False:
+        y_text = f"{ylabel} (↓ better)" if ylabel else "↓ better"
+    ax.set_ylabel(y_text)
+
+    if title is not None:
+        ax.set_title(title)
+    ax.legend(loc="best")
+    return fig
+
+
+# --------------------------------------------------------------------------- #
+# Modality attribution
+# --------------------------------------------------------------------------- #
+def _normalize_region_column(regions: pd.Series) -> pd.Series:
+    """Require a NAMED region column, raising on integer channel indices.
+
+    There are two live region orderings in this project and they disagree:
+    this module's `REGION_ORDER` is `("WT", "TC", "ET")`, the reporting order,
+    while `data.transforms.REGION_NAMES` is `("ET", "TC", "WT")`, the model's
+    channel order -- and the latter is what `scripts/explain.py` writes into
+    the `region` column of `modality_attribution.csv`. Under either mapping an
+    integer is a perfectly valid region, so guessing would relabel every bar
+    with no error anywhere: index 0 means ET in the file and WT in this
+    module.
+
+    This module cannot import `REGION_NAMES` to settle it (that would pull in
+    torch, which a test forbids), and it has no way to know which convention a
+    given caller's frame follows. So it refuses to guess, exactly as
+    `analysis.statistics.metric_direction` raises on an unknown metric rather
+    than assuming a direction. The caller maps the column explicitly.
+
+    Args:
+        regions: The `region` column, which must be string-valued.
+
+    Returns:
+        The column as strings.
+
+    Raises:
+        ValueError: `regions` holds integers, naming both conventions and the
+            mapping the caller most likely wants.
+    """
+    if pd.api.types.is_integer_dtype(regions):
+        raise ValueError(
+            "plot_modality_attribution: the `region` column holds integer channel indices, "
+            "which are ambiguous here and will not be guessed. This module's REGION_ORDER is "
+            f"{REGION_ORDER} (reporting order) while the model's channel order, which "
+            "scripts/explain.py writes into modality_attribution.csv, is ('ET', 'TC', 'WT') -- "
+            "so index 0 means ET in that file and WT here, and picking one would silently "
+            "mislabel every bar. Map the column to names before calling, e.g. "
+            "`df['region'] = df['region'].map(dict(enumerate(REGION_NAMES)))` using "
+            "neurovision.data.transforms.REGION_NAMES."
+        )
+    return regions.astype(str)
+
+
+def plot_modality_attribution(
+    attribution: pd.DataFrame,
+    *,
+    region_names: Sequence[str] | None = None,
+    expected: Mapping[str, str] | None = None,
+    figsize: tuple[float, float] | None = None,
+) -> Figure:
+    """The radiological sanity check for `scripts/explain.py`'s attribution output.
+
+    Grouped bars of mean (+/- std) attribution per (region, modality),
+    aggregated over every (case, region) row in `attribution`.
+
+    A model whose attribution does not match clinical expectation is a
+    reportable finding about the MODEL, not a bug in this plot -- see
+    `expected`.
+
+    Args:
+        attribution: Tidy frame, one row per (case, region), with a `region`
+            column (a name like `"ET"`, or an integer -- see
+            `_normalize_region_column`: integer channel indices RAISE rather
+            than being guessed, because the two live region orderings in this
+            project disagree) and one `attr_<MODALITY>` column per entry of
+            `MODALITY_NAMES`.
+        region_names: Regions to draw, in order. `None` draws every region
+            present, in `REGION_ORDER` (any region outside that order is
+            appended in encounter order).
+        expected: Region name -> the modality clinically expected to
+            dominate. Defaults to `{"ET": "T1CE", "WT": "FLAIR"}`: enhancing
+            tumour is clinically DEFINED by contrast uptake, a T1CE finding;
+            whole tumour includes peritumoral oedema, chiefly a FLAIR
+            finding. The matching bar is marked with a hatch -- a visual flag
+            to go check the expectation, never a claim that it holds.
+        figsize: Explicit size.
+
+    Returns:
+        The assembled `Figure`.
+
+    Raises:
+        ValueError: `attribution` is empty, has no `region` column, or is
+            missing an `attr_<MODALITY>` column (named).
+    """
+    if attribution.empty:
+        raise ValueError("plot_modality_attribution: `attribution` must not be empty.")
+    if "region" not in attribution.columns:
+        raise ValueError("plot_modality_attribution: `attribution` has no `region` column.")
+
+    modality_columns = {m: f"attr_{m}" for m in MODALITY_NAMES}
+    missing = [c for c in modality_columns.values() if c not in attribution.columns]
+    if missing:
+        raise ValueError(f"plot_modality_attribution: missing column(s) {missing}.")
+
+    if expected is None:
+        expected = {"ET": "T1CE", "WT": "FLAIR"}
+
+    working = attribution.copy()
+    working["region"] = _normalize_region_column(working["region"])
+
+    present = list(dict.fromkeys(working["region"]))
+    if region_names is not None:
+        order = list(region_names)
+    else:
+        order = [r for r in REGION_ORDER if r in present]
+        order += [r for r in present if r not in REGION_ORDER]
+
+    value_columns = list(modality_columns.values())
+    grouped = working.groupby("region")[value_columns]
+    means = grouped.mean()
+    stds = grouped.std()
+    n_rows = len(working)
+
+    if figsize is None:
+        figsize = (max(3.6, 1.3 * len(order) + 1.6), 3.2)
+    fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
+
+    n_modalities = len(MODALITY_NAMES)
+    width = 0.8 / n_modalities
+    positions = np.arange(len(order))
+
+    for modality_index, modality in enumerate(MODALITY_NAMES):
+        column = modality_columns[modality]
+        heights = np.array(
+            [means.loc[r, column] if r in means.index else 0.0 for r in order], dtype=float
+        )
+        errors = np.array(
+            [
+                stds.loc[r, column] if r in stds.index and np.isfinite(stds.loc[r, column]) else 0.0
+                for r in order
+            ],
+            dtype=float,
+        )
+        offset = (modality_index - (n_modalities - 1) / 2.0) * width
+        color = model_style(modality_index)["color"]
+        bars = ax.bar(
+            positions + offset,
+            heights,
+            width=width * 0.9,
+            yerr=errors,
+            capsize=2,
+            color=color,
+            label=modality,
+        )
+        # Mark, but do not pre-judge: a hatch flags "this is the bar the
+        # clinical prior expects to dominate", never "the expectation was
+        # confirmed" -- that is a conclusion for the reader, not this plot.
+        for region_index, region in enumerate(order):
+            if expected.get(region) == modality:
+                bars[region_index].set_hatch("////")
+                bars[region_index].set_edgecolor(color)
+                bars[region_index].set_linewidth(1.0)
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(order)
+    ax.set_ylabel("Mean attribution (a.u.)")
+    ax.set_title(f"Modality attribution (mean ± std, n={n_rows} case-region rows)")
+
+    handles = [
+        Patch(facecolor=model_style(i)["color"], label=m) for i, m in enumerate(MODALITY_NAMES)
+    ]
+    handles.append(Patch(facecolor="none", edgecolor="#999999", hatch="////", label="Expected"))
+    ax.legend(handles=handles, loc="best", ncol=min(len(handles), 3))
+    return fig
+
+
+# --------------------------------------------------------------------------- #
+# Per-case attribution panel
+# --------------------------------------------------------------------------- #
+@dataclass
+class AttributionCase:
+    """One row of the attribution panel: a case and its explainability maps for ONE region.
+
+    Attributes:
+        case_id: Identifier, drawn as the row label.
+        image: `(4, D, H, W)` float, channel order `MODALITY_NAMES`.
+        ground_truth: `(D, H, W)` integer class map in `{0, 1, 2, 3}`.
+        maps: Display label -> `(D, H, W)` attribution map, the SAME spatial
+            shape as `image` (unlike `GateCase.gates`, which is coarser).
+            Insertion order becomes the column order and must be identical
+            across cases.
+        region_label: Which region these maps explain, e.g. `"ET"`. The same
+            case appears once per explained region, so the row label must say
+            which one this row is -- a panel that does not is unusable.
+        slice_index: Explicit display slice, or `None` to use `pick_slice`.
+    """
+
+    case_id: str
+    image: np.ndarray
+    ground_truth: np.ndarray
+    maps: dict[str, np.ndarray]
+    region_label: str = ""
+    slice_index: int | None = None
+
+    def validate(self) -> None:
+        """Check geometry agreement, raising with the case id if not.
+
+        Same geometry trap `QualitativeCase.validate` guards against: an
+        attribution map computed on a PATCH and saved at patch resolution,
+        overlaid on the whole volume, looks entirely plausible and is
+        silently misaligned.
+
+        Raises:
+            ValueError: Any shape disagreement, or an empty `maps`.
+        """
+        cid = self.case_id
+        if self.image.ndim != 4 or self.image.shape[0] != len(MODALITY_NAMES):
+            raise ValueError(
+                f"{cid}: `image` must have shape (4, D, H, W) with channels {MODALITY_NAMES}, "
+                f"got {self.image.shape}."
+            )
+        spatial = tuple(self.image.shape[1:])
+        if tuple(self.ground_truth.shape) != spatial:
+            raise ValueError(
+                f"{cid}: `ground_truth` shape {self.ground_truth.shape} does not match the "
+                f"image's spatial shape {spatial}."
+            )
+        if not self.maps:
+            raise ValueError(f"{cid}: `maps` is empty; the panel needs at least one map.")
+        for label, array in self.maps.items():
+            if tuple(array.shape) != spatial:
+                raise ValueError(
+                    f"{cid}: map {label!r} has shape {array.shape}, expected {spatial}. An "
+                    "attribution map saved at PATCH resolution must be placed back into "
+                    "whole-volume geometry before it can be overlaid here."
+                )
+
+
+def plot_attribution_panel(
+    cases: Sequence[AttributionCase],
+    *,
+    modality: str = "FLAIR",
+    plane: str = "axial",
+    attribution_cmap: str = "inferno",
+    diverging_cmap: str = "RdBu_r",
+    signed_keys: Sequence[str] = (),
+    show_gt_contour: bool = True,
+    panel_size: float = 1.9,
+    crop_to_brain: bool = True,
+) -> Figure:
+    """Renders `scripts/explain.py`'s per-case attribution `.npz`.
+
+    Rows are cases, columns are the modality backdrop then one column per map
+    key, in the first case's order.
+
+    Normalization is PER CELL, unlike the gate-map figure's shared `[0, 1]`
+    scale -- attribution magnitudes are not comparable across methods
+    (Integrated Gradients vs. Grad-CAM) or across cases, so no single scale
+    would be meaningful. Keys in `signed_keys` are SIGNED (e.g. raw Integrated
+    Gradients, where a negative value is evidence AGAINST the region) and are
+    drawn on `diverging_cmap` with limits symmetric about zero; everything
+    else is assumed non-negative (e.g. a Grad-CAM map with `relu=True`) and
+    drawn on `attribution_cmap` over `[0, max]`. Rendering a signed map on a
+    sequential colormap makes "strongly against" and "not involved" look
+    identical, which is the failure this split exists to avoid. Each cell
+    gets its own colourbar, labelled "Signed attribution" or "Attribution"
+    accordingly.
+
+    Args:
+        cases: One `AttributionCase` per row. Every case must expose the same
+            map keys, in the same order.
+        modality: Which of `MODALITY_NAMES` to draw as the greyscale backdrop.
+        plane: `"sagittal"`, `"coronal"` or `"axial"`.
+        attribution_cmap: Colormap for non-negative (sequential) maps.
+        diverging_cmap: Colormap for signed maps.
+        signed_keys: Map keys that hold signed values.
+        show_gt_contour: Draw the ground-truth whole-tumour outline on every
+            map cell.
+        panel_size: Side length in inches of one cell.
+        crop_to_brain: Crop every cell in a row to that row's brain bounding
+            box, computed once from the modality slice.
+
+    Returns:
+        The assembled `Figure`.
+
+    Raises:
+        ValueError: `cases` is empty, `modality` is not in `MODALITY_NAMES`,
+            any case fails `validate()`, or two cases disagree on their map
+            keys (content or order).
+    """
+    if not cases:
+        raise ValueError("plot_attribution_panel: `cases` must contain at least one case.")
+    if modality not in MODALITY_NAMES:
+        raise ValueError(
+            f"plot_attribution_panel: unknown modality {modality!r}; expected one of "
+            f"{MODALITY_NAMES}."
+        )
+
+    for case in cases:
+        case.validate()
+
+    reference = cases[0]
+    map_keys = list(reference.maps)
+    for case in cases[1:]:
+        if list(case.maps) != map_keys:
+            raise ValueError(
+                f"plot_attribution_panel: case {case.case_id!r} has map keys {list(case.maps)} "
+                f"but case {reference.case_id!r} has {map_keys}. Columns are positional, so a "
+                "reordered or differing key set would attribute one explanation method's output "
+                "to another."
+            )
+
+    signed_set = set(signed_keys)
+    modality_index = MODALITY_NAMES.index(modality)
+    column_titles = [modality, *map_keys]
+
+    n_rows = len(cases)
+    n_cols = len(column_titles)
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(panel_size * n_cols, panel_size * n_rows),
+        squeeze=False,
+        constrained_layout=True,
+    )
+
+    for row, case in enumerate(cases):
+        if case.slice_index is not None:
+            index = case.slice_index
+        else:
+            index = pick_slice(case.ground_truth, plane)
+        background = _normalize_mri(take_slice(case.image[modality_index], index, plane))
+        gt_slice = take_slice(case.ground_truth, index, plane)
+
+        crop: tuple[slice, slice] | None = None
+        if crop_to_brain:
+            crop = _brain_bbox(background)
+
+        background_view = _apply_crop(background, crop)
+        gt_view = _apply_crop(gt_slice, crop)
+
+        ax = axes[row][0]
+        _blank_axes(ax)
+        ax.imshow(background_view, cmap="gray", vmin=0.0, vmax=1.0, rasterized=True)
+        row_label = f"{case.case_id} ({case.region_label})" if case.region_label else case.case_id
+        ax.set_ylabel(row_label, fontsize=7, rotation=90, labelpad=3)
+
+        for offset, key in enumerate(map_keys):
+            map_view = _apply_crop(take_slice(case.maps[key], index, plane), crop)
+
+            ax = axes[row][1 + offset]
+            _blank_axes(ax)
+            if key in signed_set:
+                bound = float(np.abs(map_view).max())
+                bound = bound if bound > 0 else 1e-12
+                image = ax.imshow(
+                    map_view, cmap=diverging_cmap, vmin=-bound, vmax=bound, rasterized=True
+                )
+                bar_label = "Signed attribution"
+            else:
+                top = float(map_view.max())
+                top = top if top > 0 else 1e-12
+                image = ax.imshow(
+                    map_view, cmap=attribution_cmap, vmin=0.0, vmax=top, rasterized=True
+                )
+                bar_label = "Attribution"
+            bar = fig.colorbar(image, ax=ax, fraction=0.046, pad=0.02, label=bar_label)
+            bar.ax.tick_params(labelsize=5)
+            bar.outline.set_linewidth(0.4)
+
+            if show_gt_contour and np.any(gt_view > 0):
+                ax.contour(
+                    (gt_view > 0).astype(float),
+                    levels=[0.5],
+                    colors="#FFFFFF",
+                    linewidths=0.6,
+                )
+
+    for col, title in enumerate(column_titles):
+        axes[0][col].set_title(title, fontsize=8)
+    return fig
