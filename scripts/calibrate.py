@@ -483,8 +483,11 @@ def _build_fit_mask(
         threshold: Passed through to whichever mask function `mode` selects.
 
     Returns:
-        A boolean mask, either per-region `(C, D, H, W)` (`"predicted"` /
-        `"union_gt"`) or shared-across-regions `(D, H, W)` (`"brain"`).
+        A boolean mask, ALWAYS per-region `(C, D, H, W)` matching `prob` --
+        `brain_mask`'s `(D, H, W)` result is broadcast across the channel
+        axis here, because `subsample_masked_logits` (this function's only
+        caller's next step) indexes `mask[c]` per channel and would
+        otherwise silently index into `brain_mask`'s spatial D axis instead.
 
     Raises:
         ValueError: `mode == "brain"` and `image` is `None`.
@@ -494,7 +497,8 @@ def _build_fit_mask(
     if mode == "brain":
         if image is None:
             raise ValueError("_build_fit_mask: mask_mode='brain' needs `image`, got None.")
-        return brain_mask(image=image)
+        shared_mask = brain_mask(image=image)  # (D, H, W), shared across regions
+        return shared_mask.unsqueeze(0).expand(prob.shape[0], *shared_mask.shape)
     # mode == "union_gt": already validated by resolve_mask_mode, so this is
     # the only remaining branch. union_foreground_mask itself logs the
     # circularity warning on every call -- not duplicated here.
@@ -591,17 +595,21 @@ def _fit_per_channel(
 
 
 def fit_split_temperature(
-    cfg: DictConfig, fit_dir: Path, prep_dir: Path
+    cfg: DictConfig, fit_dir: Path, prep_dir: Path, mask_mode: str
 ) -> TemperatureResult | None:
     """Fits a temperature on `fit_dir`, streaming case by case.
 
-    For each case: loads logits/label, builds the reporting mask with
-    `union_foreground_mask(prob, label, threshold=cfg.calibration.threshold)`
-    (from the UNCALIBRATED probabilities -- the mask must not itself depend
-    on a temperature that has not been fit yet), subsamples
-    `cfg.calibration.fit_voxels_per_case` masked voxels per case with a
-    `torch.Generator` seeded from `cfg.calibration.seed`, and concatenates
-    across cases before calling `fit_temperature`.
+    For each case: loads logits/label, builds the FIT mask selected by
+    `mask_mode` (from the UNCALIBRATED probabilities -- the mask must not
+    itself depend on a temperature that has not been fit yet; see
+    `_build_fit_mask`), subsamples `cfg.calibration.fit_voxels_per_case`
+    masked voxels per case with a `torch.Generator` seeded from
+    `cfg.calibration.seed`, and concatenates across cases before calling
+    `fit_temperature`.
+
+    Note this FIT mask is independent of the REPORTED metrics, which are
+    always computed under both `"predicted"` and `"brain"` regardless of
+    `mask_mode` -- see `accumulate`.
 
     Two calibrate.py-specific attributes, `n_voxels_fit` and `n_cases_fit`,
     are attached to the returned `TemperatureResult` (an ordinary,
@@ -616,6 +624,9 @@ def fit_split_temperature(
         cfg: The full composed Hydra config.
         fit_dir: The VAL split's eval directory (see `resolve_eval_dirs`).
         prep_dir: Root of the preprocessed BraTS data.
+        mask_mode: An already-`resolve_mask_mode`-validated value selecting
+            the FIT mask -- `"predicted"` (default), `"brain"`, or the
+            diagnostic-only `"union_gt"`.
 
     Returns:
         A `TemperatureResult`, or `None` (with an ERROR logged explaining
@@ -661,7 +672,8 @@ def fit_split_temperature(
     for case_id in case_ids:
         prob, label, logits = load_case(fit_dir, source, prep_dir, case_id)
         assert logits is not None  # guaranteed by source == "logits" above
-        mask = union_foreground_mask(prob, label, threshold=float(calib_cfg.threshold))
+        image = load_image(prep_dir, case_id) if mask_mode == "brain" else None
+        mask = _build_fit_mask(mask_mode, prob, label, image, threshold=float(calib_cfg.threshold))
         sampled_logits, sampled_labels = subsample_masked_logits(
             logits, label, mask, int(calib_cfg.fit_voxels_per_case), generator
         )
@@ -690,6 +702,7 @@ def fit_split_temperature(
     n_voxels = sum(int(t.numel()) for per_case in channel_logits for t in per_case)
     result.n_voxels_fit = n_voxels  # type: ignore[attr-defined]
     result.n_cases_fit = n_cases_used  # type: ignore[attr-defined]
+    result.mask_mode = mask_mode  # type: ignore[attr-defined]
 
     if not result.converged:
         logger.error(
@@ -704,11 +717,12 @@ def fit_split_temperature(
         return None
 
     logger.info(
-        "fit_split_temperature: fit on %d voxel(s) from %d case(s) in %s -- nll %.6f -> %.6f, "
-        "temperature=%s.",
+        "fit_split_temperature: fit on %d voxel(s) from %d case(s) in %s (mask_mode=%r) -- "
+        "nll %.6f -> %.6f, temperature=%s.",
         n_voxels,
         n_cases_used,
         fit_dir,
+        mask_mode,
         result.nll_before,
         result.nll_after,
         result.temperature.tolist(),
@@ -728,24 +742,33 @@ def accumulate(
     prep_dir: Path,
     case_ids: list[str],
     temperature: Tensor | None = None,
-) -> dict[str, CalibrationAccumulator]:
-    """ONE pass over `case_ids`, folding each case into every requested variant.
+) -> dict[tuple[str, str], CalibrationAccumulator]:
+    """ONE pass over `case_ids`, folding each case into every (mask, variant) combination.
 
-    Both variants are built in a single pass, deliberately. Two passes would
-    have to either re-read every case's array from disk (each logits file is
-    ~53 MB, so a 189-case split is ~10 GB read twice) or hold every case's
-    reporting mask in memory to keep the passes consistent (~9.8 MB per case
-    as a 3-channel bool volume, ~1.9 GB across the split). One pass needs
-    neither: the case is loaded once, the mask is derived once, both
-    accumulators consume it, and nothing survives the iteration.
+    The REPORTED metrics are always computed under BOTH label-free masks --
+    `"predicted"` (`predicted_foreground_mask`) and `"brain"` (`brain_mask`)
+    -- regardless of `calibration.mask_mode` (which only controls the
+    TEMPERATURE FIT; see `fit_split_temperature`). Reporting both together,
+    always, is what keeps them from drifting apart across separate
+    invocations -- and neither is circular the way `union_foreground_mask`
+    is (see that function's docstring), so both are safe to report.
 
-    Consistency of the mask across variants is the reason it must not simply
-    be recomputed per variant. (a) The two variants must cover exactly the
-    same voxel set or their ECEs are not comparable. (b) At
-    `threshold = 0.5` the mask is provably identical anyway, since
-    temperature scaling is strictly monotone -- so recomputing it would be a
-    silent no-op that stops being one the moment the threshold moves off
-    0.5, and the resulting mismatch would look like a calibration effect.
+    Both masks and both calibration variants are built in a single pass,
+    deliberately. Multiple passes would have to either re-read every case's
+    array from disk (each logits file is ~53 MB, so a 189-case split is
+    ~10 GB read per pass) or hold every case's masks in memory to keep the
+    passes consistent. One pass needs neither: each case is loaded once,
+    both masks are derived once, every accumulator consumes them, and
+    nothing survives the iteration.
+
+    Consistency of a given mask across the uncalibrated/temperature_scaled
+    variants matters because (a) the two variants must cover exactly the
+    same voxel set or their ECEs are not comparable, and (b) at
+    `threshold = 0.5` a probability-derived mask is provably identical
+    across variants anyway, since temperature scaling is strictly monotone
+    -- so recomputing it per variant would be a silent no-op that stops
+    being one the moment the threshold moves off 0.5, and the resulting
+    mismatch would look like a calibration effect.
 
     Args:
         cfg: The full composed Hydra config.
@@ -755,54 +778,68 @@ def accumulate(
             `resolve_source`.
         prep_dir: Root of the preprocessed BraTS data.
         case_ids: Case ids to accumulate, in order.
-        temperature: When given, a second `"temperature_scaled"` variant is
-            accumulated alongside the uncalibrated one, applying
+        temperature: When given, a `"temperature_scaled"` variant is
+            accumulated alongside `"uncalibrated"` for each mask, applying
             `apply_temperature` to the logits and re-`sigmoid`ing. Requires
             `source == "logits"` -- the caller guarantees that, since
             `load_case` returns `logits=None` for a probabilities source.
 
     Returns:
-        `{"uncalibrated": accumulator}`, plus `"temperature_scaled"` when
-        `temperature` was given.
+        `{(mask_name, "uncalibrated"): accumulator, ...}` for
+        `mask_name in ("predicted", "brain")`, plus a `"temperature_scaled"`
+        entry per mask when `temperature` was given (4 entries total).
     """
     calib_cfg = cfg.calibration
-    accumulators: dict[str, CalibrationAccumulator] = {
-        "uncalibrated": CalibrationAccumulator(n_bins=int(calib_cfg.n_bins))
+    variants = ["uncalibrated"] if temperature is None else ["uncalibrated", "temperature_scaled"]
+    accumulators: dict[tuple[str, str], CalibrationAccumulator] = {
+        (mask_name, variant): CalibrationAccumulator(n_bins=int(calib_cfg.n_bins))
+        for mask_name in _REPORT_MASK_NAMES
+        for variant in variants
     }
-    if temperature is not None:
-        accumulators["temperature_scaled"] = CalibrationAccumulator(n_bins=int(calib_cfg.n_bins))
 
     for case_id in case_ids:
         prob, label, logits = load_case(eval_dir, source, prep_dir, case_id)
+        image = load_image(prep_dir, case_id)
 
-        # Computed from the UNCALIBRATED probabilities, never the scaled
-        # ones -- see this function's docstring.
-        mask = union_foreground_mask(prob, label, threshold=float(calib_cfg.threshold))
-        accumulators["uncalibrated"].add_case(case_id, prob, label, mask=mask)
+        # Computed from the UNCALIBRATED probabilities/image, never
+        # anything temperature-scaled -- see this function's docstring.
+        masks = {
+            "predicted": predicted_foreground_mask(prob, threshold=float(calib_cfg.threshold)),
+            "brain": brain_mask(image=image),
+        }
 
-        if temperature is not None:
-            assert logits is not None  # guaranteed by source == "logits"
-            # apply_temperature expects a batch axis (B, C, D, H, W); add
-            # and remove one here since load_case works in single-case
-            # (C, D, H, W) terms throughout this script.
-            scaled_logits = apply_temperature(logits.unsqueeze(0), temperature)[0]
-            accumulators["temperature_scaled"].add_case(
-                case_id, torch.sigmoid(scaled_logits), label, mask=mask
-            )
+        for mask_name, mask in masks.items():
+            accumulators[(mask_name, "uncalibrated")].add_case(case_id, prob, label, mask=mask)
+
+            if temperature is not None:
+                assert logits is not None  # guaranteed by source == "logits"
+                # apply_temperature expects a batch axis (B, C, D, H, W); add
+                # and remove one here since load_case works in single-case
+                # (C, D, H, W) terms throughout this script.
+                scaled_logits = apply_temperature(logits.unsqueeze(0), temperature)[0]
+                accumulators[(mask_name, "temperature_scaled")].add_case(
+                    case_id, torch.sigmoid(scaled_logits), label, mask=mask
+                )
 
     return accumulators
 
 
-def _summary_with_variant(accumulator: CalibrationAccumulator, variant: str) -> pd.DataFrame:
-    """`accumulator.summary()`, tagged with a `variant` column, `metric` as a plain column."""
+def _summary_with_variant(
+    accumulator: CalibrationAccumulator, mask: str, variant: str
+) -> pd.DataFrame:
+    """`accumulator.summary()`, tagged with `mask`/`variant` columns, `metric` as a plain column."""
     df = accumulator.summary().rename_axis("metric").reset_index()
+    df["mask"] = mask
     df["variant"] = variant
     return df
 
 
-def _per_case_with_variant(accumulator: CalibrationAccumulator, variant: str) -> pd.DataFrame:
-    """`accumulator.per_case()`, tagged with a `variant` column, `case_id` as a plain column."""
+def _per_case_with_variant(
+    accumulator: CalibrationAccumulator, mask: str, variant: str
+) -> pd.DataFrame:
+    """`accumulator.per_case()`, tagged with `mask`/`variant`, `case_id` as a plain column."""
     df = accumulator.per_case().rename_axis("case_id").reset_index()
+    df["mask"] = mask
     df["variant"] = variant
     return df
 
@@ -941,14 +978,34 @@ def _temperature_payload(
     apply_dir: Path,
     reason: str | None,
     source: str,
+    mask_mode: str,
+    circular: bool,
 ) -> dict[str, Any]:
-    """Assembles the `temperature.json` payload -- written even when the fit failed."""
+    """Assembles the `temperature.json` payload -- written even when the fit failed.
+
+    Args:
+        result: The fitted (or explicitly overridden) temperature, or `None`.
+        fit_dir: The VAL split's eval directory.
+        apply_dir: The TEST split's eval directory.
+        reason: Why `result` is `None` / why the temperature_scaled variant
+            was skipped, or `None` when there is nothing to explain.
+        source: `"logits"` or `"probabilities"`, `apply_dir`'s resolved source.
+        mask_mode: `calibration.mask_mode` -- which mask the FIT used.
+        circular: True when `mask_mode == "union_gt"` was actually used to
+            fit this temperature (never true for an explicit override, which
+            skips fitting entirely). Writes `circular_do_not_report: true`
+            so this file, read months later with no run log attached, still
+            says the fitted temperature must not be reported.
+    """
     payload: dict[str, Any] = {
         "fit_dir": str(fit_dir),
         "apply_dir": str(apply_dir),
         "source": source,
+        "mask_mode": mask_mode,
         "converged": bool(result.converged) if result is not None else False,
     }
+    if circular:
+        payload["circular_do_not_report"] = True
     if result is None:
         payload["reason"] = reason or "no temperature was fit or supplied; see the run log."
         payload["temperature"] = None
@@ -979,25 +1036,25 @@ def _temperature_payload(
 
 
 def _print_summary(
-    acc_uncalibrated: CalibrationAccumulator,
-    acc_scaled: CalibrationAccumulator | None,
+    accumulators: dict[tuple[str, str], CalibrationAccumulator],
     apply_dir: Path,
     n_cases: int,
 ) -> None:
-    """Prints (not logs -- see module docstring) a compact end-of-run summary."""
+    """Prints (not logs -- see module docstring) a compact end-of-run summary.
+
+    Args:
+        accumulators: `accumulate`'s return, keyed by `(mask_name, variant)`.
+        apply_dir: The TEST split's eval directory.
+        n_cases: Number of cases accumulated.
+    """
     lines = [
         "=" * 70,
         f"Calibration summary -- apply_dir={apply_dir}, {n_cases} case(s)",
         "=" * 70,
     ]
-    for label, accumulator in (
-        ("uncalibrated", acc_uncalibrated),
-        ("temperature_scaled", acc_scaled),
-    ):
-        if accumulator is None:
-            continue
+    for (mask_name, variant), accumulator in accumulators.items():
         summary = accumulator.summary()
-        lines.append(f"  [{label}]")
+        lines.append(f"  [mask={mask_name} / {variant}]")
         for region in accumulator.region_names:
             ece_key, brier_key = f"ece_{region}", f"brier_{region}"
             if ece_key in summary.index:
@@ -1026,6 +1083,7 @@ def run_calibration(cfg: DictConfig) -> dict[str, Any]:
         without re-parsing every CSV.
     """
     calib_cfg = cfg.calibration
+    mask_mode = resolve_mask_mode(str(calib_cfg.mask_mode))
     fit_dir, apply_dir = resolve_eval_dirs(cfg)
     prep_dir = Path(cfg.data.preprocessing.out_dir)
     out_dir = ensure_dir(calib_cfg.out_dir)
@@ -1065,7 +1123,7 @@ def run_calibration(cfg: DictConfig) -> dict[str, Any]:
             temperature.tolist(),
         )
     else:
-        temp_result = fit_split_temperature(cfg, fit_dir, prep_dir)
+        temp_result = fit_split_temperature(cfg, fit_dir, prep_dir, mask_mode)
         if temp_result is None:
             temp_reason = (
                 "fit_split_temperature returned None (fit_dir has no logits/ source, the LBFGS "
@@ -1084,14 +1142,29 @@ def run_calibration(cfg: DictConfig) -> dict[str, Any]:
         apply_temperature_now = False
         temp_reason = f"apply_dir source is {apply_source!r}, not 'logits'; cannot apply."
 
+    # circular_do_not_report is about which FIT mode was actually asked for, not
+    # whether the fit succeeded -- a diverged union_gt fit is still a fit that must
+    # never be reported if it HAD converged, so the flag does not depend on
+    # temp_result being non-None.
+    circular = mask_mode == "union_gt" and explicit is None
+    if circular:
+        logger.warning(
+            "run_calibration: calibration.mask_mode='union_gt' was used to fit the temperature "
+            "-- this mask is CIRCULAR (see union_foreground_mask's docstring) and the resulting "
+            "temperature is for DIAGNOSTICS ONLY. temperature.json is marked "
+            "circular_do_not_report; do not put this number in the paper."
+        )
+
     temperature_json_path = out_dir / "temperature.json"
     write_json(
-        _temperature_payload(temp_result, fit_dir, apply_dir, temp_reason, apply_source),
+        _temperature_payload(
+            temp_result, fit_dir, apply_dir, temp_reason, apply_source, mask_mode, circular
+        ),
         temperature_json_path,
     )
     written: dict[str, Any] = {"temperature_json": temperature_json_path}
 
-    # --- 2. Score every variant in ONE pass over the split ---
+    # --- 2. Score every (mask, variant) combination in ONE pass over the split ---
     accumulators = accumulate(
         cfg,
         apply_dir,
@@ -1100,17 +1173,15 @@ def run_calibration(cfg: DictConfig) -> dict[str, Any]:
         apply_case_ids,
         temperature=temp_result.temperature if apply_temperature_now else None,
     )
-    acc_uncalibrated = accumulators["uncalibrated"]
-    acc_scaled = accumulators.get("temperature_scaled")
 
     summary_frames = []
     per_case_frames = []
     reliability_paths: list[Path] = []
-    for variant, accumulator in accumulators.items():
-        summary_frames.append(_summary_with_variant(accumulator, variant))
-        per_case_frames.append(_per_case_with_variant(accumulator, variant))
+    for (mask_name, variant), accumulator in accumulators.items():
+        summary_frames.append(_summary_with_variant(accumulator, mask_name, variant))
+        per_case_frames.append(_per_case_with_variant(accumulator, mask_name, variant))
         for region in accumulator.region_names:
-            path = out_dir / f"reliability_{variant}_{region}.csv"
+            path = out_dir / f"reliability_{mask_name}_{variant}_{region}.csv"
             accumulator.reliability(region).to_csv(path, index=False)
             reliability_paths.append(path)
 
@@ -1143,7 +1214,7 @@ def run_calibration(cfg: DictConfig) -> dict[str, Any]:
     calibration_config_path.write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
     written["calibration_config_yaml"] = calibration_config_path
 
-    _print_summary(acc_uncalibrated, acc_scaled, apply_dir, len(apply_case_ids))
+    _print_summary(accumulators, apply_dir, len(apply_case_ids))
 
     return written
 

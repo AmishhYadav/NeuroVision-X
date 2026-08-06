@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 import sys
+import zlib
 from pathlib import Path
 from types import ModuleType
 
@@ -35,7 +37,9 @@ _spec.loader.exec_module(calibrate_script)
 
 resolve_eval_dirs = calibrate_script.resolve_eval_dirs
 resolve_source = calibrate_script.resolve_source
+resolve_mask_mode = calibrate_script.resolve_mask_mode
 load_case = calibrate_script.load_case
+load_image = calibrate_script.load_image
 build_risk_coverage = calibrate_script.build_risk_coverage
 run_calibration = calibrate_script.run_calibration
 
@@ -81,10 +85,31 @@ def _synthetic_logits(label: np.ndarray, seed: int) -> np.ndarray:
     return logits.astype(np.float32)
 
 
+def _build_synthetic_image(
+    shape: tuple[int, int, int], case_id: str, n_channels: int = 4
+) -> np.ndarray:
+    """A preprocessed-looking (C, D, H, W) MRI volume: negative interior, exact-zero corner.
+
+    Mirrors real preprocessing (neurovision.data.preprocessing.normalize_nonzero):
+    z-scored brain tissue is routinely NEGATIVE, and exact zero marks air, not a
+    low-intensity voxel. The zeroed corner is the trap `brain_mask` exists to get
+    right -- `image > 0` would select nothing at all from this array.
+    """
+    # Deterministic seed from case_id, independent of Python's (possibly
+    # randomized) string hash -- so the same case_id always yields the same array.
+    seed = zlib.crc32(case_id.encode("utf-8"))
+    rng = np.random.default_rng(seed)
+    image = (rng.normal(loc=-0.5, scale=0.3, size=(n_channels, *shape))).astype(np.float32)
+    d, h, w = shape
+    image[:, : max(d // 4, 1), : max(h // 4, 1), : max(w // 4, 1)] = 0.0
+    return image.astype(np.float16)
+
+
 def _write_prep_case(prep_dir: Path, case_id: str, shape: tuple[int, int, int] = SHAPE) -> None:
     case_dir = prep_dir / case_id
     case_dir.mkdir(parents=True, exist_ok=True)
     np.save(case_dir / "label.npy", _build_synthetic_label(shape))
+    np.save(case_dir / "image.npy", _build_synthetic_image(shape, case_id))
 
 
 def _write_eval_case(
@@ -141,6 +166,7 @@ def _make_cfg(
         "source": "auto",
         "n_bins": 10,
         "threshold": 0.5,
+        "mask_mode": "predicted",
         "per_channel": True,
         "fit_voxels_per_case": 200,
         "seed": 0,
@@ -271,6 +297,7 @@ def test_probabilities_only_fit_dir_produces_unconverged_temperature(tmp_path: P
 
     metrics = pd.read_csv(out_dir / "calibration_metrics.csv")
     assert set(metrics["variant"]) == {"uncalibrated"}
+    assert set(metrics["mask"]) == {"predicted", "brain"}
     assert not metrics.empty
 
 
@@ -296,25 +323,35 @@ def test_end_to_end_logits_writes_expected_outputs(tmp_path: Path):
 
     metrics = pd.read_csv(out_dir / "calibration_metrics.csv")
     assert set(metrics["variant"]) == {"uncalibrated", "temperature_scaled"}
+    assert set(metrics["mask"]) == {"predicted", "brain"}
 
     per_case = pd.read_csv(out_dir / "per_case_calibration.csv")
     assert set(per_case["variant"]) == {"uncalibrated", "temperature_scaled"}
+    assert set(per_case["mask"]) == {"predicted", "brain"}
     assert set(per_case["case_id"]) == set(case_ids)
 
-    for variant in ("uncalibrated", "temperature_scaled"):
-        for region in REGIONS:
-            path = out_dir / f"reliability_{variant}_{region}.csv"
-            assert path.is_file(), path
-            df = pd.read_csv(path)
-            assert {"bin_lower", "bin_upper", "count", "mean_prob", "mean_label", "gap"} <= set(
-                df.columns
-            )
+    for mask_name in ("predicted", "brain"):
+        for variant in ("uncalibrated", "temperature_scaled"):
+            for region in REGIONS:
+                path = out_dir / f"reliability_{mask_name}_{variant}_{region}.csv"
+                assert path.is_file(), path
+                df = pd.read_csv(path)
+                assert {
+                    "bin_lower",
+                    "bin_upper",
+                    "count",
+                    "mean_prob",
+                    "mean_label",
+                    "gap",
+                } <= set(df.columns)
 
     assert "reliability_csvs" in written
-    assert len(written["reliability_csvs"]) == 6  # 2 variants x 3 regions
+    assert len(written["reliability_csvs"]) == 12  # 2 masks x 2 variants x 3 regions
 
     temp_payload = json.loads((out_dir / "temperature.json").read_text())
     assert temp_payload["converged"] is True
+    assert temp_payload["mask_mode"] == "predicted"
+    assert "circular_do_not_report" not in temp_payload
     assert set(temp_payload["temperature"].keys()) == set(REGIONS)
 
 
@@ -335,15 +372,17 @@ def test_temperature_scaling_leaves_pooled_voxel_counts_unchanged_at_threshold_h
 
     run_calibration(cfg)
 
-    for region in REGIONS:
-        uncalibrated_count = pd.read_csv(out_dir / f"reliability_uncalibrated_{region}.csv")[
-            "count"
-        ].sum()
-        scaled_count = pd.read_csv(out_dir / f"reliability_temperature_scaled_{region}.csv")[
-            "count"
-        ].sum()
-        assert uncalibrated_count == scaled_count, region
-        assert uncalibrated_count > 0, region  # sanity: the mask actually selected something
+    for mask_name in ("predicted", "brain"):
+        for region in REGIONS:
+            uncalibrated_count = pd.read_csv(
+                out_dir / f"reliability_{mask_name}_uncalibrated_{region}.csv"
+            )["count"].sum()
+            scaled_count = pd.read_csv(
+                out_dir / f"reliability_{mask_name}_temperature_scaled_{region}.csv"
+            )["count"].sum()
+            assert uncalibrated_count == scaled_count, (mask_name, region)
+            # sanity: the mask actually selected something
+            assert uncalibrated_count > 0, (mask_name, region)
 
 
 # ---------------------------------------------------------------------------
@@ -461,6 +500,105 @@ def test_config_composes_with_calibration_group(tmp_path: Path):
     assert cfg.calibration.apply_dir is None
     # threshold must interpolate cleanly against inference.postprocess.threshold
     assert cfg.calibration.threshold == cfg.inference.postprocess.threshold
+    # predicted is the label-free, non-circular default -- see
+    # union_foreground_mask's docstring for why union_gt must not be the default.
+    assert cfg.calibration.mask_mode == "predicted"
+
+
+# ---------------------------------------------------------------------------
+# mask_mode: validation, the circular union_gt diagnostic path, and the
+# always-both-predicted-and-brain reporting guarantee.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_mask_mode_raises_on_unknown_value_listing_allowed_ones():
+    with pytest.raises(ValueError) as excinfo:
+        resolve_mask_mode("not_a_real_mode")
+
+    message = str(excinfo.value)
+    assert "predicted" in message
+    assert "brain" in message
+    assert "union_gt" in message
+
+
+def test_resolve_mask_mode_accepts_every_valid_value():
+    for mode in ("predicted", "brain", "union_gt"):
+        assert resolve_mask_mode(mode) == mode
+
+
+def test_load_image_reads_preprocessed_channel_first_volume(tmp_path: Path):
+    prep_dir = tmp_path / "prep"
+    _write_prep_case(prep_dir, "c0")
+
+    image = load_image(prep_dir, "c0")
+
+    assert image.shape == (4, *SHAPE)
+    assert image.dtype == torch.float32
+
+
+def test_load_image_raises_when_missing(tmp_path: Path):
+    prep_dir = tmp_path / "prep"
+    prep_dir.mkdir()
+
+    with pytest.raises(FileNotFoundError):
+        load_image(prep_dir, "does_not_exist")
+
+
+def test_mask_mode_union_gt_marks_temperature_json_circular_and_warns(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    case_ids = ["c0", "c1", "c2"]
+    fit_dir, prep_dir = _write_split(tmp_path, "val", case_ids, source="logits")
+    apply_dir, _ = _write_split(tmp_path, "test", case_ids, source="logits", seed_offset=100)
+
+    out_dir = tmp_path / "calib_out"
+    cfg = _make_cfg(fit_dir, apply_dir, prep_dir, out_dir, mask_mode="union_gt")
+
+    with caplog.at_level(logging.WARNING):
+        run_calibration(cfg)
+
+    assert any(
+        "union_gt" in record.message and "CIRCULAR" in record.message for record in caplog.records
+    )
+
+    temp_payload = json.loads((out_dir / "temperature.json").read_text())
+    assert temp_payload["mask_mode"] == "union_gt"
+    assert temp_payload["circular_do_not_report"] is True
+
+    # The REPORTED metrics are still always predicted + brain, never union_gt --
+    # a circular fit does not make the reported table circular too.
+    metrics = pd.read_csv(out_dir / "calibration_metrics.csv")
+    assert set(metrics["mask"]) == {"predicted", "brain"}
+
+
+def test_mask_mode_predicted_does_not_mark_temperature_json_circular(tmp_path: Path):
+    case_ids = ["c0", "c1", "c2"]
+    fit_dir, prep_dir = _write_split(tmp_path, "val", case_ids, source="logits")
+    apply_dir, _ = _write_split(tmp_path, "test", case_ids, source="logits", seed_offset=100)
+
+    out_dir = tmp_path / "calib_out"
+    cfg = _make_cfg(fit_dir, apply_dir, prep_dir, out_dir, mask_mode="predicted")
+
+    run_calibration(cfg)
+
+    temp_payload = json.loads((out_dir / "temperature.json").read_text())
+    assert temp_payload["mask_mode"] == "predicted"
+    assert "circular_do_not_report" not in temp_payload
+
+
+def test_mask_mode_brain_fits_successfully(tmp_path: Path):
+    case_ids = ["c0", "c1", "c2"]
+    fit_dir, prep_dir = _write_split(tmp_path, "val", case_ids, source="logits")
+    apply_dir, _ = _write_split(tmp_path, "test", case_ids, source="logits", seed_offset=100)
+
+    out_dir = tmp_path / "calib_out"
+    cfg = _make_cfg(fit_dir, apply_dir, prep_dir, out_dir, mask_mode="brain")
+
+    run_calibration(cfg)
+
+    temp_payload = json.loads((out_dir / "temperature.json").read_text())
+    assert temp_payload["mask_mode"] == "brain"
+    assert temp_payload["converged"] is True
 
 
 # ---------------------------------------------------------------------------
