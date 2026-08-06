@@ -43,3 +43,136 @@ gates:
   # Also save the 4-modality patch alongside the gate maps, so the
   # qualitative figure needs no second read of the preprocessed data.
   save_image: true
+
+# Attribution map extraction (scripts/explain.py). This is what turns the
+# fully-implemented src/neurovision/explainability/ library into an actual
+# figure input: nothing else calls it, so without this script no
+# attribution map exists on disk.
+#
+# PATCH-BASED, for the same memory reason as the `gates:` block above --
+# Integrated Gradients alone needs n_steps forward+backward passes of the
+# full network PER REGION, and every explainability module documents its
+# own measured per-patch cost.
+attribution:
+  # Which frozen split to draw cases from. "test" backs a reported figure;
+  # "val" is for iterating without touching test.
+  split: test
+  # Checkpoint to load. null resolves to <training.checkpoint.dir>/best.pt,
+  # the same convention as inference.evaluation.checkpoint / gates.checkpoint.
+  checkpoint: null
+  out_dir: ${output_dir}/attribution_${explainability.attribution.split}
+  # A HANDFUL of cases, not a full split -- and 4 is chosen with real wall
+  # time in mind, not arbitrarily. Integrated Gradients alone costs n_steps
+  # forward+backward passes of the full network PER region: at n_steps=32
+  # and 2 regions (see `regions` below) that is ~64 forward+backward passes
+  # per case, on CPU, at the full patch size -- minutes per case, not
+  # seconds (see integrated_gradients.py's and faithfulness.py's own
+  # measured-cost notes: a single 96^3 forward+backward is ~17.9s on the
+  # production model). This is offline Mac tooling that produces a handful
+  # of published figures from a handful of hand-picked cases, never
+  # something to run across a full evaluation split.
+  num_cases: 4
+  # Explicit case ids override num_cases entirely. null selects the first
+  # num_cases cases in split-file order (NOT a random sample), so a rerun
+  # against the same split file always picks the same cases without
+  # threading a seed through this script.
+  case_ids: null
+  patch_size: ${data.patch_size}
+  # ET (0) and WT (2) specifically, TC (1) deliberately excluded. These are
+  # the two the radiological sanity check is actually about: enhancing
+  # tumor is clinically DEFINED by contrast uptake (a T1CE finding); whole
+  # tumor includes peritumoral edema (chiefly a FLAIR finding). A
+  # correctly-trained model should show T1CE dominating IG's
+  # modality_attribution for ET and FLAIR dominating it for WT -- that
+  # check is the headline scientific use of this script. TC adds cost
+  # (another full IG + Grad-CAM + faithfulness pass) without adding a
+  # distinct radiological claim.
+  regions: [0, 2]
+  # Also save the 4-modality patch alongside every attribution map, so a
+  # figure needs no second read of the preprocessed data.
+  save_image: true
+
+  integrated_gradients:
+    enabled: true
+    # Riemann-sum step count for the path integral -- see
+    # integrated_gradients.py's own docstring (hazard 4) for measured
+    # per-step cost and why raising this is expensive, not free, on CPU.
+    n_steps: 32
+    # How many of the n_steps interpolation points Captum batches into one
+    # forward+backward. A MEMORY control, not a speed knob (see
+    # integrated_gradients.py hazard 4) -- 1 keeps activation memory to a
+    # single forward pass regardless of n_steps.
+    internal_batch_size: 1
+    # Relative-delta threshold above which IG's completeness axiom is
+    # flagged as unconverged (logged, not raised) -- see
+    # integrated_gradients.py hazard 5.
+    delta_tolerance: 0.05
+    # Std-dev of the default Gaussian-noise IG baseline. 1.0 matches the
+    # unit variance normalize_nonzero's z-scoring gives brain tissue -- an
+    # all-zeros (spatially constant) baseline is a measured singularity of
+    # this architecture's normalization layers, see
+    # integrated_gradients.py's top-of-file docstring.
+    noise_scale: 1.0
+
+  grad_cam:
+    enabled: true
+    # No safe default -- see gradcam.py's docstring for the layer-choice
+    # guidance (final stage ~= the mask itself; bottleneck is very blurry;
+    # a middle decoder stage is usually the informative compromise). The
+    # layer used must be reported alongside any Grad-CAM figure to be
+    # reproducible, so `null` makes this script raise up front (listing
+    # available_layers(model)) rather than picking one silently.
+    target_layer: null
+    # True (the original Grad-CAM convention) keeps only evidence FOR the
+    # region; False returns the signed map, which also shows what argued
+    # against the prediction -- worth a supplementary figure, not the
+    # default.
+    relu: true
+
+  attention:
+    # Off by default: only a model with a Swin branch has attention to
+    # capture (this raises for a unet3d baseline -- see
+    # scripts/explain.py's _validate_attention_config), so this stays off
+    # unless the run is explicitly explaining a neurovision checkpoint.
+    enabled: false
+    # Which Swin stage to roll out -- see attention_rollout.py's top-of-file
+    # docstring for why this is a STAGE-LOCAL composition (Swin has no
+    # shared token set across stages, unlike Abnar & Zuidema's original
+    # rollout), and for the three-not-four-stages caveat (the coarsest
+    # fused level has no attention map at all).
+    stage: layers3
+    # Rollout residual mixing weight -- see attention_rollout.py's
+    # attention_rollout docstring. At 1.0 the output is exactly uniform (a
+    # sanity check that the residual is applied in the documented
+    # direction).
+    residual_weight: 0.5
+    # HARD guard on a stage's token count T (a dense rollout matrix needs
+    # T^2 entries) -- see attention_rollout.py's attention_rollout
+    # docstring. At a 96^3 input only stage 3 (12^3 = 1728 tokens) fits
+    # under this default.
+    max_tokens: 4096
+
+  faithfulness:
+    # compare_methods adds a "random" null-baseline row automatically, and
+    # that row is what makes every other row interpretable -- a method that
+    # does not beat it on insertion_minus_deletion has not been shown to
+    # explain anything. See faithfulness.py's top-of-file docstring,
+    # Decision 3.
+    enabled: true
+    # Number of fractions sampled along each deletion/insertion curve.
+    # Cost is roughly linear in this (one forward pass per point per
+    # method) -- see faithfulness.py's own measured per-curve cost.
+    n_points: 11
+    # "zero" is meaningful here specifically because normalize_nonzero
+    # z-scores each modality over its own brain-tissue region, so voxel
+    # value 0 is, by construction, the MEAN intensity of normal tissue --
+    # not an arbitrary out-of-distribution constant. See
+    # faithfulness.py's make_fill docstring.
+    fill: zero
+
+  # A single seeded generator drives every draw in this run (IG's default
+  # noise baseline, compare_methods' random null row, ...) -- CLAUDE.md:
+  # randomness only through an explicitly seeded torch.Generator, never the
+  # global RNG. Defaults to the run's own seed so a rerun is reproducible
+  # without a separate knob to remember.
+  seed: ${seed}
