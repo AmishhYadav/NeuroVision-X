@@ -17,6 +17,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.colors as mcolors  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -1152,5 +1153,63 @@ def test_attribution_panel_signed_key_gets_symmetric_limits() -> None:
         cam_vmin, cam_vmax = images[2].get_images()[0].get_clim()
         assert cam_vmin == 0.0
         assert cam_vmax != -cam_vmin
+    finally:
+        plt.close(fig)
+
+
+def test_modality_attribution_hatch_is_visible_against_the_bar() -> None:
+    """The expected-modality hatch must not be drawn in the bar's own face colour.
+
+    Matplotlib renders hatching in the EDGE colour, so edge == face paints the
+    marks invisibly -- the artist still reports a hatch (so a `get_hatch()`
+    assertion passes) while the rendered figure shows nothing, and the legend
+    goes on advertising a mark that is not there. Found by looking at the PNG,
+    which is the only way this class of bug surfaces.
+    """
+    df = pd.DataFrame(
+        {
+            "region": ["ET", "WT"],
+            "attr_T1": [0.1, 0.1],
+            "attr_T1CE": [0.5, 0.2],
+            "attr_T2": [0.1, 0.1],
+            "attr_FLAIR": [0.3, 0.6],
+        }
+    )
+    with paper_style():
+        fig = plot_modality_attribution(df)
+    try:
+        hatched = [p for p in fig.axes[0].patches if p.get_hatch()]
+        assert len(hatched) == 2, "one bar per region should carry the expected-modality hatch"
+        for patch in hatched:
+            face = mcolors.to_rgba(patch.get_facecolor())
+            edge = mcolors.to_rgba(patch.get_edgecolor())
+            assert (
+                face[:3] != edge[:3]
+            ), "hatch edge colour equals the bar face colour, so the hatch renders invisibly"
+    finally:
+        plt.close(fig)
+
+
+def test_modality_attribution_reserves_headroom_for_its_legend() -> None:
+    """The legend must not land on top of the tallest bar group.
+
+    `loc="best"` can only avoid the data if there is somewhere to go, so the y
+    limit is expanded before the legend is placed.
+    """
+    df = pd.DataFrame(
+        {
+            "region": ["ET"],
+            "attr_T1": [0.1],
+            "attr_T1CE": [0.6],
+            "attr_T2": [0.1],
+            "attr_FLAIR": [0.2],
+        }
+    )
+    with paper_style():
+        fig = plot_modality_attribution(df)
+    try:
+        ax = fig.axes[0]
+        tallest = max(p.get_height() for p in ax.patches)
+        assert ax.get_ylim()[1] > tallest * 1.15
     finally:
         plt.close(fig)

@@ -1707,6 +1707,15 @@ def _normalize_region_column(regions: pd.Series) -> pd.Series:
     return regions.astype(str)
 
 
+def _HATCH_COLOR() -> str:
+    """The current axes foreground colour, for hatching that must stay visible.
+
+    Read from rcParams at draw time rather than hardcoded, so a figure rendered
+    under a dark style hatches in a light colour and vice versa.
+    """
+    return str(plt.rcParams.get("axes.edgecolor", "#333333"))
+
+
 def plot_modality_attribution(
     attribution: pd.DataFrame,
     *,
@@ -1784,6 +1793,10 @@ def plot_modality_attribution(
     n_modalities = len(MODALITY_NAMES)
     width = 0.8 / n_modalities
     positions = np.arange(len(order))
+    # Extents of every drawn bar INCLUDING its error whisker, collected so the
+    # y limits can reserve legend headroom below.
+    bar_tops: list[float] = []
+    bar_bottoms: list[float] = []
 
     for modality_index, modality in enumerate(MODALITY_NAMES):
         column = modality_columns[modality]
@@ -1808,13 +1821,23 @@ def plot_modality_attribution(
             color=color,
             label=modality,
         )
+        bar_tops.extend((heights + errors).tolist())
+        bar_bottoms.extend((heights - errors).tolist())
         # Mark, but do not pre-judge: a hatch flags "this is the bar the
         # clinical prior expects to dominate", never "the expectation was
         # confirmed" -- that is a conclusion for the reader, not this plot.
+        #
+        # The hatch is drawn in the AXES foreground colour, never in the bar's
+        # own face colour: matplotlib renders hatching in the edge colour, so
+        # edge == face paints the marks invisibly. The mark would still be set
+        # on the artist (and any test inspecting `get_hatch()` would pass)
+        # while the rendered figure showed nothing -- and the legend would go
+        # on advertising a mark that is not there. Taking it from rcParams
+        # rather than hardcoding black keeps it correct under a dark render.
         for region_index, region in enumerate(order):
             if expected.get(region) == modality:
                 bars[region_index].set_hatch("////")
-                bars[region_index].set_edgecolor(color)
+                bars[region_index].set_edgecolor(_HATCH_COLOR())
                 bars[region_index].set_linewidth(1.0)
 
     ax.set_xticks(positions)
@@ -1825,8 +1848,17 @@ def plot_modality_attribution(
     handles = [
         Patch(facecolor=model_style(i)["color"], label=m) for i, m in enumerate(MODALITY_NAMES)
     ]
-    handles.append(Patch(facecolor="none", edgecolor="#999999", hatch="////", label="Expected"))
-    ax.legend(handles=handles, loc="best", ncol=min(len(handles), 3))
+    handles.append(
+        Patch(facecolor="none", edgecolor=_HATCH_COLOR(), hatch="////", label="Expected")
+    )
+    # Headroom reserved BEFORE the legend is placed, so `loc="best"` has
+    # somewhere to go that is not on top of a bar. Without it the legend lands
+    # over the tallest group -- the one a reader is most likely to be reading.
+    top = float(np.nanmax(bar_tops)) if bar_tops else 1.0
+    bottom = min(0.0, float(np.nanmin(bar_bottoms)) if bar_bottoms else 0.0)
+    if np.isfinite(top) and top > bottom:
+        ax.set_ylim(bottom, bottom + (top - bottom) * 1.30)
+    ax.legend(handles=handles, loc="upper center", ncol=min(len(handles), 3))
     return fig
 
 
