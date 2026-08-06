@@ -1,0 +1,75 @@
+# Calibration analysis (scripts/calibrate.py).
+#
+# File-driven and CPU-only: this script loads no checkpoint and runs no
+# model. Its inputs are artifacts scripts/evaluate.py already wrote --
+# logits/ or probabilities/, per_case_metrics.csv, uncertainty_summary.csv --
+# plus the preprocessed labels. It exists to produce the number this
+# project's headline claim ("competitive Dice with substantially better
+# CALIBRATION") rests on, since nothing else in the pipeline writes one.
+
+# eval_dir of the VAL split -- where the temperature is FIT. null on purpose:
+# there is no sane default that would not risk fitting and reporting on the
+# same split (see apply_dir below), so both of these must be set explicitly.
+fit_dir: null
+# eval_dir of the TEST split -- where calibration numbers are REPORTED.
+# MUST be a DIFFERENT directory than fit_dir. Fitting the temperature on the
+# same split it is reported on fits T to that split's own noise, making the
+# reported number meaningless -- scripts/calibrate.py raises rather than
+# allowing this, see resolve_eval_dirs.
+apply_dir: null
+
+out_dir: ${output_dir}/calibration
+
+# auto | logits | probabilities. "auto" prefers logits/ and falls back to
+# probabilities/. Probabilities CANNOT substitute for logits when FITTING a
+# temperature: fp16's gap below 1.0 is 0.000488, so any probability above
+# ~0.99976 round-trips to exactly 1.0 and its logit is +inf. A trained
+# segmentation net is that confident across most of the tumor core, so
+# fitting from saved probabilities would have to drop or clamp precisely the
+# voxels that drive miscalibration -- biasing the fitted T toward 1.0 and
+# understating overconfidence, with nothing failing anywhere. The
+# UNCALIBRATED half of this analysis (ECE/MCE/Brier/reliability diagram) is
+# unaffected either way: 0.9998 and 1.0 fall in the same bin. So a
+# probabilities-only fit_dir still produces a valid uncalibrated report --
+# calibrate.py just refuses to fit (and therefore never applies) a
+# temperature from it.
+source: auto
+
+n_bins: 15
+
+# threshold interpolates from inference.postprocess.threshold, deliberately,
+# rather than carrying its own default: the reporting mask
+# (union_foreground_mask) is built with this threshold, and it must cover
+# the same voxel set the reported Dice was thresholded at. If the two ever
+# diverge, the calibration number would describe a different voxel set than
+# the segmentation number sitting next to it in the paper.
+threshold: ${inference.postprocess.threshold}
+
+per_channel: true
+
+# fit_temperature uses LBFGS, which is not a streaming optimizer -- it needs
+# its inputs as one dense in-memory tensor. A full split at ~3.3M foreground
+# voxels per case per channel does not fit in memory, so a fixed number of
+# voxels is subsampled per case and concatenated across cases instead.
+fit_voxels_per_case: 20000
+
+seed: ${seed}
+
+# Explicit temperature override (a single float, or a 3-entry list matching
+# ET/TC/WT). null (default) means "fit it from fit_dir". Setting this skips
+# fit_split_temperature entirely -- useful for re-applying a temperature that
+# was already fit and reported elsewhere, without touching fit_dir at all.
+temperature: null
+
+risk_coverage:
+  enabled: true
+  # A column scripts/evaluate.py writes into uncertainty_summary.csv when
+  # inference.mc_dropout.enabled=true. Its mask is PREDICTED-foreground only
+  # (regions_cpu[:, i] > 0.5), NOT the predicted-UNION-ground-truth mask that
+  # uncertainty.risk_coverage.case_uncertainty_scalars recommends -- so this
+  # is a slightly different quantity than that module's own convention, and
+  # which column was actually used must be stated in the paper.
+  uncertainty_column: mi_mean_fg_WT
+  score_column: dice_mean
+  score_higher_is_better: true
+  coverage_points: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]

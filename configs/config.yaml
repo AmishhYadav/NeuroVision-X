@@ -8,6 +8,7 @@ defaults:
   - model: unet3d
   - training: default
   - inference: default
+  - calibration: default
   - explainability: default
   - _self_
 
