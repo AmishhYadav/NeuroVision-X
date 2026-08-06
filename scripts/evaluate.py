@@ -374,6 +374,15 @@ def evaluate_case(
         if mc_cfg.predictions_from == "mc_mean":
             mc_logits = logits_from_mean_prob(mc_output.mean_prob)
             regions = postprocess_logits(mc_logits, cfg)
+            # NOTE: `probabilities` above is deliberately NOT replaced by
+            # mc_output.mean_prob. `probabilities/` always means "the
+            # deterministic single pass", in every run, so one directory name
+            # never denotes two different quantities depending on a config
+            # flag. The consequence to be aware of: under this branch,
+            # `predictions/` and `probabilities/` come from DIFFERENT passes,
+            # so a calibration analysis must not pair them. Add "mean_prob"
+            # to `mc_dropout.save_fields` to get the matching probabilities
+            # in `mc_mean_prob/` instead.
 
     return CaseOutput(regions=regions, probabilities=probabilities, mc=mc_output)
 

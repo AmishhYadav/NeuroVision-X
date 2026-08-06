@@ -563,3 +563,270 @@ def test_run_evaluation_writes_eval_config_yaml(tmp_path: Path):
     with eval_config_path.open("r", encoding="utf-8") as f:
         loaded = yaml.safe_load(f)
     assert loaded["model"]["name"] == "unet3d"
+
+
+# ---------------------------------------------------------------------------
+# 10-18. MC-dropout wiring
+# ---------------------------------------------------------------------------
+
+
+def _setup_mc_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case_ids: list[str],
+    mc_dropout_overrides: dict | None = None,
+    **evaluation_overrides: object,
+) -> OmegaConf:
+    """Shared setup for the MC-dropout `run_evaluation` tests below.
+
+    Writes `len(case_ids)` synthetic labeled cases, checkpoints a fresh
+    `_StochasticStubModel`, and monkeypatches `evaluate_script.build_model`
+    to return a NEW `_StochasticStubModel` instance (its random init does
+    not matter -- `load_eval_model` immediately overwrites it with the
+    checkpointed weights via `load_state_dict`). `strict_arch_check=False`
+    because the checkpoint's stored `model.name` ("stub") does not match
+    the config's `model.name` ("unet3d") -- irrelevant here since the model
+    actually used is the monkeypatched stub either way.
+    """
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    for i, case_id in enumerate(case_ids):
+        _write_case(prep_dir, case_id, seed=i, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=case_ids)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    _save_stub_checkpoint(checkpoint_dir)
+
+    cfg = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        mc_dropout_overrides=mc_dropout_overrides,
+        strict_arch_check=False,
+        **evaluation_overrides,
+    )
+    monkeypatch.setattr(evaluate_script, "build_model", lambda cfg: _StochasticStubModel())
+    return cfg
+
+
+def test_mc_dropout_disabled_output_matches_baseline_file_set(tmp_path: Path):
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000", "case_001"]
+    for i, case_id in enumerate(case_ids):
+        _write_case(prep_dir, case_id, seed=i, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=case_ids)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    cfg = _make_cfg(tmp_path, prep_dir, splits_path, checkpoint_dir)
+    _save_model_checkpoint(checkpoint_dir, cfg)
+
+    run_evaluation(cfg)
+
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    entries = sorted(p.name for p in out_dir.iterdir())
+    expected = ["eval_config.yaml", "per_case_metrics.csv", "predictions", "summary.csv"]
+    assert entries == sorted(expected)
+    assert not (out_dir / "uncertainty").exists()
+    assert not (out_dir / "uncertainty_summary.csv").exists()
+
+
+def test_mc_dropout_enabled_writes_uncertainty_npy_per_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    case_ids = ["case_000", "case_001"]
+    cfg = _setup_mc_run(tmp_path, monkeypatch, case_ids, mc_dropout_overrides={"enabled": True})
+
+    run_evaluation(cfg)
+
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    for case_id in case_ids:
+        arr_path = out_dir / "uncertainty" / f"{case_id}.npy"
+        assert arr_path.is_file()
+        arr = np.load(arr_path)
+        assert arr.dtype == np.float16
+        assert arr.shape == (3, *CROPPED_SHAPE)
+
+
+def test_mc_dropout_uncertainty_summary_csv_has_expected_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    case_ids = ["case_000", "case_001"]
+    cfg = _setup_mc_run(tmp_path, monkeypatch, case_ids, mc_dropout_overrides={"enabled": True})
+
+    run_evaluation(cfg)
+
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    csv_path = out_dir / "uncertainty_summary.csv"
+    assert csv_path.is_file()
+
+    df = pd.read_csv(csv_path, index_col="case_id")
+    assert len(df) == len(case_ids)
+    assert set(df.index) == set(case_ids)
+
+    expected_columns = {"num_samples"}
+    for region in ("ET", "TC", "WT"):
+        expected_columns |= {
+            f"mi_mean_{region}",
+            f"mi_max_{region}",
+            f"mi_mean_fg_{region}",
+            f"entropy_mean_{region}",
+        }
+    assert expected_columns.issubset(set(df.columns))
+
+
+def test_mc_dropout_mi_mean_fg_is_nan_for_empty_prediction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # _StochasticStubModel always pushes the ET channel strongly negative,
+    # so its deterministic prediction is reliably empty for ET.
+    case_ids = ["case_000"]
+    cfg = _setup_mc_run(tmp_path, monkeypatch, case_ids, mc_dropout_overrides={"enabled": True})
+
+    run_evaluation(cfg)
+
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    df = pd.read_csv(out_dir / "uncertainty_summary.csv", index_col="case_id")
+    assert pd.isna(df.loc["case_000", "mi_mean_fg_ET"])
+
+
+def test_mc_dropout_save_fields_writes_multiple_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    case_ids = ["case_000"]
+    cfg = _setup_mc_run(
+        tmp_path,
+        monkeypatch,
+        case_ids,
+        mc_dropout_overrides={
+            "enabled": True,
+            "save_fields": ["mutual_information", "predictive_entropy"],
+        },
+    )
+
+    run_evaluation(cfg)
+
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    assert (out_dir / "uncertainty" / "case_000.npy").is_file()
+    assert (out_dir / "entropy_total" / "case_000.npy").is_file()
+
+
+def test_mc_dropout_unknown_save_field_raises_before_any_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    case_ids = ["case_000"]
+    cfg = _setup_mc_run(
+        tmp_path,
+        monkeypatch,
+        case_ids,
+        mc_dropout_overrides={"enabled": True, "save_fields": ["not_a_real_field"]},
+    )
+
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    with pytest.raises(ValueError, match="not_a_real_field"):
+        run_evaluation(cfg)
+
+    assert not out_dir.exists()
+
+
+def test_mc_dropout_bogus_predictions_from_raises_naming_valid_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    case_ids = ["case_000"]
+    cfg = _setup_mc_run(
+        tmp_path,
+        monkeypatch,
+        case_ids,
+        mc_dropout_overrides={"enabled": True, "predictions_from": "bogus"},
+    )
+
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    with pytest.raises(ValueError, match="deterministic"):
+        run_evaluation(cfg)
+    with pytest.raises(ValueError, match="mc_mean"):
+        run_evaluation(cfg)
+
+    assert not out_dir.exists()
+
+
+def test_evaluate_case_mc_mean_changes_postprocess_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`predictions_from="mc_mean"` must feed a DIFFERENT tensor into
+    `postprocess_logits` than the deterministic pass did -- proving the
+    branch is actually live, not re-testing postprocess_logits itself."""
+    calls: list[torch.Tensor] = []
+    original_postprocess_logits = evaluate_script.postprocess_logits
+
+    def _spy(logits: torch.Tensor, cfg: OmegaConf) -> torch.Tensor:
+        calls.append(logits)
+        return original_postprocess_logits(logits, cfg)
+
+    monkeypatch.setattr(evaluate_script, "postprocess_logits", _spy)
+
+    cfg = _make_cfg(
+        tmp_path,
+        tmp_path / "prep",
+        tmp_path / "splits.yaml",
+        tmp_path / "checkpoints",
+        mc_dropout_overrides={"enabled": True, "predictions_from": "mc_mean"},
+    )
+    model = _StochasticStubModel()
+    model.eval()
+    batch = {"image": torch.randn(1, 4, *CROPPED_SHAPE)}
+    device = torch.device("cpu")
+
+    evaluate_case(model, batch, cfg, device)
+
+    assert len(calls) == 2
+    assert not torch.equal(calls[0], calls[1])
+
+
+def test_mc_dropout_enabled_deterministic_predictions_leave_dice_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """Turning MC-dropout on (with the default predictions_from="deterministic")
+    must not move a single reported Dice value -- the regression that protects
+    an already-published baseline row."""
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000", "case_001"]
+    for i, case_id in enumerate(case_ids):
+        _write_case(prep_dir, case_id, seed=i, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=case_ids)
+
+    # ONE checkpoint, reused for both runs below: re-instantiating
+    # _StochasticStubModel per run would give each run different random
+    # conv weights, confounding "did MC-dropout move Dice" with "did the
+    # model change".
+    checkpoint_dir = tmp_path / "checkpoints"
+    _save_stub_checkpoint(checkpoint_dir)
+    monkeypatch.setattr(evaluate_script, "build_model", lambda cfg: _StochasticStubModel())
+
+    cfg_off = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        mc_dropout_overrides={"enabled": False},
+        strict_arch_check=False,
+        out_dir=tmp_path / "eval_off",
+    )
+    per_case_off = run_evaluation(cfg_off)
+
+    cfg_on = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        mc_dropout_overrides={"enabled": True, "predictions_from": "deterministic"},
+        strict_arch_check=False,
+        out_dir=tmp_path / "eval_on",
+    )
+    per_case_on = run_evaluation(cfg_on)
+
+    dice_columns = ["dice_ET", "dice_TC", "dice_WT", "dice_mean"]
+    pd.testing.assert_frame_equal(
+        per_case_off[dice_columns].sort_index(), per_case_on[dice_columns].sort_index()
+    )
