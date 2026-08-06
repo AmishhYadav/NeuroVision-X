@@ -437,8 +437,33 @@ class BranchAmbiguity(nn.Module):
                     the project-wide convention that heads emit logits and the
                     loss applies its own.
         """
-        l_c = self.cnn_logits(cnn_feat)
-        l_s = self.swin_logits(swin_proj)
+        # The features are DETACHED before the probes, and this is load-bearing
+        # for the research claim rather than an optimization.
+        #
+        # These two convs are LINEAR PROBES: "what does this branch, exactly as it
+        # currently is, think the label is here?" The gate then conditions on how
+        # much the two probes disagree. If gradient flowed back through them into
+        # the encoders, two things would go wrong, neither of which would fail a
+        # test or show up as a bad number:
+        #
+        #   1. The branch-supervision term (losses/multitask.py) would push BOTH
+        #      encoders toward predicting the label well, hence toward agreeing --
+        #      collapsing the disagreement signal the gate exists to read. The
+        #      objective would be quietly destroying its own input.
+        #   2. The segmentation loss could reach the ambiguity map through the
+        #      encoders and shape it into whatever makes segmentation easiest. The
+        #      disagreement would stop being a measurement and become a free latent
+        #      quantity -- which is exactly the thing docs/research/contribution.md
+        #      says prior content-only gates do and that this module is claimed to
+        #      improve on.
+        #
+        # Detaching makes disagreement an honest read-out of two branches that were
+        # trained independently by the main objective. The probe weights themselves
+        # still train normally: they receive gradient from the branch-supervision
+        # term and from the gate path, just not at the cost of perturbing what they
+        # measure. Same reasoning as the confidence head's no-grad target.
+        l_c = self.cnn_logits(cnn_feat.detach())
+        l_s = self.swin_logits(swin_proj.detach())
 
         p_c = torch.sigmoid(l_c)
         p_s = torch.sigmoid(l_s)

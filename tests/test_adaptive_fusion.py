@@ -691,6 +691,62 @@ def test_build_fusion_respects_use_ambiguity_false() -> None:
     assert block.ambiguity is None
 
 
+def test_ambiguity_probes_send_no_gradient_into_branch_features() -> None:
+    """Pins the `.detach()` in `BranchAmbiguity.forward`.
+
+    The branch-supervision loss term (`neurovision.losses.multitask.MultiTaskLoss`) trains
+    these probes against the region labels. If gradient from that term reached `cnn_feat` /
+    `swin_feat` (the encoder outputs), the branch-supervision objective would push both
+    encoders toward agreeing with each other -- collapsing the very disagreement signal the
+    gate is supposed to read (see `BranchAmbiguity`'s module-level comment and
+    `docs/research/contribution.md`). Verified by temporarily removing the two `.detach()`
+    calls in `BranchAmbiguity.forward` and confirming this test then fails; restored
+    afterwards.
+    """
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8, requires_grad=True)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8, requires_grad=True)
+
+    fused, branch_logits = block.forward_with_branch_logits(cnn_feat, swin_feat)
+    assert branch_logits is not None
+    l_c, l_s = branch_logits
+
+    # Backward on the branch logits ALONE, not `fused` -- isolates the probes' own gradient
+    # path from the gate/attention path, which legitimately does reach cnn_feat/swin_feat.
+    (l_c.sum() + l_s.sum()).backward()
+
+    assert cnn_feat.grad is None or torch.equal(cnn_feat.grad, torch.zeros_like(cnn_feat.grad))
+    assert swin_feat.grad is None or torch.equal(
+        swin_feat.grad, torch.zeros_like(swin_feat.grad)
+    )
+
+
+def test_ambiguity_probe_weights_still_train_despite_detached_inputs() -> None:
+    """The other half of the contract test 7 pins: the probe LEARNS even though the thing it
+    measures does not move because of it.
+    """
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8, requires_grad=True)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8, requires_grad=True)
+
+    fused, branch_logits = block.forward_with_branch_logits(cnn_feat, swin_feat)
+    assert branch_logits is not None
+    l_c, l_s = branch_logits
+
+    (l_c.sum() + l_s.sum()).backward()
+
+    cnn_logits_grad = block.ambiguity.cnn_logits.weight.grad
+    swin_logits_grad = block.ambiguity.swin_logits.weight.grad
+    assert cnn_logits_grad is not None
+    assert torch.any(cnn_logits_grad != 0.0)
+    assert swin_logits_grad is not None
+    assert torch.any(swin_logits_grad != 0.0)
+
+
 def test_gate_generator_raises_on_extra_channels_ambiguity_mismatch() -> None:
     gate_off = GateGenerator(
         CNN_CHANNELS, gate_channels="scalar", gate_reduction=4, num_groups=8, extra_channels=0

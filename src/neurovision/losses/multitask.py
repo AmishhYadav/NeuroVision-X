@@ -1,4 +1,5 @@
-"""Multi-task loss combining segmentation, boundary, confidence and (optional) surface terms.
+"""Multi-task loss combining segmentation, boundary, confidence, branch and (optional) surface
+terms.
 
 `neurovision.models.heads.multitask.MultiTaskHead` bundles a segmentation head (one per
 deep-supervision level) with two optional auxiliary heads: a **confidence** head that
@@ -7,7 +8,15 @@ head that predicts the tumor surface directly. `MultiTaskLoss` is the objective 
 all of them together, weighted-summed into one scalar so `Trainer` can call `loss_fn(preds,
 target).backward()` exactly as it does for the plain `dice_ce` loss.
 
-Two of the four terms have a load-bearing `torch.no_grad()` around a derived target:
+A fourth, optional **branch** term supervises the per-branch region-logit probes exposed by
+`neurovision.models.fusion.adaptive_fusion.BranchAmbiguity` (surfaced on `MultiTaskOutput` as
+`branch_logits`). Those probes are the read-out the fusion gate conditions on -- see
+`docs/research/contribution.md` -- and are otherwise unsupervised, which makes "disagreement"
+mean "two arbitrary learned projections differ" rather than "the two branches disagree about
+the label". `BranchAmbiguity.forward` already `.detach()`es the branch features before the
+probes see them, so this term trains only the probe convs, never the encoders.
+
+Two of the four base terms have a load-bearing `torch.no_grad()` around a derived target:
 
 - The boundary target is a hard morphological shell of the ground-truth mask (see
   `morphological_boundary` below) -- it is a fixed function of the label, never of a
@@ -94,13 +103,14 @@ def morphological_boundary(mask: Tensor, kernel_size: int = 3) -> Tensor:
 
 
 class MultiTaskLoss(nn.Module):
-    """Weighted sum of segmentation, boundary, confidence and surface losses.
+    """Weighted sum of segmentation, boundary, confidence, branch and surface losses.
 
     Accepts either a `neurovision.models.heads.multitask.MultiTaskOutput` (segmentation plus
-    optional confidence/boundary logits) or a bare `Tensor` / `list[Tensor]` from a model with
-    no auxiliary heads -- in the latter case only the segmentation term is computed and every
-    other component is exactly 0.0, so this loss is a drop-in replacement for `dice_ce` /
-    `DeepSupervisionLoss` even when the auxiliary heads are turned off.
+    optional confidence/boundary logits and fusion branch_logits) or a bare `Tensor` /
+    `list[Tensor]` from a model with no auxiliary heads -- in the latter case only the
+    segmentation term is computed and every other component is exactly 0.0, so this loss is a
+    drop-in replacement for `dice_ce` / `DeepSupervisionLoss` even when the auxiliary heads are
+    turned off.
     """
 
     def __init__(
@@ -112,6 +122,7 @@ class MultiTaskLoss(nn.Module):
         boundary_weight: float = 0.3,
         confidence_weight: float = 0.05,
         surface_weight: float = 0.0,
+        branch_weight: float = 0.0,
         boundary_kernel_size: int = 3,
         confidence_threshold: float = 0.5,
     ) -> None:
@@ -132,6 +143,10 @@ class MultiTaskLoss(nn.Module):
                 default) -- see `forward`'s comment on why this is a fixed weight rather than
                 a warmup schedule.
             surface_weight: Multiplier on the surface term.
+            branch_weight: Multiplier on the branch-supervision term (see `forward`'s
+                branch-term comment). Default 0.0, so every existing construction site is
+                unchanged. Requires `preds.branch_logits` to be populated when > 0 -- see
+                `forward`'s guard.
             boundary_kernel_size: Structuring-element size passed to
                 `morphological_boundary` when deriving the boundary target.
             confidence_threshold: Sigmoid threshold used to decide "predicted positive" when
@@ -145,6 +160,7 @@ class MultiTaskLoss(nn.Module):
         self.boundary_weight = boundary_weight
         self.confidence_weight = confidence_weight
         self.surface_weight = surface_weight
+        self.branch_weight = branch_weight
         self.boundary_kernel_size = boundary_kernel_size
         self.confidence_threshold = confidence_threshold
         self._last_components: dict[str, float] = {
@@ -176,10 +192,15 @@ class MultiTaskLoss(nn.Module):
             seg_preds = preds
             confidence_logits = None
             boundary_logits = None
+            branch_logits = None
         else:
             seg_preds = preds.seg
             confidence_logits = preds.confidence
             boundary_logits = preds.boundary
+            # getattr, not preds.branch_logits: keeps this loss working against the
+            # SimpleNamespace stand-in tests/test_multitask_loss.py uses, which has no such
+            # attribute (branch_weight defaults to 0.0 there, so it is never read).
+            branch_logits = getattr(preds, "branch_logits", None)
 
         seg_input = (
             seg_preds[0] if isinstance(seg_preds, list) and len(seg_preds) == 1 else (seg_preds)
@@ -244,13 +265,57 @@ class MultiTaskLoss(nn.Module):
         )
 
         # For logging only -- plain detached Python floats, never used in any computation.
-        self._last_components = {
+        components: dict[str, float] = {
             "seg": float(seg.detach()),
             "boundary": float(boundary.detach()),
             "confidence": float(confidence.detach()),
             "surface": float(surface.detach()),
-            "total": float(total.detach()),
         }
+
+        # --- Branch term -----------------------------------------------------------------
+        # Only computed (and only added to `total` / `last_components`) when branch_weight >
+        # 0 -- unlike the three terms above, which always contribute an (unweighted-away)
+        # 0.0 float. That asymmetry is deliberate: those terms have a well-defined "off"
+        # value (their loss module is simply None), whereas branch_logits being absent while
+        # branch_weight > 0 is a config error (the guard below), not a legitimate "off"
+        # state to silently report as 0.0.
+        if self.branch_weight > 0:
+            if branch_logits is None:
+                raise ValueError(
+                    "MultiTaskLoss.branch_weight > 0 "
+                    f"(branch_weight={self.branch_weight}) but preds.branch_logits is None. "
+                    "This happens when training.loss.multitask.branch.enabled is True while "
+                    "model.fusion.use_ambiguity is False (or the active fusion variant has "
+                    "no ambiguity mechanism at all, e.g. 'concat' or 'add') -- a positive "
+                    "branch weight against a fusion variant with no ambiguity mechanism "
+                    "means the config declares a loss term that cannot be computed. Set "
+                    "training.loss.multitask.branch.enabled: false, or model.fusion."
+                    "use_ambiguity: true with fusion.name: adaptive_gated."
+                )
+            # One BCE term per branch per fused level, unweighted mean over both --
+            # see the module docstring and the ValueError above for why this term exists.
+            # adaptive_max_pool3d (not interpolate/avg_pool): both encoders downsample with
+            # ceil, so a level's shape is ceil(D / 2**k), not D / 2**k, and adaptive_max_pool3d
+            # hits any requested output shape exactly regardless of input parity. MAX, not
+            # average: a small region can cover a fraction of one coarse-level cell, and
+            # average-pooling plus a 0.5 threshold would train the probe to say "nothing
+            # here" on a case that has something -- over-inclusion at coarse scale is the
+            # safer error for a signal whose only job is to produce a disagreement map.
+            branch_terms: list[Tensor] = []
+            for l_c, l_s in branch_logits:
+                target_c = F.adaptive_max_pool3d(target.float(), l_c.shape[2:])
+                target_s = F.adaptive_max_pool3d(target.float(), l_s.shape[2:])
+                branch_terms.append(F.binary_cross_entropy_with_logits(l_c, target_c))
+                branch_terms.append(F.binary_cross_entropy_with_logits(l_s, target_s))
+            # BCE only, no Dice: these are linear probes, not segmenters -- at the coarsest
+            # fused level (stride 16) a Dice term is computed over a handful of foreground
+            # cells and is extremely high-variance, which is not what a probe wants.
+            branch = torch.stack(branch_terms).mean()
+            total = total + self.branch_weight * branch
+            components["branch"] = float(branch.detach())
+
+        components["total"] = float(total.detach())
+        self._last_components = components
 
         return total
 
@@ -262,7 +327,9 @@ class MultiTaskLoss(nn.Module):
         floats and carry no gradient, so they must never be used in any further computation.
 
         Returns:
-            A dict with keys `"seg"`, `"boundary"`, `"confidence"`, `"surface"`, `"total"`.
+            A dict with keys `"seg"`, `"boundary"`, `"confidence"`, `"surface"`, `"total"`, and
+            additionally `"branch"` when `branch_weight > 0` -- the key is absent, not 0.0,
+            when the term is off (see `forward`'s branch-term comment for why).
         """
         return self._last_components
 
@@ -303,6 +370,14 @@ def build_multitask(cfg: Any) -> nn.Module:
 
     confidence_weight = mt_cfg.confidence.weight if mt_cfg.confidence.enabled else 0.0
 
+    # branch.{enabled,weight} default to False/0.1 when absent, same pattern as
+    # AdaptiveGatedFusion's own `use_ambiguity` builder default -- an older composed config
+    # written before this key existed must still build, with the term off.
+    branch_cfg = mt_cfg.get("branch", None)
+    branch_enabled = branch_cfg.get("enabled", False) if branch_cfg is not None else False
+    branch_weight_cfg = branch_cfg.get("weight", 0.1) if branch_cfg is not None else 0.1
+    branch_weight = branch_weight_cfg if branch_enabled else 0.0
+
     surface_loss: nn.Module | None = None
     surface_weight = 0.0
     if mt_cfg.surface.enabled:
@@ -333,11 +408,12 @@ def build_multitask(cfg: Any) -> nn.Module:
 
     logger.info(
         "Building multitask loss: seg_weight=%s boundary_weight=%s confidence_weight=%s "
-        "surface_weight=%s",
+        "surface_weight=%s branch_weight=%s",
         mt_cfg.seg_weight,
         boundary_weight,
         confidence_weight,
         surface_weight,
+        branch_weight,
     )
 
     return MultiTaskLoss(
@@ -348,6 +424,7 @@ def build_multitask(cfg: Any) -> nn.Module:
         boundary_weight=boundary_weight,
         confidence_weight=confidence_weight,
         surface_weight=surface_weight,
+        branch_weight=branch_weight,
         boundary_kernel_size=mt_cfg.boundary.kernel_size,
         confidence_threshold=mt_cfg.confidence.threshold,
     )

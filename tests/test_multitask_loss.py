@@ -1,9 +1,9 @@
 """Tests for neurovision.losses.multitask: morphological_boundary and MultiTaskLoss.
 
 Uses a small local stand-in for `neurovision.models.heads.multitask.MultiTaskOutput`
-(a `types.SimpleNamespace` with `.seg` / `.confidence` / `.boundary`) so this file does not
-depend on the parallel agent's module -- `MultiTaskLoss` accesses those attributes only, it
-never imports the real dataclass at runtime.
+(a `types.SimpleNamespace` with `.seg` / `.confidence` / `.boundary` / `.branch_logits`) so
+this file does not depend on the parallel agent's module -- `MultiTaskLoss` accesses those
+attributes only, it never imports the real dataclass at runtime.
 
 All tensors are tiny and everything runs on CPU, well under a second.
 """
@@ -14,6 +14,7 @@ import types
 
 import pytest
 import torch
+import torch.nn.functional as F
 from omegaconf import OmegaConf
 
 from neurovision.losses import multitask  # noqa: F401  (registers "multitask")
@@ -24,9 +25,11 @@ from neurovision.losses.segmentation import DiceBCELoss
 SHAPE = (2, 3, 16, 16, 16)
 
 
-def _output(seg=None, confidence=None, boundary=None):
+def _output(seg=None, confidence=None, boundary=None, branch_logits=None):
     """A stand-in for MultiTaskOutput, accessed by attribute only."""
-    return types.SimpleNamespace(seg=seg, confidence=confidence, boundary=boundary)
+    return types.SimpleNamespace(
+        seg=seg, confidence=confidence, boundary=boundary, branch_logits=branch_logits
+    )
 
 
 def _binary_target(shape: tuple[int, ...] = SHAPE, seed: int = 0) -> torch.Tensor:
@@ -415,6 +418,20 @@ def test_build_multitask_boundary_disabled_zeroes_weight() -> None:
     assert loss.boundary_loss is None
 
 
+def test_build_multitask_branch_key_absent_defaults_to_off() -> None:
+    """An older config composed before the branch key existed must still build, term off."""
+    cfg = _loss_cfg()
+    assert "branch" not in cfg.training.loss.multitask
+    loss = build_multitask(cfg)
+    assert loss.branch_weight == 0.0
+
+
+def test_build_multitask_branch_enabled_reads_weight_from_config() -> None:
+    cfg = _loss_cfg(multitask={"branch": {"enabled": True, "weight": 0.15}})
+    loss = build_multitask(cfg)
+    assert loss.branch_weight == pytest.approx(0.15)
+
+
 # ---------------------------------------------------------------------------
 # Surface term (HausdorffDTLoss) actually composes -- slow path, one tiny tensor
 # ---------------------------------------------------------------------------
@@ -437,3 +454,138 @@ def test_build_multitask_surface_enabled_composes_and_is_nonzero() -> None:
 
     assert torch.isfinite(total)
     assert loss.last_components["surface"] != 0.0
+
+
+# ---------------------------------------------------------------------------
+# Branch-supervision term
+# ---------------------------------------------------------------------------
+
+
+def test_branch_term_shape_and_finiteness() -> None:
+    """A MultiTaskOutput carrying branch_logits at four decreasing resolutions."""
+    seg_loss = DiceBCELoss()
+    mt_loss = MultiTaskLoss(seg_loss=seg_loss, branch_weight=0.2)
+
+    target = _binary_target()  # (2, 3, 16, 16, 16)
+    seg_logits = torch.randn(SHAPE)
+
+    torch.manual_seed(10)
+    resolutions = [8, 4, 2, 1]  # fine-to-coarse, mirrors strides 2/4/8/16
+    branch_logits = [
+        (torch.randn(2, 3, r, r, r), torch.randn(2, 3, r, r, r)) for r in resolutions
+    ]
+
+    out = _output(seg=[seg_logits], branch_logits=branch_logits)
+    loss = mt_loss(out, target)
+
+    assert torch.isfinite(loss)
+    assert "branch" in mt_loss.last_components
+    assert isinstance(mt_loss.last_components["branch"], float)
+    assert torch.isfinite(torch.tensor(mt_loss.last_components["branch"]))
+
+
+def test_branch_weight_zero_absent_from_last_components_and_bitwise_identical() -> None:
+    """branch_weight=0.0: no 'branch' key, and the total matches branch_logits=None exactly."""
+    seg_loss = DiceBCELoss()
+    mt_loss = MultiTaskLoss(seg_loss=seg_loss, branch_weight=0.0)
+
+    target = _binary_target()
+    seg_logits = torch.randn(SHAPE)
+    branch_logits = [(torch.randn(2, 3, 4, 4, 4), torch.randn(2, 3, 4, 4, 4))]
+
+    out_with = _output(seg=[seg_logits], branch_logits=branch_logits)
+    total_with = mt_loss(out_with, target)
+    components_with = dict(mt_loss.last_components)
+
+    out_without = _output(seg=[seg_logits], branch_logits=None)
+    total_without = mt_loss(out_without, target)
+
+    assert "branch" not in components_with
+    assert torch.equal(total_with, total_without)
+
+
+def test_branch_weight_positive_with_no_branch_logits_raises() -> None:
+    """The guard: a positive branch_weight against an output with no ambiguity mechanism."""
+    seg_loss = DiceBCELoss()
+    mt_loss = MultiTaskLoss(seg_loss=seg_loss, branch_weight=0.1)
+
+    target = _binary_target()
+    seg_logits = torch.randn(SHAPE)
+    out = _output(seg=[seg_logits], branch_logits=None)
+
+    with pytest.raises(ValueError, match="branch_weight > 0"):
+        mt_loss(out, target)
+
+
+def test_branch_term_perfect_probe_near_zero_wrong_probe_large() -> None:
+    """A perfect probe scores near-zero BCE; flipping its sign scores large BCE."""
+    seg_loss = DiceBCELoss()
+    mt_loss = MultiTaskLoss(seg_loss=seg_loss, branch_weight=1.0)
+
+    target = torch.zeros(1, 3, 8, 8, 8)
+    target[:, :, 2:6, 2:6, 2:6] = 1.0
+    seg_logits = torch.randn(1, 3, 8, 8, 8)
+
+    # Level shape equal to the target's own spatial shape -- adaptive_max_pool3d to an
+    # identical shape is the identity, so the downsampled target equals `target` exactly.
+    correct_logits = (target * 2 - 1) * 20  # saturated, sign matches target everywhere
+    out_correct = _output(seg=[seg_logits], branch_logits=[(correct_logits, correct_logits)])
+    mt_loss(out_correct, target)
+    assert mt_loss.last_components["branch"] < 1e-3
+
+    wrong_logits = -correct_logits  # flip sign: maximally wrong everywhere
+    out_wrong = _output(seg=[seg_logits], branch_logits=[(wrong_logits, wrong_logits)])
+    mt_loss(out_wrong, target)
+    assert mt_loss.last_components["branch"] > 15.0
+
+
+def test_branch_term_downsampled_target_uses_max_pool_hand_checked() -> None:
+    """Pins adaptive_max_pool3d (max, not average) as the downsampling for the branch target.
+
+    A single foreground voxel at (5, 5, 5) of an 8^3 volume, downsampled to 4^3: each output
+    cell covers a 2-voxel window, so voxel index 5 (5 // 2 == 2) lands in coarse cell index 2
+    on every axis. An average-pool implementation would instead put a fractional (1/8) value
+    there, not 1.0 -- this test would fail against that implementation.
+    """
+    target = torch.zeros(1, 3, 8, 8, 8)
+    target[0, :, 5, 5, 5] = 1.0
+
+    level_shape = (4, 4, 4)
+    expected_target = F.adaptive_max_pool3d(target, level_shape)
+    assert expected_target[0, 0, 2, 2, 2].item() == 1.0
+    assert expected_target.sum().item() == 3.0  # exactly one coarse cell, all 3 region channels
+
+    torch.manual_seed(11)
+    l_c = torch.randn(1, 3, *level_shape)
+    l_s = torch.randn(1, 3, *level_shape)
+
+    seg_loss = DiceBCELoss()
+    mt_loss = MultiTaskLoss(seg_loss=seg_loss, branch_weight=1.0)
+    seg_logits = torch.randn(1, 3, 8, 8, 8)
+    out = _output(seg=[seg_logits], branch_logits=[(l_c, l_s)])
+    mt_loss(out, target)
+
+    expected_branch = (
+        F.binary_cross_entropy_with_logits(l_c, expected_target)
+        + F.binary_cross_entropy_with_logits(l_s, expected_target)
+    ) / 2
+    assert mt_loss.last_components["branch"] == pytest.approx(expected_branch.item(), abs=1e-5)
+
+
+def test_branch_term_gradient_flows_to_branch_logits() -> None:
+    seg_loss = DiceBCELoss()
+    mt_loss = MultiTaskLoss(seg_loss=seg_loss, branch_weight=1.0)
+
+    target = _binary_target()
+    seg_logits = torch.randn(SHAPE)
+    l_c = torch.randn(2, 3, 4, 4, 4, requires_grad=True)
+    l_s = torch.randn(2, 3, 4, 4, 4, requires_grad=True)
+
+    out = _output(seg=[seg_logits], branch_logits=[(l_c, l_s)])
+    loss = mt_loss(out, target)
+    loss.backward()
+
+    assert l_c.grad is not None
+    assert torch.any(l_c.grad != 0.0)
+    assert l_s.grad is not None
+    assert torch.any(l_s.grad != 0.0)
