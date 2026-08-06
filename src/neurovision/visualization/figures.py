@@ -437,16 +437,6 @@ class QualitativeCase:
             )
 
 
-def _normalize01(values: np.ndarray) -> np.ndarray:
-    """Min-max a 2D array into [0, 1]; a constant array becomes all zeros."""
-    finite = np.asarray(values, dtype=np.float64)
-    lo = float(np.nanmin(finite)) if finite.size else 0.0
-    hi = float(np.nanmax(finite)) if finite.size else 0.0
-    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-        return np.zeros_like(finite)
-    return (finite - lo) / (hi - lo)
-
-
 def _normalize_mri(
     values: np.ndarray, percentiles: tuple[float, float] = (1.0, 99.0)
 ) -> np.ndarray:
@@ -458,9 +448,13 @@ def _normalize_mri(
     1. Preprocessing z-scores each modality over its NONZERO voxels, so brain
        interior values are routinely negative. A min-max therefore maps the
        zero-valued air OUTSIDE the head to some mid-grey, and the panel renders
-       every brain on a grey card. Voxels that are exactly zero are the
-       preprocessing's own background marker, so they are pinned to black after
-       scaling.
+       every brain on a grey card. Voxels that are exactly zero are treated as
+       the preprocessing's background marker and pinned to black after scaling.
+       (Strictly this is a heuristic: a brain voxel landing exactly on its
+       channel mean would also be 0.0 and be drawn black. For continuous float
+       data that is a measure-zero coincidence affecting single voxels, and the
+       alternative -- a grey card behind every brain -- is worse in every real
+       case.)
     2. A single bright voxel (an enhancing rim, a scanner artefact) sets the
        maximum and washes out everything else. The window is therefore taken
        from percentiles of the nonzero voxels, not from the extremes.
@@ -618,11 +612,23 @@ def plot_qualitative_panel(
 
     column_titles = [modality, "Ground truth", *model_labels]
     if show_uncertainty:
-        # Take the label from the first case that actually has a map -- an
-        # explicit label beats a generic one, and cases without a map do not get
-        # to name the column.
-        labelled = next(c for c in cases if c.uncertainty is not None)
-        column_titles.append(labelled.uncertainty_label)
+        # ONE column header covers every row, so every row's map must be the
+        # same QUANTITY. MC-dropout mutual information (epistemic) and the
+        # predictive entropy of a single deterministic pass are different
+        # things; taking the header from whichever case happened to come first
+        # would label the other rows as a measurement that was never made. Same
+        # class of positional-mislabeling bug as the prediction-key check above,
+        # and it must fail the same way.
+        with_maps = [c for c in cases if c.uncertainty is not None]
+        labels_seen = {c.uncertainty_label for c in with_maps}
+        if len(labels_seen) > 1:
+            detail = ", ".join(f"{c.case_id}={c.uncertainty_label!r}" for c in with_maps)
+            raise ValueError(
+                "plot_qualitative_panel: cases disagree on `uncertainty_label` "
+                f"({detail}). One column header cannot describe two different "
+                "quantities -- plot them as separate panels."
+            )
+        column_titles.append(with_maps[0].uncertainty_label)
 
     n_rows = len(cases)
     n_cols = len(column_titles)
@@ -633,6 +639,20 @@ def plot_qualitative_panel(
         squeeze=False,
         constrained_layout=True,
     )
+
+    # An annotation keyed by a string that is not a column title is silently
+    # dropped -- a typo'd model label just means a missing caption in the final
+    # PDF, with nothing to notice. Warn once, naming the keys and the valid set.
+    for case in cases:
+        unmatched = sorted(set(case.annotations) - set(column_titles))
+        if unmatched:
+            logger.warning(
+                "plot_qualitative_panel: case %s has annotation key(s) %s matching no column; "
+                "they will not be drawn. Valid column titles: %s.",
+                case.case_id,
+                unmatched,
+                column_titles,
+            )
 
     cmap = _class_cmap()
     # vmin/vmax pinned to the class range so a case missing class 3 does not
@@ -1251,6 +1271,19 @@ def plot_comparison_forest(
 
     # Drawn top-to-bottom in table order, so the figure reads in the same order
     # as the table it accompanies.
+    unknown_verdicts = sorted(set(map(str, rows["verdict"])) - set(_VERDICT_COLORS))
+    if unknown_verdicts:
+        # Grey is the safe default (an unrecognized row will not be mistaken for
+        # a claimed result), but silently greying it would hide a real upstream
+        # bug in `compare_models`. Warn rather than raise: a cosmetic mismatch
+        # should not cost the whole figure.
+        logger.warning(
+            "plot_comparison_forest: unrecognized verdict(s) %s drawn in grey; expected one of "
+            "%s. Check what produced this table.",
+            unknown_verdicts,
+            sorted(_VERDICT_COLORS),
+        )
+
     y_positions = np.arange(n_rows)[::-1]
     for y, (_metric, row) in zip(y_positions, rows.iterrows(), strict=True):
         verdict = str(row["verdict"])

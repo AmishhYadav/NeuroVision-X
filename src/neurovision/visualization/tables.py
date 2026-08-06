@@ -327,8 +327,15 @@ def format_results_markdown(
 
 
 def _footnote(table: pd.DataFrame, show_median: bool) -> str:
-    """The caveats that must travel with every results table in this project."""
-    parts = ["Reported as mean ± std over the held-out cases"]
+    """The caveats that must travel with every results table in this project.
+
+    Built once and rendered by BOTH the Markdown and the LaTeX formatter. The
+    LaTeX one is the version that goes in the paper, so it is the one that most
+    needs the caveats -- an earlier version attached them only to the Markdown
+    output, which meant the compiled PDF silently dropped the `ignore_empty`
+    convention and the excluded-case counts.
+    """
+    parts = ["Reported as mean +/- std over the held-out cases"]
     if show_median:
         parts[0] += ", median in parentheses"
     parts[0] += "."
@@ -344,11 +351,37 @@ def _footnote(table: pd.DataFrame, show_median: bool) -> str:
             "Cases where the metric was undefined are excluded from the mean rather than given "
             f"an arbitrary penalty ({detail})."
         )
+
+    # Surfaces `gt_empty_frac`, which is otherwise carried in the tidy table and
+    # never rendered. The size of the ignore_empty effect depends entirely on
+    # this fraction, so stating the convention without it is half a caveat.
+    empty = table[table["gt_empty_frac"] > 0]
+    if not empty.empty:
+        detail = ", ".join(
+            f"{region} {100.0 * frac:.1f}%"
+            for region, frac in empty.groupby("region", sort=False)["gt_empty_frac"].first().items()
+        )
+        parts.append(f"Cases with an empty ground-truth region: {detail}.")
+
     parts.append(
-        "Metrics use `ignore_empty=False` (the BraTS convention): a region absent from the "
+        "Metrics use ignore_empty=False (the BraTS convention): a region absent from the "
         "ground truth scores Dice 1.0 if the prediction is also empty."
     )
     return " ".join(parts)
+
+
+def _latex_note(text: str) -> list[str]:
+    """Render a caveat below a LaTeX table, wrapped to the table's width.
+
+    A `\\multicolumn` cell does not line-break, so a two-sentence caveat placed
+    in one would run off the page. `\\parbox` wraps. Deliberately NOT
+    `threeparttable`, which would add a package to the paper's preamble that
+    this project has no other reason to require.
+    """
+    return [
+        "\\vspace{2pt}",
+        f"\\parbox{{\\linewidth}}{{\\footnotesize {escape_latex(text)}}}",
+    ]
 
 
 def format_results_latex(
@@ -437,7 +470,9 @@ def format_results_latex(
                 cells.append(body)
         lines.append(" & ".join(cells) + " \\\\")
 
-    lines.extend(["\\bottomrule", "\\end{tabular}", "\\end{table}"])
+    lines.extend(["\\bottomrule", "\\end{tabular}"])
+    lines.extend(_latex_note(_footnote(table, show_median)))
+    lines.append("\\end{table}")
     return "\n".join(lines)
 
 
@@ -459,6 +494,26 @@ def _validate_comparison(table: pd.DataFrame, func_name: str) -> None:
         )
     if table.empty:
         raise ValueError(f"{func_name}: table is empty.")
+
+
+def _comparison_footnote(name_a: str) -> str:
+    """The caveats that must travel with every comparison table.
+
+    Shared by the Markdown and LaTeX renderers so the two cannot drift. Both
+    `inconclusive` AND `negligible` are named: `compare_models` treats them as
+    two different reasons not to claim a difference, and a footnote that warns
+    about only one of them reads as permission to claim the other.
+    """
+    return (
+        f"Positive improvement always means {name_a} is better, regardless of whether the "
+        "metric itself is higher- or lower-is-better. Neither an inconclusive verdict (the "
+        "bootstrap CI contains zero, or the Holm-adjusted p exceeds alpha) nor a negligible "
+        "one (conclusive, but the entire CI sits inside the practical-equivalence margin) may "
+        "be claimed as a difference. n is the paired-complete case count and n_missing the "
+        "cases dropped for a NaN on either side. The Holm family is the whole table -- "
+        "re-running on a subset after seeing the p-values would destroy the error-rate "
+        "guarantee."
+    )
 
 
 def _p_value(value: float) -> str:
@@ -518,7 +573,7 @@ def format_comparison_markdown(
     header = ["Metric"]
     if has_means:
         header += [name_a, name_b]
-    header += ["Improvement", "95% CI", "p (Holm)", "Effect (g)", "n", "Verdict"]
+    header += ["Improvement", "95% CI", "p (Holm)", "Effect (g)", "n", "n missing", "Verdict"]
 
     lines: list[str] = []
     if caption:
@@ -542,17 +597,12 @@ def format_comparison_markdown(
         cells.append(_p_value(float(row["p_holm"])))
         cells.append(_fmt(float(row["hedges_g"]), 2) if "hedges_g" in table.columns else "--")
         cells.append(str(int(row["n"])))
+        cells.append(str(int(row["n_missing"])) if "n_missing" in table.columns else "--")
         cells.append(str(row["verdict"]))
         lines.append("| " + " | ".join(cells) + " |")
 
     lines.append("")
-    lines.append(
-        f"Positive improvement always means **{name_a} is better**, regardless of whether the "
-        "metric itself is higher- or lower-is-better. `inconclusive` means the bootstrap CI "
-        "contains zero or the Holm-adjusted p exceeds alpha; those rows must not be claimed. "
-        "The Holm family is the whole table -- re-running on a subset after seeing the p-values "
-        "would destroy the error-rate guarantee."
-    )
+    lines.append(_comparison_footnote(f"**{name_a}**"))
     return "\n".join(lines)
 
 
@@ -590,7 +640,15 @@ def format_comparison_latex(
     header = ["Metric"]
     if has_means:
         header += [escape_latex(name_a), escape_latex(name_b)]
-    header += ["$\\Delta$", "95\\% CI", "$p_{\\mathrm{Holm}}$", "$g$", "$n$", "Verdict"]
+    header += [
+        "$\\Delta$",
+        "95\\% CI",
+        "$p_{\\mathrm{Holm}}$",
+        "$g$",
+        "$n$",
+        "$n_{\\mathrm{miss}}$",
+        "Verdict",
+    ]
 
     lines = [
         "\\begin{table}[t]",
@@ -619,10 +677,13 @@ def format_comparison_latex(
         cells.append(_p_value(float(row["p_holm"])).replace("<", "$<$"))
         cells.append(_fmt(float(row["hedges_g"]), 2) if "hedges_g" in table.columns else "--")
         cells.append(str(int(row["n"])))
+        cells.append(str(int(row["n_missing"])) if "n_missing" in table.columns else "--")
         cells.append(escape_latex(str(row["verdict"])))
         lines.append(" & ".join(cells) + " \\\\")
 
-    lines.extend(["\\bottomrule", "\\end{tabular}", "\\end{table}"])
+    lines.extend(["\\bottomrule", "\\end{tabular}"])
+    lines.extend(_latex_note(_comparison_footnote(name_a)))
+    lines.append("\\end{table}")
     return "\n".join(lines)
 
 

@@ -226,6 +226,65 @@ def test_results_latex_emits_a_cmidrule_per_region_group() -> None:
     assert "\\cmidrule(lr){4-5}" in text
 
 
+def test_results_latex_carries_the_same_caveats_as_the_markdown() -> None:
+    """The LaTeX table is the one that goes in the paper, so it needs them most.
+
+    An earlier version attached the caveats only to the Markdown output, which
+    meant the compiled PDF silently dropped the `ignore_empty` convention and
+    the excluded-case counts.
+    """
+    table = build_results_table({"U-Net": _per_case(0, hd95_nan=3)}, regions=["ET"])
+    text = format_results_latex(table, caption="c", label="tab:x")
+    assert "\\parbox{\\linewidth}" in text
+    assert "ignore\\_empty=False" in text
+    assert "3/12" in text
+    # The note sits INSIDE the table environment, after the tabular.
+    assert text.index("\\end{tabular}") < text.index("\\parbox") < text.index("\\end{table}")
+
+
+def test_results_latex_note_escapes_its_own_underscores() -> None:
+    """`ignore_empty=False` in a footnote is a raw `_` that would break the build."""
+    text = format_results_latex(_results_table(), caption="c", label="tab:x")
+    note = text[text.index("\\parbox") :]
+    assert "ignore_empty" not in note
+
+
+def test_results_footnote_reports_the_empty_region_fraction() -> None:
+    """Surfaces gt_empty_frac -- the ignore_empty caveat's size depends on it."""
+    per_case = _per_case(0)
+    per_case.loc[per_case.index[:3], "gt_empty_ET"] = 1.0
+    table = build_results_table({"U-Net": per_case}, regions=["ET"])
+    assert "ET 25.0%" in format_results_markdown(table)
+
+
+def test_results_footnote_omits_the_empty_line_when_no_region_is_empty() -> None:
+    table = build_results_table({"U-Net": _per_case(0)}, regions=["ET"])
+    assert "empty ground-truth region" not in format_results_markdown(table)
+
+
+def test_results_formatters_raise_on_an_unknown_metric_direction() -> None:
+    """`metric_direction` raises rather than guessing; that must reach the caller.
+
+    Guessing a direction would bold the wrong end of a column and invert a paper
+    claim with nothing failing anywhere, so the exception must not be swallowed
+    anywhere in the formatting path.
+    """
+    # Two models: with one, `_best_models` short-circuits before resolving any
+    # direction (there is nothing to compare), so the path under test is dead.
+    renamed = {"dice_WT": "foo_WT"}
+    table = build_results_table(
+        {"A": _per_case(0).rename(columns=renamed), "B": _per_case(1).rename(columns=renamed)},
+        regions=["WT"],
+        metrics=["foo"],
+    )
+    with pytest.raises(ValueError, match="unknown metric"):
+        format_results_markdown(table, highlight_best=True)
+    with pytest.raises(ValueError, match="unknown metric"):
+        format_results_latex(table, caption="c", label="tab:x", highlight_best=True)
+    # ...and is avoidable by turning highlighting off, rather than being fatal.
+    assert "foo" in format_results_markdown(table, highlight_best=False)
+
+
 # --------------------------------------------------------------------------- #
 # escape_latex
 # --------------------------------------------------------------------------- #
@@ -234,6 +293,18 @@ def test_escape_latex_handles_every_special_character() -> None:
     assert escape_latex("50%") == "50\\%"
     assert escape_latex("a&b") == "a\\&b"
     assert escape_latex("#1") == "\\#1"
+    assert escape_latex("$5") == "\\$5"
+    assert escape_latex("{x}") == "\\{x\\}"
+    assert escape_latex("a~b") == "a\\textasciitilde{}b"
+    assert escape_latex("2^3") == "2\\textasciicircum{}3"
+
+
+def test_escape_latex_covers_the_whole_escape_table() -> None:
+    """Guards against a character being added to the table but never exercised."""
+    from neurovision.visualization.tables import _LATEX_ESCAPES
+
+    for char in _LATEX_ESCAPES:
+        assert escape_latex(char) != char, f"{char!r} passed through unescaped"
 
 
 def test_escape_latex_does_not_double_escape_its_own_backslash() -> None:
@@ -247,18 +318,23 @@ def test_escape_latex_does_not_double_escape_its_own_backslash() -> None:
 def _comparison() -> pd.DataFrame:
     return pd.DataFrame(
         {
-            "n": [180, 180, 180],
-            "mean_Ours": [0.9200, 0.8600, 3.10],
-            "mean_U-Net": [0.9000, 0.8580, 5.20],
-            "mean_diff": [0.02, 0.002, -2.10],
-            "improvement": [0.02, 0.002, 2.10],
-            "improvement_lo": [0.011, -0.001, 0.90],
-            "improvement_hi": [0.029, 0.005, 3.30],
-            "p_holm": [0.0002, 0.41, 0.004],
-            "hedges_g": [0.62, 0.05, 0.44],
-            "verdict": ["better", "inconclusive", "better"],
+            "n": [180, 180, 177, 180],
+            # HD95 is legitimately NaN when one side of a region is empty, so
+            # n_missing is a real quantity that must reach the rendered table.
+            "n_missing": [0, 0, 3, 0],
+            "mean_Ours": [0.9200, 0.8600, 3.10, 0.8700],
+            "mean_U-Net": [0.9000, 0.8580, 5.20, 0.8690],
+            "mean_diff": [0.02, 0.002, -2.10, 0.001],
+            "improvement": [0.02, 0.002, 2.10, 0.001],
+            "improvement_lo": [0.011, -0.001, 0.90, 0.0004],
+            "improvement_hi": [0.029, 0.005, 3.30, 0.0016],
+            "p_holm": [0.0002, 0.41, 0.004, 0.01],
+            "hedges_g": [0.62, 0.05, 0.44, 0.11],
+            # All four verdicts appear, so a regression in any one of them fails
+            # here rather than in a rendered paper table.
+            "verdict": ["better", "inconclusive", "better", "negligible"],
         },
-        index=["dice_WT", "dice_ET", "hd95_WT"],
+        index=["dice_WT", "dice_ET", "hd95_WT", "dice_TC"],
     )
 
 
@@ -282,10 +358,36 @@ def test_comparison_markdown_prints_the_ci_as_an_interval() -> None:
 
 
 def test_comparison_markdown_carries_the_verdict_caveat() -> None:
+    """Both non-claimable verdicts must be named.
+
+    Warning about `inconclusive` alone reads as permission to claim `negligible`.
+    """
     text = format_comparison_markdown(_comparison(), name_a="Ours", name_b="U-Net")
     assert "inconclusive" in text
+    assert "negligible" in text
     assert "Holm family is the whole table" in text
-    assert "Ours is better" in text
+    assert "Ours** is better" in text
+
+
+def test_comparison_markdown_reports_n_missing() -> None:
+    """A row where 3 cases were dropped as NaN must not read as n=177 with no note."""
+    text = format_comparison_markdown(_comparison(), name_a="Ours", name_b="U-Net")
+    header = text.splitlines()[0]
+    assert "n missing" in header
+    hd95_row = next(line for line in text.splitlines() if line.startswith("| hd95_WT |"))
+    cells = [c.strip() for c in hd95_row.strip("|").split("|")]
+    assert cells[-2] == "3"
+
+
+def test_comparison_renders_every_verdict() -> None:
+    table = _comparison()
+    markdown = format_comparison_markdown(table, name_a="Ours", name_b="U-Net")
+    latex = format_comparison_latex(
+        table, caption="c", label="tab:x", name_a="Ours", name_b="U-Net"
+    )
+    for verdict in ("better", "inconclusive", "negligible"):
+        assert f"| {verdict} |" in markdown
+        assert f"& {verdict}" in latex
 
 
 def test_comparison_markdown_warns_when_the_names_do_not_match(caplog) -> None:
@@ -309,6 +411,32 @@ def test_comparison_latex_escapes_and_is_balanced() -> None:
     assert "dice\\_WT" in text
     assert "$<$ 0.001" in text
     assert "95\\% CI" in text
+
+
+def test_comparison_latex_carries_the_verdict_caveat() -> None:
+    """The LaTeX comparison table previously had no footnote at all."""
+    text = format_comparison_latex(
+        _comparison(), caption="c", label="tab:x", name_a="Ours", name_b="U-Net"
+    )
+    assert "\\parbox{\\linewidth}" in text
+    assert "inconclusive" in text and "negligible" in text
+    assert text.index("\\end{tabular}") < text.index("\\parbox") < text.index("\\end{table}")
+
+
+def test_comparison_latex_column_count_matches_the_preamble() -> None:
+    """A tabular preamble narrower than the emitted cells is a hard LaTeX error."""
+    text = format_comparison_latex(
+        _comparison(), caption="c", label="tab:x", name_a="Ours", name_b="U-Net"
+    )
+    preamble = next(line for line in text.splitlines() if line.startswith("\\begin{tabular}"))
+    # The column spec is the LAST brace group -- counting letters in the whole
+    # line also counts the 'l' and 'a' in "tabular".
+    spec = preamble[preamble.rindex("{") + 1 : preamble.rindex("}")]
+    n_columns = len(spec)
+    body_rows = [line for line in text.splitlines() if line.rstrip().endswith("\\\\")]
+    assert body_rows
+    for row in body_rows:
+        assert row.count(" & ") == n_columns - 1, row
 
 
 # --------------------------------------------------------------------------- #

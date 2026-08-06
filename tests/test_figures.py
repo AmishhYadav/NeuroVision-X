@@ -124,6 +124,23 @@ def test_paper_style_restores_rcparams_even_on_exception() -> None:
         plt.rcParams["pdf.fonttype"] = before
 
 
+def test_region_colors_are_keyed_in_reporting_order() -> None:
+    """Pins the WT/TC/ET reporting order against the ET/TC/WT channel order.
+
+    `REGION_COLORS` is consumed by notebooks rather than by this module, so a
+    swapped key order would recolour every per-region figure with nothing in the
+    package failing.
+    """
+    assert tuple(figures.REGION_COLORS) == figures.REGION_ORDER
+    assert figures.REGION_ORDER == ("WT", "TC", "ET")
+    assert len(set(figures.REGION_COLORS.values())) == 3
+
+
+def test_palettes_exclude_okabe_ito_yellow() -> None:
+    """#F0E442 is a fine fill but illegible as a 1pt line on white."""
+    assert "#F0E442" not in set(figures.REGION_COLORS.values()) | set(MODEL_COLOR_CYCLE)
+
+
 def test_model_style_cycles_and_wraps() -> None:
     first = model_style(0)
     wrapped = model_style(len(MODEL_COLOR_CYCLE))
@@ -333,6 +350,47 @@ def test_qualitative_panel_rejects_reordered_prediction_keys() -> None:
     }
     with pytest.raises(ValueError, match="prediction keys"):
         plot_qualitative_panel([a, b])
+
+
+def test_qualitative_panel_rejects_disagreeing_uncertainty_labels() -> None:
+    """One column header cannot describe two different quantities.
+
+    MC-dropout mutual information is epistemic; the predictive entropy of a
+    single deterministic pass is not. Taking the header from whichever case came
+    first would label the other row as a measurement that was never made — the
+    same positional-mislabeling bug the prediction-key check exists to stop.
+    """
+    a = _case("A", with_uncertainty=True)
+    b = _case("B", with_uncertainty=True)
+    a.uncertainty_label = "MC-dropout MI"
+    b.uncertainty_label = "Entropy (1 pass)"
+    with pytest.raises(ValueError, match="uncertainty_label"):
+        plot_qualitative_panel([a, b])
+
+
+def test_qualitative_panel_accepts_matching_uncertainty_labels() -> None:
+    a = _case("A", with_uncertainty=True)
+    b = _case("B", with_uncertainty=True)
+    with paper_style():
+        fig = plot_qualitative_panel([a, b])
+    try:
+        titles = [ax.get_title() for ax in fig.axes if ax.get_title()]
+        assert "MC-dropout MI" in titles
+    finally:
+        plt.close(fig)
+
+
+def test_qualitative_panel_warns_about_an_unmatched_annotation_key(caplog) -> None:
+    """A typo'd model label would otherwise just be a missing caption in the PDF."""
+    case = _case("A")
+    case.annotations = {"Basline": "Dice 0.91"}  # codespell:ignore
+    with caplog.at_level(logging.WARNING), paper_style():
+        fig = plot_qualitative_panel([case])
+    try:
+        assert "Basline" in caplog.text  # codespell:ignore
+        assert "matching no column" in caplog.text
+    finally:
+        plt.close(fig)
 
 
 def test_qualitative_panel_rejects_an_unknown_modality() -> None:
@@ -697,6 +755,18 @@ def test_comparison_forest_can_subset_metrics() -> None:
         fig = plot_comparison_forest(_comparison_table(), metrics=["dice_ET", "dice_WT"])
     try:
         assert [t.get_text() for t in fig.axes[0].get_yticklabels()] == ["dice_ET", "dice_WT"]
+    finally:
+        plt.close(fig)
+
+
+def test_comparison_forest_warns_on_an_unrecognized_verdict(caplog) -> None:
+    """Grey is safe, but silently greying would hide an upstream compare_models bug."""
+    table = _comparison_table()
+    table.loc["dice_ET", "verdict"] = "maybe"
+    with caplog.at_level(logging.WARNING), paper_style():
+        fig = plot_comparison_forest(table)
+    try:
+        assert "maybe" in caplog.text
     finally:
         plt.close(fig)
 
