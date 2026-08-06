@@ -891,8 +891,7 @@ def plot_reliability_diagram(
         )
         if ax_hist is not None:
             centres = (
-                table["bin_lower"].to_numpy(dtype=float)
-                + table["bin_upper"].to_numpy(dtype=float)
+                table["bin_lower"].to_numpy(dtype=float) + table["bin_upper"].to_numpy(dtype=float)
             ) / 2.0
             counts = table["count"].to_numpy(dtype=float)
             total = counts.sum()
@@ -912,7 +911,13 @@ def plot_reliability_diagram(
     if ax_hist is not None:
         ax_hist.set_xlabel("Predicted probability")
         ax_hist.set_ylabel("Bin share")
-        ax_hist.set_yscale("log")
+        # Log scale only when there is something positive to log. Bin
+        # populations span several orders of magnitude in a real run (almost
+        # every voxel lands in the first bin), but an all-empty curve -- what
+        # `reliability_curve` returns for a region absent from a case -- has no
+        # positive values and matplotlib warns rather than erroring.
+        if any(np.nansum(t["count"].to_numpy(dtype=float)) > 0 for t in curves.values()):
+            ax_hist.set_yscale("log")
     else:
         ax.set_xlabel("Predicted probability")
     return fig
@@ -997,7 +1002,9 @@ def plot_risk_coverage(
 
     for index, (label, curve) in enumerate(curves.items()):
         legend_label = f"{label} (AURC {curve.aurc:.4f})" if show_aurc else label
-        ax.plot(curve.coverage, curve.performance, label=legend_label, zorder=2, **model_style(index))
+        ax.plot(
+            curve.coverage, curve.performance, label=legend_label, zorder=2, **model_style(index)
+        )
 
     ax.set_xlabel("Coverage (fraction of cases retained)")
     ax.set_ylabel(ylabel)
@@ -1079,7 +1086,9 @@ def plot_training_curves(
 
     if figsize is None:
         figsize = (3.9 * len(panels), 3.0)
-    fig, axes = plt.subplots(1, len(panels), figsize=figsize, squeeze=False, constrained_layout=True)
+    fig, axes = plt.subplots(
+        1, len(panels), figsize=figsize, squeeze=False, constrained_layout=True
+    )
 
     multi_model = len(histories) > 1
     for panel_index, panel in enumerate(panels):
@@ -1217,8 +1226,6 @@ def plot_comparison_forest(
         ax.set_title(title)
 
     seen = list(dict.fromkeys(str(v) for v in rows["verdict"]))
-    handles = [
-        Patch(facecolor=_VERDICT_COLORS.get(v, "#999999"), label=v) for v in seen
-    ]
+    handles = [Patch(facecolor=_VERDICT_COLORS.get(v, "#999999"), label=v) for v in seen]
     ax.legend(handles=handles, loc="best", ncol=min(len(handles), 3))
     return fig
