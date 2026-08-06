@@ -471,9 +471,7 @@ def test_branch_term_shape_and_finiteness() -> None:
 
     torch.manual_seed(10)
     resolutions = [8, 4, 2, 1]  # fine-to-coarse, mirrors strides 2/4/8/16
-    branch_logits = [
-        (torch.randn(2, 3, r, r, r), torch.randn(2, 3, r, r, r)) for r in resolutions
-    ]
+    branch_logits = [(torch.randn(2, 3, r, r, r), torch.randn(2, 3, r, r, r)) for r in resolutions]
 
     out = _output(seg=[seg_logits], branch_logits=branch_logits)
     loss = mt_loss(out, target)

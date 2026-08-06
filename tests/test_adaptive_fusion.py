@@ -718,9 +718,7 @@ def test_ambiguity_probes_send_no_gradient_into_branch_features() -> None:
     (l_c.sum() + l_s.sum()).backward()
 
     assert cnn_feat.grad is None or torch.equal(cnn_feat.grad, torch.zeros_like(cnn_feat.grad))
-    assert swin_feat.grad is None or torch.equal(
-        swin_feat.grad, torch.zeros_like(swin_feat.grad)
-    )
+    assert swin_feat.grad is None or torch.equal(swin_feat.grad, torch.zeros_like(swin_feat.grad))
 
 
 def test_ambiguity_probe_weights_still_train_despite_detached_inputs() -> None:
