@@ -774,3 +774,216 @@ def test_builder_swin_enabled_defaults_true_when_key_absent() -> None:
     assert model.use_swin is True
     assert model.swin_encoder is not None
     assert len(model.fusion_blocks) == SWIN_NUM_LEVELS
+
+
+# ---------------------------------------------------------------------------
+# 14. branch-logits supervision (BranchAmbiguity plumbing to MultiTaskOutput)
+# ---------------------------------------------------------------------------
+
+
+def _build_model_with_branch_supervision(
+    deep_supervision_levels: int = 3,
+    fusion_name: str = "adaptive_gated",
+    supervise_branch_logits: bool = True,
+) -> NeuroVisionX:
+    cnn = _build_cnn()
+    swin = _build_swin()
+    fusion_blocks = _build_fusion_blocks(cnn, swin, fusion_name)
+    decoder = _build_decoder(cnn)
+    heads = MultiTaskHead(
+        decoder_channels=decoder.out_channels,
+        out_channels=3,
+        deep_supervision_levels=deep_supervision_levels,
+        confidence=True,
+        boundary=False,
+        confidence_num_groups=NUM_GROUPS,
+    )
+    return NeuroVisionX(
+        cnn_encoder=cnn,
+        swin_encoder=swin,
+        fusion_blocks=fusion_blocks,
+        decoder=decoder,
+        out_channels=3,
+        deep_supervision_levels=deep_supervision_levels,
+        head_dropout=0.0,
+        heads=heads,
+        supervise_branch_logits=supervise_branch_logits,
+    )
+
+
+def test_branch_logits_collected_in_train_mode_with_aux_heads() -> None:
+    model = _build_model_with_branch_supervision(deep_supervision_levels=3)
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    out = model(x)
+
+    assert isinstance(out, MultiTaskOutput)
+    assert out.branch_logits is not None
+    assert len(out.branch_logits) == SWIN_NUM_LEVELS
+    for level, pair in enumerate(out.branch_logits):
+        assert isinstance(pair, tuple)
+        l_c, l_s = pair
+        # Fusion level i fuses CNN level i+1 / Swin level i, both at stride 2**(i+1).
+        expected_size = 32 // (2 ** (level + 1))
+        assert l_c.shape == (1, 3, expected_size, expected_size, expected_size)
+        assert l_s.shape == (1, 3, expected_size, expected_size, expected_size)
+
+
+def test_branch_supervision_eval_mode_returns_plain_tensor() -> None:
+    # THE PINNED INVARIANT: eval mode must always return a Tensor, unconditionally, even with
+    # branch supervision on -- sliding-window inference and MONAI's inferer assume it.
+    model = _build_model_with_branch_supervision(deep_supervision_levels=3)
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        out = model(x)
+
+    assert isinstance(out, Tensor)
+    assert out.shape == (1, 3, 32, 32, 32)
+
+
+def test_branch_logits_none_when_supervision_disabled() -> None:
+    model = _build_model_with_branch_supervision(
+        deep_supervision_levels=3, supervise_branch_logits=False
+    )
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    out = model(x)
+
+    assert isinstance(out, MultiTaskOutput)
+    assert out.branch_logits is None
+
+
+def test_branch_logits_none_not_list_of_nones_for_fusion_with_no_ambiguity() -> None:
+    # ConcatFusion has no ambiguity mechanism: forward_with_branch_logits falls back to
+    # FusionBlock's default, which always reports None. The collected result must be a bare
+    # None, not [None, None, None] -- a partially/never-populated list would let a loss
+    # silently supervise nothing while still looking like a populated field.
+    model = _build_model_with_branch_supervision(
+        deep_supervision_levels=3, fusion_name="concat", supervise_branch_logits=True
+    )
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    out = model(x)
+
+    assert isinstance(out, MultiTaskOutput)
+    assert out.branch_logits is None
+
+
+def test_gradients_reach_branch_logit_convs_at_every_fused_level() -> None:
+    # THE test that proves the plumbing is real: a detached or dropped level would pass every
+    # shape assertion above and fail only here.
+    model = _build_model_with_branch_supervision(deep_supervision_levels=1)
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    out = model(x)
+    assert out.branch_logits is not None
+
+    total = sum(l_c.sum() + l_s.sum() for l_c, l_s in out.branch_logits)
+    total.backward()
+
+    for level, block in enumerate(model.fusion_blocks):
+        cnn_grad = block.ambiguity.cnn_logits.weight.grad
+        swin_grad = block.ambiguity.swin_logits.weight.grad
+        assert cnn_grad is not None, f"level {level}: cnn_logits conv has no grad"
+        assert swin_grad is not None, f"level {level}: swin_logits conv has no grad"
+        assert torch.any(cnn_grad != 0.0), f"level {level}: cnn_logits conv grad is all zero"
+        assert torch.any(swin_grad != 0.0), f"level {level}: swin_logits conv grad is all zero"
+
+
+def test_forward_with_gates_unaffected_by_branch_supervision() -> None:
+    # forward_with_gates keeps its existing (logits, gate_maps) contract untouched regardless
+    # of supervise_branch_logits -- scripts/extract_gates.py depends on it.
+    model = _build_model_with_branch_supervision(deep_supervision_levels=3)
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        logits, gates = model.forward_with_gates(x)
+
+    assert isinstance(logits, Tensor)
+    assert logits.shape == (1, 3, 32, 32, 32)
+    assert len(gates) == SWIN_NUM_LEVELS
+    for gate in gates:
+        assert gate is not None
+        assert torch.all(gate > 0.0)
+        assert torch.all(gate < 1.0)
+
+
+def _full_cfg_with_branch(
+    branch_enabled: bool,
+    use_ambiguity: bool = True,
+    confidence_enabled: bool = True,
+    boundary_enabled: bool = False,
+    loss_name: str = "multitask",
+) -> object:
+    """Same shape as `_full_cfg_with_aux`, extended with `training.loss.multitask.branch` and
+    `model.fusion.use_ambiguity` so the branch-supervision builder guards can be exercised."""
+    cfg = _full_cfg_with_aux(
+        confidence_enabled=confidence_enabled,
+        boundary_enabled=boundary_enabled,
+        loss_name=loss_name,
+    )
+    cfg.model.fusion.use_ambiguity = use_ambiguity
+    cfg.training.loss.multitask = {"branch": {"enabled": branch_enabled}}
+    return cfg
+
+
+def test_builder_raises_when_branch_enabled_but_use_ambiguity_false() -> None:
+    cfg = _full_cfg_with_branch(
+        branch_enabled=True, use_ambiguity=False, confidence_enabled=True, loss_name="multitask"
+    )
+
+    with pytest.raises(ValueError, match="use_ambiguity"):
+        build_neurovision(cfg)
+
+
+def test_builder_raises_when_branch_enabled_but_no_aux_head() -> None:
+    cfg = _full_cfg_with_branch(
+        branch_enabled=True,
+        use_ambiguity=True,
+        confidence_enabled=False,
+        boundary_enabled=False,
+        loss_name="multitask",
+    )
+
+    with pytest.raises(ValueError, match="auxiliary head"):
+        build_neurovision(cfg)
+
+
+def test_builder_raises_when_branch_enabled_but_loss_not_multitask() -> None:
+    cfg = _full_cfg_with_branch(
+        branch_enabled=True,
+        use_ambiguity=True,
+        confidence_enabled=True,
+        loss_name="dice_ce",
+    )
+
+    with pytest.raises(ValueError, match="No other loss knows what to do"):
+        build_neurovision(cfg)
+
+
+def test_builder_branch_supervision_agreement_builds_fine() -> None:
+    cfg = _full_cfg_with_branch(
+        branch_enabled=True, use_ambiguity=True, confidence_enabled=True, loss_name="multitask"
+    )
+
+    model = build_neurovision(cfg)
+
+    assert isinstance(model, NeuroVisionX)
+    assert model.supervise_branch_logits is True
+
+
+def test_builder_branch_disabled_by_default_does_not_supervise() -> None:
+    # training.loss.multitask.branch.enabled defaults to False when the key is absent
+    # entirely, matching configs/training/default.yaml.
+    cfg = _full_cfg_with_aux(confidence_enabled=True, boundary_enabled=False, loss_name="multitask")
+
+    model = build_neurovision(cfg)
+
+    assert model.supervise_branch_logits is False

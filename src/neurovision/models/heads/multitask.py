@@ -54,11 +54,21 @@ class MultiTaskOutput:
             or `None` if the confidence head is disabled.
         boundary: Full-resolution boundary logits, shape `(B, out_channels, D, H, W)`, or
             `None` if the boundary head is disabled.
+        branch_logits: Per-fusion-level branch ambiguity logits, ordered fine-to-coarse (one
+            entry per FUSED level -- stride 2, 4, 8, 16 in production). Entry `i` is
+            `(cnn_logits, swin_logits)`, each shape `(B, num_regions, D_i, H_i, W_i)` at that
+            level's resolution -- see `neurovision.models.fusion.adaptive_fusion.
+            BranchAmbiguity`. `None` when the active fusion variant has no ambiguity
+            mechanism, or when `NeuroVisionX` was not asked to collect them
+            (`supervise_branch_logits=False`). Populated by `NeuroVisionX.forward` only, not
+            by `MultiTaskHead.forward` -- this dataclass is shared by both, but the branch
+            logits come from the fusion blocks, not from a head.
     """
 
     seg: list[Tensor]
     confidence: Tensor | None
     boundary: Tensor | None
+    branch_logits: list[tuple[Tensor, Tensor]] | None = None
 
 
 class MultiTaskHead(nn.Module):

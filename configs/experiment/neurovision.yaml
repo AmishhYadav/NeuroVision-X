@@ -40,3 +40,10 @@ training:
       # null -> halving weights (1, 0.5, 0.25) normalized to sum 1.0, which is
       # what the three supervised levels (strides 1, 2, 4) want.
       weights: null
+    multitask:
+      branch:
+        # On here (off in the stock training config): the full model has
+        # BranchAmbiguity (model.fusion.use_ambiguity defaults true) and both
+        # auxiliary heads, so branch-logits supervision is meaningful and
+        # build_neurovision's guard is satisfied.
+        enabled: true

@@ -14,11 +14,16 @@ variant ran.
 ## Three variants, one contract
 
 - `AdaptiveGatedFusion` — the novel module. A learned adapter projects the
-  Swin branch into the CNN branch's channel width, a small conv-net predicts
-  a spatially-varying gate from both branches, windowed cross-attention lets
-  every CNN voxel query the (projected) Swin context, and the gate controls
-  how much of that attention output is admitted at each voxel: `out = cnn +
-  layer_scale * gate * attn_out`.
+  Swin branch into the CNN branch's channel width, an explicit local
+  ambiguity signal (`BranchAmbiguity`: per-branch region logits, their
+  disagreement, and their entropy — see `docs/research/contribution.md` for
+  why this, not branch content alone, is the actual contribution) feeds a
+  small conv-net that predicts a spatially-varying gate from both branches
+  plus that signal, windowed cross-attention lets every CNN voxel query the
+  (projected) Swin context, and the gate controls how much of that attention
+  output is admitted at each voxel: `out = cnn + layer_scale * gate *
+  attn_out`. `use_ambiguity=False` drops the ambiguity signal entirely (the
+  content-only ablation, rung 2 of the P2 ablation ladder).
 - `ConcatFusion` — the standard "what everyone does" baseline: concatenate,
   1x1x1 conv back down to `cnn_channels`, norm, activation. No gating, no
   attention.
@@ -142,6 +147,28 @@ class FusionBlock(nn.Module):
             `None` for the two baselines.
         """
         raise NotImplementedError
+
+    def forward_with_branch_logits(
+        self, cnn_feat: Tensor, swin_feat: Tensor
+    ) -> tuple[Tensor, tuple[Tensor, Tensor] | None]:
+        """Fuses one level and also returns the per-branch ambiguity logits.
+
+        Default implementation for variants with no ambiguity mechanism
+        (`ConcatFusion`, `AddFusion`): just runs `forward` and reports no
+        branch logits. `AdaptiveGatedFusion` overrides this to actually
+        return them, so an ablation can swap fusion variants without the
+        caller (`NeuroVisionX`, which supervises the branch logits when
+        present) needing to special-case which variant is active.
+
+        Args:
+            cnn_feat: CNN branch feature, shape `(B, cnn_channels, D, H, W)`.
+            swin_feat: Swin branch feature, shape
+                `(B, swin_channels, D, H, W)`.
+
+        Returns:
+            `(fused, branch_logits)`, `branch_logits` always `None` here.
+        """
+        return self.forward(cnn_feat, swin_feat), None
 
 
 # -----------------------------------------------------------------------------
@@ -351,26 +378,137 @@ class WindowedCrossAttention(nn.Module):
         return attn_out.permute(0, 4, 1, 2, 3)  # back to (B, C, D, H, W)
 
 
+class BranchAmbiguity(nn.Module):
+    """Computes the explicit local ambiguity signal the gate conditions on.
+
+    This is the project's actual contribution (see `docs/research/contribution.md`):
+    prior gated fusion derives its mixing weight from branch *content* alone: the
+    gate here additionally sees how much the CNN branch and the Swin branch
+    *disagree* about this voxel's region labels. Each branch gets a lightweight
+    1x1x1 conv that reads out region logits independently, and per-voxel
+    disagreement plus each branch's own predictive entropy are concatenated
+    onto the gate's input.
+
+    Args:
+        channels: Channel width both `cnn_feat` and `swin_proj` share. Note
+            `swin_proj` is already the channel-projected Swin feature (see
+            `AdaptiveGatedFusion._fuse`), so both convs read the same width.
+        num_regions: Number of region channels (ET/TC/WT -> 3) each branch's
+            auxiliary projection predicts.
+    """
+
+    def __init__(self, channels: int, num_regions: int) -> None:
+        super().__init__()
+        self.cnn_logits = nn.Conv3d(channels, num_regions, kernel_size=1, bias=True)
+        self.swin_logits = nn.Conv3d(channels, num_regions, kernel_size=1, bias=True)
+
+        # Zero-init the BIAS only (same reasoning as GateGenerator.conv_out):
+        # centres each branch's predicted probability on sigmoid(0) = 0.5, i.e.
+        # no prior toward either region or background before training has seen
+        # any data. The WEIGHT is left at PyTorch's default random init so the
+        # disagreement/entropy signal has spatial spread from the start --
+        # zeroing it too would make disagreement identically 0 everywhere,
+        # which is exactly the "gate can't see anything useful yet" state this
+        # module exists to avoid.
+        nn.init.zeros_(self.cnn_logits.bias)
+        nn.init.zeros_(self.swin_logits.bias)
+
+        # 3 * num_regions: disagreement (num_regions channels) + CNN entropy
+        # (num_regions) + Swin entropy (num_regions). Exposed so
+        # AdaptiveGatedFusion does not re-derive it when sizing GateGenerator.
+        self.out_channels = 3 * num_regions
+
+    def forward(self, cnn_feat: Tensor, swin_proj: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        """Computes per-branch region logits and the ambiguity signal.
+
+        Args:
+            cnn_feat: CNN branch feature, shape `(B, channels, D, H, W)`.
+            swin_proj: Channel-projected Swin feature, shape
+                `(B, channels, D, H, W)`.
+
+        Returns:
+            `(ambiguity, l_c, l_s)`:
+                `ambiguity`: shape `(B, 3 * num_regions, D, H, W)`, every
+                    channel in `[0, 1]` -- `[disagreement, h_cnn, h_swin]`
+                    concatenated on the channel dim.
+                `l_c`, `l_s`: RAW region logits from the CNN and Swin
+                    branches respectively, each shape
+                    `(B, num_regions, D, H, W)`. No sigmoid applied, matching
+                    the project-wide convention that heads emit logits and the
+                    loss applies its own.
+        """
+        l_c = self.cnn_logits(cnn_feat)
+        l_s = self.swin_logits(swin_proj)
+
+        p_c = torch.sigmoid(l_c)
+        p_s = torch.sigmoid(l_s)
+
+        disagreement = (p_c - p_s).abs()
+
+        # eps clamp is LOAD-BEARING, not defensive style: a saturated logit
+        # gives p exactly 0.0 or 1.0 in floating point, log(0) is -inf, and
+        # 0 * -inf is NaN. A trained (or even just confident, early-training)
+        # branch saturates routinely, and a NaN here would propagate silently
+        # into the gate and then into every downstream feature with no error
+        # anywhere.
+        eps = 1e-6
+        p_c_clamped = p_c.clamp(eps, 1.0 - eps)
+        p_s_clamped = p_s.clamp(eps, 1.0 - eps)
+
+        # Per-channel Bernoulli entropy, normalized to [0, 1] by dividing by
+        # ln 2 (its maximum, at p=0.5). cnn_feat/swin_proj are GroupNorm'd and
+        # roughly unit-scale; an un-normalized entropy (max 0.693 nats) and a
+        # disagreement already in [0, 1] would otherwise enter the gate's
+        # first conv at two arbitrarily different scales for no reason.
+        log2 = torch.log(torch.tensor(2.0, dtype=p_c.dtype, device=p_c.device))
+
+        def _entropy(p: Tensor) -> Tensor:
+            return -(p * torch.log(p) + (1.0 - p) * torch.log(1.0 - p)) / log2
+
+        h_c = _entropy(p_c_clamped)
+        h_s = _entropy(p_s_clamped)
+
+        # Per-region, not summed to one channel: ET is the region the
+        # calibration claim leans on, and summing would make an ET-only
+        # disagreement indistinguishable from a WT-only one -- exactly the
+        # distinction the gate needs to condition on.
+        #
+        # Memory: at the finest fused level (stride 2, 48^3 tokens from a 96^3
+        # patch) this is 3 * num_regions = 9 channels, ~1 MB/sample in fp16 --
+        # negligible against the ~790 MB that level's attention already costs.
+        ambiguity = torch.cat([disagreement, h_c, h_s], dim=1)
+        return ambiguity, l_c, l_s
+
+
 class GateGenerator(nn.Module):
     """Predicts a spatially-varying gate from the concatenated branch features.
 
-    `Conv3d(2C, hidden, 1) -> GroupNorm -> LeakyReLU -> Conv3d(hidden, out, 3)
-    -> Sigmoid`. See `AdaptiveGatedFusion`'s docstring for why the gate exists
-    and how it is used in the merge.
+    `Conv3d(2C [+ extra], hidden, 1) -> GroupNorm -> LeakyReLU ->
+    Conv3d(hidden, out, 3) -> Sigmoid`. See `AdaptiveGatedFusion`'s docstring
+    for why the gate exists and how it is used in the merge.
 
     Args:
         cnn_channels: CNN branch channel width `C`. The input to this module
             is `2 * C` wide (CNN feature concatenated with projected Swin
-            feature).
+            feature) plus `extra_channels` when ambiguity conditioning is on.
         gate_channels: `"scalar"` for a single gate value per voxel
             (broadcasts over channels) or `"channel"` for one gate value per
             channel per voxel.
         gate_reduction: Bottleneck reduction factor for the hidden width.
         num_groups: GroupNorm group count.
+        extra_channels: Width of an additional signal concatenated onto the
+            gate's input alongside the two branch features -- the
+            `BranchAmbiguity` output when ambiguity conditioning is enabled,
+            0 otherwise (the content-only ablation).
     """
 
     def __init__(
-        self, cnn_channels: int, gate_channels: str, gate_reduction: int, num_groups: int
+        self,
+        cnn_channels: int,
+        gate_channels: str,
+        gate_reduction: int,
+        num_groups: int,
+        extra_channels: int = 0,
     ) -> None:
         super().__init__()
         # Guarantees hidden % num_groups == 0 (GroupNorm's requirement) and a
@@ -379,7 +517,10 @@ class GateGenerator(nn.Module):
         hidden = max(num_groups, (cnn_channels // gate_reduction // num_groups) * num_groups)
         gate_out = 1 if gate_channels == "scalar" else cnn_channels
 
-        self.conv_in = nn.Conv3d(2 * cnn_channels, hidden, kernel_size=1, bias=False)
+        self.extra_channels = extra_channels
+        self.conv_in = nn.Conv3d(
+            2 * cnn_channels + extra_channels, hidden, kernel_size=1, bias=False
+        )
         self.norm = nn.GroupNorm(num_groups, hidden)
         self.act = nn.LeakyReLU(negative_slope=0.01, inplace=True)
         # kernel_size=3, not 1: the gate decides WHERE transformer context is
@@ -401,19 +542,44 @@ class GateGenerator(nn.Module):
         # exists to learn.
         nn.init.zeros_(self.conv_out.bias)
 
-    def forward(self, cnn_feat: Tensor, swin_proj: Tensor) -> Tensor:
+    def forward(
+        self, cnn_feat: Tensor, swin_proj: Tensor, ambiguity: Tensor | None = None
+    ) -> Tensor:
         """Computes the gate map.
 
         Args:
             cnn_feat: CNN branch feature, shape `(B, C, D, H, W)`.
             swin_proj: Channel-projected Swin feature, shape
                 `(B, C, D, H, W)`.
+            ambiguity: The `BranchAmbiguity` output, shape
+                `(B, extra_channels, D, H, W)`, or `None` when
+                `extra_channels == 0`.
 
         Returns:
             Gate, shape `(B, 1, D, H, W)` (scalar) or `(B, C, D, H, W)`
             (channel), values in `(0, 1)`.
+
+        Raises:
+            ValueError: If `ambiguity` is supplied but this instance has
+                `extra_channels == 0`, or omitted while `extra_channels > 0`.
+                A silently-ignored (or silently-missing) ambiguity tensor
+                would make the content-only ablation and the full model
+                numerically identical while the config claims they differ.
         """
-        x = torch.cat([cnn_feat, swin_proj], dim=1)
+        if self.extra_channels == 0:
+            if ambiguity is not None:
+                raise ValueError(
+                    "GateGenerator was built with extra_channels=0 (no ambiguity "
+                    "conditioning) but an ambiguity tensor was passed in."
+                )
+            x = torch.cat([cnn_feat, swin_proj], dim=1)
+        else:
+            if ambiguity is None:
+                raise ValueError(
+                    f"GateGenerator was built with extra_channels={self.extra_channels} "
+                    "and requires an ambiguity tensor of that width, but none was passed."
+                )
+            x = torch.cat([cnn_feat, swin_proj, ambiguity], dim=1)
         x = self.act(self.norm(self.conv_in(x)))
         return self.sigmoid(self.conv_out(x))
 
@@ -477,6 +643,18 @@ class AdaptiveGatedFusion(FusionBlock):
         use_checkpoint: If True, checkpoint the fusion computation during
             training to trade compute for activation memory. Ignored when
             `return_gate=True` — see `forward`.
+        use_ambiguity: If True (the default), condition the gate on the
+            explicit inter-branch ambiguity signal (`BranchAmbiguity`) --
+            this is the project's actual contribution, see
+            `docs/research/contribution.md`. If False, the gate sees only
+            `[cnn_feat, swin_proj]`, i.e. the content-only ablation
+            (rung 2 of the P2 ablation ladder); `BranchAmbiguity` is not
+            constructed at all in that case, so the ablation is genuinely
+            parameter-matched-minus-the-mechanism rather than a
+            built-but-unused module inflating the parameter count.
+        num_regions: Number of region channels each branch's auxiliary
+            projection predicts (ET/TC/WT -> 3). Unused when
+            `use_ambiguity=False`.
 
     Raises:
         ValueError: If `cnn_channels % num_heads != 0`,
@@ -498,6 +676,8 @@ class AdaptiveGatedFusion(FusionBlock):
         proj_dropout: float = 0.0,
         layer_scale_init: float = 1e-4,
         use_checkpoint: bool = False,
+        use_ambiguity: bool = True,
+        num_regions: int = 3,
     ) -> None:
         super().__init__(cnn_channels, swin_channels)
 
@@ -515,13 +695,26 @@ class AdaptiveGatedFusion(FusionBlock):
             raise ValueError(f"gate_channels must be 'scalar' or 'channel', got {gate_channels!r}.")
 
         self.use_checkpoint = use_checkpoint
+        self.use_ambiguity = use_ambiguity
 
         # bias=False: GroupNorm immediately follows and applies its own
         # learned per-channel shift, matching the convention in cnn.py.
         self.swin_proj_conv = nn.Conv3d(swin_channels, cnn_channels, kernel_size=1, bias=False)
         self.swin_proj_norm = nn.GroupNorm(num_groups, cnn_channels)
 
-        self.gate_generator = GateGenerator(cnn_channels, gate_channels, gate_reduction, num_groups)
+        # BranchAmbiguity is only constructed when the ablation asks for it --
+        # not built-but-unused, so the content-only ablation is genuinely
+        # parameter-free in this respect (see the arg docstring above).
+        if use_ambiguity:
+            self.ambiguity = BranchAmbiguity(cnn_channels, num_regions)
+            extra_channels = self.ambiguity.out_channels
+        else:
+            self.ambiguity = None
+            extra_channels = 0
+
+        self.gate_generator = GateGenerator(
+            cnn_channels, gate_channels, gate_reduction, num_groups, extra_channels=extra_channels
+        )
         self.cross_attn = WindowedCrossAttention(
             cnn_channels,
             num_heads,
@@ -533,7 +726,9 @@ class AdaptiveGatedFusion(FusionBlock):
 
         self.layer_scale = nn.Parameter(torch.full((1, cnn_channels, 1, 1, 1), layer_scale_init))
 
-    def _fuse(self, cnn_feat: Tensor, swin_feat: Tensor) -> tuple[Tensor, Tensor]:
+    def _fuse(
+        self, cnn_feat: Tensor, swin_feat: Tensor
+    ) -> tuple[Tensor, Tensor, tuple[Tensor, Tensor] | None]:
         """The actual fusion computation, factored out so it can be
         optionally wrapped in `torch.utils.checkpoint.checkpoint`.
 
@@ -542,16 +737,27 @@ class AdaptiveGatedFusion(FusionBlock):
             swin_feat: shape `(B, swin_channels, D, H, W)`.
 
         Returns:
-            `(fused, gate)`, `fused` shape `(B, cnn_channels, D, H, W)`,
-            `gate` shape `(B, 1 or cnn_channels, D, H, W)`.
+            `(fused, gate, branch_logits)`. `fused` shape
+            `(B, cnn_channels, D, H, W)`, `gate` shape
+            `(B, 1 or cnn_channels, D, H, W)`. `branch_logits` is the
+            `(l_c, l_s)` pair from `BranchAmbiguity` when `use_ambiguity` is
+            True, else `None`.
         """
         swin_proj = self.swin_proj_norm(self.swin_proj_conv(swin_feat))
-        gate = self.gate_generator(cnn_feat, swin_proj)
+
+        if self.ambiguity is not None:
+            ambiguity, l_c, l_s = self.ambiguity(cnn_feat, swin_proj)
+            gate = self.gate_generator(cnn_feat, swin_proj, ambiguity)
+            branch_logits: tuple[Tensor, Tensor] | None = (l_c, l_s)
+        else:
+            gate = self.gate_generator(cnn_feat, swin_proj)
+            branch_logits = None
+
         attn_out = self.cross_attn(cnn_feat, swin_proj)
         # Broadcasting handles both the scalar gate (1 channel) and the
         # per-channel gate (cnn_channels channels) with the same expression.
         fused = cnn_feat + self.layer_scale * gate * attn_out
-        return fused, gate
+        return fused, gate, branch_logits
 
     def forward(
         self, cnn_feat: Tensor, swin_feat: Tensor, return_gate: bool = False
@@ -573,7 +779,7 @@ class AdaptiveGatedFusion(FusionBlock):
             # for what is only a debug/visualization path (plotting the gate
             # map for the paper) -- always take the plain, non-checkpointed
             # path when the caller wants the gate.
-            fused, gate = self._fuse(cnn_feat, swin_feat)
+            fused, gate, _branch_logits = self._fuse(cnn_feat, swin_feat)
             return fused, gate
 
         # Same guard as CNNEncoder.forward: only checkpoint in training with
@@ -581,10 +787,44 @@ class AdaptiveGatedFusion(FusionBlock):
         # gradient at all when nothing in the input requires grad, which is
         # exactly the eval/no_grad case.
         if self.use_checkpoint and self.training and torch.is_grad_enabled():
-            fused, _gate = checkpoint(self._fuse, cnn_feat, swin_feat, use_reentrant=False)
+            fused, _gate, _branch_logits = checkpoint(
+                self._fuse, cnn_feat, swin_feat, use_reentrant=False
+            )
         else:
-            fused, _gate = self._fuse(cnn_feat, swin_feat)
+            fused, _gate, _branch_logits = self._fuse(cnn_feat, swin_feat)
         return fused
+
+    def forward_with_branch_logits(
+        self, cnn_feat: Tensor, swin_feat: Tensor
+    ) -> tuple[Tensor, tuple[Tensor, Tensor] | None]:
+        """Fuses one level and also returns the per-branch ambiguity logits.
+
+        The branch logits are what `BranchAmbiguity` reads out from each
+        encoder branch independently -- exposed here so a caller (e.g. a
+        deep-supervision-style loss on the ambiguity mechanism itself) can
+        supervise them directly. Uses the SAME checkpointing guard as
+        `forward`: checkpointing is what keeps this block inside the 16 GB
+        VRAM budget, and the supervised-training path is exactly where that
+        matters.
+
+        Args:
+            cnn_feat: shape `(B, cnn_channels, D, H, W)`.
+            swin_feat: shape `(B, swin_channels, D, H, W)`.
+
+        Returns:
+            `(fused, branch_logits)`. `branch_logits` is `(l_c, l_s)`, each
+            shape `(B, num_regions, D, H, W)`, when `use_ambiguity` is True;
+            `None` otherwise.
+        """
+        self._validate_inputs(cnn_feat, swin_feat)
+
+        if self.use_checkpoint and self.training and torch.is_grad_enabled():
+            fused, _gate, branch_logits = checkpoint(
+                self._fuse, cnn_feat, swin_feat, use_reentrant=False
+            )
+        else:
+            fused, _gate, branch_logits = self._fuse(cnn_feat, swin_feat)
+        return fused, branch_logits
 
 
 class ConcatFusion(FusionBlock):
@@ -693,7 +933,10 @@ def build_adaptive_gated_fusion(
         cfg: The full composed Hydra config, exposing `cfg.model.fusion` with
             keys `num_heads`, `window_size`, `full_attention_max_tokens`,
             `gate_channels`, `gate_reduction`, `num_groups`, `attn_dropout`,
-            `proj_dropout`, `layer_scale_init`, `use_checkpoint`.
+            `proj_dropout`, `layer_scale_init`, `use_checkpoint`, and
+            optionally `use_ambiguity` (default True when absent, so an
+            older config composed before this key existed still builds).
+            `num_regions` is read from `cfg.model.out_channels`.
         cnn_channels: CNN branch channel width at this level.
         swin_channels: Swin branch channel width at this level.
         level: Index into the fused pyramid (0 = finest). Unused by this
@@ -721,6 +964,8 @@ def build_adaptive_gated_fusion(
         proj_dropout=fusion_cfg.proj_dropout,
         layer_scale_init=fusion_cfg.layer_scale_init,
         use_checkpoint=fusion_cfg.use_checkpoint,
+        use_ambiguity=fusion_cfg.get("use_ambiguity", True),
+        num_regions=cfg.model.out_channels,
     )
     logger.debug(
         "Built AdaptiveGatedFusion for level %d: cnn=%d ch, swin=%d ch",

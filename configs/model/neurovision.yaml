@@ -67,6 +67,13 @@ fusion:
   proj_dropout: 0.0
   layer_scale_init: 1.0e-4
   use_checkpoint: false
+  # This single key is what isolates the project's actual contribution (see
+  # docs/research/contribution.md): the gate is conditioned on an explicit
+  # inter-branch ambiguity signal, not on branch content alone. true -> the
+  # full gate (ours). false -> the content-only gate -- same architecture,
+  # disagreement/entropy channels removed -- which is rung 2 of the P2
+  # ablation ladder (fixed scalar blend < content-only gate < full gate).
+  use_ambiguity: true
 
 decoder:
   # null -> mirror the skip widths (UNetDecoder's own default: decoder_channels =
@@ -89,7 +96,31 @@ decoder:
 head:
   # Segmentation head dropout. Non-zero is what makes MC-dropout uncertainty
   # possible later: a model trained at p=0.0 has no predictive spread to measure.
-  dropout: 0.0
+  #
+  # 0.1, and this is a decision that CANNOT be retrofitted -- it changes training,
+  # so a checkpoint trained at 0.0 can never be given a meaningful epistemic map
+  # afterwards. It has to be right before the run starts.
+  #
+  # Why here and not in the decoder. Before this was set, the CNN encoder
+  # (model.encoder.cnn.dropout: 0.1) was the ONLY source of MC-dropout
+  # stochasticity in the whole network, and it is a weak one: its Dropout3d sits
+  # before `conv2 -> norm2` in each ResidualBlock, and `zero_init_residual: true`
+  # zeroes norm2.weight, so at init the perturbation is multiplied by exactly zero
+  # and mutual information comes out 0 at every voxel (measured). That resolves
+  # after one optimizer step, but it shows how thin the margin was.
+  #
+  # The segmentation head is the classic MC-dropout placement: Dropout3d
+  # immediately before the 1x1x1 logit conv, so it perturbs the prediction
+  # directly without degrading any intermediate feature, and with deep supervision
+  # on there are three such heads. It also cannot be annihilated by a
+  # zero-initialized norm the way the encoder's can.
+  #
+  # decoder.dropout above deliberately stays 0.0. Dropout3d drops WHOLE CHANNELS,
+  # and doing that through the decoder at full resolution is a direct threat to the
+  # boundary-accuracy half of the research claim -- the thing the paper is actually
+  # about. Buying uncertainty diversity at the cost of boundary detail is the wrong
+  # trade here.
+  dropout: 0.1
 
   # The confidence head predicts, per voxel and per region, whether the
   # segmentation head's own prediction is correct there. Its target is built at

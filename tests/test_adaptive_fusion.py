@@ -14,7 +14,9 @@ from omegaconf import OmegaConf
 from neurovision.models.fusion.adaptive_fusion import (
     AdaptiveGatedFusion,
     AddFusion,
+    BranchAmbiguity,
     ConcatFusion,
+    GateGenerator,
     _window_partition,
     _window_reverse,
 )
@@ -22,12 +24,14 @@ from neurovision.models.fusion.registry import available_fusions, build_fusion
 
 CNN_CHANNELS = 32
 SWIN_CHANNELS = 48
+NUM_REGIONS = 3
 
 
 def _cfg(**overrides: object) -> object:
     """Builds a full composed config mirroring cfg.model.fusion."""
     base = {
         "model": {
+            "out_channels": NUM_REGIONS,
             "fusion": {
                 "name": "adaptive_gated",
                 "num_heads": 4,
@@ -40,7 +44,7 @@ def _cfg(**overrides: object) -> object:
                 "proj_dropout": 0.0,
                 "layer_scale_init": 1e-4,
                 "use_checkpoint": False,
-            }
+            },
         },
     }
     cfg = OmegaConf.create(base)
@@ -462,3 +466,244 @@ def test_build_fusion_returns_add() -> None:
 def test_build_fusion_unknown_name_raises_and_names_available() -> None:
     with pytest.raises(ValueError, match="adaptive_gated"):
         build_fusion(_cfg(name="bogus"), CNN_CHANNELS, SWIN_CHANNELS, level=0)
+
+
+# ---------------------------------------------------------------------------
+# ambiguity-conditioned gate
+# ---------------------------------------------------------------------------
+
+
+def test_ambiguity_on_forward_and_forward_with_branch_logits_shapes() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    out = block(cnn_feat, swin_feat)
+    assert isinstance(out, torch.Tensor)
+    assert out.shape == (1, CNN_CHANNELS, 8, 8, 8)
+
+    fused, branch_logits = block.forward_with_branch_logits(cnn_feat, swin_feat)
+    assert fused.shape == (1, CNN_CHANNELS, 8, 8, 8)
+    assert branch_logits is not None
+    l_c, l_s = branch_logits
+    assert l_c.shape == (1, NUM_REGIONS, 8, 8, 8)
+    assert l_s.shape == (1, NUM_REGIONS, 8, 8, 8)
+
+
+def test_ambiguity_off_forward_with_branch_logits_returns_none_and_fewer_params() -> None:
+    block_on = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block_off = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=False
+    )
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    fused, branch_logits = block_off.forward_with_branch_logits(cnn_feat, swin_feat)
+    assert fused.shape == (1, CNN_CHANNELS, 8, 8, 8)
+    assert branch_logits is None
+
+    n_params_on = sum(p.numel() for p in block_on.parameters())
+    n_params_off = sum(p.numel() for p in block_off.parameters())
+    # Proves the ablation actually removes parameters rather than building an
+    # unused BranchAmbiguity module.
+    assert n_params_off < n_params_on
+
+
+def test_gate_generator_conv_in_channels_reflect_ambiguity_switch() -> None:
+    block_on = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block_off = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=False
+    )
+    assert block_on.gate_generator.conv_in.in_channels == 2 * CNN_CHANNELS + 3 * NUM_REGIONS
+    assert block_off.gate_generator.conv_in.in_channels == 2 * CNN_CHANNELS
+    assert block_off.ambiguity is None
+
+
+def test_branch_ambiguity_output_ranges_are_bounded() -> None:
+    ambiguity_module = BranchAmbiguity(CNN_CHANNELS, NUM_REGIONS)
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+    swin_proj = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+
+    ambiguity, l_c, l_s = ambiguity_module(cnn_feat, swin_proj)
+
+    assert ambiguity.shape == (1, 3 * NUM_REGIONS, 4, 4, 4)
+    assert torch.all(ambiguity >= 0.0)
+    assert torch.all(ambiguity <= 1.0)
+    assert l_c.shape == (1, NUM_REGIONS, 4, 4, 4)
+    assert l_s.shape == (1, NUM_REGIONS, 4, 4, 4)
+
+
+def test_branch_ambiguity_saturated_logits_stay_finite() -> None:
+    # Drives both branch logit convs to saturation: without the eps clamp
+    # before the entropy logs, this produces NaN (log(0) = -inf, 0 * -inf =
+    # NaN) that would silently propagate into the gate and every downstream
+    # feature. Confirmed to fail without the clamp during development.
+    ambiguity_module = BranchAmbiguity(CNN_CHANNELS, NUM_REGIONS)
+    with torch.no_grad():
+        ambiguity_module.cnn_logits.weight.fill_(1e4)
+        ambiguity_module.swin_logits.weight.fill_(1e4)
+
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+    swin_proj = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+
+    ambiguity, l_c, l_s = ambiguity_module(cnn_feat, swin_proj)
+
+    assert torch.isfinite(ambiguity).all()
+    assert torch.isfinite(l_c).all()
+    assert torch.isfinite(l_s).all()
+
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    with torch.no_grad():
+        block.ambiguity.cnn_logits.weight.fill_(1e4)
+        block.ambiguity.swin_logits.weight.fill_(1e4)
+        out = block(torch.randn(1, CNN_CHANNELS, 8, 8, 8), torch.randn(1, SWIN_CHANNELS, 8, 8, 8))
+    assert torch.isfinite(out).all()
+
+
+def test_branch_ambiguity_zeroed_weights_give_exact_disagreement_zero_entropy_one() -> None:
+    # Pins the normalization constant (ln 2): with both logit conv WEIGHTS
+    # zeroed (biases are already zero-initialized), every branch predicts
+    # p=0.5 everywhere regardless of input, so disagreement is exactly 0 and
+    # Bernoulli entropy at p=0.5 is exactly its maximum -- 1.0 after the
+    # ln(2) normalization. A wrong normalization constant would show up here
+    # and nowhere else.
+    ambiguity_module = BranchAmbiguity(CNN_CHANNELS, NUM_REGIONS)
+    with torch.no_grad():
+        ambiguity_module.cnn_logits.weight.zero_()
+        ambiguity_module.swin_logits.weight.zero_()
+
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+    swin_proj = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+
+    ambiguity, l_c, l_s = ambiguity_module(cnn_feat, swin_proj)
+    disagreement, h_c, h_s = ambiguity.split(NUM_REGIONS, dim=1)
+
+    assert torch.equal(disagreement, torch.zeros_like(disagreement))
+    assert torch.allclose(h_c, torch.ones_like(h_c))
+    assert torch.allclose(h_s, torch.ones_like(h_s))
+
+
+def test_gradient_reaches_both_branch_logit_convs_through_gate_alone() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    fused = block(cnn_feat, swin_feat)
+    fused.sum().backward()
+
+    cnn_logits_grad = block.ambiguity.cnn_logits.weight.grad
+    swin_logits_grad = block.ambiguity.swin_logits.weight.grad
+    assert cnn_logits_grad is not None
+    assert torch.any(cnn_logits_grad != 0.0)
+    assert swin_logits_grad is not None
+    assert torch.any(swin_logits_grad != 0.0)
+
+
+def test_gradient_survives_checkpointing_for_branch_logits() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS,
+        SWIN_CHANNELS,
+        num_heads=4,
+        window_size=4,
+        use_ambiguity=True,
+        use_checkpoint=True,
+    )
+    block.train()
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8, requires_grad=True)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8, requires_grad=True)
+
+    fused, branch_logits = block.forward_with_branch_logits(cnn_feat, swin_feat)
+    assert branch_logits is not None
+    l_c, l_s = branch_logits
+
+    loss = fused.sum() + l_c.sum() + l_s.sum()
+    loss.backward()
+
+    cnn_logits_grad = block.ambiguity.cnn_logits.weight.grad
+    swin_logits_grad = block.ambiguity.swin_logits.weight.grad
+    assert cnn_logits_grad is not None
+    assert torch.any(cnn_logits_grad != 0.0)
+    assert swin_logits_grad is not None
+    assert torch.any(swin_logits_grad != 0.0)
+
+
+def test_zero_layer_scale_init_is_exact_identity_with_ambiguity_on() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS,
+        SWIN_CHANNELS,
+        num_heads=4,
+        window_size=4,
+        layer_scale_init=0.0,
+        use_ambiguity=True,
+    )
+    block.eval()
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    with torch.no_grad():
+        out = block(cnn_feat, swin_feat)
+
+    assert torch.equal(out, cnn_feat)
+
+
+def test_concat_and_add_fusion_forward_with_branch_logits_returns_none() -> None:
+    concat_block = ConcatFusion(CNN_CHANNELS, SWIN_CHANNELS)
+    add_block = AddFusion(CNN_CHANNELS, SWIN_CHANNELS)
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 6, 6, 6)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 6, 6, 6)
+
+    fused, branch_logits = concat_block.forward_with_branch_logits(cnn_feat, swin_feat)
+    assert isinstance(fused, torch.Tensor)
+    assert branch_logits is None
+
+    fused, branch_logits = add_block.forward_with_branch_logits(cnn_feat, swin_feat)
+    assert isinstance(fused, torch.Tensor)
+    assert branch_logits is None
+
+
+def test_build_fusion_defaults_use_ambiguity_true_when_key_absent() -> None:
+    # An older config composed before use_ambiguity existed must still build,
+    # and must build the full (ambiguity-conditioned) gate -- not silently
+    # fall back to the content-only ablation.
+    cfg = _cfg(name="adaptive_gated")
+    assert "use_ambiguity" not in cfg.model.fusion
+    block = build_fusion(cfg, CNN_CHANNELS, SWIN_CHANNELS, level=0)
+    assert isinstance(block, AdaptiveGatedFusion)
+    assert block.use_ambiguity is True
+    assert block.ambiguity is not None
+
+
+def test_build_fusion_respects_use_ambiguity_false() -> None:
+    cfg = _cfg(name="adaptive_gated", use_ambiguity=False)
+    block = build_fusion(cfg, CNN_CHANNELS, SWIN_CHANNELS, level=0)
+    assert isinstance(block, AdaptiveGatedFusion)
+    assert block.use_ambiguity is False
+    assert block.ambiguity is None
+
+
+def test_gate_generator_raises_on_extra_channels_ambiguity_mismatch() -> None:
+    gate_off = GateGenerator(
+        CNN_CHANNELS, gate_channels="scalar", gate_reduction=4, num_groups=8, extra_channels=0
+    )
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+    swin_proj = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+    bogus_ambiguity = torch.randn(1, 9, 4, 4, 4)
+
+    with pytest.raises(ValueError, match="extra_channels"):
+        gate_off(cnn_feat, swin_proj, ambiguity=bogus_ambiguity)
+
+    gate_on = GateGenerator(
+        CNN_CHANNELS, gate_channels="scalar", gate_reduction=4, num_groups=8, extra_channels=9
+    )
+    with pytest.raises(ValueError, match="extra_channels"):
+        gate_on(cnn_feat, swin_proj, ambiguity=None)

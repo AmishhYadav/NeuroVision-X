@@ -101,6 +101,16 @@ class NeuroVisionX(nn.Module):
             `head_dropout`. Keyword-only and optional so every existing direct construction
             of `NeuroVisionX` (throughout `tests/`) keeps working unchanged. When supplied,
             `len(heads.seg_heads)` must equal `deep_supervision_levels`.
+        supervise_branch_logits: If True, `forward` collects each fusion block's per-branch
+            ambiguity logits (`AdaptiveGatedFusion.forward_with_branch_logits`) and attaches
+            them to `MultiTaskOutput.branch_logits` -- so a loss can supervise the CNN and
+            Swin branches' independent region predictions directly, which is what makes the
+            gate's disagreement signal mean "the two branches disagree about the LABEL"
+            rather than just "the two branches differ" (see
+            `neurovision.models.fusion.adaptive_fusion.BranchAmbiguity`). Only takes effect
+            in training mode with an auxiliary head enabled -- see `forward`'s docstring for
+            the full return-type switch. Keyword-only, default False, so every existing
+            construction of `NeuroVisionX` keeps working unchanged.
 
     Raises:
         ValueError: If any of the construction-time consistency checks below fails. Each
@@ -118,6 +128,7 @@ class NeuroVisionX(nn.Module):
         head_dropout: float = 0.0,
         *,
         heads: MultiTaskHead | None = None,
+        supervise_branch_logits: bool = False,
     ) -> None:
         super().__init__()
 
@@ -203,6 +214,7 @@ class NeuroVisionX(nn.Module):
         self.fusion_blocks = fusion_blocks
         self.decoder = decoder
         self.deep_supervision_levels = deep_supervision_levels
+        self.supervise_branch_logits = supervise_branch_logits
 
         # self.heads is a MultiTaskHead (owns the segmentation heads AND the optional
         # confidence / boundary heads), not a bare nn.ModuleList of segmentation heads --
@@ -220,7 +232,9 @@ class NeuroVisionX(nn.Module):
             )
         )
 
-    def _encode_decode(self, x: Tensor) -> list[Tensor]:
+    def _encode_decode(
+        self, x: Tensor, collect_branch_logits: bool = False
+    ) -> tuple[list[Tensor], list[tuple[Tensor, Tensor]] | None]:
         """Shared encoder -> fusion -> decoder body used by every forward path.
 
         Factored out so `forward`, `forward_multitask`, and `forward_with_gates` do not each
@@ -230,10 +244,20 @@ class NeuroVisionX(nn.Module):
 
         Args:
             x: Input MRI volume, shape `(B, in_channels, D, H, W)`.
+            collect_branch_logits: If True, run each fusion block's
+                `forward_with_branch_logits` instead of its plain `forward` and collect the
+                per-level `(cnn_logits, swin_logits)` pairs -- the extra ambiguity-head
+                convs cost nothing when this is False, since `forward` is called instead.
+                Ignored (nothing is collected) when there is no Swin branch, since there is
+                then nothing to fuse.
 
         Returns:
-            Fine-to-coarse decoder features (no heads applied), length
-            `decoder.num_stages`.
+            `(feats, branch_logits)`. `feats` is the fine-to-coarse decoder features (no
+            heads applied), length `decoder.num_stages`. `branch_logits` is `None` unless
+            `collect_branch_logits=True` AND every fusion level actually returned a pair --
+            a fusion variant with no ambiguity mechanism (e.g. `ConcatFusion`) makes the
+            whole list `None` rather than a list with holes, so a caller never has to
+            distinguish "no ambiguity anywhere" from "ambiguity for only some levels".
         """
         # Fine-to-coarse pyramid from the CNN branch (always present).
         cnn_pyramid = self.cnn_encoder(x)
@@ -242,16 +266,34 @@ class NeuroVisionX(nn.Module):
             swin_pyramid = self.swin_encoder(x)
             # CNN level 0 (stride 1) has no Swin counterpart and passes through unfused;
             # levels 1.. are fused one at a time with the aligned Swin level.
-            skips = [cnn_pyramid[0]] + [
-                block(cnn_pyramid[i + 1], swin_pyramid[i])
-                for i, block in enumerate(self.fusion_blocks)
-            ]
+            skips = [cnn_pyramid[0]]
+            branch_logits: list[tuple[Tensor, Tensor]] | None = (
+                [] if collect_branch_logits else None
+            )
+            missing_a_level = False
+            for i, block in enumerate(self.fusion_blocks):
+                if collect_branch_logits:
+                    fused, pair = block.forward_with_branch_logits(
+                        cnn_pyramid[i + 1], swin_pyramid[i]
+                    )
+                    if pair is None:
+                        missing_a_level = True
+                    branch_logits.append(pair)  # type: ignore[union-attr]
+                else:
+                    fused = block(cnn_pyramid[i + 1], swin_pyramid[i])
+                skips.append(fused)
+            if collect_branch_logits and missing_a_level:
+                # A partially-populated list would let a loss silently supervise only some
+                # levels -- see this method's docstring.
+                branch_logits = None
         else:
             # cnn-only ablation: the Swin encoder is never called, and every CNN level
             # passes to the decoder unfused.
             skips = cnn_pyramid
+            branch_logits = None
 
-        return self.decoder(skips)  # fine-to-coarse decoder features, no heads applied yet
+        feats = self.decoder(skips)  # fine-to-coarse decoder features, no heads applied yet
+        return feats, branch_logits
 
     def forward(self, x: Tensor) -> Tensor | list[Tensor] | MultiTaskOutput:
         """Runs the full network.
@@ -304,14 +346,26 @@ class NeuroVisionX(nn.Module):
             `eval()` mode. The auxiliary heads contain `Dropout3d` too (see
             `AuxiliaryHead`), so this applies to them exactly as it does to the segmentation
             heads.
+
+            BRANCH-LOGITS COLLECTION: when `self.training and self.supervise_branch_logits`,
+            each fusion block's `forward_with_branch_logits` runs instead of its plain
+            `forward` and the per-level `(cnn_logits, swin_logits)` pairs are attached to
+            `MultiTaskOutput.branch_logits` on the `MultiTaskOutput` return path (case 3)
+            only — the `Tensor` and `list[Tensor]` return paths never carry them, since only
+            `MultiTaskLoss` (via `training.loss.name == "multitask"`) knows what to do with
+            the field, and `build_neurovision` requires an auxiliary head whenever
+            `supervise_branch_logits` is on (see its branch-supervision guard).
         """
-        feats = self._encode_decode(x)
+        collect_branch_logits = self.training and self.supervise_branch_logits
+        feats, branch_logits = self._encode_decode(x, collect_branch_logits=collect_branch_logits)
         out = self.heads(feats)
 
         # See the docstring above: MultiTaskOutput only when an aux head is enabled and only
         # in training; list only in training with more than one segmentation head and no aux
         # head; a single tensor otherwise. This is the one place the switch happens.
         if self.training and self.heads.has_auxiliary:
+            if collect_branch_logits:
+                out.branch_logits = branch_logits
             return out
         if self.training and len(out.seg) > 1:
             return out.seg
@@ -331,9 +385,11 @@ class NeuroVisionX(nn.Module):
         Returns:
             A `MultiTaskOutput` with `seg` of length `deep_supervision_levels` and
             `confidence` / `boundary` populated according to which auxiliary heads are
-            enabled (`None` for a disabled one).
+            enabled (`None` for a disabled one). `branch_logits` is always `None` here --
+            branch-logits collection is `forward`'s job only (see its docstring), since
+            nothing yet consumes them through this path.
         """
-        feats = self._encode_decode(x)
+        feats, _branch_logits = self._encode_decode(x)
         return self.heads(feats)
 
     def forward_with_gates(self, x: Tensor) -> tuple[Tensor, list[Tensor | None]]:
@@ -396,8 +452,12 @@ def build_neurovision(cfg: Any) -> nn.Module:
     Raises:
         ValueError: If `cfg.model.deep_supervision_levels > 1` disagrees with
             `cfg.training.loss.deep_supervision.enabled` (when the latter is present at all —
-            see below), naming both config keys. Also propagates any `ValueError` raised by
-            `NeuroVisionX.__init__`'s own consistency checks.
+            see below), naming both config keys. Also raised when
+            `cfg.training.loss.multitask.branch.enabled` is True but
+            `cfg.model.fusion.use_ambiguity` is False, or no auxiliary head is enabled, or
+            `cfg.training.loss.name != "multitask"` -- each a way branch-logits supervision
+            would be silently pointless or impossible. Also propagates any `ValueError` raised
+            by `NeuroVisionX.__init__`'s own consistency checks.
     """
     cnn_encoder = build_cnn_encoder(cfg)
 
@@ -480,12 +540,54 @@ def build_neurovision(cfg: Any) -> nn.Module:
     confidence_enabled = bool(conf_cfg.get("enabled", False)) if conf_cfg is not None else False
     boundary_enabled = bool(bnd_cfg.get("enabled", False)) if bnd_cfg is not None else False
 
-    # Guard: an auxiliary head is enabled only if training.loss.name == "multitask", and vice
-    # versa. Modelled on the deep-supervision guard directly above -- same reasoning, a
-    # different silent-mismatch shape. Skipped entirely when there is no training group at
-    # all (e.g. a model-only test config), same as the deep-supervision guard.
     aux_enabled = confidence_enabled or boundary_enabled
     loss_name = OmegaConf.select(cfg, "training.loss.name", default=None)
+
+    # Guard: branch-logits supervision (training.loss.multitask.branch.enabled) needs both an
+    # ambiguity mechanism to supervise AND a MultiTaskOutput return path to carry the field
+    # out of the model. .get()/OmegaConf.select() with defaults throughout, so an older config
+    # composed before this key existed still builds -- same reasoning as the guard directly
+    # below. Skipped entirely when there is no training group at all (loss_name is None).
+    # Checked BEFORE the general aux/loss-name guard below so a branch-specific message wins:
+    # every reachable "branch_enabled and (no aux head or wrong loss)" config also satisfies
+    # that guard's own condition (it is what forces aux_enabled and loss_name=="multitask" to
+    # agree), so if it ran first it would always fire instead and a "branch" test could never
+    # observe the branch guard's own message.
+    branch_enabled = bool(
+        OmegaConf.select(cfg, "training.loss.multitask.branch.enabled", default=False)
+    )
+    if loss_name is not None:
+        use_ambiguity = bool(cfg.model.fusion.get("use_ambiguity", True))
+        if branch_enabled and not use_ambiguity:
+            raise ValueError(
+                "training.loss.multitask.branch.enabled is True but model.fusion.use_ambiguity "
+                "is False. model.fusion.use_ambiguity=false is the content-only ablation (rung "
+                "2 of the P2 ablation ladder) -- it does not construct BranchAmbiguity at all, "
+                "so there are no branch logits to supervise. Turn branch supervision off "
+                "alongside it: set training.loss.multitask.branch.enabled to false."
+            )
+        if branch_enabled and not aux_enabled:
+            raise ValueError(
+                "training.loss.multitask.branch.enabled is True but neither "
+                "model.head.confidence.enabled nor model.head.boundary.enabled is True. "
+                "Branch logits can only leave the model on the MultiTaskOutput return path "
+                "(see NeuroVisionX.forward), which requires an auxiliary head -- with both "
+                "off, the branch logits would be computed and silently discarded every step. "
+                "Enable at least one auxiliary head, or set "
+                "training.loss.multitask.branch.enabled to false."
+            )
+        if branch_enabled and loss_name != "multitask":
+            raise ValueError(
+                f"training.loss.multitask.branch.enabled is True but training.loss.name is "
+                f"'{loss_name}', not 'multitask'. No other loss knows what to do with "
+                f"MultiTaskOutput.branch_logits. Set training.loss.name to 'multitask', or "
+                f"set training.loss.multitask.branch.enabled to false."
+            )
+
+    # Guard: an auxiliary head is enabled only if training.loss.name == "multitask", and vice
+    # versa. Modelled on the deep-supervision guard above -- same reasoning, a different
+    # silent-mismatch shape. Skipped entirely when there is no training group at all (e.g. a
+    # model-only test config), same as the deep-supervision guard.
     if loss_name is not None:
         if aux_enabled and loss_name != "multitask":
             raise ValueError(
@@ -552,6 +654,7 @@ def build_neurovision(cfg: Any) -> nn.Module:
         deep_supervision_levels=deep_supervision_levels,
         head_dropout=head_cfg.dropout,
         heads=heads,
+        supervise_branch_logits=branch_enabled,
     )
 
     n_params = sum(p.numel() for p in model.parameters())

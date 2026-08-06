@@ -87,23 +87,71 @@ sessions by resume is still ONE row — sum the GPU hours.
 Written before the runs start so the plan is on record and cannot be
 retrofitted to whatever came out.
 
+### The budget this plan is cut to
+
+**60 GPU-h, two weeks, Kaggle free tier (~30 h/week), single seed.** Fixed
+2026-08-06. Every cut below follows from that number and from one ranking
+decision: **the contribution ablation outranks baseline breadth.**
+
+The reasoning. `docs/research/contribution.md` says the claim is not "we gated
+the fusion" — it is that the gate conditions on inter-branch *disagreement*.
+Rung 2 of its P2 ladder, the content-only gate, is the only run that can
+distinguish those two claims. Without it the paper reduces to "we built a fusion
+model", which is not publishable. `baseline_swinunetr` at ~25 h is 42% of the
+entire budget for a row that strengthens the results table but proves nothing
+about the mechanism. So it is cut, and the hours go to the ablation.
+
+What that costs the paper, stated plainly so it is not discovered in review:
+there is no transformer baseline trained under our schedule on our splits.
+Published SwinUNETR BraTS-2021 numbers are **not** a substitute — they are on
+the official validation set, ours is a random split of the training set, and the
+two are not comparable. The paper must say the transformer baseline is absent
+for compute reasons rather than quietly implying comparability.
+
+**Cut and not run:** `baseline_swinunetr`; the 6-row architecture ablation grid;
+P2 rung 1 (fixed scalar blend); every second and third seed. Single-seed means
+no seed-to-seed std, so **no claim may rest on a margin smaller than the
+between-run noise we cannot measure.** State it as a limitation.
+
+### Runs
+
 | Run | Config | Purpose | Est. GPU h |
 |---|---|---|---|
-| `baseline_unet3d` | `+experiment=baseline_unet3d` | Milestone-1 baseline A. The number the fusion model must beat. Re-run at the file's own 100-epoch schedule; see note 1 on the row above. | ~8 |
-| `baseline_swinunetr` | `+experiment=baseline_swinunetr` | Milestone-1 baseline B. Same schedule, same seed, same data — architecture is the only variable. | ~25 |
-| `neurovision` | `+experiment=neurovision` | The proposed model, same `_baseline_common` schedule as both baselines. | ~15 |
+| _timing probe_ | `+experiment=neurovision training.epochs=2` | **Run this first.** `neurovision` has never touched a GPU, so its ~15 h is a pure estimate. Two epochs measure the real h/epoch. If it lands above ~0.20 h/epoch the budget breaks, and the fix is to cut all three runs to 80 epochs *together* — they must share a schedule or nothing below is a controlled comparison. | ~0.5 |
+| `baseline_unet3d` | `+experiment=baseline_unet3d` | Milestone-1 baseline. The number the fusion model must be competitive with. Re-run at the file's own 100-epoch schedule; see note 1 on the row above, which is why the existing 200-epoch row cannot serve. | ~8 |
+| `neurovision` | `+experiment=neurovision` | The proposed model, same `_baseline_common` schedule as the baseline. Also serves as P2 rung 3, so the ladder's top rung costs nothing extra. | ~15 |
+| `ablation_content_only_gate` | `+experiment=ablation_content_only_gate` | **P2 rung 2 — the load-bearing experiment.** `model.fusion.use_ambiguity: false`, a one-key diff against `neurovision`, parameter-matched to within 0.018% (6,360 of 34,911,341). Isolates the ambiguity conditioning from the gate's mere existence. If it ties `neurovision` on ECE and HD95, the declared null result fires and the contribution must be rewritten as the smaller claim. | ~15 |
 
-The first two estimates are now **re-planned against measurement**, not against
-the original paper-FLOP calculation. Measured: 16.47 GPU-h for 200 U-Net epochs
-= **0.082 h/epoch**, so 100 epochs is ~8 h — the original `~12` was high by
-about 50%. SwinUNETR-B is ~3× the U-Net per epoch (62.19M params plus 20–30%
-for gradient checkpointing) → ~25 h. NeuroVision-X at 34.88M sits between them;
-that row is still a pure estimate, since nothing of that architecture has run
-on a GPU. Re-plan again once each first session reports a real epoch time.
+Evaluation is priced separately at **~7 h total**: `scripts/evaluate.py` on val
+**and** test for all three models with `inference.evaluation.save_logits=true`
+(~1 h each — `calibrate.py` refuses to fit and report on the same split, and
+temperature cannot be fit from fp16 probabilities), plus MC-dropout on **test
+only** at N=10 for `neurovision` and `baseline_unet3d` (~2 h each; MC on val as
+well would cost ~4 h and buy nothing, since risk-coverage is a test-split
+result).
 
-The 6-row fusion ablation grid runs a shortened 40-epoch schedule and is priced
-separately by `python scripts/run_ablation_grid.py` — re-run it with a measured
-`--sec-per-step` now that one exists.
+Everything else — calibration, temperature scaling, boundary stratification,
+gate extraction, explainability, figures, tables — is CPU and runs on the Mac
+for zero GPU hours. None of it belongs in a Kaggle session.
+
+Total: 0.5 + 8 + 15 + 15 + 7 = **45.5 h**, leaving ~14 h against 60 for failed
+sessions, queue time and resumes. Spend the margin on failures first. If nothing
+breaks, the best marginal use of ~6 h is `ablation_fusion_concat` at the 40-epoch
+schedule, so the paper carries one architecture-ablation row.
+
+The U-Net estimate is **re-planned against measurement**, not against the
+original paper-FLOP calculation. Measured: 16.47 GPU-h for 200 U-Net epochs =
+**0.082 h/epoch**, so 100 epochs is ~8 h — the original `~12` was high by about
+50%. The `neurovision` and `ablation_content_only_gate` rows are still pure
+estimates: 34,911,341 parameters sits between `unet3d` (12.87M) and
+SwinUNETR-B (62.19M), but parameter count is a poor predictor of step time for
+an architecture with windowed cross-attention at four scales. That is exactly
+what the timing probe exists to settle, and it is why the probe is the first
+thing that runs.
+
+`python scripts/run_ablation_grid.py` and the 6-row architecture grid it prices
+are **not part of this budget** — see the cut list above. The script stays for a
+future milestone with more hours.
 
 ---
 

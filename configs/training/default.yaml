@@ -87,6 +87,18 @@ loss:
       enabled: true
       weight: 0.05
       threshold: 0.5
+    # Supervises the two per-branch region projections BranchAmbiguity reads out
+    # (neurovision.models.fusion.adaptive_fusion) against the label. This is what makes the
+    # gate's disagreement signal mean "the two branches disagree about the LABEL here" rather
+    # than just "the two branches' features differ" -- see docs/research/contribution.md. Not
+    # a co-objective: like the confidence term, it is a small constant weight so it cannot
+    # compete with the segmentation term, which stays at exactly 1.0 (seg_weight above) so its
+    # gradient is identical across ablations. false HERE because the stock training config is
+    # what the two baselines compose against and must not change; turned on in
+    # configs/experiment/neurovision.yaml.
+    branch:
+      enabled: false
+      weight: 0.1
     surface:
       # OFF by default and this is a measured decision, not a preference.
       # MONAI's HausdorffDTLoss computes a Euclidean distance transform for

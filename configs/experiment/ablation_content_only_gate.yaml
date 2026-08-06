@@ -1,0 +1,78 @@
+# @package _global_
+#
+# P2 rung 2: the content-only gate.
+#
+#   python scripts/train.py +experiment=ablation_content_only_gate data.root_dir=/path/to/prep
+#
+# This is the single most important ablation in the project. Read
+# docs/research/contribution.md before running it.
+#
+# ## What it isolates
+#
+# The claimed contribution is not "we gated the fusion". Gated and cross-attention
+# fusion for dual-branch medical segmentation is well-trodden. The claim is about
+# *what the gate is a function of*: at each fused scale a `BranchAmbiguity` module
+# reads region logits from each branch independently and hands the gate the
+# per-voxel disagreement between them plus each branch's own predictive entropy.
+# The gate can therefore condition on a quantity a content-only gate cannot
+# compute -- "the local-texture branch and the long-range-context branch do not
+# agree about this voxel".
+#
+# `model.fusion.use_ambiguity: false` removes exactly that and nothing else. The
+# gate still exists, still resolves per voxel, still drives the same windowed
+# cross-attention and the same `cnn + layer_scale * gate * attn` merge. It simply
+# goes back to seeing only `[cnn_feat, swin_proj]`.
+#
+# If this run matches `+experiment=neurovision` on ECE and HD95, the contribution
+# is NOT the ambiguity conditioning -- it is only the gate's per-voxel spatial
+# resolution, which is a smaller and different claim, and the paper must be
+# rewritten to make that one instead. That is the declared null result in
+# contribution.md P2 and it must be reported if it happens.
+#
+# ## Why this is a fair comparison
+#
+# Two things make it fair, and both were checked rather than assumed:
+#
+#   1. Same schedule. This file includes `neurovision` (which includes
+#      `_baseline_common`), so seed, data, augmentation, optimizer, LR schedule,
+#      epochs, dropout and stopping rule are identical BY CONSTRUCTION. Only the
+#      one key below differs. Do not "fix" this into a standalone copy of
+#      neurovision.yaml -- a copy drifts, and a drifted ablation silently stops
+#      testing what it claims to test.
+#
+#   2. Parameter-matched. Measured: the full model is 34,911,341 parameters and
+#      turning `use_ambiguity` off removes 6,360 of them -- 0.018%. So a
+#      difference between these two runs cannot be attributed to capacity.
+#      `BranchAmbiguity` is not constructed at all when the flag is off, so the
+#      removal is real and not a built-but-unused module inflating the count.
+#
+# ## Cost
+#
+# Same 100-epoch schedule as `neurovision`, so the same ~15 GPU-h across two
+# Kaggle sessions with resume. Priced into the two-week plan.
+
+defaults:
+  - neurovision
+  - _self_
+
+experiment_name: ablation_content_only_gate
+
+model:
+  fusion:
+    # The one-key diff. false -> GateGenerator is built with extra_channels=0 and
+    # sees only [cnn_feat, swin_proj]; BranchAmbiguity is never constructed.
+    use_ambiguity: false
+
+training:
+  loss:
+    multitask:
+      branch:
+        # MUST be false whenever use_ambiguity is false: with no BranchAmbiguity
+        # there are no branch logits to supervise. build_neurovision raises rather
+        # than letting a branch-supervision weight sit in the config doing nothing,
+        # which would make this run look like it had a loss term it did not have.
+        enabled: false
+
+wandb:
+  group: p2_ablation
+  tags: [ablation, p2, content_only_gate]
