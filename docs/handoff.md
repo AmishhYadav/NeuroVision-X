@@ -18,10 +18,15 @@ was never the gap; the wiring was.
 |---|---|---|
 | 1 | MC-dropout in `scripts/evaluate.py` | **done** |
 | 1b | `save_logits` in `scripts/evaluate.py` | **done** |
-| 2 | `scripts/extract_gates.py` — fusion gate maps | code complete, **NOT REVIEWED** |
-| 3 | Calibration / ECE producer | not started |
-| 4 | Boundary-stratified metrics | not started |
-| 5 | Explainability driver script | not started |
+| 2 | `scripts/extract_gates.py` — fusion gate maps | **done** (reviewed `943bb41`) |
+| 3 | Calibration / ECE producer | in progress |
+| 4 | Boundary-stratified metrics | **done** (`ac8e894`) |
+| 5 | Explainability driver script | in progress |
+
+Remaining after items 3 and 5 land: rewrite `notebooks/09_paper_figures.ipynb`
+§10 (it still describes a `--save-gates` path in `scripts/evaluate.py` that was
+never built), fold this file's content into `CLAUDE.md`'s status section, and
+delete this file.
 
 ## Item 1 — done
 
@@ -71,21 +76,22 @@ are unaffected either way — 0.9998 and 1.0 fall in the same bin.
 `logits/` is captured before the `mc_mean` branch can rebind `regions`, so it
 always means the deterministic pass.
 
-## Item 2 — code complete, NOT REVIEWED
+## Item 2 — done, reviewed in `943bb41`
 
-**Resume here.** The implementing subagent was stopped at a session boundary
-after writing `scripts/extract_gates.py` (585 lines),
-`tests/test_extract_gates.py` (541 lines, 14 passing),
-`configs/explainability/default.yaml`, and an edit to `configs/config.yaml`'s
-`defaults` list. Verified at the stop: the full suite is green (843 passed),
-`scripts/smoke_test.py` passes, and `scripts/show_config.py` composes — so the
-tree is consistent, not half-broken.
+Review found one real defect and two documentation faults:
 
-What did NOT happen: no review pass against the spec, and no check of the four
-things a subagent usually gets wrong here (crop-origin off-by-one, `None` and
-empty-list gate handling, the `has_label: False` error path, and whether the
-manifest columns match what the figure will need). Read the file before
-trusting it. The design rationale below is what the spec was built from.
+- `center_on="prediction"` advertised itself as the mode for unlabeled BraTS
+  validation cases. It cannot be: `build_gates_dataloader` reuses the shared
+  `build_val_transforms`, whose `LoadImaged` has no `allow_missing_keys=True`,
+  and `scripts/preprocess.py` writes no `label.npy` at all for such a case. The
+  path died inside MONAI without naming the case. `_validate_center_on` now
+  rejects a case with no `label.npy` in either mode, and the mode is
+  re-documented as what it really buys — a crop window chosen without
+  consulting the ground truth.
+- The test fixture claimed writing `label.npy` for a `has_label=False` case
+  matched real preprocessing output. It does not.
+- The manifest gained a `center_on` column: `wt_empty` means "no ground-truth
+  WT" under one mode and "the model predicted no WT" under the other.
 
 
 `scripts/extract_gates.py` + `configs/explainability/default.yaml`.
@@ -127,13 +133,31 @@ the wrong interface.
 Risk-coverage needs per-case uncertainty scalars (`case_uncertainty_scalars`)
 joined against per-case Dice from `per_case_metrics.csv`. Both already exist.
 
-## Items 4 and 5 — not started
+## Item 4 — done (`ac8e894`)
 
-4. Boundary-stratified metrics. `metrics/segmentation.py` scores whole regions
-   only. The distance-to-boundary machinery this needs is also what item 2's
-   gate-vs-boundary correlation wants, so build it once and reuse.
-5. Explainability driver writing attribution maps to disk, so
-   `09_paper_figures.ipynb` can stay file-driven and CPU-only.
+`src/neurovision/metrics/boundary.py` + wiring into `scripts/evaluate.py`
+behind `cfg.inference.evaluation.boundary_bands` (on by default; `null` off).
+
+- Bands stratify on the GROUND-TRUTH distance field, never the prediction's,
+  or two models would be binned by two different partitions of space.
+- Wiring is additive only — no existing Dice/HD95 column moves, which is what
+  keeps the published `baseline_unet3d` row valid. Pinned by a test that runs
+  evaluation twice and asserts frame equality on the shared columns.
+- `distance_band_means` is the generic reducer item 2's gate-vs-boundary
+  correlation also wants, so the distance machinery exists once.
+
+## Item 5 — explainability driver
+
+`scripts/explain.py` + an `attribution:` block in
+`configs/explainability/default.yaml`. Same shape as `extract_gates.py`: a
+handful of cases, one tumor-centred patch each, CPU, one `.npz` per case plus
+manifest CSVs, so `09_paper_figures.ipynb` stays file-driven.
+
+The headline output is `modality_attribution.csv`, not the heatmaps: enhancing
+tumor is clinically *defined* by contrast uptake (T1CE) and whole tumor
+includes peritumoral edema (FLAIR), so Integrated Gradients should show T1CE
+dominating for ET and FLAIR for WT. If it does not, that is a reportable
+finding about the model.
 
 ## Kaggle side — separate track, not blocked on any of the above
 
