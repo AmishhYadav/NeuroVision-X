@@ -15,8 +15,11 @@ import pandas as pd
 import pytest
 
 from neurovision.visualization.tables import (
+    build_boundary_table,
     build_results_table,
     escape_latex,
+    format_boundary_latex,
+    format_boundary_markdown,
     format_comparison_latex,
     format_comparison_markdown,
     format_results_latex,
@@ -462,3 +465,216 @@ def test_write_table_rejects_bad_stems(tmp_path, stem: str) -> None:
 def test_write_table_rejects_an_unknown_extension(tmp_path) -> None:
     with pytest.raises(ValueError, match="unsupported extension"):
         write_table("x", tmp_path, "results", "docx")
+
+
+# --------------------------------------------------------------------------- #
+# build_boundary_table
+# --------------------------------------------------------------------------- #
+def _bt_two_models() -> pd.DataFrame:
+    """One region, one band, one model clearly better (lower error) than the other."""
+    per_case = {
+        "A": pd.DataFrame(
+            {"berr_ET_0-2": [0.1, 0.1], "bn_ET_0-2": [10.0, 10.0]}, index=["c0", "c1"]
+        ),
+        "B": pd.DataFrame(
+            {"berr_ET_0-2": [0.5, 0.5], "bn_ET_0-2": [10.0, 10.0]}, index=["c0", "c1"]
+        ),
+    }
+    return build_boundary_table(per_case, metric="berr", regions=["ET"])
+
+
+def test_build_boundary_table_row_count_and_hand_computed_mean() -> None:
+    per_case = {
+        "A": pd.DataFrame(
+            {
+                "berr_ET_0-2": [0.1, 0.2, 0.3],
+                "berr_ET_2-5": [0.05, 0.06, 0.07],
+                "berr_TC_0-2": [0.4, 0.5, 0.6],
+                "berr_TC_2-5": [0.01, 0.02, 0.03],
+            },
+            index=["c0", "c1", "c2"],
+        )
+    }
+    table = build_boundary_table(per_case, metric="berr", regions=["ET", "TC"])
+    # 1 model x 2 regions x 2 bands
+    assert len(table) == 4
+    row = table[(table["region"] == "ET") & (table["band"] == "0-2")].iloc[0]
+    assert row["mean"] == pytest.approx((0.1 + 0.2 + 0.3) / 3)
+
+
+def test_build_boundary_table_orders_bands_numerically_not_lexicographically() -> None:
+    """A plain string sort would put '10-inf' before '2-5'; this pins the fix."""
+    per_case = {
+        "A": pd.DataFrame(
+            {
+                "berr_ET_0-2": [0.1],
+                "berr_ET_2-5": [0.2],
+                "berr_ET_10-inf": [0.3],
+            },
+            index=["c0"],
+        )
+    }
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    assert list(dict.fromkeys(table["band"])) == ["0-2", "2-5", "10-inf"]
+
+
+def test_build_boundary_table_parses_a_signed_band_label() -> None:
+    per_case = {"A": pd.DataFrame({"berr_ET_-inf-0": [0.1], "berr_ET_0-2": [0.2]}, index=["c0"])}
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    assert list(dict.fromkeys(table["band"])) == ["-inf-0", "0-2"]
+
+
+def test_build_boundary_table_raises_on_an_unparseable_band_label() -> None:
+    per_case = {"A": pd.DataFrame({"berr_ET_weird": [0.1]}, index=["c0"])}
+    with pytest.raises(ValueError, match="weird"):
+        build_boundary_table(per_case, metric="berr", regions=["ET"])
+
+
+def test_build_boundary_table_counts_nan_band_as_missing() -> None:
+    per_case = {
+        "A": pd.DataFrame(
+            {"berr_ET_0-2": [0.1, np.nan, 0.3, 0.4]},
+            index=["c0", "c1", "c2", "c3"],
+        )
+    }
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    row = table.iloc[0]
+    # `n` is the TOTAL case count and `n_missing` the NaN count within it --
+    # the same convention as build_results_table. Both builders feed the same
+    # paper, so the column must not mean two things.
+    assert row["n"] == 4
+    assert row["n_missing"] == 1
+    assert row["mean"] == pytest.approx((0.1 + 0.3 + 0.4) / 3)
+
+
+def test_boundary_and_results_tables_agree_on_what_n_means() -> None:
+    """Same column name, same meaning, across both builders in this module.
+
+    A divergence here is invisible in the rendered table and produces a wrong
+    denominator in a paper's "averaged over N cases" claim.
+    """
+    per_case = {
+        "A": pd.DataFrame(
+            {"dice_ET": [0.1, np.nan, 0.3, 0.4], "berr_ET_0-2": [0.1, np.nan, 0.3, 0.4]},
+            index=["c0", "c1", "c2", "c3"],
+        )
+    }
+    results_row = build_results_table(per_case, metrics=["dice"], regions=["ET"]).iloc[0]
+    boundary_row = build_boundary_table(per_case, metric="berr", regions=["ET"]).iloc[0]
+
+    assert results_row["n"] == boundary_row["n"]
+    assert results_row["n_missing"] == boundary_row["n_missing"]
+
+
+def test_build_boundary_table_mean_voxels_from_bn_columns() -> None:
+    per_case = {
+        "A": pd.DataFrame(
+            {
+                "berr_ET_0-2": [0.1, 0.2],
+                "bn_ET_0-2": [100.0, 200.0],
+                "berr_ET_2-5": [0.1, 0.2],  # no matching bn_ET_2-5 column
+            },
+            index=["c0", "c1"],
+        )
+    }
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    row_02 = table[table["band"] == "0-2"].iloc[0]
+    row_25 = table[table["band"] == "2-5"].iloc[0]
+    assert row_02["mean_voxels"] == pytest.approx(150.0)
+    assert np.isnan(row_25["mean_voxels"])
+
+
+def test_build_boundary_table_rejects_an_unknown_metric() -> None:
+    with pytest.raises(ValueError, match="berr"):
+        build_boundary_table(
+            {"A": pd.DataFrame({"berr_ET_0-2": [0.1]}, index=["c0"])}, metric="dice"
+        )
+
+
+def test_build_boundary_table_rejects_empty_input() -> None:
+    with pytest.raises(ValueError, match="at least one model"):
+        build_boundary_table({})
+
+
+def test_build_boundary_table_raises_when_no_column_matches_the_metric() -> None:
+    per_case = {"A": pd.DataFrame({"dice_ET": [0.9]}, index=["c0"])}
+    with pytest.raises(ValueError, match="berr"):
+        build_boundary_table(per_case, metric="berr", regions=["ET"])
+
+
+# --------------------------------------------------------------------------- #
+# Boundary Markdown / LaTeX rendering
+# --------------------------------------------------------------------------- #
+def test_boundary_markdown_bolds_the_lower_error_model() -> None:
+    text = format_boundary_markdown(_bt_two_models())
+    row = next(line for line in text.splitlines() if line.startswith("| ET |"))
+    assert "**0.100" in row
+    assert "**0.500" not in row
+
+
+def test_boundary_latex_bolds_the_lower_error_model() -> None:
+    text = format_boundary_latex(_bt_two_models())
+    assert "\\textbf{0.100" in text
+    assert "\\textbf{0.500" not in text
+
+
+def test_boundary_markdown_suppresses_bolding_with_one_model() -> None:
+    per_case = {"A": pd.DataFrame({"berr_ET_0-2": [0.1, 0.2]}, index=["c0", "c1"])}
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    assert "**" not in format_boundary_markdown(table)
+
+
+def test_boundary_latex_suppresses_bolding_with_one_model() -> None:
+    per_case = {"A": pd.DataFrame({"berr_ET_0-2": [0.1, 0.2]}, index=["c0", "c1"])}
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    assert "\\textbf{" not in format_boundary_latex(table)
+
+
+def test_boundary_footnote_names_excluded_cases_in_both_renderers() -> None:
+    """Regression guard: an earlier bug attached caveats only to the Markdown output."""
+    per_case = {"A": pd.DataFrame({"berr_ET_0-2": [0.1, np.nan, 0.3]}, index=["c0", "c1", "c2"])}
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    md = format_boundary_markdown(table)
+    latex = format_boundary_latex(table)
+    assert "1/3" in md
+    assert "1/3" in latex
+
+
+def test_boundary_footnote_states_the_decomposition_and_voxel_counts() -> None:
+    per_case = {
+        "A": pd.DataFrame(
+            {"berr_ET_0-2": [0.1, 0.2], "bn_ET_0-2": [100.0, 300.0]}, index=["c0", "c1"]
+        )
+    }
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    text = format_boundary_markdown(table, show_voxels=True)
+    assert "berr = bfnr + bfpr" in text
+    assert "0-2: 200" in text  # mean of 100 and 300
+
+
+def test_boundary_footnote_omits_voxel_counts_when_disabled() -> None:
+    per_case = {"A": pd.DataFrame({"berr_ET_0-2": [0.1, 0.2]}, index=["c0", "c1"])}
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    assert "Mean voxel count" not in format_boundary_markdown(table, show_voxels=False)
+
+
+def test_boundary_latex_uses_math_pm_and_does_not_double_escape() -> None:
+    per_case = {
+        "NeuroVision_X (50%)": pd.DataFrame({"berr_ET_0-2": [0.1, 0.2]}, index=["c0", "c1"])
+    }
+    table = build_boundary_table(per_case, metric="berr", regions=["ET"])
+    text = format_boundary_latex(table)
+    assert "$\\pm$" in text
+    assert "±" not in text
+    assert "\\textbackslash\\{\\}" not in text
+    assert "NeuroVision\\_X (50\\%)" in text
+
+
+def test_boundary_markdown_rejects_a_foreign_table() -> None:
+    with pytest.raises(ValueError, match="missing column"):
+        format_boundary_markdown(pd.DataFrame({"model": ["a"]}))
+
+
+def test_boundary_latex_rejects_a_foreign_table() -> None:
+    with pytest.raises(ValueError, match="missing column"):
+        format_boundary_latex(pd.DataFrame({"model": ["a"]}))

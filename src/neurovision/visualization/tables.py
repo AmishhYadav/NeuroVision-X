@@ -688,6 +688,422 @@ def format_comparison_latex(
 
 
 # --------------------------------------------------------------------------- #
+# Boundary-stratified tables
+# --------------------------------------------------------------------------- #
+# `scripts/evaluate.py` writes columns named `f"{metric}_{region}_{band}"`
+# (e.g. `berr_ET_0-2`) where `band` is produced by
+# `neurovision.metrics.boundary.band_label`. That module is NOT imported here
+# -- it pulls in scipy and torch, and this module's whole reason to exist is
+# to stay renderable with no plotting stack or torch installed. Band labels
+# are instead re-derived from the column names themselves.
+_VALID_BOUNDARY_METRICS: frozenset[str] = frozenset({"berr", "bfnr", "bfpr"})
+
+_BOUNDARY_TIDY_COLUMNS: tuple[str, ...] = (
+    "model",
+    "region",
+    "band",
+    "metric",
+    "mean",
+    "std",
+    "median",
+    "n",
+    "n_missing",
+    "mean_voxels",
+)
+
+
+def _band_lower_edge(label: str) -> float:
+    """Parses the lower (inclusive) edge out of a `band_label` string.
+
+    Splits on the LAST `-`, not the first: a signed band such as `"-inf-0"`
+    has its own leading `-`, and splitting on the first `-` would cut the
+    label in the wrong place (`"-inf-0"` -> `("", "inf-0")` instead of
+    `("-inf", "0")`). `float()` parses `"inf"` / `"-inf"` natively, so no
+    special-casing of infinities is needed beyond that.
+
+    Args:
+        label: A `band_label` output, e.g. `"0-2"`, `"10-inf"`, `"-inf-0"`.
+
+    Returns:
+        The lower edge, as a float (`-inf` is a legal result).
+
+    Raises:
+        ValueError: `label` does not split into two floats on its last `-`.
+    """
+    parts = label.rsplit("-", 1)
+    if len(parts) != 2:
+        raise ValueError(
+            f"build_boundary_table: cannot parse band label {label!r} as 'LO-HI'; found no '-' "
+            "separating the two edges."
+        )
+    try:
+        lo = float(parts[0])
+        float(parts[1])  # validated but unused -- only the lower edge sorts the table
+    except ValueError as exc:
+        raise ValueError(
+            f"build_boundary_table: cannot parse band label {label!r} as 'LO-HI' -- "
+            f"{parts[0]!r} and/or {parts[1]!r} is not a number."
+        ) from exc
+    return lo
+
+
+def build_boundary_table(
+    per_case: Mapping[str, pd.DataFrame],
+    *,
+    metric: str = "berr",
+    regions: Sequence[str] | None = None,
+    bands: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Aggregates per-case boundary-stratified error columns into a tidy table.
+
+    This is the quantitative form of the project's boundary-accuracy claim --
+    not "our HD95 is lower" but "our error rate in the 0-2 mm shell around the
+    true margin is lower". Companion to `build_results_table`, one level more
+    specific: instead of one number per (model, region, metric) it reports one
+    per (model, region, distance-from-boundary band).
+
+    Args:
+        per_case: Model display label -> that model's `per_case_metrics.csv`
+            (as written by `scripts/evaluate.py`), indexed by case id.
+            Insertion order is preserved and becomes the column order in the
+            rendered table.
+        metric: One of `"berr"` (total error rate), `"bfnr"` (under-
+            segmentation / missed tumour) or `"bfpr"` (over-segmentation /
+            spurious tumour). The column read is `f"{metric}_{region}_{band}"`.
+        regions: Regions to report, in reporting order. Defaults to
+            `REGION_ORDER`.
+        bands: Explicit band labels, in the order they should appear. `None`
+            discovers them from the column names present across `per_case`
+            and sorts by numeric lower edge -- a plain string sort would put
+            `"10-inf"` before `"2-5"` and silently reverse the table's
+            reading order.
+
+    Returns:
+        A tidy `DataFrame`, one row per (model, region, band), with columns
+        `model, region, band, metric, mean, std, median, n, n_missing,
+        mean_voxels`. `mean`/`std` (sample std, ddof=1)/`median` are computed
+        over cases, skipping any case where that band contained zero voxels
+        (rate is NaN by construction there). `n` is the TOTAL case count and
+        `n_missing` the number of those skipped as NaN -- the same convention
+        as `build_results_table`, deliberately, since one column name meaning
+        two different things across two builders in one module is a silently
+        wrong number in a paper table. A band routinely has zero voxels -- the
+        outermost band on a small tumour, or every band of a region absent
+        from the ground truth -- so `n_missing` is not decoration; a rate
+        averaged over 140 of 189 cases is a different number from the one a
+        reader assumes. `mean_voxels` is the mean of the
+        matching `bn_<region>_<band>` column when present, NaN otherwise; it
+        is what tells a reader whether a band's rate was averaged over
+        thousands of voxels per case or a handful.
+
+    Raises:
+        ValueError: `metric` is not one of `"berr"`/`"bfnr"`/`"bfpr"`,
+            `per_case` is empty, a band label cannot be parsed as `"LO-HI"`,
+            or no column in any table matches the requested metric for any
+            requested region.
+    """
+    if metric not in _VALID_BOUNDARY_METRICS:
+        raise ValueError(
+            f"build_boundary_table: metric must be one of {sorted(_VALID_BOUNDARY_METRICS)}, "
+            f"got {metric!r}."
+        )
+    if not per_case:
+        raise ValueError("build_boundary_table: `per_case` must contain at least one model.")
+
+    resolved_regions = list(regions) if regions is not None else list(REGION_ORDER)
+
+    # Discover which `f"{metric}_{region}_{band}"` columns actually exist,
+    # across every model's table, regardless of whether `bands` was given
+    # explicitly -- a caller-supplied band that matches nothing anywhere
+    # would otherwise silently produce an all-NaN row rather than a raise.
+    discovered: set[str] = set()
+    sample_columns: list[str] = []
+    for table in per_case.values():
+        sample_columns.extend(table.columns)
+        for region in resolved_regions:
+            prefix = f"{metric}_{region}_"
+            for column in table.columns:
+                if column.startswith(prefix):
+                    discovered.add(column[len(prefix) :])
+
+    if not discovered:
+        raise ValueError(
+            f"build_boundary_table: no column matched metric {metric!r} for region(s) "
+            f"{resolved_regions}. Columns present (sample): "
+            f"{sorted(set(sample_columns))[:10]}."
+        )
+
+    resolved_bands = sorted(discovered, key=_band_lower_edge) if bands is None else list(bands)
+
+    rows: list[dict[str, object]] = []
+    for model, table in per_case.items():
+        for region in resolved_regions:
+            for band in resolved_bands:
+                column = f"{metric}_{region}_{band}"
+                if column in table.columns:
+                    raw = table[column].to_numpy(dtype=float)
+                else:
+                    raw = np.array([], dtype=float)
+                values = raw[np.isfinite(raw)]
+
+                voxel_column = f"bn_{region}_{band}"
+                if voxel_column in table.columns:
+                    voxels = table[voxel_column].to_numpy(dtype=float)
+                    voxels = voxels[np.isfinite(voxels)]
+                    mean_voxels = float(voxels.mean()) if voxels.size else float("nan")
+                else:
+                    mean_voxels = float("nan")
+
+                rows.append(
+                    {
+                        "model": model,
+                        "region": region,
+                        "band": band,
+                        "metric": metric,
+                        "mean": float(values.mean()) if values.size else float("nan"),
+                        "std": float(values.std(ddof=1)) if values.size > 1 else float("nan"),
+                        "median": float(np.median(values)) if values.size else float("nan"),
+                        # `n` is the TOTAL case count and `n_missing` the NaN
+                        # count within it, exactly matching build_results_table
+                        # above. The two builders live in one module and their
+                        # output lands in one paper; `n` meaning "total" in one
+                        # table and "contributing" in the other is a silently
+                        # wrong number waiting to happen.
+                        "n": int(raw.size),
+                        "n_missing": int(raw.size - values.size),
+                        "mean_voxels": mean_voxels,
+                    }
+                )
+
+    return pd.DataFrame(rows, columns=list(_BOUNDARY_TIDY_COLUMNS))
+
+
+def _validate_boundary_tidy(table: pd.DataFrame, func_name: str) -> None:
+    """Raise unless `table` looks like `build_boundary_table` output."""
+    missing = sorted(set(_BOUNDARY_TIDY_COLUMNS) - set(table.columns))
+    if missing:
+        raise ValueError(
+            f"{func_name}: table is missing column(s) {missing}; expected the output of "
+            "build_boundary_table."
+        )
+    if table.empty:
+        raise ValueError(f"{func_name}: table is empty.")
+
+
+def _boundary_best_models(table: pd.DataFrame) -> dict[tuple[str, str], str]:
+    """Which model wins each (region, band) cell.
+
+    Unlike `_best_models`, the direction is hardcoded rather than looked up
+    through `metric_direction` -- `berr`/`bfnr`/`bfpr` are error RATES, and
+    every one of them is lower-is-better, by definition, for the whole
+    family. `metric_direction` does not know these column names and would
+    raise on them.
+    """
+    winners: dict[tuple[str, str], str] = {}
+    if table["model"].nunique() < 2:
+        # "Best per row" with one model bolds every cell, which reads as an
+        # emphasis the table has not earned. Nothing to compare, nothing to bold.
+        return winners
+    for (region, band), group in table.groupby(["region", "band"], sort=False):
+        means = group.set_index("model")["mean"]
+        means = means[np.isfinite(means)]
+        if means.empty:
+            continue
+        winners[(region, band)] = str(means.idxmin())  # lower error rate wins, always
+    return winners
+
+
+def _boundary_footnote(table: pd.DataFrame, metric: str, *, show_voxels: bool) -> str:
+    """The caveats that must travel with every boundary-stratified table.
+
+    Built once and rendered by BOTH the Markdown and the LaTeX formatter, the
+    same pattern as `_footnote` / `_comparison_footnote` above and for the
+    same reason: an earlier version of this codebase attached caveats only to
+    the Markdown output, so the compiled PDF -- the artifact that actually
+    goes in the paper -- silently dropped them.
+    """
+    parts = [
+        "Bands are distance in millimetres from the GROUND-TRUTH boundary, so every model is "
+        "stratified by the same partition of space -- a per-model stratification would not be "
+        "comparable."
+    ]
+    parts.append(f"Rates ({metric}) are per-case means over the held-out cases.")
+
+    missing = table[table["n_missing"] > 0]
+    if not missing.empty:
+        detail = ", ".join(
+            f"{row['model']} {row['region']} {row['band']}: "
+            f"{int(row['n_missing'])}/{int(row['n'])}"
+            for _, row in missing.iterrows()
+        )
+        parts.append(
+            "Cases where a band contained zero voxels are excluded from the mean rather than "
+            f"given an arbitrary penalty ({detail})."
+        )
+
+    # `metric` is always one of berr/bfnr/bfpr -- build_boundary_table raises
+    # otherwise -- so this fires unconditionally, but the check is left
+    # explicit rather than assumed in case a future metric joins the family.
+    if metric in ("berr", "bfnr", "bfpr"):
+        parts.append(
+            "berr = bfnr + bfpr exactly, by construction (missed tumour plus spurious tumour)."
+        )
+
+    if show_voxels:
+        bands_in_order = list(dict.fromkeys(table["band"]))
+        per_band = table.groupby("band", sort=False)["mean_voxels"].mean()
+        detail = ", ".join(
+            f"{band}: {per_band[band]:.0f}"
+            for band in bands_in_order
+            if np.isfinite(per_band[band])
+        )
+        if detail:
+            parts.append(f"Mean voxel count per band, averaged over models and regions: {detail}.")
+
+    return " ".join(parts)
+
+
+def _boundary_cell(row: pd.Series, *, places: int, bold: bool, emphasis: str) -> str:
+    """Render one `mean +/- std` cell for the boundary table, optionally bolded."""
+    body = f"{_fmt(float(row['mean']), places)} ± {_fmt(float(row['std']), places)}"
+    if bold and emphasis:
+        return f"{emphasis}{body}{emphasis}"
+    return body
+
+
+def format_boundary_markdown(
+    table: pd.DataFrame,
+    *,
+    caption: str | None = None,
+    precision: int = 3,
+    show_voxels: bool = True,
+) -> str:
+    """Render a `build_boundary_table` output as Markdown.
+
+    Rows are grouped by region then band; columns are models; cells are
+    `mean +/- std`. The winning (lowest-error) model per row is bolded.
+
+    Args:
+        table: Output of `build_boundary_table`.
+        caption: Optional line printed above the table.
+        precision: Decimal places for the error rates.
+        show_voxels: Include the mean voxel count per band in the footnote.
+
+    Returns:
+        The Markdown text, ending without a trailing newline.
+
+    Raises:
+        ValueError: `table` is not a `build_boundary_table` output, or is empty.
+    """
+    _validate_boundary_tidy(table, "format_boundary_markdown")
+
+    models = list(dict.fromkeys(table["model"]))
+    regions = list(dict.fromkeys(table["region"]))
+    metric = str(table["metric"].iloc[0])
+    winners = _boundary_best_models(table)
+
+    header = ["Region", "Band", *models]
+    lines: list[str] = []
+    if caption:
+        lines.extend([caption, ""])
+    lines.append("| " + " | ".join(header) + " |")
+    lines.append("|" + "|".join(["---"] * len(header)) + "|")
+
+    indexed = table.set_index(["model", "region", "band"])
+    for region in regions:
+        region_bands = list(dict.fromkeys(table.loc[table["region"] == region, "band"]))
+        for band in region_bands:
+            cells = [region, band]
+            for model in models:
+                key = (model, region, band)
+                if key not in indexed.index:
+                    cells.append("--")
+                    continue
+                cells.append(
+                    _boundary_cell(
+                        indexed.loc[key],
+                        places=precision,
+                        bold=winners.get((region, band)) == model,
+                        emphasis="**",
+                    )
+                )
+            lines.append("| " + " | ".join(cells) + " |")
+
+    lines.append("")
+    lines.append(_boundary_footnote(table, metric, show_voxels=show_voxels))
+    return "\n".join(lines)
+
+
+def format_boundary_latex(
+    table: pd.DataFrame,
+    *,
+    caption: str | None = None,
+    label: str | None = None,
+    precision: int = 3,
+    show_voxels: bool = True,
+) -> str:
+    """Render a `build_boundary_table` output as a booktabs LaTeX table.
+
+    Requires `\\usepackage{booktabs}` in the document preamble.
+
+    Args:
+        table: Output of `build_boundary_table`.
+        caption: Optional table caption. Omitted from the output when `None`.
+        label: Optional LaTeX label, used as `\\label{<label>}`. Omitted when
+            `None`.
+        precision: Decimal places for the error rates.
+        show_voxels: Include the mean voxel count per band in the footnote.
+
+    Returns:
+        The LaTeX source, ending without a trailing newline.
+
+    Raises:
+        ValueError: `table` is not a `build_boundary_table` output, or is empty.
+    """
+    _validate_boundary_tidy(table, "format_boundary_latex")
+
+    models = list(dict.fromkeys(table["model"]))
+    regions = list(dict.fromkeys(table["region"]))
+    metric = str(table["metric"].iloc[0])
+    winners = _boundary_best_models(table)
+
+    lines = ["\\begin{table}[t]", "\\centering"]
+    if caption:
+        lines.append(f"\\caption{{{escape_latex(caption)}}}")
+    if label:
+        lines.append(f"\\label{{{label}}}")
+    lines.append("\\begin{tabular}{ll" + "c" * len(models) + "}")
+    lines.append("\\toprule")
+    header = ["Region", "Band", *(escape_latex(m) for m in models)]
+    lines.append(" & ".join(header) + " \\\\")
+    lines.append("\\midrule")
+
+    indexed = table.set_index(["model", "region", "band"])
+    for region in regions:
+        region_bands = list(dict.fromkeys(table.loc[table["region"] == region, "band"]))
+        for band in region_bands:
+            cells = [escape_latex(region), escape_latex(band)]
+            for model in models:
+                key = (model, region, band)
+                if key not in indexed.index:
+                    cells.append("--")
+                    continue
+                body = _boundary_cell(indexed.loc[key], places=precision, bold=False, emphasis="")
+                # `$\pm$` rather than the literal character: a raw U+00B1 in a
+                # .tex file only compiles under a UTF-8-aware engine.
+                body = body.replace("±", "$\\pm$")
+                if winners.get((region, band)) == model:
+                    body = f"\\textbf{{{body}}}"
+                cells.append(body)
+            lines.append(" & ".join(cells) + " \\\\")
+
+    lines.extend(["\\bottomrule", "\\end{tabular}"])
+    lines.extend(_latex_note(_boundary_footnote(table, metric, show_voxels=show_voxels)))
+    lines.append("\\end{table}")
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
 # IO
 # --------------------------------------------------------------------------- #
 _ALLOWED_TABLE_EXTENSIONS: frozenset[str] = frozenset({"md", "tex", "txt", "csv"})

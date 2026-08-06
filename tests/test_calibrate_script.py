@@ -430,6 +430,21 @@ def test_build_risk_coverage_succeeds_with_matching_columns(tmp_path: Path):
     assert "uncertainty_correlation" in result
     assert result["uncertainty_correlation"]["n_cases"] == len(case_ids)
 
+    # The oracle ceiling and the random null must ship in the same table as the
+    # model curve. Without them a risk-coverage figure cannot be read at all --
+    # a model curve hugging the random line is the reportable negative result,
+    # and nothing else in the saved output would reveal it.
+    curve = result["risk_coverage"]
+    assert {"oracle_performance", "random_performance"}.issubset(curve.columns)
+    assert len(curve) == len(case_ids)
+    # Retaining every case is the same set regardless of ranking, so all three
+    # must agree at full coverage -- an end-to-end check on the alignment.
+    last = curve.iloc[-1]
+    assert last["performance"] == pytest.approx(last["oracle_performance"])
+    assert last["performance"] == pytest.approx(last["random_performance"])
+    # The oracle can never be beaten by a real ranking, at any coverage.
+    assert (curve["oracle_performance"] >= curve["performance"] - 1e-9).all()
+
 
 # ---------------------------------------------------------------------------
 # 9. configs/config.yaml still composes with the new calibration group

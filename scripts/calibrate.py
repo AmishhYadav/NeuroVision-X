@@ -786,12 +786,20 @@ def build_risk_coverage(cfg: DictConfig, apply_dir: Path) -> dict[str, Any] | No
     oracle = oracle_curve(score, higher_is_better=higher_is_better)
     random_ = random_curve(score, higher_is_better=higher_is_better)
 
+    # The oracle and random curves are saved ALONGSIDE the model's, not left in
+    # memory, because a risk-coverage figure without them cannot be read: the
+    # oracle is the ceiling no uncertainty estimate can beat, and a model curve
+    # that hugs the random line means the uncertainty carries no information
+    # about case difficulty. Both are computed over the same k = 1..N coverage
+    # grid, so the three columns align row for row.
     curve_table = pd.DataFrame(
         {
             "coverage": model_curve.coverage,
             "n_retained": model_curve.n_retained,
             "performance": model_curve.performance,
             "risk": model_curve.risk,
+            "oracle_performance": oracle.performance,
+            "random_performance": random_.performance,
         }
     )
     ref_table = referral_table(
