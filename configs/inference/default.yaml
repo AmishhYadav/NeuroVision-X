@@ -43,6 +43,23 @@ mc_dropout:
   # would then be identical, mutual information would be exactly 0 everywhere,
   # and the returned uncertainty map would look plausible and mean nothing.
   require_dropout: true
+  # "deterministic" (default): saved predictions and reported Dice/IoU/HD95
+  # always come from the single deterministic pass, so turning MC-dropout on
+  # never silently moves a number that is already reported elsewhere (e.g.
+  # docs/experiments.md). "mc_mean" re-derives the prediction from the
+  # MC-dropout mean probability instead -- an explicit opt-in for comparing
+  # against the mean-pass prediction, which makes metrics from that run NOT
+  # comparable to a deterministic-pass evaluation.
+  predictions_from: deterministic
+  # Which MCDropoutOutput tensor fields get written to disk, one .npy per
+  # case per field (see scripts/evaluate.py's _MC_FIELD_TO_DIR for the
+  # directory each maps to). Default is just the epistemic term:
+  # mutual_information -> uncertainty/ is the fixed contract
+  # notebooks/09_paper_figures.ipynb reads from. Add "mean_prob" /
+  # "predictive_entropy" / "expected_entropy" only if you need them --
+  # each one roughly doubles the per-case disk cost (see the storage-guard
+  # warning scripts/evaluate.py logs after the first case).
+  save_fields: [mutual_information]
 
 postprocess:
   threshold: 0.5

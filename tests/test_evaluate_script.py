@@ -29,6 +29,7 @@ import pytest
 import torch
 import yaml
 from omegaconf import OmegaConf
+from torch import nn
 
 from neurovision.models import baseline  # noqa: F401 -- registers "unet3d"
 from neurovision.models.registry import build_model
@@ -46,6 +47,7 @@ build_eval_dataloader = evaluate_script.build_eval_dataloader
 resolve_checkpoint = evaluate_script.resolve_checkpoint
 load_eval_model = evaluate_script.load_eval_model
 run_evaluation = evaluate_script.run_evaluation
+evaluate_case = evaluate_script.evaluate_case
 
 # 32^3 cropped inside a 40^3 original volume -- small enough to run in
 # milliseconds on CPU, with room for a [4, 36) bbox on every axis.
@@ -135,12 +137,17 @@ def _make_cfg(
     prep_dir: Path,
     splits_path: Path,
     checkpoint_dir: Path,
+    mc_dropout_overrides: dict | None = None,
     **evaluation_overrides: object,
 ) -> OmegaConf:
     """Builds a small evaluation config mirroring config.yaml + inference/default.yaml.
 
     Every value is kept tiny (32^3 volumes, a 2-level U-Net, roi_size=16, 0
     dataloader workers) so a whole evaluation run stays under a second on CPU.
+
+    `mc_dropout_overrides` merges into `inference.mc_dropout` (default off,
+    matching `configs/inference/default.yaml`), separately from
+    `**evaluation_overrides` which merges into `inference.evaluation`.
     """
     out_dir = evaluation_overrides.pop("out_dir", tmp_path / "eval_out")
 
@@ -153,6 +160,17 @@ def _make_cfg(
         "strict_arch_check": True,
     }
     evaluation.update(evaluation_overrides)
+
+    mc_dropout = {
+        "enabled": False,
+        "num_samples": 3,
+        "seed": 0,
+        "require_dropout": True,
+        "predictions_from": "deterministic",
+        "save_fields": ["mutual_information"],
+    }
+    if mc_dropout_overrides:
+        mc_dropout.update(mc_dropout_overrides)
 
     base = {
         "seed": 0,
@@ -198,6 +216,7 @@ def _make_cfg(
                 "keep_largest_only": False,
                 "et_min_volume": 0,
             },
+            "mc_dropout": mc_dropout,
             "evaluation": evaluation,
         },
     }
@@ -219,6 +238,55 @@ def _save_model_checkpoint(checkpoint_dir: Path, cfg: OmegaConf, is_best: bool =
         best_metric_mode="max",
         cfg=cfg,
         is_best=is_best,
+    )
+
+
+class _StochasticStubModel(nn.Module):
+    """Tiny model with one active `Dropout3d`, for MC-dropout tests.
+
+    `unet3d` under the tests' tiny config has `dropout: 0.0` (an
+    `nn.Identity`, per this project's convention -- see
+    `mc_dropout_predict`'s `require_dropout` guard), so it cannot exercise
+    MC-dropout's stochastic-passes path at all. This stub keeps the same
+    `(B, 4, D, H, W) -> (B, 3, D, H, W)` contract `sliding_window_predict`
+    needs (`Conv3d` with `padding=1` preserves spatial shape) but adds a
+    `Dropout3d(p=0.5)` so repeated forward passes under `dropout_enabled`
+    genuinely differ.
+
+    Channel 0 (ET) is pushed hard negative on every pass, so its
+    deterministic (eval-mode) prediction is reliably empty after
+    thresholding -- this is what lets `mi_mean_fg_ET` exercise its NaN path
+    deterministically rather than depending on random init.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.conv = nn.Conv3d(4, 3, kernel_size=3, padding=1)
+        self.dropout = nn.Dropout3d(p=0.5)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.dropout(self.conv(x))
+        out = out.clone()
+        out[:, 0] = out[:, 0] - 20.0  # ET channel: always strongly negative
+        return out
+
+
+def _save_stub_checkpoint(checkpoint_dir: Path) -> None:
+    """Checkpoints a freshly built `_StochasticStubModel`, without training."""
+    model = _StochasticStubModel()
+    optimizer = torch.optim.Adam(model.parameters())
+    fake_trained_cfg = OmegaConf.create({"model": {"name": "stub"}})
+    save_checkpoint(
+        checkpoint_dir,
+        model,
+        optimizer,
+        epoch=0,
+        global_step=0,
+        best_metric=0.5,
+        best_metric_name="val/dice_mean",
+        best_metric_mode="max",
+        cfg=fake_trained_cfg,
+        is_best=True,
     )
 
 

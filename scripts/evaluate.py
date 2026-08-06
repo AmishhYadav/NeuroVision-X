@@ -7,9 +7,23 @@ prediction volumes, and (optionally) probability maps for later calibration
 analysis. Device is resolved once from config via
 `neurovision.utils.device.get_device`, exactly like `scripts/train.py`.
 
+Also optionally runs MC-dropout uncertainty estimation
+(`neurovision.inference.mc_dropout`), gated behind
+`cfg.inference.mc_dropout.enabled` (default off, so a plain evaluation run's
+output is byte-identical to before this was wired in). When enabled, it
+writes one `.npy` array per case per configured field under
+`<out_dir>/<field_dir>/` (see `_MC_FIELD_TO_DIR` below -- `mutual_information`
+always lands in `uncertainty/`, which is the fixed contract
+`notebooks/09_paper_figures.ipynb` reads from) plus a per-case
+`uncertainty_summary.csv` of scalar summaries. Segmentation metrics still
+come from the deterministic sliding-window pass unless
+`cfg.inference.mc_dropout.predictions_from` is explicitly set to
+`"mc_mean"`.
+
 Example usage:
 
     python scripts/evaluate.py inference.evaluation.split=test
+    python scripts/evaluate.py inference.evaluation.split=test inference.mc_dropout.enabled=true
 
 The wiring is split into small functions (`build_eval_dataloader`,
 `resolve_checkpoint`, `load_eval_model`, `evaluate_case`, `run_evaluation`)
@@ -20,6 +34,8 @@ tested without going through Hydra -- see tests/test_evaluate_script.py.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +50,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from neurovision.data.dataset import build_data_dicts, build_dataset, load_splits
-from neurovision.data.transforms import build_val_transforms
+from neurovision.data.transforms import REGION_NAMES, build_val_transforms
+from neurovision.inference.mc_dropout import (
+    MCDropoutOutput,
+    logits_from_mean_prob,
+    mc_dropout_predict,
+)
 from neurovision.inference.postprocess import (
     postprocess_logits,
     regions_to_classes,
@@ -65,6 +86,24 @@ logger = logging.getLogger(__name__)
 # Relative to this file, so the script works from any working directory and on
 # any machine -- no absolute paths. Copied from scripts/train.py.
 _CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
+
+# One directory name per MCDropoutOutput tensor field. Fixed and explicit
+# (never derived from the field name itself), because `mutual_information ->
+# "uncertainty"` is a contract `notebooks/09_paper_figures.ipynb` reads from
+# directly -- renaming it here would silently break that notebook's fallback
+# logic with no error anywhere.
+_MC_FIELD_TO_DIR: dict[str, str] = {
+    "mutual_information": "uncertainty",
+    "predictive_entropy": "entropy_total",
+    "expected_entropy": "entropy_aleatoric",
+    "mean_prob": "mc_mean_prob",
+}
+
+# Storage-guard threshold: above this projected total, the one-time log line
+# below calls out Kaggle's 20 GB /kaggle/working quota explicitly.
+_MC_STORAGE_WARN_BYTES = 15 * (1024**3)
+
+_VALID_MC_PREDICTIONS_FROM = {"deterministic", "mc_mean"}
 
 
 def build_eval_dataloader(cfg: DictConfig, split: str) -> tuple[DataLoader, list[str]]:
@@ -226,10 +265,89 @@ def load_eval_model(
     return model, resume_state
 
 
+@dataclass
+class CaseOutput:
+    """Everything `evaluate_case` produces for one case.
+
+    A dataclass rather than a tuple: `mc` is sometimes `None` and a 3-tuple
+    whose last element is sometimes absent is exactly the kind of positional
+    API that gets mis-unpacked at a call site.
+
+    Attributes:
+        regions: Binary float tensor, shape `(1, 3, D, H, W)`, channel order
+            `(ET, TC, WT)`. This is what `run_evaluation` saves as the
+            prediction and scores against the ground truth. Comes from the
+            deterministic sliding-window pass unless
+            `cfg.inference.mc_dropout.predictions_from == "mc_mean"`, in
+            which case it is re-derived from the MC-dropout mean pass
+            instead (see `evaluate_case`'s docstring).
+        probabilities: `torch.sigmoid(logits)` from the deterministic pass,
+            same shape as `regions`, when
+            `cfg.inference.evaluation.save_probabilities` is True;
+            otherwise `None` so a ~53 MB-per-case tensor is never
+            materialized when it is not going to be written to disk.
+        mc: The `MCDropoutOutput` from the extra stochastic passes, when
+            `cfg.inference.mc_dropout.enabled` is True; otherwise `None`.
+    """
+
+    regions: Tensor
+    probabilities: Tensor | None
+    mc: MCDropoutOutput | None
+
+
+def _validate_mc_dropout_config(mc_cfg: DictConfig) -> None:
+    """Validates `cfg.inference.mc_dropout` before any inference has run.
+
+    Called once, at the top of `run_evaluation`, before the checkpoint is
+    loaded or `out_dir` is created -- a config typo here should fail
+    immediately, not after minutes of sliding-window inference on the first
+    case.
+
+    Args:
+        mc_cfg: `cfg.inference.mc_dropout`. A no-op when `mc_cfg.enabled` is
+            False, since neither field this checks is read anywhere in that
+            case.
+
+    Raises:
+        ValueError: If `mc_cfg.predictions_from` is not one of
+            `{"deterministic", "mc_mean"}`, or if `mc_cfg.save_fields`
+            names a field `MCDropoutOutput` does not have.
+    """
+    if not mc_cfg.enabled:
+        return
+
+    if mc_cfg.predictions_from not in _VALID_MC_PREDICTIONS_FROM:
+        raise ValueError(
+            f"cfg.inference.mc_dropout.predictions_from={mc_cfg.predictions_from!r} is not "
+            f"valid. Choose one of {sorted(_VALID_MC_PREDICTIONS_FROM)}."
+        )
+
+    # Derived from the dataclass itself (minus num_samples, which is a count,
+    # not a per-voxel field) rather than a second hardcoded list -- so this
+    # check cannot silently drift out of sync with MCDropoutOutput.
+    valid_fields = {f.name for f in dataclass_fields(MCDropoutOutput) if f.name != "num_samples"}
+    unknown = [name for name in mc_cfg.save_fields if name not in valid_fields]
+    if unknown:
+        raise ValueError(
+            f"cfg.inference.mc_dropout.save_fields contains unknown field(s) {unknown}. "
+            f"Valid MCDropoutOutput fields are {sorted(valid_fields)}."
+        )
+
+
 def evaluate_case(
     model: nn.Module, batch: dict[str, Any], cfg: DictConfig, device: torch.device
-) -> tuple[Tensor, Tensor | None]:
-    """Runs sliding-window inference and postprocessing for one case.
+) -> CaseOutput:
+    """Runs sliding-window inference (and, optionally, MC-dropout) for one case.
+
+    Always runs the deterministic `sliding_window_predict` pass first, and
+    `CaseOutput.regions` comes from THAT pass by default: turning on
+    MC-dropout uncertainty must never silently move a Dice number that is
+    already reported elsewhere (e.g. `docs/experiments.md`). The only
+    exception is `cfg.inference.mc_dropout.predictions_from == "mc_mean"`, an
+    explicit opt-in that re-derives `regions` from the MC-dropout mean
+    prediction instead -- `run_evaluation` logs a one-time warning when this
+    is active, since it does make segmentation metrics incomparable to a
+    deterministic-pass run.
 
     Args:
         model: The segmentation model, already on `device`.
@@ -239,19 +357,25 @@ def evaluate_case(
         device: The resolved torch device.
 
     Returns:
-        `(regions, probabilities)`. `regions` is a binary float tensor,
-        shape `(1, 3, D, H, W)`, channel order `(ET, TC, WT)`.
-        `probabilities` is `torch.sigmoid(logits)`, same shape, when
-        `cfg.inference.evaluation.save_probabilities` is True; otherwise
-        `None`, so a ~53 MB-per-case tensor is never materialized when it is
-        not going to be written to disk.
+        A `CaseOutput`. See its docstring for what each field holds.
     """
     image = batch["image"]
     logits = sliding_window_predict(model, image, cfg, device)
     regions = postprocess_logits(logits, cfg)
 
     probabilities = torch.sigmoid(logits) if cfg.inference.evaluation.save_probabilities else None
-    return regions, probabilities
+
+    mc_cfg = cfg.inference.mc_dropout
+    mc_output: MCDropoutOutput | None = None
+    if mc_cfg.enabled:
+        # num_samples/seed/require_dropout are read by mc_dropout_predict
+        # itself from cfg.inference.mc_dropout, so they are not repeated here.
+        mc_output = mc_dropout_predict(model, image, cfg, device)
+        if mc_cfg.predictions_from == "mc_mean":
+            mc_logits = logits_from_mean_prob(mc_output.mean_prob)
+            regions = postprocess_logits(mc_logits, cfg)
+
+    return CaseOutput(regions=regions, probabilities=probabilities, mc=mc_output)
 
 
 def _log_and_print_summary(
@@ -320,6 +444,13 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
     session dying partway through should not lose everything that had
     already been scored.
 
+    When `cfg.inference.mc_dropout.enabled` is True, also writes one `.npy`
+    array per case per field in `cfg.inference.mc_dropout.save_fields`
+    (directory names via `_MC_FIELD_TO_DIR`) plus a per-case
+    `uncertainty_summary.csv`. Both are entirely absent when MC-dropout is
+    off -- a plain evaluation run's output is unchanged from before this was
+    wired in.
+
     Args:
         cfg: The full composed Hydra config.
 
@@ -329,6 +460,12 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
         skipped because `meta["has_label"]` is False do not appear in it.
     """
     device = get_device(cfg)
+
+    # Validated before anything else runs: a config typo here should fail
+    # immediately, not after a checkpoint load and minutes of sliding-window
+    # inference on the first case.
+    mc_cfg = cfg.inference.mc_dropout
+    _validate_mc_dropout_config(mc_cfg)
 
     checkpoint_path = resolve_checkpoint(cfg)
     model, _resume_state = load_eval_model(cfg, checkpoint_path, device)
@@ -347,11 +484,34 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
     if eval_cfg.save_probabilities:
         ensure_dir(probabilities_dir)
 
+    # One output directory per requested MC-dropout field, built up front so
+    # the per-case loop below never has to check "does this dir exist yet".
+    # Empty (mc_field_dirs stays {}) when mc_dropout is disabled or
+    # save_fields is empty -- no directory is created in either case.
+    mc_field_dirs: dict[str, Path] = {}
+    if mc_cfg.enabled:
+        for field_name in mc_cfg.save_fields:
+            mc_field_dirs[field_name] = ensure_dir(out_dir / _MC_FIELD_TO_DIR[field_name])
+
+        if mc_cfg.predictions_from == "mc_mean":
+            # Logged once here (before the loop), not per case: this is a
+            # fact about the run's CONFIG, not about any individual case.
+            logger.warning(
+                "cfg.inference.mc_dropout.predictions_from='mc_mean': every case's saved "
+                "prediction and reported segmentation metrics (Dice/IoU/HD95) come from the "
+                "MC-dropout mean pass, not the deterministic single pass. These numbers are "
+                "NOT comparable to a deterministic-pass evaluation run -- e.g. an "
+                "already-reported baseline row in docs/experiments.md."
+            )
+
     per_case_csv_path = out_dir / "per_case_metrics.csv"
     summary_csv_path = out_dir / "summary.csv"
+    uncertainty_csv_path = out_dir / "uncertainty_summary.csv"
 
     aggregator = MetricAggregator()
     n_skipped_unlabeled = 0
+    uncertainty_rows: dict[str, dict[str, float]] = {}
+    mc_storage_logged = False
 
     model.eval()
     with torch.no_grad():
@@ -359,7 +519,9 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
         for case_id, batch in progress:
             meta = read_json(prep_dir / case_id / "meta.json")
 
-            regions, probabilities = evaluate_case(model, batch, cfg, device)
+            case_output = evaluate_case(model, batch, cfg, device)
+            regions = case_output.regions
+            probabilities = case_output.probabilities
 
             if eval_cfg.save_predictions:
                 classes = regions_to_classes(regions)  # (1, D, H, W)
@@ -373,6 +535,68 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
                 # done in the frame the model actually predicted in.
                 probs_np = probabilities[0].cpu().numpy().astype(np.float16)
                 np.save(probabilities_dir / f"{case_id}.npy", probs_np)
+
+            if case_output.mc is not None:
+                mc = case_output.mc
+
+                # Saved in CROPPED geometry, same convention as
+                # probabilities/ above -- these back calibration-style
+                # analysis, which needs the frame the model predicted in.
+                first_field_bytes: int | None = None
+                for field_name, field_dir in mc_field_dirs.items():
+                    field_np = getattr(mc, field_name)[0].cpu().numpy().astype(np.float16)
+                    np.save(field_dir / f"{case_id}.npy", field_np)
+                    if first_field_bytes is None:
+                        first_field_bytes = field_np.nbytes
+
+                if not mc_storage_logged and first_field_bytes is not None:
+                    # Only the first case's array size is measured directly;
+                    # the rest is a projection from it, since every case's
+                    # array is the same dtype/channel-count (only D, H, W
+                    # differ case to case, so this is an estimate, not exact).
+                    projected_bytes = first_field_bytes * len(case_ids) * len(mc_field_dirs)
+                    message = (
+                        f"MC-dropout save_fields={list(mc_field_dirs)}: first case's array is "
+                        f"{first_field_bytes / 1e6:.2f} MB, projecting to "
+                        f"~{projected_bytes / 1e9:.2f} GB across {len(case_ids)} case(s)."
+                    )
+                    if projected_bytes > _MC_STORAGE_WARN_BYTES:
+                        message += (
+                            " This exceeds 15 GB -- Kaggle's /kaggle/working output quota is "
+                            "20 GB. Consider a smaller save_fields list or a subset split."
+                        )
+                    logger.warning(message)
+                    mc_storage_logged = True
+
+                # Uncertainty summary row: independent of has_label, since it
+                # says nothing about ground truth. mi/entropy moved to CPU
+                # for the same device-mismatch reason regions/label are below.
+                mi = mc.mutual_information.cpu()
+                entropy = mc.predictive_entropy.cpu()
+                regions_cpu = regions.cpu()
+                row: dict[str, float] = {}
+                for i, region in enumerate(REGION_NAMES):
+                    mi_channel = mi[:, i]
+                    row[f"mi_mean_{region}"] = mi_channel.mean().item()
+                    row[f"mi_max_{region}"] = mi_channel.max().item()
+                    fg_mask = regions_cpu[:, i] > 0.5
+                    if fg_mask.any():
+                        row[f"mi_mean_fg_{region}"] = mi_channel[fg_mask].mean().item()
+                    else:
+                        # NaN, not 0.0: an empty prediction and a confidently
+                        # certain prediction are different states and must
+                        # not collapse to the same number.
+                        row[f"mi_mean_fg_{region}"] = float("nan")
+                    row[f"entropy_mean_{region}"] = entropy[:, i].mean().item()
+                row["num_samples"] = float(mc.num_samples)
+                uncertainty_rows[case_id] = row
+
+                # Rewritten every iteration, same reasoning as the per-case
+                # metrics CSV below: a killed run keeps every already-scored
+                # case's uncertainty summary instead of losing all of them.
+                pd.DataFrame.from_dict(uncertainty_rows, orient="index").rename_axis(
+                    "case_id"
+                ).to_csv(uncertainty_csv_path)
 
             if not meta["has_label"]:
                 # Real: the BraTS validation set ships without segmentations.
