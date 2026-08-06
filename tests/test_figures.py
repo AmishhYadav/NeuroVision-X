@@ -1034,20 +1034,44 @@ def test_modality_attribution_averages_rows_sharing_a_region() -> None:
         plt.close(fig)
 
 
-def test_modality_attribution_accepts_integer_region_values() -> None:
+def test_modality_attribution_raises_on_integer_region_values() -> None:
+    """Integer channel indices are ambiguous here and must never be guessed.
+
+    This module's REGION_ORDER is ("WT", "TC", "ET") while the model's channel
+    order -- what scripts/explain.py writes into modality_attribution.csv -- is
+    ("ET", "TC", "WT"). Index 0 is therefore ET in the file and WT here, and
+    either mapping renders a perfectly plausible chart with every bar
+    relabelled. Same reasoning as analysis.statistics.metric_direction raising
+    on an unknown metric.
+    """
     df = pd.DataFrame(
         {
-            "region": [0, 2],  # REGION_ORDER = ("WT", "TC", "ET") -> WT, ET
+            "region": [0, 2],
             "attr_T1": [0.1, 0.1],
             "attr_T1CE": [0.2, 0.5],
             "attr_T2": [0.1, 0.1],
             "attr_FLAIR": [0.4, 0.2],
         }
     )
+    with pytest.raises(ValueError, match="integer channel indices"):
+        plot_modality_attribution(df)
+
+
+def test_modality_attribution_uses_named_regions_verbatim() -> None:
+    df = pd.DataFrame(
+        {
+            "region": ["ET", "WT"],
+            "attr_T1": [0.1, 0.1],
+            "attr_T1CE": [0.5, 0.2],
+            "attr_T2": [0.1, 0.1],
+            "attr_FLAIR": [0.2, 0.4],
+        }
+    )
     with paper_style():
         fig = plot_modality_attribution(df)
     try:
         labels = [t.get_text() for t in fig.axes[0].get_xticklabels()]
+        # REGION_ORDER is the drawing order, so WT precedes ET.
         assert labels == ["WT", "ET"]
     finally:
         plt.close(fig)
