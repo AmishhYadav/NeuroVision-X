@@ -45,6 +45,29 @@ n_bins: 15
 # the segmentation number sitting next to it in the paper.
 threshold: ${inference.postprocess.threshold}
 
+# Which LABEL-FREE mask selects voxels for the TEMPERATURE FIT.
+#   predicted (default) -- prob >= threshold, the model's own predicted-
+#     positive voxels. Label never enters the definition, so it cannot be
+#     circular. See uncertainty.calibration.predicted_foreground_mask.
+#   brain     -- the nonzero-intensity brain region (image != 0, unioned
+#     across modalities). Also label-free. See
+#     uncertainty.calibration.brain_mask.
+#   union_gt  -- DIAGNOSTICS ONLY. predicted-positive UNION ground-truth-
+#     positive (uncertainty.calibration.union_foreground_mask). This mask is
+#     CIRCULAR: a voxel with p < threshold can only be included via
+#     label > 0, so its sub-threshold bins show mean_label == 1.0 by
+#     construction, not as a measurement -- measured to inflate ECE by
+#     41-57% and bias a fitted temperature by ~3-4x on a real 189-case
+#     split. Selecting it writes circular_do_not_report: true into
+#     temperature.json and logs a WARNING; the fitted temperature must
+#     never be reported.
+# Regardless of this setting, the REPORTED metrics (calibration_metrics.csv,
+# per_case_calibration.csv, reliability_*.csv) are always computed for BOTH
+# "predicted" and "brain" in the same run -- see accumulate() in
+# scripts/calibrate.py -- so the two never drift apart across invocations.
+# "union_gt" only ever affects which mask the TEMPERATURE FIT itself uses.
+mask_mode: predicted
+
 per_channel: true
 
 # fit_temperature uses LBFGS, which is not a streaming optimizer -- it needs

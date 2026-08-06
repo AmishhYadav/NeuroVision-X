@@ -27,11 +27,23 @@ Example usage:
         calibration.apply_dir=outputs/baseline_unet3d/eval_test
 
 The wiring is split into small functions (`resolve_eval_dirs`,
-`resolve_source`, `load_case`, `subsample_masked_logits`,
-`fit_split_temperature`, `accumulate`, `build_risk_coverage`,
-`run_calibration`), mirroring `scripts/evaluate.py`'s decomposition, so each
-piece can be unit tested without going through Hydra -- see
-tests/test_calibrate_script.py.
+`resolve_source`, `resolve_mask_mode`, `load_case`, `load_image`,
+`subsample_masked_logits`, `fit_split_temperature`, `accumulate`,
+`build_risk_coverage`, `run_calibration`), mirroring `scripts/evaluate.py`'s
+decomposition, so each piece can be unit tested without going through Hydra
+-- see tests/test_calibrate_script.py.
+
+## Reporting mask: label-free, not `union_foreground_mask`
+
+`calibration.mask_mode` (default `"predicted"`) selects which LABEL-FREE
+mask the TEMPERATURE FIT uses -- see `configs/calibration/default.yaml`'s
+comment for the full account of why `union_foreground_mask` (the old
+default) is CIRCULAR and must never back a reported number.
+`"union_gt"` remains selectable for diagnostics only; choosing it logs a
+warning and marks `temperature.json` with `circular_do_not_report: true`.
+Independent of `mask_mode`, the REPORTED metrics are always computed for
+BOTH `"predicted"` and `"brain"` in the same pass over the split (see
+`accumulate`), so the two can never drift apart across separate runs.
 """
 
 from __future__ import annotations
@@ -53,7 +65,9 @@ from neurovision.uncertainty.calibration import (
     CalibrationAccumulator,
     TemperatureResult,
     apply_temperature,
+    brain_mask,
     fit_temperature,
+    predicted_foreground_mask,
     union_foreground_mask,
 )
 from neurovision.uncertainty.risk_coverage import (
@@ -74,6 +88,18 @@ logger = logging.getLogger(__name__)
 _CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
 
 _VALID_SOURCES = ("auto", "logits", "probabilities")
+
+# "predicted" (default) and "brain" are label-free and safe for reporting.
+# "union_gt" is circular (see uncertainty.calibration.union_foreground_mask)
+# and is selectable only as an explicit diagnostic for the TEMPERATURE FIT --
+# never for the reported metrics, which always use both "predicted" and
+# "brain" regardless of this setting (see accumulate()).
+_VALID_MASK_MODES = ("predicted", "brain", "union_gt")
+
+# The two label-free masks the REPORTED metrics are always computed under,
+# in one pass over the split -- see accumulate()'s docstring for why both
+# are produced together rather than in separate invocations.
+_REPORT_MASK_NAMES = ("predicted", "brain")
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +230,24 @@ def resolve_source(eval_dir: Path, requested: str) -> str:
     )
 
 
+def resolve_mask_mode(mode: str) -> str:
+    """Validates `calibration.mask_mode` up front, before any file is opened.
+
+    Args:
+        mode: `cfg.calibration.mask_mode`.
+
+    Returns:
+        `mode`, unchanged, when valid.
+
+    Raises:
+        ValueError: `mode` is not one of `_VALID_MASK_MODES`, listing the
+            allowed values -- same style as `resolve_source`'s validation.
+    """
+    if mode not in _VALID_MASK_MODES:
+        raise ValueError(f"calibration.mask_mode must be one of {_VALID_MASK_MODES}, got {mode!r}.")
+    return mode
+
+
 def _shared_case_ids(eval_dir: Path, source: str, prep_dir: Path) -> list[str]:
     """The case ids present as BOTH a `<source>/*.npy` file and a `<prep_dir>/<case_id>/` dir.
 
@@ -323,6 +367,31 @@ def load_case(
     return prob, label, logits
 
 
+def load_image(prep_dir: Path, case_id: str) -> Tensor:
+    """Loads one case's preprocessed MRI volume, for `calibration.mask_mode="brain"`.
+
+    Args:
+        prep_dir: Root of the preprocessed BraTS data.
+        case_id: The case identifier.
+
+    Returns:
+        Float32 CPU tensor, shape `(C, D, H, W)` (one channel per modality),
+        matching `neurovision.data.preprocessing.preprocess_case`'s
+        `image.npy` convention -- exact zero marks non-brain voxels, nonzero
+        (routinely negative, since each modality is z-scored over its own
+        nonzero voxels) marks brain. Feeds directly into
+        `neurovision.uncertainty.calibration.brain_mask`.
+
+    Raises:
+        FileNotFoundError: `<prep_dir>/<case_id>/image.npy` does not exist.
+    """
+    image_path = prep_dir / case_id / "image.npy"
+    if not image_path.is_file():
+        raise FileNotFoundError(f"load_image({case_id!r}): {image_path} does not exist.")
+    arr = np.load(image_path).astype(np.float32)
+    return torch.from_numpy(arr)
+
+
 def subsample_masked_logits(
     logits: Tensor,
     label: Tensor,
@@ -394,6 +463,42 @@ def subsample_masked_logits(
 # ---------------------------------------------------------------------------
 # Temperature fitting
 # ---------------------------------------------------------------------------
+
+
+def _build_fit_mask(
+    mode: str,
+    prob: Tensor,
+    label: Tensor,
+    image: Tensor | None,
+    threshold: float,
+) -> Tensor:
+    """Builds the mask that selects voxels for the TEMPERATURE FIT, per `mask_mode`.
+
+    Args:
+        mode: An already-`resolve_mask_mode`-validated value.
+        prob: Predicted probabilities for one case, shape `(C, D, H, W)`.
+        label: Binary region labels, same shape as `prob`.
+        image: The case's preprocessed MRI volume (`load_image`'s return),
+            required when `mode == "brain"`; unused otherwise.
+        threshold: Passed through to whichever mask function `mode` selects.
+
+    Returns:
+        A boolean mask, either per-region `(C, D, H, W)` (`"predicted"` /
+        `"union_gt"`) or shared-across-regions `(D, H, W)` (`"brain"`).
+
+    Raises:
+        ValueError: `mode == "brain"` and `image` is `None`.
+    """
+    if mode == "predicted":
+        return predicted_foreground_mask(prob, threshold=threshold)
+    if mode == "brain":
+        if image is None:
+            raise ValueError("_build_fit_mask: mask_mode='brain' needs `image`, got None.")
+        return brain_mask(image=image)
+    # mode == "union_gt": already validated by resolve_mask_mode, so this is
+    # the only remaining branch. union_foreground_mask itself logs the
+    # circularity warning on every call -- not duplicated here.
+    return union_foreground_mask(prob, label, threshold=threshold)
 
 
 def _fit_per_channel(

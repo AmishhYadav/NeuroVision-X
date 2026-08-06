@@ -29,6 +29,19 @@ hardest region and the one this project's calibration claim leans on most,
 so collapsing it into a whole-tumor average would throw away the exact
 breakdown a reader needs.
 
+## Which reporting mask to use
+
+`union_foreground_mask` (predicted-positive UNION ground-truth-positive) is
+CIRCULAR: a voxel with `p < threshold` can only join it via `label > 0`, so
+`P(label=1 | p < threshold, in mask)` is exactly 1 by construction, not a
+measurement -- measured to inflate reported ECE by 41-57% and to bias a
+fitted temperature by roughly 3-4x on a real 189-case split. It is kept in
+this module as a DIAGNOSTIC only, and it warns on every call. Use
+`predicted_foreground_mask` (the model's own predicted-positive voxels,
+label-free) or `brain_mask` (the nonzero-intensity brain region, also
+label-free) to compute any number that gets reported. See each function's
+own docstring for the full account.
+
 ## CUDA hazard (read before touching device/dtype handling here)
 
 CLAUDE.md records three separate CUDA-only faults that shipped past a green
@@ -68,6 +81,8 @@ __all__ = [
     "maximum_calibration_error",
     "brier_score",
     "union_foreground_mask",
+    "predicted_foreground_mask",
+    "brain_mask",
     "subsample_voxels",
     "TemperatureResult",
     "fit_temperature",
@@ -497,49 +512,72 @@ def union_foreground_mask(
     label: Tensor | np.ndarray,
     threshold: float = 0.5,
 ) -> Tensor:
-    """The reporting mask this project uses: predicted-positive UNION ground-truth-positive.
+    """DIAGNOSTIC-ONLY mask: predicted-positive UNION ground-truth-positive. CIRCULAR -- read this.
 
-    Why a mask is needed at all. Roughly 99% of a BraTS volume is background
-    the model is trivially certain about, so a whole-volume ECE is an average
-    over voxels that no model gets wrong. Measured on a synthetic model that
-    predicts `p = 0.99` on foreground while being right only 60% of the time
-    -- catastrophic overconfidence -- whole-volume ECE is 0.0049 and
-    foreground ECE is 0.3896, an 80x difference. Reporting the whole-volume
-    number would make every model, including a broken one, look perfectly
-    calibrated, and would erase exactly the effect this project's research
-    claim rests on.
+    ## The circularity, and why it is not a theoretical nitpick
 
-    Why the UNION specifically, rather than predicted-positive alone.
-    Predicted-positive covers the model's false POSITIVES (it said tumor,
-    there was none) but silently excludes its false NEGATIVES (it confidently
-    said background where tumor actually was). Those false negatives are
-    high-confidence mistakes -- the single most clinically dangerous thing a
-    calibration analysis exists to expose -- so a predicted-only mask would
-    hide the failure mode the paper is about. Ground-truth-positive alone has
-    the mirror-image problem. The union covers both.
+    A voxel with `p < threshold` can only enter this mask by having
+    `label > 0` -- that is the only door in for it. So among the
+    sub-threshold voxels this mask selects, `P(label = 1 | p < threshold, in
+    mask)` is exactly 1 BY CONSTRUCTION, regardless of whether the model is
+    any good. Confirmed on a real 189-case evaluation: every populated
+    reliability bin below the threshold showed `mean_label == 1.000000`,
+    for every region. That is arithmetic, not a measurement, and it is not a
+    small effect: it was measured to contribute 41% (ET), 50% (TC), and 57%
+    (WT) of the TOTAL reported ECE, it pushed a fitted temperature to
+    `[4.58, 4.75, 3.71]` (a segmentation net normally needs 1.1-2.0), and
+    after applying that temperature the WT ECE got WORSE (0.0730 -> 0.0776)
+    -- because the fit was optimizing NLL against a contaminated
+    distribution, not against the model's real behaviour.
 
-    Consequence to state in the paper: this mask is defined using the ground
-    truth, so it can only be computed at evaluation time on a labelled split,
-    never at deployment time. It is a REPORTING mask, not something the model
-    or a clinician would have access to. That is fine for a calibration
-    number -- Dice is computed against the ground truth too -- but it does
-    mean the masked ECE is not a quantity you could monitor in production.
+    **Do not use this mask to compute a reported ECE/MCE/Brier number, and
+    do not use it to fit a temperature that will be reported.** Use
+    `predicted_foreground_mask` (label-free, cannot be circular by
+    construction) or `brain_mask` instead. This function stays in the
+    module because it is still a legitimate DIAGNOSTIC -- e.g. quantifying
+    how much a false-negative-inclusive mask changes the picture -- never
+    as the basis for a paper claim. Every call logs a WARNING naming this,
+    so an accidental reporting use is visible in the run log rather than
+    silently producing a wrong number.
+
+    An earlier version of this docstring justified the mask by analogy to
+    Dice: "Dice is computed against the ground truth too." That analogy is
+    FALSE and is corrected here rather than repeated. Dice uses the label
+    as the OBJECT of comparison -- prediction vs. label, a symmetric
+    overlap measure that does not change which voxels are compared based on
+    their own outcome. This mask instead uses the label to SELECT WHICH
+    VOXELS ARE MEASURED, and then measures how well probability predicts
+    that same label on the selected set -- selection on the dependent
+    variable, a different and invalid maneuver that Dice does not commit.
+
+    ## Why a mask is needed at all (this part of the original reasoning still holds)
+
+    Roughly 99% of a BraTS volume is background the model is trivially
+    certain about, so a whole-volume ECE is an average over voxels that no
+    model gets wrong. Measured on a synthetic model that predicts `p = 0.99`
+    on foreground while being right only 60% of the time -- catastrophic
+    overconfidence -- whole-volume ECE is 0.0049 and foreground ECE is
+    0.3896, an 80x difference. Reporting the whole-volume number would make
+    every model, including a broken one, look perfectly calibrated. This is
+    still true; it just does not license computing the restricted number
+    with a mask that bakes the label into which voxels get measured. See
+    `predicted_foreground_mask` and `brain_mask` for the label-free
+    alternatives that solve the same 99%-background problem without this
+    mask's circularity.
 
     Args:
         prob: Predicted probabilities, `(C, D, H, W)` or `(1, C, D, H, W)` or
             any shape matching `label`, values in `[0, 1]`.
         label: Binary ground truth, same shape as `prob`.
         threshold: Probability at or above which a voxel counts as predicted
-            positive. Matches `cfg.inference.postprocess.threshold`; pass the
-            config value rather than relying on this default if the two ever
-            diverge, or the reported calibration would cover a different voxel
-            set than the reported Dice.
+            positive.
 
     Returns:
         A boolean CPU tensor, same shape as `prob`, True where the voxel is
         predicted positive OR labelled positive. Per-region (one channel per
         region), so it is accepted directly as `CalibrationAccumulator`'s
-        per-region `mask`.
+        per-region `mask` -- but see the warning above about what it must
+        never be used for.
 
     Raises:
         ValueError: Shape mismatch, zero elements, `prob` outside `[0, 1]`,
@@ -548,7 +586,117 @@ def union_foreground_mask(
     prob_t = _to_cpu_float32(prob)
     label_t = _to_cpu_float32(label)
     _validate_prob_label(prob_t, label_t, check_prob_range=True)
+    logger.warning(
+        "union_foreground_mask: this mask is CIRCULAR for calibration reporting -- a voxel "
+        "with p < threshold can only be included via label > 0, so its sub-threshold bins have "
+        "mean_label == 1.0 by construction, not as a measurement. Do NOT use this to compute a "
+        "reported ECE/MCE/Brier or to fit a reported temperature; it is diagnostic-only. Use "
+        "predicted_foreground_mask or brain_mask for reporting instead. See this function's "
+        "docstring for the full account."
+    )
     return (prob_t >= threshold) | (label_t > 0.5)
+
+
+def predicted_foreground_mask(
+    prob: Tensor | np.ndarray,
+    threshold: float = 0.5,
+) -> Tensor:
+    """The model's own predicted-positive voxels. Label-free, so it cannot be circular.
+
+    `label` is not even a parameter here -- this mask depends only on
+    `prob`, so `P(label = 1 | in mask)` computed over it is a genuine
+    measurement of the model rather than an identity forced by the mask's
+    own definition. That is the bug fixed in `union_foreground_mask`; see
+    its docstring for the measured damage it caused.
+
+    Known blind spot, and its mitigation. By construction this mask
+    EXCLUDES every false negative -- a voxel where the model confidently
+    said background (`p < threshold`) but tumour was actually present.
+    Those voxels never enter this mask, so a calibration number computed
+    only over it says nothing about how well-calibrated the model is on its
+    confident misses. This is not left uncovered: those exact voxels are
+    what `neurovision.metrics.boundary.boundary_stratified_errors`'s
+    `bfnr_*` columns measure (false-negative rate stratified by distance to
+    the ground-truth boundary) -- the blind spot is covered by a DIFFERENT
+    analysis, rather than papered over by folding the label back into this
+    mask, which is exactly what made `union_foreground_mask` circular in
+    the first place.
+
+    Args:
+        prob: Predicted probabilities, any shape, values in `[0, 1]`.
+        threshold: Probability at or above which a voxel counts as predicted
+            positive. Matches `cfg.inference.postprocess.threshold`; pass the
+            config value rather than relying on this default if the two ever
+            diverge, or the reported calibration would cover a different
+            voxel set than the reported Dice.
+
+    Returns:
+        A boolean CPU tensor, same shape as `prob`, True where
+        `prob >= threshold`.
+
+    Raises:
+        ValueError: `prob` has zero elements, or contains a value outside
+            `[0, 1]`.
+    """
+    prob_t = _to_cpu_float32(prob)
+    if prob_t.numel() == 0:
+        raise ValueError("prob has zero elements; nothing to compute a mask over.")
+    p_min = float(prob_t.min())
+    p_max = float(prob_t.max())
+    if p_min < 0.0 or p_max > 1.0:
+        raise ValueError(f"prob must contain values in [0, 1], got min={p_min} max={p_max}.")
+    return prob_t >= threshold
+
+
+def brain_mask(
+    image: Tensor | np.ndarray | None = None,
+    mask: Tensor | np.ndarray | None = None,
+) -> Tensor:
+    """Selects the nonzero-intensity brain region of a preprocessed MRI volume. Label-free.
+
+    Preprocessing (`neurovision.data.preprocessing.normalize_nonzero`)
+    z-scores each modality over its OWN nonzero voxels and crops to the
+    union nonzero bounding box, so brain INTERIORS are routinely NEGATIVE
+    after normalization and exact zero is the marker for air, not for a
+    low-intensity voxel. This mask is therefore derived from `image != 0`,
+    unioned across the modality/channel axis -- **never `image > 0`**,
+    which would silently drop every negative-valued (below-mean) brain
+    voxel and misreport the mask as covering only half the brain.
+
+    Args:
+        image: The preprocessed MRI volume, shape `(C, D, H, W)` (one
+            channel per modality, typically 4 for T1/T1CE/T2/FLAIR). The
+            returned mask is the union of `image[c] != 0` over `c`, i.e. a
+            voxel counts as brain if ANY modality has signal there.
+        mask: An already-computed boolean mask. Use this when constructing
+            the mask from `image` is impractical at the call site (e.g. the
+            image was not loaded); it takes priority over `image` when both
+            are given, and is returned as-is (cast to bool, on CPU).
+
+    Returns:
+        A boolean CPU tensor. Shape `(D, H, W)` when derived from `image`
+        (the channel axis is reduced away by the union); whatever shape
+        `mask` was given as when `mask` is used instead.
+
+    Raises:
+        ValueError: Neither `image` nor `mask` was given. There is
+            deliberately NO silent fallback to a whole-volume all-True mask
+            here -- returning "everything is brain" without saying so would
+            defeat the purpose of a brain-restricted reporting mask with
+            nothing failing anywhere to reveal it. Pass one of the two
+            arguments explicitly.
+    """
+    if mask is not None:
+        return torch.as_tensor(mask).detach().to(dtype=torch.bool, device="cpu")
+    if image is None:
+        raise ValueError(
+            "brain_mask needs either `image` (the preprocessed (C, D, H, W) MRI volume, to "
+            "derive the mask from `image != 0`) or `mask` (an already-computed boolean array). "
+            "Falling back to a whole-volume all-True mask silently would defeat the purpose of "
+            "a brain-restricted reporting mask."
+        )
+    image_t = _to_cpu_float32(image)
+    return (image_t != 0.0).any(dim=0)
 
 
 def subsample_voxels(

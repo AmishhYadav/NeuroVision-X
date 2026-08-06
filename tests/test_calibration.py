@@ -22,10 +22,12 @@ from neurovision.uncertainty.calibration import (
     CalibrationAccumulator,
     apply_temperature,
     bin_edges,
+    brain_mask,
     brier_score,
     expected_calibration_error,
     fit_temperature,
     maximum_calibration_error,
+    predicted_foreground_mask,
     reliability_curve,
     subsample_voxels,
     union_foreground_mask,
@@ -697,3 +699,150 @@ def test_union_foreground_mask_validates_inputs() -> None:
         union_foreground_mask(torch.tensor([0.5]), torch.tensor([0.5]))
     with pytest.raises(ValueError, match="same shape"):
         union_foreground_mask(torch.tensor([0.5, 0.5]), torch.tensor([1.0]))
+
+
+def test_union_foreground_mask_logs_circularity_warning(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        union_foreground_mask(torch.tensor([0.9]), torch.tensor([1.0]))
+
+    assert any("CIRCULAR" in record.message for record in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Circularity regression test -- pins the bug this module's fix addresses.
+#
+# `union_foreground_mask` can only admit a sub-threshold (p < threshold)
+# voxel via `label > 0`, so every populated bin below the threshold has
+# mean_label == 1.0 EXACTLY -- an artifact of the mask's own definition, not
+# a measurement of the model. `predicted_foreground_mask` cannot exhibit
+# this: it never even looks at the label, so nothing below the threshold can
+# be predicted-positive in the first place.
+# ---------------------------------------------------------------------------
+
+
+def test_circularity_regression_union_mask_forces_mean_label_one_below_threshold() -> None:
+    threshold = 0.5
+    n_bins = 10
+    gen = torch.Generator().manual_seed(0)
+
+    # True negatives: low prob, label 0 -- excluded from the union mask entirely
+    # (prob < threshold and label == 0), so they cannot contaminate the sub-threshold
+    # bins below.
+    prob_tn = torch.rand(500, generator=gen) * 0.3
+    label_tn = torch.zeros(500)
+
+    # False negatives: low prob, label 1 -- the ONLY way into the union mask's
+    # sub-threshold bins, and exactly the voxels that force mean_label == 1.0 there.
+    prob_fn = torch.rand(200, generator=gen) * 0.4
+    label_fn = torch.ones(200)
+
+    # True positives: high prob, label 1 -- included by both masks, above threshold.
+    prob_tp = 0.6 + torch.rand(300, generator=gen) * 0.4
+    label_tp = torch.ones(300)
+
+    prob = torch.cat([prob_tn, prob_fn, prob_tp])
+    label = torch.cat([label_tn, label_fn, label_tp])
+
+    union_mask = union_foreground_mask(prob, label, threshold=threshold)
+    union_curve = reliability_curve(prob, label, n_bins=n_bins, mask=union_mask)
+    below_union = union_curve[union_curve["bin_upper"] <= threshold]
+    populated_below_union = below_union[below_union["count"] > 0]
+
+    # Sanity: the bug has something to bite on -- there really are populated
+    # sub-threshold bins under the union mask.
+    assert len(populated_below_union) > 0
+    assert (populated_below_union["mean_label"] == 1.0).all()
+
+    predicted_mask = predicted_foreground_mask(prob, threshold=threshold)
+    predicted_curve = reliability_curve(prob, label, n_bins=n_bins, mask=predicted_mask)
+    below_predicted = predicted_curve[predicted_curve["bin_upper"] <= threshold]
+
+    # Nothing below the threshold can be predicted-positive under a label-free
+    # mask, so every sub-threshold bin is empty -- there is no forced
+    # mean_label == 1.0 left to observe, because the label never selected
+    # which voxels are measured in the first place.
+    assert (below_predicted["count"] == 0).all()
+
+
+# ---------------------------------------------------------------------------
+# predicted_foreground_mask: label-free by construction
+# ---------------------------------------------------------------------------
+
+
+def test_predicted_foreground_mask_never_depends_on_label() -> None:
+    prob = torch.tensor([0.1, 0.6, 0.4, 0.9])
+    label_a = torch.tensor([0.0, 0.0, 1.0, 1.0])
+    label_b = torch.tensor([1.0, 1.0, 0.0, 0.0])
+
+    # `predicted_foreground_mask` has no `label` parameter at all -- calling
+    # it twice, with two completely different labelings "in scope", produces
+    # the identical result both times because the label plays no role in the
+    # computation whatsoever.
+    mask_a = predicted_foreground_mask(prob)
+    mask_b = predicted_foreground_mask(prob)
+
+    assert torch.equal(mask_a, mask_b)
+    assert mask_a.tolist() == [False, True, False, True]
+    del label_a, label_b  # never consulted -- exists only to make the claim visible
+
+
+def test_predicted_foreground_mask_threshold_is_inclusive_and_configurable() -> None:
+    prob = torch.tensor([0.5, 0.4])
+
+    assert predicted_foreground_mask(prob).tolist() == [True, False]
+    assert predicted_foreground_mask(prob, threshold=0.3).tolist() == [True, True]
+    assert predicted_foreground_mask(prob, threshold=0.6).tolist() == [False, False]
+
+
+def test_predicted_foreground_mask_validates_prob_range() -> None:
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        predicted_foreground_mask(torch.tensor([1.5, 0.2]))
+
+
+# ---------------------------------------------------------------------------
+# brain_mask: nonzero-intensity brain region, the `!= 0` vs `> 0` trap
+# ---------------------------------------------------------------------------
+
+
+def test_brain_mask_selects_negative_interior_not_just_positive_voxels() -> None:
+    # Background is EXACT zero (the air marker); interior is NEGATIVE, as
+    # z-scored brain tissue routinely is after neurovision.data.preprocessing's
+    # normalize_nonzero. `image > 0` would select nothing at all here -- that
+    # is the trap this function exists to avoid.
+    image = torch.zeros(2, 4, 4, 4)
+    image[:, 1:3, 1:3, 1:3] = -0.75
+
+    mask = brain_mask(image=image)
+
+    assert mask.dtype == torch.bool
+    assert mask.shape == (4, 4, 4)
+    assert bool((image > 0).any()) is False  # sanity: the trap is real for this input
+    assert mask[1:3, 1:3, 1:3].all()
+    assert not mask[0, 0, 0]
+
+
+def test_brain_mask_unions_across_modality_channels() -> None:
+    # Channel 0 has signal only in one corner, channel 1 only in the opposite
+    # corner -- the mask must be the UNION, not e.g. channel 0 alone.
+    image = torch.zeros(2, 4, 4, 4)
+    image[0, 0, 0, 0] = -0.5
+    image[1, 3, 3, 3] = 0.5
+
+    mask = brain_mask(image=image)
+
+    assert mask[0, 0, 0]
+    assert mask[3, 3, 3]
+    assert not mask[1, 1, 1]
+
+
+def test_brain_mask_precomputed_mask_takes_priority_and_is_returned_as_is() -> None:
+    precomputed = torch.tensor([[True, False], [False, True]])
+
+    result = brain_mask(image=torch.zeros(2, 2, 2), mask=precomputed)
+
+    assert torch.equal(result, precomputed)
+
+
+def test_brain_mask_raises_when_neither_image_nor_mask_given() -> None:
+    with pytest.raises(ValueError, match="brain_mask needs"):
+        brain_mask()
