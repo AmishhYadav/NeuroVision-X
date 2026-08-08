@@ -114,11 +114,25 @@ training:
   grad_clip_norm: 1.0
 
   # Validation is full sliding-window inference over all 187 val cases and is
-  # NOT cheap -- for SwinUNETR it is on the order of 10 minutes. At
-  # val_interval: 1 that would cost more GPU time than the training itself.
-  # Every 5 epochs gives 20 validation points across the run, which is plenty
-  # to see the curve and to pick a best checkpoint, and costs ~5x less.
-  val_interval: 5
+  # NOT cheap. MEASURED for `neurovision` at 64^3 (probe v4): 4.5 s/case, so
+  # 0.234 h for a full validation pass -- note that is MORE per case than the
+  # 3.76 s measured at 96^3, because smaller windows means more of them to
+  # tile the same volume.
+  #
+  # Every 10 epochs, not the previous 5. At 80 epochs that is 8 validation
+  # points instead of 16, which halves validation from ~3.7 h to ~1.9 h per
+  # fusion run and is what keeps the three-run plan inside 60 GPU-h with a
+  # margin for a failed session. 8 points is still enough to see the curve and
+  # pick a best checkpoint: the LR follows a cosine to min_lr, so val Dice
+  # climbs and plateaus rather than oscillating, and the best checkpoint is
+  # near the end.
+  #
+  # Changing this affects monitoring and best-checkpoint selection ONLY -- no
+  # training math depends on it. It still lives here, in the shared file, so
+  # that every arm's `best.pt` is selected from the same granularity; picking
+  # the best of 16 points for one model and 8 for another would be a mild but
+  # real confound in a comparison of best checkpoints.
+  val_interval: 10
   log_interval: 20
 
   sliding_window:
