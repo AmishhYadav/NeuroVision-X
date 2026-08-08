@@ -163,17 +163,23 @@ Everything else — calibration, temperature scaling, boundary stratification,
 gate extraction, explainability, figures, tables — is CPU and runs on the Mac
 for zero GPU hours. None of it belongs in a Kaggle session.
 
-Total: 0.15 (probes, spent) + 3 + 23 + 23 + 7 = **~56 h**, leaving ~4 h against
-60 for failed sessions, queue time and resumes. That margin is thin — thinner
-than the original plan's ~14 h — which is the price of having discovered the
-real cost. Spend it on failures only; the `ablation_fusion_concat` row the
-original plan held in reserve is no longer affordable and is cut.
+Total: 0.3 (probes, spent) + 3 + 23.7 + 23.7 + 7 = **~58 h**, leaving ~2 h
+against 60 for failed sessions, queue time and resumes. Thinner than the
+original plan's ~14 h, which is the price of having discovered the real cost
+rather than assumed it. Spend it on failures only; the `ablation_fusion_concat`
+row the original plan held in reserve is no longer affordable and is cut.
 
-The `neurovision` and ablation figures are still projections until probe v4
-reports: 0.875 h/epoch scaled by the 0.296 volume ratio, minus the gradient
-checkpointing v4 tests removing. Four separate pre-run estimates of this
-model's cost and memory have now been wrong, so treat ~23 h as provisional
-until a clean 64³ step time is on record here.
+These are no longer projections. `neurovision` is priced from probe v4's
+measured 1.12 s/step at 64³ with checkpointing off: 0.272 h/epoch x 80 =
+21.8 h of training, plus 8 validation passes at 0.234 h = 1.9 h. The
+`ablation_content_only_gate` row is the same architecture to within 0.018% of
+its parameters, so it carries the same cost. `baseline_unet3d` is scaled from
+its own measured 0.082 h/epoch at 96³ by the 0.296 volume ratio.
+
+Calendar, which is the real constraint rather than the hour count: the two
+fusion runs are ~24 h each against a 12 h session cap, so each needs two
+chained sessions. Five long sessions total, at a free tier of ~30 h/week, is
+roughly two weeks.
 
 The U-Net estimate is **re-planned against measurement**, not against the
 original paper-FLOP calculation. Measured: 16.47 GPU-h for 200 U-Net epochs =
@@ -201,3 +207,5 @@ evidence about the setup, and forgetting it means repeating it.
 | `probe_neurovision` v1 | `+experiment=neurovision training.epochs=2` | ~0.03 (~2 min) | **CUDA OOM on the first training step**, in a `GroupNorm` forward before any optimizer step ran — `Tried to allocate 432.00 MiB. GPU 0 has a total capacity of 14.56 GiB of which 346.81 MiB is free`. Everything upstream was correct (875/187 data dicts mounted, model built at 34,911,341 params, multitask loss, `FRESH:` line, W&B offline), so this is purely a memory result. Two corrections follow. A T4's *usable* capacity is **14.56 GiB, not 16** — ~1.4 GiB goes to context and reserve. And the un-checkpointed model does not fit at the default 4-patch step: it reached 14.22 GiB partway through a single forward, so the true peak is well above 14.56 GiB, against a pre-run estimate of 10–12 GB. The AMP conversion factor for this architecture is therefore ~0.75+ of fp32, not the ~0.55 assumed. Fix: `model.encoder.cnn.use_checkpoint=true`. |
 | `probe_neurovision` v2 | v1 + `model.encoder.cnn.use_checkpoint=true` | ~0.03 (~2 min) | Checkpointing cleared the forward; **OOM moved to `backward`**, at step 4. `Tried to allocate 216.00 MiB ... 154.81 MiB is free`, with **888 MiB "reserved by PyTorch but unallocated"** — i.e. ~0.9 GB lost to allocator fragmentation against a 216 MiB shortfall, which is what motivated `expandable_segments:True` in v3 rather than paying decoder recompute for the same memory. It ran far enough to read the bar — `3/875 [00:27<1:45:01, 7.23s/it]` — the first sign the ~15 h estimate was badly wrong. Not trusted on its own: a process allocating at the ceiling thrashes, which inflates step time by an unknown amount. |
 | `probe_neurovision` v3 | v2 + `expandable_segments`, `data.overfit_n=50`, 3 epochs | ~0.12 (~7 min) | **COMPLETED — the run that re-planned the project.** Steady state `3.69` then `3.59 s/it` over 50-step epochs; loss fell 1.36 → 1.05 and val Dice reached ~0.65 ET, so the architecture trains correctly and this is purely a cost result. (Those metrics are memorization — `overfit_n` sets val = train — and must never be reported.) Scaled up: **0.875 h/epoch** over 875 steps, validation **3.76 s/case → 0.195 h** over 187 cases, so 100 epochs = **~91 h**, versus `baseline_unet3d`'s measured 0.082 h/epoch. `neurovision` is **10.7x the U-Net per epoch**. Peak VRAM **13.59 GiB allocated / 14.39 reserved of 14.56** — 93% of the card, *with* checkpointing on. This is what forced 64³ / 80 epochs. It also calibrated the AMP factor properly: 12.44 GB of fp32 saved tensors predicted vs 13.59 GiB observed, so the right conversion is **~1.0x plus ~1.6 GB** of weights, Adam and workspace — not 0.5–0.6, and not the 0.75 guessed from v1. |
+| `probe_neurovision` v4 | 64³ (from the config), **no** gradient checkpointing, `data.overfit_n=50`, 3 epochs | ~0.10 (~6 min) | **COMPLETED — the run the final plan is priced from, and the first estimate today that landed on target.** Steady state `1.12 s/it`; peak VRAM **6.17 GiB allocated / 7.31 GiB reserved of 14.56**, no OOM. Projection beforehand was 1.0 s/step and ~7.4 GiB, so the recalibrated memory model (≈1.0× the fp32 saved-tensor figure, plus ~1.6 GB for weights, Adam and workspace) is confirmed. **Gradient checkpointing is therefore off permanently** — there is ~7 GiB of headroom at 64³ and the ~20-30% recompute is given back. Scaled up: **0.272 h/epoch** over 875 steps = 21.8 h for 80 epochs. Validation measured **4.5 s/case**, i.e. 0.234 h over 187 cases — MORE per case than the 3.76 s at 96³, because smaller windows means more of them to tile the same volume. That overage is what prompted `val_interval` 5 → 10. |
+| `probe_neurovision` v5 | v4's config, re-run against the commit that logs gradient norms | ~0.10 (~6 min) | Reads the per-epoch grad-norm median / p90 / max / clipped-fraction that `Trainer` now writes to the python log, to settle `grad_clip_norm` before any long run starts. Result recorded when it lands. |
