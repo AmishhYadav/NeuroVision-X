@@ -162,4 +162,4 @@ evidence about the setup, and forgetting it means repeating it.
 
 | Run | Config | GPU h burned | What happened |
 |---|---|---|---|
-| _(none yet)_ | | | |
+| `probe_neurovision` v1 | `+experiment=neurovision training.epochs=2` | ~0.03 (~2 min) | **CUDA OOM on the first training step**, in a `GroupNorm` forward before any optimizer step ran — `Tried to allocate 432.00 MiB. GPU 0 has a total capacity of 14.56 GiB of which 346.81 MiB is free`. Everything upstream was correct (875/187 data dicts mounted, model built at 34,911,341 params, multitask loss, `FRESH:` line, W&B offline), so this is purely a memory result. Two corrections follow. A T4's *usable* capacity is **14.56 GiB, not 16** — ~1.4 GiB goes to context and reserve. And the un-checkpointed model does not fit at the default 4-patch step: it reached 14.22 GiB partway through a single forward, so the true peak is well above 14.56 GiB, against a pre-run estimate of 10–12 GB. The AMP conversion factor for this architecture is therefore ~0.75+ of fp32, not the ~0.55 assumed. Fix: `model.encoder.cnn.use_checkpoint=true`. |
