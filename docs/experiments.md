@@ -44,6 +44,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 
 | Run | Config | Seed | Model | Epochs | GPU h | Dice ET | Dice TC | Dice WT | HD95 ET | HD95 TC | HD95 WT | ECE | W&B | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `baseline_unet3d` (80ep/64³) | `+experiment=baseline_unet3d data.num_workers=2`, `GIT_REF=6ee28a7` | 42 | `unet3d`, 12.87M | 80 / 80 | ~3.2 | 0.8442 | 0.9058 | 0.9276 | 4.91 | 5.24 | 6.72 | — | `pzu8y5fo` (offline) | 6–10 below |
 | `baseline_unet3d` | root config, **not** `+experiment=` — see note 1. Overrides: `model=unet3d training.epochs=200 training.val_interval=2 data.dataset_type=dataset data.num_workers=2` | 42 | `unet3d`, 12.87M | 200 / 200 | 16.5 | 0.8587 | 0.9157 | 0.9354 | 4.02 | 5.21 | 5.36 | — | `nz5y7li7` | 1–5 below |
 
 **Notes for `baseline_unet3d` / `nz5y7li7`**
@@ -79,6 +80,36 @@ sessions by resume is still ONE row — sum the GPU hours.
 5. W&B ran in `offline` mode and was synced afterwards; the run id is the same
    across both sessions because it lives in the checkpoint. Full environment,
    seeds and runtimes: `docs/reproducibility.md`.
+
+
+**Notes for `baseline_unet3d` (80ep/64³) / `pzu8y5fo`**
+
+6. **This is the row the fusion runs are compared against**, not the 200-epoch
+   one above it. Same `_baseline_common.yaml` as `neurovision` and
+   `ablation_content_only_gate`: 64³ patches, 80 epochs, `val_interval` 10,
+   `grad_clip_norm` 5.0, seed 42. One Kaggle T4 session, no resume.
+7. **Cost of the re-planned schedule, against the 200-epoch/96³ row.** Dice ET
+   0.8587 → 0.8442 (−0.0145), TC 0.9157 → 0.9058 (−0.0099), WT 0.9354 →
+   0.9276 (−0.0078). HD95 ET 4.02 → 4.91 mm, TC 5.21 → 5.24 mm, WT 5.36 →
+   6.72 mm. So the 64³/80-epoch cut costs roughly **1 Dice point and
+   0.9–1.4 mm of HD95**. That was the price of affording the P2 ablation, and
+   it applies identically to every arm, so relative comparisons are unaffected
+   — but the absolute numbers are not state-of-the-art and the paper must not
+   present them as such. WT boundary suffers most, which is expected: whole
+   tumour is the largest structure and so loses the most from a smaller
+   context window.
+8. **Peak VRAM 0.50 GiB of 14.56.** The U-Net leaves 96% of the card unused;
+   it is `neurovision` that is memory-bound, not the baseline.
+9. **`grad_clip_norm` 5.0 is doing its intended job**, confirmed on real data:
+   median gradient norm 0.720, p90 2.373, **max 15.086**, and only **1.6% of
+   875 steps clipped**. At the previous value of 1.0 most steps would have
+   been rescaled, which is what probe v5 caught before any run started.
+10. **HD95 ET is over n = 184**: 5 of 189 cases are NaN because exactly one
+    side of the ET region was empty. `gt_empty_ET` on the test split is
+    **0.0265** (5 of 189), matching the 2.6% measured over the full BraTS 2021
+    training set — an independent check that split and label handling are
+    intact. Evaluation ran on the **Mac CPU** in ~35 min for both splits
+    (6.49 s/case), consuming zero GPU hours.
 
 ---
 
