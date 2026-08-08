@@ -163,10 +163,17 @@ Everything else — calibration, temperature scaling, boundary stratification,
 gate extraction, explainability, figures, tables — is CPU and runs on the Mac
 for zero GPU hours. None of it belongs in a Kaggle session.
 
-Total: 0.5 + 8 + 15 + 15 + 7 = **45.5 h**, leaving ~14 h against 60 for failed
-sessions, queue time and resumes. Spend the margin on failures first. If nothing
-breaks, the best marginal use of ~6 h is `ablation_fusion_concat` at the 40-epoch
-schedule, so the paper carries one architecture-ablation row.
+Total: 0.15 (probes, spent) + 3 + 23 + 23 + 7 = **~56 h**, leaving ~4 h against
+60 for failed sessions, queue time and resumes. That margin is thin — thinner
+than the original plan's ~14 h — which is the price of having discovered the
+real cost. Spend it on failures only; the `ablation_fusion_concat` row the
+original plan held in reserve is no longer affordable and is cut.
+
+The `neurovision` and ablation figures are still projections until probe v4
+reports: 0.875 h/epoch scaled by the 0.296 volume ratio, minus the gradient
+checkpointing v4 tests removing. Four separate pre-run estimates of this
+model's cost and memory have now been wrong, so treat ~23 h as provisional
+until a clean 64³ step time is on record here.
 
 The U-Net estimate is **re-planned against measurement**, not against the
 original paper-FLOP calculation. Measured: 16.47 GPU-h for 200 U-Net epochs =
