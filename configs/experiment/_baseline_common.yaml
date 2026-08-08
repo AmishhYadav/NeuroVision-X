@@ -111,7 +111,35 @@ training:
       enabled: false
       weights: null
 
-  grad_clip_norm: 1.0
+  # 5.0, raised from 1.0 on 2026-08-08 by MEASUREMENT (probe v5), before any
+  # reportable run started -- which is the only moment it can be changed.
+  #
+  # Measured for `neurovision` at 64^3, stable across three epochs:
+  #   median 1.07-1.16 | p90 ~2.0 | max 3.9 | CLIPPED ON 66-70% OF STEPS
+  #
+  # At 1.0 this model spent ~70% of its training with the ENTIRE gradient
+  # rescaled, i.e. at an effective learning rate the config does not describe.
+  # Two consequences, both fatal to the plan rather than merely untidy:
+  #
+  #   1. `neurovision` and `ablation_content_only_gate` would clip at different
+  #      rates (they differ in the ambiguity probes, hence in gradient
+  #      magnitude), so the P2 comparison would confound "does conditioning on
+  #      disagreement help?" with "did these two runs train at different
+  #      effective segmentation LRs?". That ablation is the whole contribution.
+  #   2. It silently defeats the deliberate choice NOT to normalize the
+  #      multi-task loss weights. Segmentation is pinned at exactly 1.0 so its
+  #      gradient is identical across ablations -- clipping the whole vector
+  #      70% of the time undoes that, which is a caveat already recorded
+  #      against the multi-task weights in CLAUDE.md.
+  #
+  # 5.0 sits above the measured maximum of 3.894, so clipping goes back to
+  # being what it is for: a guard against rare spikes, not a de facto LR
+  # schedule. The baseline is unaffected either way (unet3d's gradient norm at
+  # init is 0.522) but shares the value, because a comparison in which one arm
+  # clips and another does not is not a controlled one.
+  #
+  # DO NOT CHANGE THIS MID-RUN, and do not change it for one arm only.
+  grad_clip_norm: 5.0
 
   # Validation is full sliding-window inference over all 187 val cases and is
   # NOT cheap. MEASURED for `neurovision` at 64^3 (probe v4): 4.5 s/case, so
