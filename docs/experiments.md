@@ -117,10 +117,39 @@ between-run noise we cannot measure.** State it as a limitation.
 
 | Run | Config | Purpose | Est. GPU h |
 |---|---|---|---|
-| _timing probe_ | `+experiment=neurovision training.epochs=2` | **Run this first.** `neurovision` has never touched a GPU, so its ~15 h is a pure estimate. Two epochs measure the real h/epoch. If it lands above ~0.20 h/epoch the budget breaks, and the fix is to cut all three runs to 80 epochs *together* — they must share a schedule or nothing below is a controlled comparison. | ~0.5 |
-| `baseline_unet3d` | `+experiment=baseline_unet3d` | Milestone-1 baseline. The number the fusion model must be competitive with. Re-run at the file's own 100-epoch schedule; see note 1 on the row above, which is why the existing 200-epoch row cannot serve. | ~8 |
-| `neurovision` | `+experiment=neurovision` | The proposed model, same `_baseline_common` schedule as the baseline. Also serves as P2 rung 3, so the ladder's top rung costs nothing extra. | ~15 |
-| `ablation_content_only_gate` | `+experiment=ablation_content_only_gate` | **P2 rung 2 — the load-bearing experiment.** `model.fusion.use_ambiguity: false`, a one-key diff against `neurovision`, parameter-matched to within 0.018% (6,360 of 34,911,341). Isolates the ambiguity conditioning from the gate's mere existence. If it ties `neurovision` on ECE and HD95, the declared null result fires and the contribution must be rewritten as the smaller claim. | ~15 |
+| _timing probe_ | `+experiment=neurovision data.overfit_n=50` | **DONE — and it fired the abort trigger.** See the four `probe_neurovision` rows under *Abandoned / failed runs*; v3 is the one that produced the number. Measured at the original 96³: **3.6 s/step = 0.875 h/epoch**, i.e. ~91 h for 100 epochs, needed twice. That is >3x the whole budget, so the schedule below is the re-planned one. | ~0.15 spent |
+| `baseline_unet3d` | `+experiment=baseline_unet3d` | Milestone-1 baseline. The number the fusion model must be competitive with. Re-run at the shared 80-epoch / 64³ schedule; the existing 200-epoch row cannot serve, both for the reason in note 1 and because it was trained at 96³. | ~3 |
+| `neurovision` | `+experiment=neurovision` | The proposed model, same `_baseline_common` schedule as the baseline. Also serves as P2 rung 3, so the ladder's top rung costs nothing extra. Two sessions. | ~23 |
+| `ablation_content_only_gate` | `+experiment=ablation_content_only_gate` | **P2 rung 2 — the load-bearing experiment.** `model.fusion.use_ambiguity: false`, a one-key diff against `neurovision`, parameter-matched to within 0.018% (6,360 of 34,911,341). Isolates the ambiguity conditioning from the gate's mere existence. If it ties `neurovision` on ECE and HD95, the declared null result fires and the contribution must be rewritten as the smaller claim. Its gradient-checkpointing flags must match `neurovision`'s exactly. | ~23 |
+
+**Re-planned 2026-08-08, against measurement rather than arithmetic.** The
+original plan (96³, 100 epochs) priced out at ~197 h against 60. The trigger
+written into the probe row above — *"if it lands above ~0.20 h/epoch, cut all
+three runs together"* — fired at 0.875, more than 4x the threshold.
+
+The cut is **64³ patches and 80 epochs**, set in `_baseline_common.yaml` so
+every arm inherits it. Patch volume falls 3.4x and step time falls with it.
+It lives in the shared file deliberately: patch size changes what the network
+sees, so an architecture comparison in which one arm saw 96³ and another 64³
+would be measuring two things at once.
+
+What was **not** cut, and why. The natural instinct was to cut the fusion —
+the novel, expensive-looking part. A per-submodule profile says that would
+have been exactly wrong: windowed cross-attention across all four levels is
+**1.5% of the forward pass**, while the decoder is **69%** and the stride-1
+CNN stem another 15.6%. The cost is ordinary full-resolution 3D convolution,
+not the contribution. Cutting fusion would have bought ~1% and damaged the
+paper. So the architecture, fusion, ambiguity gate, auxiliary heads and the P2
+ablation are all untouched; only data and schedule moved.
+
+Cost to state in the paper: less spatial context per training patch, which may
+cost a little whole-tumor Dice, and a schedule at ~56% of nnU-Net's reference
+budget rather than ~70%. Both apply identically to every arm.
+
+One intended side effect: at 64³ the two coarsest fusion levels (8³ = 512 and
+4³ = 64 tokens) fall under `full_attention_max_tokens: 512` and take the
+full-attention path instead of the windowed one. That is the documented rule
+working as designed, and at 512² score entries it is free.
 
 Evaluation is priced separately at **~7 h total**: `scripts/evaluate.py` on val
 **and** test for all three models with `inference.evaluation.save_logits=true`
