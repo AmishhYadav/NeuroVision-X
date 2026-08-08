@@ -27,6 +27,7 @@ import math
 import shutil
 import sys
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -150,7 +151,7 @@ def _write_splits(splits_path: Path, case_ids: tuple[str, ...]) -> None:
     write_yaml({"train": list(case_ids), "val": list(case_ids), "test": []}, splits_path)
 
 
-def _compose_config(artifacts_dir: Path) -> Any:
+def _compose_config(artifacts_dir: Path, extra_overrides: Sequence[str] = ()) -> Any:
     """Composes the real Hydra config with smoke-test-sized overrides.
 
     Uses Hydra's programmatic API (not `@hydra.main`) because this script
@@ -162,6 +163,12 @@ def _compose_config(artifacts_dir: Path) -> Any:
     Args:
         artifacts_dir: Root directory holding the synthetic preprocessed
             data, splits file, and checkpoint output for this run.
+        extra_overrides: Extra Hydra override strings, so
+            `+experiment=neurovision` can be gated on CPU before it costs a
+            rationed GPU session. A `+experiment=` group addition is applied
+            during composition while the fixed value overrides below are
+            applied afterwards, so the experiment file cannot re-inflate the
+            tiny patch size / epoch count no matter what order the list is in.
 
     Returns:
         The composed `DictConfig`.
@@ -194,17 +201,20 @@ def _compose_config(artifacts_dir: Path) -> Any:
         # model=unet3d stays at production channel widths (the default) --
         # the DATA is what should be tiny here, not the architecture, since
         # the point is to exercise the real model.
+        *extra_overrides,
     ]
     with hydra.initialize_config_dir(version_base="1.3", config_dir=_CONFIG_DIR):
         cfg = hydra.compose(config_name="config", overrides=overrides)
     return cfg
 
 
-def _run_pipeline(artifacts_dir: Path) -> dict[str, float]:
+def _run_pipeline(artifacts_dir: Path, extra_overrides: Sequence[str] = ()) -> dict[str, float]:
     """Generates synthetic data, composes config, runs training, and asserts.
 
     Args:
         artifacts_dir: Root directory for all generated artifacts.
+        extra_overrides: Extra Hydra override strings passed to
+            `_compose_config`.
 
     Returns:
         The metrics dict returned by `run_training`.
@@ -221,7 +231,7 @@ def _run_pipeline(artifacts_dir: Path) -> dict[str, float]:
     logger.info("  synthetic data written to %s", preprocessed_dir)
 
     logger.info("STAGE 2/5: composing the real Hydra config")
-    cfg = _compose_config(artifacts_dir)
+    cfg = _compose_config(artifacts_dir, extra_overrides)
     logger.info(
         "  config composed: model=%s, patch_size=%s, epochs=%d",
         cfg.model.name,
@@ -303,6 +313,20 @@ def main() -> int:
         default=None,
         help="Write artifacts here instead of a temp dir.",
     )
+    parser.add_argument(
+        "-o",
+        "--override",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "Extra Hydra override, repeatable. Use to gate a full experiment on CPU "
+            "before spending a Kaggle session, e.g. "
+            "`-o +experiment=neurovision`. The smoke-test-sized data overrides "
+            "(patch 32^3, 2 epochs, cpu) still win, so only the architecture and "
+            "loss wiring of the experiment are exercised."
+        ),
+    )
     args = parser.parse_args()
 
     setup_logging(level="INFO")
@@ -318,7 +342,7 @@ def main() -> int:
 
     success = False
     try:
-        metrics = _run_pipeline(artifacts_dir)
+        metrics = _run_pipeline(artifacts_dir, args.override)
         logger.info("=" * 70)
         logger.info("Final val/dice_mean: %.4f", metrics["val/dice_mean"])
         logger.info("SMOKE TEST PASSED")
