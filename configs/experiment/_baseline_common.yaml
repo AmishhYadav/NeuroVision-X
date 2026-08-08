@@ -184,7 +184,27 @@ training:
 
   # Under Kaggle's 12h wall clock. The trainer predicts whether the next epoch
   # fits and exits cleanly with a saved checkpoint rather than being SIGKILLed.
-  max_hours: 11.0
+  # 10.5, lowered from 11.0 once the real epoch cost was measured.
+  #
+  # Trainer predicts whether the NEXT epoch fits using the MEAN epoch duration
+  # so far. With val_interval 10, nine epochs in ten cost ~0.27 h and the
+  # tenth costs ~0.51 h (it also validates), so the mean is ~0.30 h and
+  # UNDERSTATES a validation epoch by ~0.21 h. Worst case: the check passes
+  # just under the limit and the epoch that follows is a validation one.
+  #
+  # At 11.0 that lands at ~11.5 h, plus ~0.15 h of clone / pip / dataset setup
+  # that happens before Trainer's clock even starts -- ~11.65 h against
+  # Kaggle's hard 12 h kill, a ~20 minute margin. A kill lands mid-epoch with
+  # no checkpoint written, losing that epoch's work.
+  #
+  # 10.5 puts the same worst case at ~11.2 h, a ~50 minute margin, and costs
+  # nothing: at ~0.30 h/epoch it is 35 epochs per session against 37, and
+  # neurovision's 80 epochs need three sessions either way.
+  #
+  # Purely operational -- it changes where sessions break, never what is
+  # trained, so it does not need to match across arms the way patch_size and
+  # grad_clip_norm do. It lives here only so every run behaves the same way.
+  max_hours: 10.5
 
 wandb:
   project: neurovision-x
