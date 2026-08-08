@@ -225,6 +225,14 @@ class Trainer:
         self.model.train()
         running_loss = 0.0
         n_batches = 0
+        # Every pre-clip gradient norm this epoch. Kept so the epoch summary
+        # below can reach the PYTHON LOG, not only W&B: whether grad_clip_norm
+        # is set correctly has to be decided before a multi-run comparison
+        # starts (clipping rescales the whole gradient, so two runs clipping at
+        # different rates train at different effective segmentation learning
+        # rates), and on Kaggle the log is retrievable from the API for free
+        # while the W&B history means downloading gigabytes of checkpoints.
+        grad_norms: list[float] = []
 
         progress = tqdm(self.train_loader, desc=f"epoch {epoch}", leave=False)
         for batch_idx, batch in enumerate(progress):
@@ -264,6 +272,7 @@ class Trainer:
                     grad_norm = float(
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_norm)
                     )
+                    grad_norms.append(grad_norm)
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
                 self.optimizer.zero_grad(set_to_none=True)
@@ -314,7 +323,39 @@ class Trainer:
             self.global_step += 1
 
         avg_loss = running_loss / n_batches if n_batches > 0 else float("nan")
-        return {"train/loss_epoch": avg_loss}
+        metrics = {"train/loss_epoch": avg_loss}
+
+        # Gradient-norm summary, to the python log so it survives without W&B.
+        # `clipped_frac` is the number that actually decides grad_clip_norm: a
+        # run clipping on most steps is training at an effective LR the config
+        # does not describe, and two runs in one comparison clipping at
+        # different rates are not a controlled comparison at all.
+        if grad_norms:
+            ordered = sorted(grad_norms)
+            n = len(ordered)
+            p50 = ordered[n // 2]
+            p90 = ordered[min(n - 1, int(0.9 * n))]
+            clipped = sum(1 for g in grad_norms if g > grad_clip_norm) / n
+            logger.info(
+                "epoch %d grad_norm: median %.3f | p90 %.3f | max %.3f | "
+                "clipped %.1f%% of %d steps (grad_clip_norm=%.2f)",
+                epoch,
+                p50,
+                p90,
+                ordered[-1],
+                100 * clipped,
+                n,
+                grad_clip_norm,
+            )
+            metrics.update(
+                {
+                    "train/grad_norm_median": p50,
+                    "train/grad_norm_p90": p90,
+                    "train/grad_norm_max": ordered[-1],
+                    "train/grad_norm_clipped_frac": clipped,
+                }
+            )
+        return metrics
 
     def validate(self, epoch: int) -> dict[str, float]:
         """Runs sliding-window inference and region metrics over `val_loader`.
