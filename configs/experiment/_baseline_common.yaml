@@ -24,7 +24,25 @@ data:
   # Explicitly restated rather than inherited, so that a later edit to
   # configs/data/brats.yaml cannot silently change what "the baseline" meant
   # halfway through the experiment table in docs/experiments.md.
-  patch_size: [96, 96, 96]
+  # 64^3, not the repo default 96^3, and this is a BUDGET decision forced by
+  # measurement -- see the probe_neurovision rows in docs/experiments.md.
+  # Measured on a real T4: `neurovision` runs at 3.6 s/step at 96^3, i.e.
+  # 0.875 h/epoch over 875 steps, so 100 epochs costs ~91 h. The plan needs
+  # that cost TWICE (the model and its parameter-matched P2 ablation) inside a
+  # 60 h budget. At 64^3 the patch volume falls 3.4x and the step falls with
+  # it, which is what brings the pair back inside the budget.
+  #
+  # It lives HERE, in the shared file, precisely because it must apply to every
+  # arm equally. Patch size changes what the network sees; an architecture
+  # comparison in which one arm saw 96^3 and another 64^3 would be measuring
+  # two things at once. Both baselines and both fusion runs inherit it, so the
+  # comparison stays controlled and the architecture itself is untouched.
+  #
+  # Cost to state in the paper: less spatial context per training patch, which
+  # may cost a little whole-tumor Dice. Evaluation is unaffected in kind --
+  # sliding-window inference already tiles the full volume -- but note
+  # inference roi_size interpolates this key, so eval tiles at 64^3 too.
+  patch_size: [64, 64, 64]
   pos_neg_ratio: [1, 1]
   samples_per_volume: 4
 
@@ -45,18 +63,24 @@ data:
   overfit_n: null # never set on a reportable run
 
 training:
-  # 100 epochs x 875 train cases x 4 patches/case = 350,000 patch presentations.
-  # For scale, nnU-Net's reference budget is 1000 epochs x 250 iterations x
-  # batch 2 = 500,000. So this is ~70% of a standard full-length 3D
-  # segmentation schedule -- chosen because it has to fit twice inside a
-  # ~30 GPU-hour week, and SwinUNETR-B is roughly 3x the cost per epoch of the
-  # U-Net at the same schedule.
+  # 80 epochs x 875 train cases x 4 patches/case = 280,000 patch presentations,
+  # against nnU-Net's reference 1000 x 250 x batch 2 = 500,000. So ~56% of a
+  # standard full-length 3D segmentation schedule.
+  #
+  # Cut from 100 to 80 alongside the 64^3 patch size above, for the same
+  # measured reason: at 0.875 h/epoch the pair of fusion runs did not fit in
+  # 60 GPU-h. 64^3 does most of the work; this closes the remainder and leaves
+  # margin for a failed session. The plan's own written trigger said that if
+  # the probe came in over 0.20 h/epoch, all runs drop schedule TOGETHER --
+  # they must share one schedule or nothing below is a controlled comparison.
+  # This is that trigger firing, and it is why the value lives in the shared
+  # file rather than in any single experiment.
   #
   # PICK THIS ONCE AND DO NOT CHANGE IT MID-RUN. The cosine schedule is defined
   # over `epochs`, so raising it on a resumed run silently rewrites the LR curve
   # the earlier epochs were trained under, and the run is then no longer any
   # single schedule.
-  epochs: 100
+  epochs: 80
 
   batch_size: 1 # x samples_per_volume 4 = 4 patches of 96^3 per optimizer step
   grad_accum_steps: 1
