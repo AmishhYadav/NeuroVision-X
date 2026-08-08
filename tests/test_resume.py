@@ -381,3 +381,110 @@ def test_resume_from_reproduces_rng_sequences(tmp_path) -> None:
     assert python_seq_1 == python_seq_2
     assert numpy_seq_1 == numpy_seq_2
     assert torch_seq_1 == pytest.approx(torch_seq_2)
+
+
+def test_real_neurovision_model_survives_a_two_session_resume(tmp_path):
+    """Resumes the ACTUAL NeuroVisionX, not a stand-in, across two processes.
+
+    Every other test in this file resumes `nn.Conv3d(4, 3, 3)`. That is the
+    right choice for testing resume *mechanics* -- optimizer moments, RNG,
+    scheduler continuity -- because those are model-agnostic and a tiny module
+    keeps the suite fast.
+
+    It leaves one thing uncovered, and it is the thing that actually happens
+    on Kaggle: `neurovision` costs ~24 GPU-h against a 12 h session cap, so it
+    MUST run as two chained sessions, and the second builds a fresh model in a
+    fresh process and loads the first session's `last.pt`. A payload that does
+    not round-trip for the real 34.9M-parameter network -- a fusion probe
+    buffer, an ambiguity-gate parameter, anything that breaks
+    `weights_only=True` -- would surface at hour 12 of a rationed run and
+    nowhere earlier.
+
+    So this asserts the whole contract on the production config: the payload
+    loads under `weights_only=True` (the safety guarantee -- see
+    `neurovision.training.checkpoint`'s module docstring), every weight is
+    bit-identical, Adam's moment buffers carry over, the epoch advances by
+    exactly one, the W&B run id survives (without it the resumed session
+    orphans the original run), and training actually continues.
+    """
+    from pathlib import Path
+
+    import hydra
+
+    from neurovision.losses.registry import build_loss
+    from neurovision.models.registry import build_model
+    from neurovision.training.checkpoint import save_checkpoint
+
+    config_dir = str(Path(__file__).resolve().parent.parent / "configs")
+    with hydra.initialize_config_dir(version_base="1.3", config_dir=config_dir):
+        cfg = hydra.compose(
+            "config",
+            overrides=[
+                "data.root_dir=/x",
+                "data.preprocessing.out_dir=/p",
+                "data.splits.path=/s",
+                "+experiment=neurovision",
+            ],
+        )
+
+    # --- session 1 -------------------------------------------------------
+    model_a = build_model(cfg)
+    loss_fn = build_loss(cfg)
+    opt_a = torch.optim.AdamW(model_a.parameters(), lr=1e-4)
+
+    # One real step, so Adam's exp_avg buffers hold something non-trivial and
+    # a resume that silently dropped them would fail below rather than pass.
+    images = torch.randn(1, 4, 32, 32, 32)
+    labels = (torch.rand(1, 3, 32, 32, 32) > 0.7).float()
+    model_a.train()
+    loss_fn(model_a(images), labels).backward()
+    opt_a.step()
+
+    save_checkpoint(
+        tmp_path,
+        model_a,
+        opt_a,
+        epoch=7,
+        global_step=123,
+        best_metric=0.42,
+        best_metric_name="val/dice_mean",
+        best_metric_mode="max",
+        wandb_run_id="abc123",
+        cfg=cfg,
+        is_best=True,
+    )
+
+    # --- session 2: fresh objects, as a new Kaggle kernel would build ----
+    model_b = build_model(cfg)
+    opt_b = torch.optim.AdamW(model_b.parameters(), lr=1e-4)
+
+    # Direct guard: a payload holding a DictConfig or a numpy RNG ndarray
+    # raises UnpicklingError here. weights_only=False would "fix" it by making
+    # loading any checkpoint arbitrary code execution.
+    torch.load(tmp_path / LAST_CHECKPOINT_NAME, weights_only=True)
+
+    state = load_checkpoint(tmp_path / LAST_CHECKPOINT_NAME, model_b, optimizer=opt_b)
+
+    for (name, before), after in zip(model_a.state_dict().items(), model_b.state_dict().values()):
+        assert torch.equal(before, after), f"weight {name} differs after resume"
+
+    moments_a = opt_a.state_dict()["state"]
+    moments_b = opt_b.state_dict()["state"]
+    assert moments_a, "no Adam state to compare -- the step above did not run"
+    for key, entry in moments_a.items():
+        assert torch.allclose(entry["exp_avg"], moments_b[key]["exp_avg"])
+
+    # The saved epoch already completed; resuming *at* it would retrain it and
+    # desynchronize the epoch-indexed LR schedule.
+    assert state.start_epoch == 8
+    assert state.global_step == 123
+    assert state.best_metric == pytest.approx(0.42)
+    # Without this the resumed session calls wandb.init() fresh and orphans
+    # the run the checkpoint belongs to.
+    assert state.wandb_run_id == "abc123"
+
+    model_b.train()
+    resumed_loss = loss_fn(model_b(images), labels)
+    resumed_loss.backward()
+    opt_b.step()
+    assert torch.isfinite(resumed_loss)
