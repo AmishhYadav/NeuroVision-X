@@ -60,6 +60,7 @@ choices keep this tractable:
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 import torch
@@ -470,28 +471,41 @@ class BranchAmbiguity(nn.Module):
 
         disagreement = (p_c - p_s).abs()
 
-        # eps clamp is LOAD-BEARING, not defensive style: a saturated logit
-        # gives p exactly 0.0 or 1.0 in floating point, log(0) is -inf, and
-        # 0 * -inf is NaN. A trained (or even just confident, early-training)
-        # branch saturates routinely, and a NaN here would propagate silently
-        # into the gate and then into every downstream feature with no error
-        # anywhere.
-        eps = 1e-6
-        p_c_clamped = p_c.clamp(eps, 1.0 - eps)
-        p_s_clamped = p_s.clamp(eps, 1.0 - eps)
+        # Bernoulli entropy computed FROM THE LOGITS via softplus, never from
+        # the probabilities via log. This is a correctness fix, not a style
+        # preference -- the probability form destroyed a 10.5 GPU-hour run.
+        #
+        # The obvious form is `-(p*log(p) + (1-p)*log(1-p))` guarded by an eps
+        # clamp, `p.clamp(eps, 1 - eps)` with eps = 1e-6. That is exactly right
+        # in fp32 and a COMPLETE NO-OP in fp16, because fp16's epsilon is
+        # ~9.8e-4: `1.0 - 1e-6` rounds to exactly 1.0, so the upper clamp
+        # clamps nothing. Under AMP the probes run in fp16, and any p above
+        # ~0.9995 -- which a confident probe reaches within ~10 epochs --
+        # becomes exactly 1.0. Then (1-p) is 0, log(0) is -inf, and 0 * -inf
+        # is NaN. The NaN flows into the gate, the fused features, and the
+        # loss, and nothing raises: the run just quietly trains on NaN.
+        # Measured on `neurovision` session 1 (2026-08-09): loss was NaN by
+        # epoch 20 at the latest, best.pt frozen at epoch 9.
+        #
+        # For p = sigmoid(z): log(p) = -softplus(-z) and log(1-p) =
+        # -softplus(z), so
+        #     H(p) = p * softplus(-z) + (1 - p) * softplus(z)
+        # softplus is finite everywhere, so a saturated branch gives
+        # `0 * finite = 0` -- the correct entropy of a certain prediction --
+        # instead of `0 * inf = NaN`. No clamp, no eps, no dtype assumption.
+        #
+        # Normalized to [0, 1] by ln 2 (the maximum, at p = 0.5). cnn_feat and
+        # swin_proj are GroupNorm'd and roughly unit-scale; an un-normalized
+        # entropy (max 0.693 nats) alongside a disagreement already in [0, 1]
+        # would enter the gate's first conv at two different scales for no
+        # reason.
+        log2 = math.log(2.0)
 
-        # Per-channel Bernoulli entropy, normalized to [0, 1] by dividing by
-        # ln 2 (its maximum, at p=0.5). cnn_feat/swin_proj are GroupNorm'd and
-        # roughly unit-scale; an un-normalized entropy (max 0.693 nats) and a
-        # disagreement already in [0, 1] would otherwise enter the gate's
-        # first conv at two arbitrarily different scales for no reason.
-        log2 = torch.log(torch.tensor(2.0, dtype=p_c.dtype, device=p_c.device))
+        def _entropy_from_logits(logits: Tensor, p: Tensor) -> Tensor:
+            return (p * F.softplus(-logits) + (1.0 - p) * F.softplus(logits)) / log2
 
-        def _entropy(p: Tensor) -> Tensor:
-            return -(p * torch.log(p) + (1.0 - p) * torch.log(1.0 - p)) / log2
-
-        h_c = _entropy(p_c_clamped)
-        h_s = _entropy(p_s_clamped)
+        h_c = _entropy_from_logits(l_c, p_c)
+        h_s = _entropy_from_logits(l_s, p_s)
 
         # Per-region, not summed to one channel: ET is the region the
         # calibration claim leans on, and summing would make an ET-only

@@ -761,3 +761,72 @@ def test_gate_generator_raises_on_extra_channels_ambiguity_mismatch() -> None:
     )
     with pytest.raises(ValueError, match="extra_channels"):
         gate_on(cnn_feat, swin_proj, ambiguity=None)
+
+
+def test_branch_ambiguity_entropy_is_finite_under_fp16_saturation() -> None:
+    """A saturated probe must give finite entropy in fp16, not NaN.
+
+    This is a regression guard for the bug that destroyed 10.5 GPU-hours of
+    `neurovision` session 1 (2026-08-09). The entropy was computed from
+    probabilities as `-(p*log(p) + (1-p)*log(1-p))`, guarded by
+    `p.clamp(eps, 1 - eps)` with `eps = 1e-6`.
+
+    That guard is exactly correct in fp32 and a COMPLETE NO-OP in fp16:
+    fp16's epsilon is ~9.8e-4, so `1.0 - 1e-6` rounds to exactly 1.0 and the
+    upper clamp clamps nothing. Under AMP the probes run in fp16, so any
+    probability above ~0.9995 became exactly 1.0, `(1 - p)` became 0,
+    `log(0)` was -inf, and `0 * -inf` was NaN. The NaN flowed through the gate
+    into every fused feature and into the loss, and nothing raised -- training
+    simply continued on NaN, with `best.pt` frozen at the last pre-divergence
+    epoch.
+
+    Two properties are asserted, and BOTH are needed. Finiteness alone would
+    pass for an implementation that silently returns zeros; correctness alone
+    (checked elsewhere in fp32) is what the old code already satisfied.
+
+    The dtype is the entire point of the test -- run it in fp32 only and it
+    passes against the broken implementation.
+    """
+    torch.manual_seed(0)
+    module = BranchAmbiguity(channels=16, num_regions=3)
+    # The state a confident probe reaches after ~10 epochs of real training:
+    # a logit large enough that sigmoid saturates to exactly 1.0 in fp16.
+    with torch.no_grad():
+        module.cnn_logits.bias.fill_(30.0)
+        module.swin_logits.bias.fill_(-30.0)
+
+    for dtype in (torch.float32, torch.float16):
+        mod = module.half() if dtype is torch.float16 else module.float()
+        cnn_feat = torch.randn(1, 16, 4, 4, 4, dtype=dtype)
+        swin_proj = torch.randn(1, 16, 4, 4, 4, dtype=dtype)
+        ambiguity, _, _ = mod(cnn_feat, swin_proj)
+
+        assert torch.isfinite(ambiguity).all(), (
+            f"non-finite ambiguity in {dtype}: a saturated probe must give entropy 0, "
+            "not NaN. See this test's docstring."
+        )
+        # Channels [0:num_regions] are disagreement, the rest are the two
+        # entropies. A certain probe has zero entropy.
+        entropy = ambiguity[:, 3:]
+        assert entropy.max().item() < 1e-3, "a saturated probe should have ~zero entropy"
+
+
+def test_branch_ambiguity_entropy_is_one_at_maximum_uncertainty() -> None:
+    """p = 0.5 must give entropy exactly 1.0, since it is normalized by ln 2.
+
+    Pairs with the fp16 finiteness test above: that one would also pass for an
+    implementation that returned zeros everywhere, so the actual value has to
+    be pinned somewhere too.
+    """
+    module = BranchAmbiguity(channels=16, num_regions=3).float()
+    # Zero weights and biases -> logits 0 -> p = 0.5 for both branches.
+    with torch.no_grad():
+        for conv in (module.cnn_logits, module.swin_logits):
+            conv.weight.zero_()
+            conv.bias.zero_()
+
+    ambiguity, _, _ = module(torch.randn(1, 16, 2, 2, 2), torch.randn(1, 16, 2, 2, 2))
+
+    assert ambiguity[:, 3:].mean().item() == pytest.approx(1.0, abs=1e-5)
+    # Both branches predict 0.5, so they agree exactly.
+    assert ambiguity[:, :3].abs().max().item() < 1e-6
