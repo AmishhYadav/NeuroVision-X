@@ -179,6 +179,19 @@ export default function App() {
   const hasLogits = detail?.meta.has_logits ?? false;
   const hasPrediction = detail?.meta.has_prediction ?? false;
   const uncertaintyKind = caseData.uncertainty?.kind ?? null;
+
+  // Fraction of this case's artifacts that have arrived. Counted against what
+  // the case ACTUALLY has -- a case with no label or no logits must still be
+  // able to reach 100%, or the bar would stall short of the end and look like
+  // a failed load.
+  const expectedArtifacts =
+    4 + 1 + (hasLabel ? 1 : 0) + (hasLogits ? 1 : 0); // modalities + profile + label + logits
+  const loadedArtifacts =
+    Object.keys(caseData.volumes).length +
+    (caseData.profile ? 1 : 0) +
+    (caseData.labelMask ? 1 : 0) +
+    (caseData.uncertainty ? 1 : 0);
+  const loadProgress = Math.min(1, loadedArtifacts / expectedArtifacts);
   const ribbonPlane: Plane =
     layout === "single" ? singlePlane : (expandedPlane ?? "axial");
   const ribbonLabel = ribbonPlane.charAt(0).toUpperCase() + ribbonPlane.slice(1);
@@ -250,6 +263,30 @@ export default function App() {
             </div>
           ) : (
             <>
+              {/* A case pulls four modality volumes plus masks, entropy and the
+                  profile - around 20 MB. Without this the viewports sit black
+                  for several seconds and the app reads as frozen. Determinate,
+                  because we know exactly how many artifacts are outstanding. */}
+              {caseData.loading && (
+                <div
+                  className="flex shrink-0 items-center gap-3 border border-surface-seam bg-surface-panel px-3 py-1.5"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="font-condensed text-[11px] tracking-[0.12em] text-text-dim uppercase">
+                    Loading {selectedCaseId}
+                  </span>
+                  <span className="h-px flex-1 bg-surface-seam">
+                    <span
+                      className="block h-px bg-text-secondary transition-[width] duration-[120ms]"
+                      style={{ width: `${Math.round(loadProgress * 100)}%` }}
+                    />
+                  </span>
+                  <span className="tabular font-mono text-[11px] text-text-dim">
+                    {Math.round(loadProgress * 100)}%
+                  </span>
+                </div>
+              )}
               <div className="min-h-0 flex-1">
                 <ViewportGrid
                   layout={layout}
