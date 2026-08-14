@@ -23,6 +23,8 @@
 # is not the same thing and should not be silently ignored.
 app/frontend/node_modules/
 app/frontend/dist/
+# tsc -b incremental state. Machine-local and rewritten on every build.
+app/frontend/*.tsbuildinfo
 
 # Python
 __pycache__/

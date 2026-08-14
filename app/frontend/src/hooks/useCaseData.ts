@@ -9,6 +9,7 @@ import {
   type CaseDetail,
   type CaseProfile,
   type Modality,
+  type UncertaintyBuffer,
   type VolumeBuffer,
 } from "../api";
 
@@ -19,7 +20,7 @@ export interface CaseDataState {
   volumes: Partial<Record<Modality, VolumeBuffer>>;
   predictionMask: VolumeBuffer | null;
   labelMask: VolumeBuffer | null;
-  uncertainty: VolumeBuffer | null;
+  uncertainty: UncertaintyBuffer | null;
   profile: CaseProfile | null;
   loading: boolean;
   error: string | null;

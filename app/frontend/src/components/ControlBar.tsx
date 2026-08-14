@@ -8,6 +8,7 @@ interface ControlBarProps {
   overlayMode: OverlayMode;
   onChangeOverlayMode: (m: OverlayMode) => void;
   hasLabel: boolean;
+  hasPrediction: boolean;
   showTruthOutline: boolean;
   onToggleTruthOutline: () => void;
   overlayOpacity: number;
@@ -28,10 +29,10 @@ const MODALITIES: { key: Modality; label: string }[] = [
   { key: "flair", label: "FLAIR" },
 ];
 
-const OVERLAY_MODES: { key: OverlayMode; label: string; needsLabel: boolean }[] = [
-  { key: "prediction", label: "Prediction", needsLabel: false },
-  { key: "truth", label: "Truth", needsLabel: true },
-  { key: "disagreement", label: "Disagreement", needsLabel: true },
+const OVERLAY_MODES: { key: OverlayMode; label: string }[] = [
+  { key: "prediction", label: "Prediction" },
+  { key: "truth", label: "Truth" },
+  { key: "disagreement", label: "Disagreement" },
 ];
 
 function Divider() {
@@ -44,6 +45,7 @@ export function ControlBar({
   overlayMode,
   onChangeOverlayMode,
   hasLabel,
+  hasPrediction,
   showTruthOutline,
   onToggleTruthOutline,
   overlayOpacity,
@@ -75,8 +77,17 @@ export function ControlBar({
       <Divider />
 
       <div className="flex shrink-0 items-center gap-1" role="group" aria-label="Overlay">
-        {OVERLAY_MODES.map(({ key, label, needsLabel }) => {
-          const disabled = needsLabel && !hasLabel;
+        {OVERLAY_MODES.map(({ key, label }) => {
+          // Prediction needs a saved prediction; Truth needs a label;
+          // Disagreement compares the two, so it needs both.
+          const missingPrediction = key !== "truth" && !hasPrediction;
+          const missingLabel = key !== "prediction" && !hasLabel;
+          const disabled = missingPrediction || missingLabel;
+          const hint = missingPrediction
+            ? "No saved prediction for this case."
+            : missingLabel
+              ? "No ground-truth label for this case."
+              : undefined;
           return (
             <button
               key={key}
@@ -84,7 +95,7 @@ export function ControlBar({
               disabled={disabled}
               onClick={() => onChangeOverlayMode(key)}
               aria-pressed={overlayMode === key}
-              title={disabled ? "No ground-truth label for this case." : undefined}
+              title={hint}
               className={`rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
                 disabled
                   ? "cursor-not-allowed text-text-dim"
@@ -151,7 +162,7 @@ export function ControlBar({
         }`}
       >
         <Power size={13} aria-hidden="true" />
-        Entropy
+        Predictive entropy
       </button>
       {!hasLogits && (
         <span className="ml-2 hidden shrink-0 font-mono text-[11px] text-text-dim sm:inline">

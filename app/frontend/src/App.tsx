@@ -21,6 +21,11 @@ import { ControlBar, MODALITY_ORDER } from "./components/ControlBar";
 
 const UNCERTAINTY_OPACITY = 0.6;
 const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 };
+// Module-level so this is the *same* array reference across renders - a
+// fresh `[]` on every render (while the profile is still loading) would
+// re-trigger the ribbon's draw effect on unrelated re-renders, e.g. dragging
+// the opacity slider.
+const EMPTY_PROFILE: number[] = [];
 
 type BootState = "loading" | "ready" | "unreachable" | "error";
 
@@ -88,6 +93,12 @@ export default function App() {
     });
     setExpandedPlane(null);
     if (!caseData.detail.meta.has_label) setOverlayMode("prediction");
+    // Prediction and Disagreement overlays both need a saved prediction;
+    // fall back to Truth (if available) rather than leaving the mode on a
+    // now-disabled control.
+    if (!caseData.detail.meta.has_prediction && caseData.detail.meta.has_label) {
+      setOverlayMode("truth");
+    }
     if (!caseData.detail.meta.has_logits) setShowUncertainty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseData.detail?.meta.case_id]);
@@ -157,6 +168,8 @@ export default function App() {
   const shape = detail?.meta.shape ?? null;
   const hasLabel = detail?.meta.has_label ?? false;
   const hasLogits = detail?.meta.has_logits ?? false;
+  const hasPrediction = detail?.meta.has_prediction ?? false;
+  const uncertaintyKind = caseData.uncertainty?.kind ?? null;
   const ribbonPlane: Plane =
     layout === "single" ? singlePlane : (expandedPlane ?? "axial");
   const ribbonLabel = ribbonPlane.charAt(0).toUpperCase() + ribbonPlane.slice(1);
@@ -255,7 +268,7 @@ export default function App() {
                   onScrub={(i) =>
                     setSliceIndices((prev) => ({ ...prev, [ribbonPlane]: i }))
                   }
-                  tumor={profilePlane?.tumor ?? []}
+                  tumor={profilePlane?.tumor ?? EMPTY_PROFILE}
                   error={profilePlane?.error ?? null}
                   entropy={profilePlane?.entropy ?? null}
                   onFocusRibbon={() => setFocusedPlane(ribbonPlane)}
@@ -268,7 +281,12 @@ export default function App() {
         {selectedCaseId && !caseData.error && (
           <div className="w-56 shrink-0 overflow-y-auto border-l border-surface-seam bg-surface-panel">
             <MetricsPanel metrics={caseData.detail?.metrics ?? null} regions={caseData.detail?.regions ?? null} />
-            <Legend overlayMode={overlayMode} showUncertainty={showUncertainty} hasLabel={hasLabel} />
+            <Legend
+              overlayMode={overlayMode}
+              showUncertainty={showUncertainty}
+              hasLabel={hasLabel}
+              uncertaintyKind={uncertaintyKind}
+            />
           </div>
         )}
       </div>
@@ -279,6 +297,7 @@ export default function App() {
         overlayMode={overlayMode}
         onChangeOverlayMode={setOverlayMode}
         hasLabel={hasLabel}
+        hasPrediction={hasPrediction}
         showTruthOutline={showTruthOutline}
         onToggleTruthOutline={() => setShowTruthOutline((v) => !v)}
         overlayOpacity={overlayOpacity}

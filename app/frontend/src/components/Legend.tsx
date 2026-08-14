@@ -1,9 +1,13 @@
+import { PREDICTIVE_ENTROPY_SINGLE_PASS } from "../api";
+import { ENTROPY_ONE_CHANNEL } from "../lib/colors";
 import type { OverlayMode } from "../lib/render";
 
 interface LegendProps {
   overlayMode: OverlayMode;
   showUncertainty: boolean;
   hasLabel: boolean;
+  /** Raw `X-Uncertainty-Kind` header value from the last uncertainty fetch, or null if absent. */
+  uncertaintyKind: string | null;
 }
 
 function Swatch({ color, label }: { color: string; label: string }) {
@@ -19,7 +23,7 @@ function Swatch({ color, label }: { color: string; label: string }) {
   );
 }
 
-export function Legend({ overlayMode, showUncertainty, hasLabel }: LegendProps) {
+export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind }: LegendProps) {
   return (
     <div className="flex flex-col gap-2 border-t border-surface-seam px-3 py-3">
       <div className="eyebrow">Legend</div>
@@ -52,17 +56,42 @@ export function Legend({ overlayMode, showUncertainty, hasLabel }: LegendProps) 
 
       {showUncertainty && (
         <div className="flex flex-col gap-1.5 pt-1">
-          <div
-            className="h-2 w-full rounded-[2px]"
-            style={{
-              background: "linear-gradient(90deg, #3B0F70, #E4693E, #FCFDBF)",
-            }}
-            aria-hidden="true"
-          />
+          {/* The bar spans the full [0, 1] scale the colours encode, with a
+              tick where ONE region channel is maximally uncertain (1/3).
+              Everything to the right of it needs two of the three channels
+              uncertain at once, so marking it tells the reader which part of
+              the ramp this field can realistically reach. */}
+          <div className="relative h-2 w-full">
+            <div
+              className="h-2 w-full rounded-[2px]"
+              style={{
+                background: "linear-gradient(90deg, #3B0F70, #E4693E, #FCFDBF)",
+              }}
+              aria-hidden="true"
+            />
+            <div
+              className="absolute top-0 h-2 w-px bg-white/80"
+              style={{ left: `${ENTROPY_ONE_CHANNEL * 100}%` }}
+              aria-hidden="true"
+            />
+          </div>
           <div className="flex justify-between font-mono text-[10px] text-text-dim">
             <span>0</span>
             <span>Predictive entropy</span>
             <span>1</span>
+          </div>
+          <div className="text-center font-mono text-[10px] text-text-dim">
+            tick = 1 channel fully uncertain
+          </div>
+          {/* Sub-label states exactly what was measured. The backend header
+              is the source of truth - never fall back to the reassuring
+              "single pass" text for an unrecognized or missing header, since
+              this layer must never be presented as epistemic/MC-dropout
+              uncertainty when it isn't. */}
+          <div className="text-center font-mono text-[10px] text-text-dim">
+            {uncertaintyKind === PREDICTIVE_ENTROPY_SINGLE_PASS
+              ? "single pass · aleatoric + epistemic combined"
+              : `unknown source (${uncertaintyKind ?? "no header"})`}
           </div>
         </div>
       )}

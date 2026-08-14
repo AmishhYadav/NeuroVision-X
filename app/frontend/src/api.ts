@@ -75,6 +75,20 @@ export interface VolumeBuffer {
   shape: [number, number, number];
 }
 
+/** The only uncertainty kind the client is allowed to present as such - see UncertaintyBuffer. */
+export const PREDICTIVE_ENTROPY_SINGLE_PASS = "predictive-entropy-single-pass";
+
+/**
+ * `VolumeBuffer` plus the `X-Uncertainty-Kind` response header, verbatim.
+ * The backend is CORS-exposing that header on purpose so the client cannot
+ * mislabel what this quantity is (e.g. present a single-pass entropy map as
+ * epistemic/MC-dropout uncertainty). `kind` is the raw header value, or null
+ * if the header was absent - callers must not assume a default.
+ */
+export interface UncertaintyBuffer extends VolumeBuffer {
+  kind: string | null;
+}
+
 export interface ProfilePlaneData {
   n: number;
   tumor: number[];
@@ -178,22 +192,36 @@ export function getMask(
   return getBinary(`/cases/${encodeURIComponent(caseId)}/mask/${source}`, fallbackShape, signal);
 }
 
-/** Returns null on 404 (no saved logits for this case) rather than throwing. */
+/**
+ * Returns null on 404 (no saved logits for this case) rather than throwing.
+ * Reads `X-Uncertainty-Kind` itself (rather than going through `getBinary`,
+ * which only surfaces `X-Volume-Shape`) so the label shown to the user is
+ * always what the backend actually measured.
+ */
 export async function getUncertainty(
   caseId: string,
   fallbackShape: [number, number, number],
   signal?: AbortSignal,
-): Promise<VolumeBuffer | null> {
+): Promise<UncertaintyBuffer | null> {
+  const path = `/cases/${encodeURIComponent(caseId)}/uncertainty`;
+  let res: Response;
   try {
-    return await getBinary(
-      `/cases/${encodeURIComponent(caseId)}/uncertainty`,
-      fallbackShape,
-      signal,
-    );
+    res = await fetch(`${API_BASE}${path}`, { signal });
   } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return null;
-    throw err;
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
   }
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new ApiError(res.status, `${res.status} ${res.statusText} on ${path}`);
+  }
+  const shapeHeader = res.headers.get("X-Volume-Shape");
+  const shape: [number, number, number] = shapeHeader
+    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
+    : fallbackShape;
+  const kind = res.headers.get("X-Uncertainty-Kind");
+  const buf = await res.arrayBuffer();
+  return { data: new Uint8Array(buf), shape, kind };
 }
 
 export function getProfile(caseId: string, signal?: AbortSignal): Promise<CaseProfile> {

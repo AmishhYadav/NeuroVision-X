@@ -38,6 +38,34 @@ const ENTROPY_STOPS: RGB[] = [
   hexToRgb("#FCFDBF"),
 ];
 
+/**
+ * Entropy at which the overlay reaches full opacity.
+ *
+ * The COLOUR of a voxel always encodes its true entropy on a fixed [0, 1]
+ * scale, so the same colour means the same value in every case - per-case
+ * rescaling would make a barely-uncertain case look dramatic and destroy any
+ * comparison between two cases. Only the ALPHA is given a gain, because
+ * without one the layer is invisible: measured on the test split, entropy is
+ * concentrated in a thin boundary shell and only ~0.4% of voxels on a slice
+ * exceed 0.3, so a straight `alpha = e` peaks near 0.2 exactly where the
+ * model is genuinely uncertain.
+ *
+ * 0.35 rather than 1.0 because of how the field is normalized:
+ * `entropy_from_logits` divides the summed per-channel Bernoulli entropy by
+ * `3 * ln 2`, so a voxel where ONE of the three region channels is maximally
+ * uncertain reads ~0.33, not 1.0. Values above that need two channels
+ * uncertain at once and are rare.
+ */
+export const ENTROPY_ALPHA_FULL = 0.35;
+
+/**
+ * Entropy reached when exactly one of the three region channels is maximally
+ * uncertain (1/3). Marked on the legend's colour bar so a reader can tell the
+ * reachable part of the scale from the part that needs several channels to
+ * disagree at once - the same reason gate maps mark 0.5.
+ */
+export const ENTROPY_ONE_CHANNEL = 1 / 3;
+
 /** Linear interpolation across the 3-stop entropy ramp. `t` in [0, 1]. */
 export function entropyColor(t: number): RGB {
   const clamped = Math.min(1, Math.max(0, t));

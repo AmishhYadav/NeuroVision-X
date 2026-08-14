@@ -55,10 +55,20 @@ export function Viewport({
     const cw = container.clientWidth;
     const ch = container.clientHeight;
     if (cw === 0 || ch === 0) return;
-    canvas.width = cw;
-    canvas.height = ch;
+    // Backing store scaled to device pixels, CSS size pinned to the layout
+    // size, and the transform folds the DPR back in so the rest of this
+    // function can keep working in CSS-pixel coordinates. Without this the
+    // browser upsamples the canvas on HiDPI displays and blurs the slice -
+    // imageSmoothingEnabled only controls drawImage *within* the canvas, it
+    // cannot prevent that upsample.
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = cw * dpr;
+    canvas.height = ch * dpr;
+    canvas.style.width = `${cw}px`;
+    canvas.style.height = `${ch}px`;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, cw, ch);

@@ -128,6 +128,13 @@ export function SliceRibbon({
     ctx.stroke();
   };
 
+  // Kept current every render so the resize observer below - which only
+  // subscribes once - always calls the freshest closure instead of the one
+  // captured at mount (a stale draw() would repaint the ribbon with
+  // mount-time tumor/error/entropy/index data on every window resize).
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+
   useEffect(() => {
     draw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,7 +143,7 @@ export function SliceRibbon({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const observer = new ResizeObserver(() => draw());
+    const observer = new ResizeObserver(() => drawRef.current());
     observer.observe(container);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps

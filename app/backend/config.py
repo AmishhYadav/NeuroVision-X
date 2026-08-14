@@ -76,12 +76,14 @@ def get_settings() -> Settings:
     settings = Settings(
         prep_dir=_path_env("NVX_PREP_DIR", "data/preprocessed/brats"),
         eval_dir=_path_env("NVX_EVAL_DIR", "outputs/eval_test_baseline_unet3d"),
-        checkpoint=_path_env(
-            "NVX_CHECKPOINT", "outputs/checkpoints/baseline_unet3d/best.pt"
-        ),
+        checkpoint=_path_env("NVX_CHECKPOINT", "outputs/checkpoints/baseline_unet3d/best.pt"),
         experiment=os.environ.get("NVX_EXPERIMENT", "baseline_unet3d"),
         cache_dir=_path_env("NVX_CACHE_DIR", "outputs/demo_cache"),
-        max_cases=int(os.environ.get("NVX_MAX_CASES", "24")),
+        # 200 covers the whole 189-case test split. Listing them costs one
+        # meta.json read each (~90 ms measured), and the case list is the only
+        # way to reach a hard case -- capping below the split size hides
+        # exactly the failures the demo exists to show.
+        max_cases=int(os.environ.get("NVX_MAX_CASES", "200")),
         demo_overlap=float(os.environ.get("NVX_DEMO_OVERLAP", "0.25")),
     )
     settings.cache_dir.mkdir(parents=True, exist_ok=True)

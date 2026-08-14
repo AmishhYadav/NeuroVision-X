@@ -10,7 +10,7 @@
 
 import type { Plane } from "../api";
 import { sliceIndexer } from "./slicing";
-import { CLASS_COLORS, DISAGREEMENT_COLORS, entropyColor } from "./colors";
+import { CLASS_COLORS, DISAGREEMENT_COLORS, ENTROPY_ALPHA_FULL, entropyColor } from "./colors";
 
 export type OverlayMode = "prediction" | "truth" | "disagreement";
 
@@ -91,7 +91,10 @@ export function renderSlice(params: RenderParams): ImageData {
       if (showUncertainty && uncertainty) {
         const e = uncertainty[srcIdx] / 255;
         if (e > 0) {
-          const alpha = e * uncertaintyOpacity;
+          // Colour carries the true entropy on a fixed [0, 1] scale; alpha
+          // ramps to full by ENTROPY_ALPHA_FULL so the thin high-entropy
+          // shell is actually visible. See the constant for the measurements.
+          const alpha = Math.min(1, e / ENTROPY_ALPHA_FULL) * uncertaintyOpacity;
           const [er, eg, eb] = entropyColor(e);
           r = r * (1 - alpha) + er * alpha;
           g = g * (1 - alpha) + eg * alpha;

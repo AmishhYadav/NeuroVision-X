@@ -193,9 +193,7 @@ def _crop_to_meta(volume: np.ndarray, meta: CaseMeta) -> np.ndarray:
     return cropped
 
 
-def load_mask(
-    case_id: str, source: MaskSource, settings: Settings | None = None
-) -> bytes:
+def load_mask(case_id: str, source: MaskSource, settings: Settings | None = None) -> bytes:
     """Returns a `{0,1,2,3}` class map in the cropped frame as uint8 bytes.
 
     `label` is already cropped on disk. `prediction` is stored in original
@@ -261,6 +259,4 @@ def region_voxel_counts(mask: np.ndarray, spacing: tuple[float, float, float]) -
         "TC": int(((mask == 1) | (mask == 3)).sum()),
         "WT": int((mask > 0).sum()),
     }
-    return {
-        region: {"voxels": n, "ml": round(n * voxel_ml, 2)} for region, n in counts.items()
-    }
+    return {region: {"voxels": n, "ml": round(n * voxel_ml, 2)} for region, n in counts.items()}
