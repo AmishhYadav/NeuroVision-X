@@ -1,0 +1,21 @@
+# Demo-only dependencies, deliberately NOT merged into the repo-root
+# requirements.txt. That file is the pinned training stack that Kaggle
+# installs at the start of every GPU session; a web server has no business
+# being installed there, and adding to it would slow every session down for
+# something no training run imports.
+#
+# Install with:  uv pip install -r app/backend/requirements.txt
+#
+# numpy / pandas are already required by the training stack, so they are not
+# repeated here. Live inference (wave 2) additionally needs torch + monai,
+# which the training stack already provides.
+fastapi==0.141.1
+uvicorn[standard]==0.52.2
+
+# Test-only. `starlette.testclient` imports `httpx2` (the httpx 2.x line,
+# github.com/pydantic/httpx2) and raises "requires the httpx2 package" without
+# it, so `tests/test_app_api.py` cannot run on a fresh clone otherwise. The
+# odd-looking name is starlette's own requirement, not a substitute for httpx:
+# starlette 1.6.0's metadata declares `httpx2>=2.0.0` under its `full` extra.
+httpx2==2.10.0
+

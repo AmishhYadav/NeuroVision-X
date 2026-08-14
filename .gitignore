@@ -18,6 +18,12 @@
 *.npy
 *.nii.gz
 
+# Demo frontend build artifacts. `dist/` is anchored to the frontend because
+# the FastAPI server mounts exactly that directory; a stray `dist/` elsewhere
+# is not the same thing and should not be silently ignored.
+app/frontend/node_modules/
+app/frontend/dist/
+
 # Python
 __pycache__/
 *.py[cod]

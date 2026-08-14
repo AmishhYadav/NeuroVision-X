@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/* Self-hosted fonts (no CDN). Weights chosen to match the visual system. */
+@import "@fontsource-variable/ibm-plex-sans";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-sans-condensed/500.css";
+@import "@fontsource/ibm-plex-sans-condensed/600.css";
+
+@theme {
+  /* Surfaces */
+  --color-surface-page: #0e1012;
+  --color-surface-panel: #16191d;
+  --color-surface-raised: #1d2126;
+  --color-surface-seam: #2a2f36;
+  --color-surface-viewport: #000000;
+  --color-surface-ribbon: #0a0b0d;
+
+  /* Text */
+  --color-text-primary: #e7eaee;
+  --color-text-secondary: #9aa3ae;
+  --color-text-dim: #616b76;
+
+  /* Data colours - never used for chrome */
+  --color-data-necrotic: #56b4e9;
+  --color-data-oedema: #009e73;
+  --color-data-enhancing: #d55e00;
+  --color-data-wt: #0072b2;
+  --color-data-amber: #e69f00;
+  --color-data-fn: #f0e442;
+  --color-data-fp: #cc79a7;
+
+  /* Uncertainty ramp (magma-like) */
+  --color-entropy-low: #3b0f70;
+  --color-entropy-mid: #e4693e;
+  --color-entropy-high: #fcfdbf;
+
+  --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-condensed: "IBM Plex Sans Condensed", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-surface-seam);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-surface-page);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .font-mono,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .eyebrow {
+    font-family: var(--font-condensed);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 11px;
+    color: var(--color-text-dim);
+    font-weight: 600;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-text-primary);
+    outline-offset: 1px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.001ms !important;
+      animation-duration: 0.001ms !important;
+    }
+  }
+}
