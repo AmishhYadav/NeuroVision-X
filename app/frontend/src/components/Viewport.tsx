@@ -1,3 +1,4 @@
+import { Maximize2, Minimize2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Plane } from "../api";
 import { renderSlice, type OverlayMode } from "../lib/render";
@@ -143,10 +144,21 @@ export function Viewport({
           onClick={onToggleExpand}
           disabled={!expandable}
           aria-expanded={expanded}
-          title={expandable ? "Click to expand this plane" : undefined}
-          className="font-mono text-[11px] tracking-[0.02em] text-text-secondary uppercase transition-colors duration-[120ms] hover:text-text-primary disabled:cursor-default disabled:hover:text-text-secondary"
+          title={
+            !expandable ? undefined : expanded ? "Show all three planes" : "Expand this plane"
+          }
+          className="group flex items-center gap-1.5 font-mono text-[11px] tracking-[0.02em] text-text-secondary uppercase transition-colors duration-[120ms] hover:text-text-primary disabled:cursor-default disabled:hover:text-text-secondary"
         >
           {planeLabel}
+          {/* The label is the expand control, which is not discoverable from
+              a bare word - the icon is the affordance. Rendered inline so it
+              carries the same hover colour as the text. */}
+          {expandable &&
+            (expanded ? (
+              <Minimize2 className="h-3 w-3 opacity-50 group-hover:opacity-100" aria-hidden="true" />
+            ) : (
+              <Maximize2 className="h-3 w-3 opacity-50 group-hover:opacity-100" aria-hidden="true" />
+            ))}
         </button>
         <span className="tabular ml-auto font-mono text-[11px] text-text-dim">
           {sliceIndex} / {Math.max(sliceCount - 1, 0)}

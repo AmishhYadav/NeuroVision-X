@@ -121,6 +121,28 @@ export class ApiUnreachableError extends Error {
   }
 }
 
+/**
+ * Gateway statuses that mean the API itself is not running.
+ *
+ * In development the Vite dev server proxies `/api`, so a dead backend comes
+ * back as an HTTP **502** rather than as a failed fetch -- the proxy answered,
+ * the API did not. Treating that as an ordinary API error surfaces
+ * "502 Bad Gateway on /health" to the user, when the actual problem is that
+ * uvicorn was never started. These are classified as unreachable so the UI
+ * can print the command that fixes it.
+ */
+const GATEWAY_DOWN = new Set([502, 503, 504]);
+
+/**
+ * Maps a non-ok response onto the error type that describes what to DO about
+ * it. Exported only so the 502-is-unreachable rule can be tested directly;
+ * it is not part of the client surface.
+ */
+export function responseError(res: Pick<Response, "status" | "statusText">, path: string): Error {
+  if (GATEWAY_DOWN.has(res.status)) return new ApiUnreachableError();
+  return new ApiError(res.status, `${res.status} ${res.statusText} on ${path}`);
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
@@ -130,7 +152,7 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
     throw new ApiUnreachableError();
   }
   if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText} on ${path}`);
+    throw responseError(res, path);
   }
   return (await res.json()) as T;
 }
@@ -148,7 +170,7 @@ async function getBinary(
     throw new ApiUnreachableError();
   }
   if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText} on ${path}`);
+    throw responseError(res, path);
   }
   const shapeHeader = res.headers.get("X-Volume-Shape");
   const shape: [number, number, number] = shapeHeader
@@ -213,7 +235,7 @@ export async function getUncertainty(
   }
   if (res.status === 404) return null;
   if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText} on ${path}`);
+    throw responseError(res, path);
   }
   const shapeHeader = res.headers.get("X-Volume-Shape");
   const shape: [number, number, number] = shapeHeader

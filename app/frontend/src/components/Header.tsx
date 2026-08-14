@@ -39,10 +39,13 @@ export function Header({ health, reachable, onToggleCaseList, showCaseListToggle
           Cases
         </button>
       )}
-      <h1 className="font-condensed text-sm font-semibold tracking-[0.12em] text-text-primary uppercase">
+      {/* The wordmark never wraps: at ~600px it otherwise breaks mid-word into
+          "NEUROVISION-" / "X" and pushes the header to two lines. The meta
+          strip truncates instead of wrapping, for the same reason. */}
+      <h1 className="font-condensed shrink-0 text-sm font-semibold tracking-[0.12em] whitespace-nowrap text-text-primary uppercase">
         NeuroVision-X
       </h1>
-      <div className="font-mono text-xs text-text-secondary">
+      <div className="min-w-0 truncate font-mono text-xs text-text-secondary">
         {health ? (
           <span>
             {health.experiment} · {splitLabel(health.eval_dir)} · {health.case_count} cases

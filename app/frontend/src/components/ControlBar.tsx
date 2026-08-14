@@ -55,7 +55,11 @@ export function ControlBar({
   onToggleUncertainty,
 }: ControlBarProps) {
   return (
-    <div className="flex h-12 shrink-0 items-center overflow-x-auto border-t border-surface-seam bg-surface-panel px-3">
+    // Wraps to a second row on narrow screens rather than clipping. It used to
+    // be a fixed-height row with overflow-x-auto, which technically scrolled
+    // but gave no affordance -- the entropy toggle simply vanished off the
+    // right edge at ~820px and looked like a missing feature.
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-y-1 border-t border-surface-seam bg-surface-panel px-3 py-1 xl:flex-nowrap xl:gap-y-0 xl:py-0">
       <div className="flex shrink-0 items-center gap-1" role="group" aria-label="Modality">
         {MODALITIES.map(({ key, label }) => (
           <button

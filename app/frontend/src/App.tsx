@@ -156,9 +156,18 @@ export default function App() {
   if (bootState === "error") {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-page px-6 text-center">
-        <p className="font-mono text-sm text-text-primary">
-          Failed to load the application: {bootError}
-        </p>
+        <div className="max-w-md">
+          <p className="mb-2 font-condensed text-sm tracking-[0.12em] text-text-dim uppercase">
+            NeuroVision-X
+          </p>
+          <p className="mb-2 font-mono text-sm text-text-primary">
+            The API responded, but not with what the viewer expected.
+          </p>
+          <p className="font-mono text-xs text-text-secondary">{bootError}</p>
+          <p className="mt-3 font-mono text-xs text-text-dim">
+            Check the paths the server resolved at <code>/api/health</code>.
+          </p>
+        </div>
       </div>
     );
   }
@@ -185,7 +194,12 @@ export default function App() {
         onToggleCaseList={() => setCaseListOpen((v) => !v)}
       />
 
-      <div className="relative flex min-h-0 flex-1">
+      {/* Below the single-viewport breakpoint the readout moves BELOW the
+          image instead of beside it: at ~600px a 224px sidebar eats a third
+          of the width, and the MRI is the thing worth the pixels. */}
+      <div
+        className={`relative flex min-h-0 flex-1 ${layout === "single" ? "flex-col" : "flex-row"}`}
+      >
         {showCaseListInline && (
           <div className="w-56 shrink-0 overflow-hidden border-r border-surface-seam bg-surface-panel">
             <CaseList
@@ -279,7 +293,11 @@ export default function App() {
         </div>
 
         {selectedCaseId && !caseData.error && (
-          <div className="w-56 shrink-0 overflow-y-auto border-l border-surface-seam bg-surface-panel">
+          <div
+            className={`shrink-0 overflow-y-auto border-surface-seam bg-surface-panel ${
+              layout === "single" ? "max-h-56 w-full border-t" : "w-56 border-l"
+            }`}
+          >
             <MetricsPanel metrics={caseData.detail?.metrics ?? null} regions={caseData.detail?.regions ?? null} />
             <Legend
               overlayMode={overlayMode}

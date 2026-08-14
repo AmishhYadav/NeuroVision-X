@@ -30,6 +30,25 @@ To serve everything from one process instead, build the frontend once
 (`npm run build`) and the API will mount `app/frontend/dist` at `/` — then
 <http://127.0.0.1:8000> alone serves the whole app.
 
+## Tests
+
+```bash
+pytest tests/test_app_api.py         # API, on synthetic cases (part of the main suite)
+cd app/frontend && npm test          # slicing + compositing + error classification
+npm run test:e2e                     # drives the real app in headless Chrome
+```
+
+`npm test` is pure and fast (~100 ms, no browser). It pins the things that stay
+plausible when they are wrong: the plane-to-screen geometry, the exact overlay
+blend arithmetic, the entropy alpha ramp, and the rule that a fixed colour scale
+is never rescaled per case.
+
+`npm run test:e2e` needs both servers running. It asserts on rendered pixels
+rather than on elements existing — a viewport that draws pure black passes every
+DOM assertion — and it checks the overlay against `/api/profile`, so "no colour
+here" is only a pass when that slice genuinely contains no tumour. **Run it
+before showing the demo.**
+
 ## Pointing it at different results
 
 Every path comes from the environment, with repo-relative defaults. Nothing is
