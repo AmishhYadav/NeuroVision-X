@@ -17,6 +17,10 @@
 # be committed as .npy.
 *.npy
 *.nii.gz
+# SRI24 ships UNCOMPRESSED .nii, which `*.nii.gz` does not match -- so without
+# this line a fetched atlas is committable, and it is CC-BY-SA (share-alike),
+# which is exactly what `scripts/fetch_atlas.py` exists to avoid.
+*.nii
 
 # Demo frontend build artifacts. `dist/` is anchored to the frontend because
 # the FastAPI server mounts exactly that directory; a stray `dist/` elsewhere
