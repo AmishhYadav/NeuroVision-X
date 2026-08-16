@@ -7,6 +7,13 @@ Written 2026-08-16, after the original reliability claim was measured and did
 not hold. Read `docs/experiments.md` notes 11–17 before this file: the numbers
 that forced the pivot are there, not here.
 
+**Revised the same day**, after a literature and resource review triggered by a
+single question: what happens to Phase 2 when no neuroanatomy reviewer is
+available? Three things changed as a result — Phase 2 was rewritten around
+claims that need no expertise to check (Finding E, §5), the MNI bridge was
+considered and declined (Finding D, §3), and the paper's framing was revised
+again because close prior work already exists (Finding F, §3 and §10).
+
 ---
 
 ## 1. Why the direction changed
@@ -61,13 +68,24 @@ where an over-claim would be easy and damaging.
 | A WHO **grade** | WHO CNS5 (2021) grading is *integrated* — it requires histology **plus** molecular markers (IDH, 1p/19q, ATRX, TERT, CDKN2A/B). It is not determinable from MRI, and our dataset carries no grade label. |
 | A tumour **stage** | Diffuse gliomas are not staged. There is no TNM system for them; they are graded. "Stage" is the wrong word and using it would signal unfamiliarity with the domain. |
 | A **prognosis** or predicted patient outcome | We have no clinical outcomes to validate against (see §3, Finding C). |
+| An **eloquence assessment** | VASARI's F3 (eloquent brain involvement) is deliberately not automated. VASARI-auto declined it too — "we did not wish to detract from a gold standard of a neurosurgeon's electrical stimulation assessment for eloquent-sparing resections" — and F3 is among the features with poor inter-rater agreement even between consultants. We report a strictly weaker, purely geometric quantity: overlap with, and millimetre distance to, structures that a **named published classification** designates eloquent. See §5 Phase 2, Tier C. |
+| A **deficit** the patient has or will have | Decided 2026-08-16: the shipped pipeline stops at Tier C. No deficit sentences appear in any artifact. |
 | Anything **diagnostic** | Framed throughout as a research and educational decision-support demo. |
 
 **The honesty constraint that shapes the whole design:** we can *validate* the
-anatomy layer (atlas alignment is checkable), but we **cannot validate the
-deficit layer**, because BraTS ships no clinical outcomes. The functional layer
-is therefore a **cited literature lookup**, not a model output, and must be
-presented as such everywhere it appears.
+anatomy layer (atlas alignment is checkable), but we **cannot validate a
+deficit layer**, because BraTS ships no clinical outcomes. An unvalidatable
+layer that we also cannot get reviewed (see Finding E) does not ship. Every
+claim in the output must therefore fall into one of exactly two categories:
+
+1. **Geometric** — computed deterministically from a mask and a label map, and
+   reproducible by anyone with the same inputs.
+2. **Referential** — a lookup into a *named, published, citable* classification,
+   where our contribution is the mapping and the source owns the claim.
+
+Anything that is neither does not go in the artifact. This is what replaces the
+"reviewed by someone with neuroanatomy background" mitigation the first draft
+of this plan relied on.
 
 ---
 
@@ -89,6 +107,14 @@ step in this kind of work — per-patient nonlinear registration to an atlas,
 which is exactly the step that fails worst near a lesion — is simply not
 required. This is the single biggest reason this feature is tractable.
 
+Re-verified 2026-08-16 over **all 1,251** preprocessed `meta.json` files, not a
+sample: `original_shape (240, 240, 155)`, `spacing (1, 1, 1)`, affine diagonal
+`(-1, -1, 1)` — 1251/1251 identical, zero variation. BraTS 2021's published
+preprocessing is rigid registration to SRI24, resampling to 1 mm isotropic, and
+skull-stripping, and the SRI24 paper states the atlas grid as 240 × 240 × 155 at
+1 mm. Independent corroboration: MNI152 at 1 mm is 182 × 218 × 182, so the grid
+alone rules out the alternative template.
+
 **Finding B — SRI24 ships its own parcellations, openly licensed.** The atlas
 includes T1/T2/PD channels, GM/WM/CSF tissue probability maps, DTI-derived
 channels (FA, MD), and **two label maps**: cortical regions and subcortical
@@ -108,6 +134,71 @@ markers. `metadata.csv` carries only geometry and voxel counts.
 
 Consequence: any grading or outcome claim requires a *different dataset*
 (§8). It is not a modelling problem, it is a data problem.
+
+**Finding D — SRI24 is not MNI space, and that cuts both ways.** SRI24 was
+built by unbiased, template-free groupwise nonrigid registration of 24 subjects
+into its **own population-average coordinate system**. It was deliberately not
+registered to MNI152 or ICBM452. Finding A therefore holds only for resources
+that ship *in SRI24 space*: the TZO (`tzo116plus`) and LPBA40 parcellations, the
+GM/WM/CSF tissue probability maps, the ML tissue segmentation, and the FA/MD/
+diffusivity channels. Everything else in the field — JHU ICBM-DTI-81 tract
+labels, Brainnetome, Harvard-Oxford, Neurosynth/NeuroQuery meta-analytic maps —
+is MNI and would need a one-time nonlinear SRI24↔MNI warp plus a registration
+dependency the stack does not have.
+
+**Decision, 2026-08-16: no bridge.** The pipeline stays entirely in SRI24 native
+space. Consequences, accepted deliberately:
+
+- No **named** white-matter tracts. The FA/MD channels say *where* white matter
+  is, not *which tract* it is; tract identity requires the MNI atlas. Replaced
+  by deep-white-matter involvement computed from the tissue maps, which is what
+  VASARI F21 asks for anyway and needs no tract atlas.
+- No meta-analytic functional decoding. (Also note Neurosynth is **ODbL**, whose
+  share-alike applies to derived databases — a licensing question we now avoid.)
+- In exchange: zero registration anywhere in the pipeline, zero warp to
+  validate, and no new dependency. "No registration at any stage" becomes a
+  defensible property of the system rather than an unexamined assumption.
+
+Supporting reason to stay out of MNI tract atlases specifically: ICBM-DTI-81
+shipped with a left–right mirrored orientation and 15 mislabelled regions in its
+2010 version, and the 2012 "fix" edited the label lookup table rather than the
+image — so labels formally aligned while the coordinate frame stayed flipped.
+That is precisely this project's recurring failure mode: everything plausible,
+nothing raising. Inheriting it on top of our own warp error is a poor trade for
+a layer the report does not need.
+
+**Finding E — there is no domain reviewer, and expert review is a weaker
+instrument than the first draft assumed.** No one with a neuroanatomy or
+neuro-oncology background is available to review this work. Separately, the
+published evidence says such review would not have been an oracle: VASARI-auto
+measured two consultant neuroradiologists against each other on 100
+glioblastomas and found mean Cohen's **κ = 0.49 ± 0.32**, with several features
+at or below chance (F24 −0.23, F11 −0.03). Automated-vs-rater was 0.42 ± 0.34 —
+statistically indistinguishable from human-vs-human — while the automated method
+against itself across different segmentations scored 0.94 ± 0.10.
+
+Consequence, and it is the reason §5 Phase 2 was rewritten: the response to a
+missing reviewer is **not** to proceed on model authority and hope, and not to
+abandon the layer. It is to restrict every shipped claim to something that does
+not need expertise to check — geometry, or a lookup into a published
+classification (§2, the two categories).
+
+**Finding F — close prior work exists and is very recent.** Two papers cover
+much of what §4 proposes:
+
+- **VASARI-auto** (Ruffle et al., *NeuroImage: Clinical* 2024; arXiv 2404.15318;
+  code at `github.com/jamesruffle/vasari-auto`) — deterministic automation of 16
+  VASARI features from glioma lesion masks, n = 1172, nonlinearly registered to
+  1 mm MNI with enantiomorphic correction. Notably **excludes F3 (eloquence)** on
+  principle, and excludes seven further features needing diffusion sequences,
+  non-brain-extracted data, or carrying "risk of confabulation".
+- **BTReport** (Heras Rivera et al., arXiv 2602.16006, Feb 2026) — deterministic
+  feature extraction with an LLM used *only* for narrative structuring, on BraTS,
+  grounded in VASARI, releasing a BTReport-BraTS synthetic-report dataset. (Read
+  from the abstract; full-text extraction was not available locally.)
+
+Consequence: "we built an automated structured-report pipeline for glioma MRI"
+is no longer novel and must not be the paper's claim. See §10.
 
 ---
 
@@ -130,8 +221,9 @@ preprocessed case ──► [existing] NeuroVisionX ──► region logits
                         └────────────────────┬───────────────────┘
                                              ▼
                         ┌────────────────────────────────────────┐
-                        │  NEW: knowledge layer (Phase 2)        │
-                        │  structure → function → deficit, cited │
+                        │  NEW: reference layer (Phase 2)        │
+                        │  structure → published eloquence class │
+                        │  + mm distance. No deficit text.       │
                         └────────────────────┬───────────────────┘
                                              ▼
                         ┌────────────────────────────────────────┐
@@ -186,12 +278,21 @@ on its side, and that was found by looking at it. Four independent checks:
    as the demo's radiological-convention fix, and a left/right swap in a report
    about which hemisphere is affected is the single most damaging error this
    feature could make.
-4. **Population-level plausibility.** Compute the tumour-location distribution
-   over all 1,251 cases. Literature says gliomas concentrate in frontal and
-   temporal white matter and are comparatively rare in brainstem and
-   cerebellum. If our distribution reproduces that, the atlas is very unlikely
-   to be scrambled — and if it does not, something is wrong. This is a cheap,
-   quantitative, independent check and it is the strongest one available.
+4. **Population-level plausibility, against published numbers.** Compute the
+   tumour-location distribution over all 1,251 cases and compare it with the
+   epidemiological literature, which reports gliomas by lobe as **frontal 40%,
+   temporal 29%, parietal 14%, occipital 3%, deeper structures 14%**
+   (Larjavaara et al., *Neuro-Oncology* 2007). A scrambled, flipped or
+   mis-scaled atlas cannot reproduce that ordering by accident. This is a
+   cheap, quantitative, independent check and it is the strongest one
+   available — and it now has a target to hit rather than a vibe to match.
+
+   Two caveats to state when reporting it. Our cohort is BraTS 2021, which is
+   overwhelmingly high-grade glioma, while the reference figures are for gliomas
+   generally; and the reference counts *tumours per lobe* while our measure is
+   voxel overlap with a parcellation, so exact agreement is not expected. The
+   check is on **rank order and rough magnitude**, and that is enough to catch
+   every failure it is meant to catch.
 
 Plus visual QC on ~10 cases (atlas boundaries overlaid on T1), because the
 lesson from this project's qualitative panels and slice viewer is that some
@@ -233,42 +334,86 @@ Tests: synthetic masks placed in known atlas structures; a mask covering an
 entire structure must give `frac_of_structure == 1.0`; laterality round-trip;
 empty mask → empty table, not a crash.
 
-### Phase 2 — Functional knowledge base (4–6 days, mostly not coding)
+### Phase 2 — Eloquence reference layer (2–3 days)
 
-`data/knowledge/structure_function.yaml` (versioned, in-repo, reviewed)
+`data/knowledge/eloquence_map.yaml` (versioned, in-repo)
 
-Schema per structure:
+**Rewritten 2026-08-16.** The original design was a knowledge base of functions
+and deficits, authored here and mitigated by external expert review. Finding E
+removed the mitigation and showed it was weaker than assumed; Finding F showed
+that the one team in this exact domain with expert access declined to automate
+the same claim. The layer is therefore restricted to what can be checked without
+domain expertise.
+
+**Four tiers, separated by how a claim is justified rather than by subject.**
+
+| Tier | Claim | How it is justified | Ships? |
+|---|---|---|---|
+| A | structure name, laterality, tissue class | SRI24 ships it; Phase 0 validates the alignment | yes |
+| B | cortical / deep-WM / ependymal involvement, midline crossing, multifocality, epicentre | deterministic geometry over label + tissue maps; VASARI definitions, with published human-agreement numbers to compare against | yes (Phase 3) |
+| C | overlap with, and mm distance to, structures a **named published classification** calls eloquent | the source owns the claim; we own only the mapping | yes |
+| D | function and deficit text | needs literature judgement we cannot check | **no — cut** |
+
+Tier C is strictly weaker than VASARI F3 and deliberately so. It is a geometric
+statement about a published list, not an assessment of this patient.
+
+**Schema.** One entry per SRI24/TZO label, and `evidence` is the field that
+makes the whole layer auditable by a non-expert:
 
 ```yaml
-- structure_id: 57
-  name: Precentral gyrus (left)
-  system: motor
-  functions: [voluntary motor control of the right side of the body]
-  associated_deficits:
-    - description: contralateral (right-sided) weakness or paralysis
-      confidence: well-established
-  pathways: [corticospinal tract]
-  sources: [<citation>]
+version: 1
+classification:
+  name: Sawaya eloquence grading
+  citation: <full citation + PMID/DOI>
+  eloquent_structures_verbatim: >
+    motor/sensory cortices, visual center, speech center, internal capsule,
+    basal ganglia, hypothalamus/thalamus, brainstem, dentate nucleus
+near_eloquent_rule:
+  # Sawaya's "near-eloquent" is documented as ambiguous in the literature, so we
+  # do not guess at it: the report emits the measured distance and applies an
+  # explicit, configurable threshold, stated in the artifact.
+  distance_mm: 10
+entries:
+  - structure_id: 1
+    structure_name: Precentral_L      # copied verbatim from the SRI24 LUT
+    eloquence: eloquent
+    matched_term: motor cortex        # the term in the source it matches
+    evidence: "<verbatim sentence from the cited source>"
+    source: <citation + PMID/DOI>
 ```
 
-Hard rules:
-- **Every entry carries a citation.** No entry is generated without a source.
-  An uncited neuroanatomical claim in a medical-adjacent tool is not
-  acceptable, and this is the layer where fabrication would be easiest and
-  least visible.
-- `confidence` is an explicit field, because plasticity and individual
-  variation mean many associations are probabilistic, not deterministic.
-- Deficit text is written in hedged language ("associated with", "may")
-  because it is a literature association, not a prediction for this patient.
+**Hard rules, all enforced by tests:**
 
-White-matter pathways come from the SRI24 DTI channels or a tract atlas; tract
-involvement is what connects a cortical site to a distant body function (e.g.
-corticospinal tract → contralateral limb motor control). This is the honest
-version of "what other organs are connected" — the brain relates to the body
-through **pathways and functions**, not through organ-to-organ links.
+- **Every entry stores the verbatim supporting sentence**, not just a citation.
+  This is the substitute for expert review, and it changes the verification
+  question from *"is this neuroanatomy correct?"* — which needs an expert — to
+  *"does this quoted sentence say this thing about this structure?"*, which the
+  author can check on every entry in a single sitting.
+- **The default is `unclassified`, never `non-eloquent`.** Absence of a source is
+  not evidence of functional silence, and defaulting the other way would
+  manufacture a reassuring claim out of a gap in our sourcing. Reports render
+  `unclassified` explicitly.
+- **Structure names are copied from the atlas LUT, never retyped.** A test
+  asserts every `structure_id` exists in the loaded label map and that
+  `structure_name` matches it exactly — a mismatch means the mapping is against
+  a structure that is not the one being measured.
+- `eloquence` comes from a closed vocabulary; anything else raises.
+- The report prints a **coverage line**: *N of M structures classified, K
+  unclassified*, so a thin knowledge base is visible in the output rather than
+  hidden by it.
 
-Effort here is dominated by sourcing and review, not code. This layer should be
-reviewed by someone with neuroanatomy background before it is shown to anyone.
+**No white-matter tract identity** (Finding D). "Deep white matter involvement"
+comes from the SRI24 tissue maps in Phase 3, VASARI-F21 style. The report does
+not name tracts, and must not imply it knows which pathway is involved.
+
+Effort drops from 4–6 days to 2–3 because the sourcing target is a single
+published classification over ~116 labels rather than a functional profile per
+structure.
+
+**If Tier D is ever revived**, the bar is: restricted to the eloquent set, two
+independent sources for `well-established` and one capping at `limited`, the
+same verbatim-evidence rule, hedged wording, and no entry without a qualifying
+source. That was designed and costed; it was cut on scope, not on feasibility.
 
 ### Phase 3 — Tumour characterisation profile (3–4 days)
 
@@ -281,6 +426,22 @@ reviewed by someone with neuroanatomy background before it is shown to anyone.
 - Mass effect: midline shift and ventricular compression, exploiting that
   every case is in a common template where the midline is known a priori
 - Anatomical involvement summary from Phase 1
+
+**Use VASARI's definitions wherever one exists, rather than inventing a
+parallel vocabulary.** The overlap is large and mostly free: proportion
+enhancing (F5), proportion non-enhancing (F6), necrosis proportion (F7),
+multifocal/multicentric (F9), oedema proportion (F14), ependymal invasion
+(F19), cortical involvement (F20), deep white matter invasion (F21), midline
+crossing (F22–23), satellite lesions (F24), epicentre location and side
+(F1–F2). Three reasons: the definitions are published and peer-reviewed, so we
+are not the authority; VASARI-auto reports per-feature agreement against
+consultant neuroradiologists, so our numbers land next to a published human
+benchmark instead of floating free; and it makes the output comparable with
+other work rather than idiosyncratic.
+
+Note F19/F20/F21 need only the SRI24 tissue maps and ventricle labels — no
+tract atlas, which is what makes them the right substitute for the tract layer
+Finding D cut.
 
 Reported as a **descriptive profile**, never as a grade or stage. These
 quantities are associated with aggressiveness in the literature and are
@@ -327,13 +488,14 @@ Presentation requirements, non-negotiable and enforced by tests:
 |---|---|---|
 | 0 — Atlas + alignment proof | 2–3 | **Gate for everything** |
 | 1 — Localisation engine | 3–4 | needs 0 |
-| 2 — Knowledge base | 4–6 | parallel with 1 |
+| 2 — Eloquence reference layer | 2–3 | parallel with 1 |
 | 3 — Burden profile | 3–4 | independent, can start now |
 | 4 — Report + demo | 4–5 | needs 1, 2, 3 |
 | 5 — Validation + paper | 5–7 | needs 4 |
 
-**≈ 21–29 working days**, zero GPU hours. Phase 3 depends on nothing new and
-could start immediately if a quick win is wanted.
+**≈ 19–26 working days**, zero GPU hours (was 21–29; Phase 2's rewrite removed
+2–3 days of sourcing). Phase 3 depends on nothing new and could start
+immediately if a quick win is wanted.
 
 ---
 
@@ -346,10 +508,14 @@ could start immediately if a quick win is wanted.
   entry's citation.
 - Atlas version is recorded in every report, so a report can be traced to the
   parcellation that produced it.
-- No new Python dependency is expected. Nibabel handles NIfTI, scipy handles
-  connected components and distance transforms, both already pinned. If a
-  registration tool turns out to be needed after all (it should not be, per
-  Finding A), that is a **new dependency and requires asking first**.
+- No new Python dependency. Nibabel handles NIfTI, scipy handles connected
+  components and distance transforms, both already pinned. A registration tool
+  was considered and **declined** (Finding D), which is what keeps this true.
+- Staying in SRI24 native space also keeps the licence surface small: SRI24 is
+  the only external data artifact, at CC-BY-SA, downloaded and never vendored.
+  The MNI-space route would have added Neurosynth's **ODbL**, whose share-alike
+  clause reaches derived *databases* — a live question for a repo that would be
+  shipping a derived structure table.
 
 ---
 
@@ -374,9 +540,11 @@ config change. Decide separately, after Phases 0–5.
 |---|---|---|
 | **Mass effect invalidates the atlas near the lesion** | **High — scientific** | Unavoidable in principle: tumours displace tissue, and a healthy-brain atlas mislabels displaced tissue exactly where the lesion is. Mitigate by reporting involvement as *approximate*, quantifying displacement in Phase 3, and stating the limitation in the report artifact. Do not pretend precision we do not have. |
 | Left/right swap in a report | High — clinical | Derive laterality from the affine and assert it; visual QC. Phase 0 check 3. |
-| Knowledge base fabrication | High — credibility | Citation required per entry; external review before display. |
+| **Prior work already covers the pipeline** | **High — novelty** | VASARI-auto and BTReport exist (Finding F). Reposition the paper around what they do not do; see §10. Cite both prominently rather than being caught by a reviewer who knows them. |
+| Knowledge base fabrication | High — credibility | **Mitigation replaced 2026-08-16.** External review is unavailable and, per Finding E, was moderate-agreement anyway. Now: only geometric or referential claims ship, deficit text is cut, every mapping entry stores the verbatim supporting sentence, and unmapped structures default to `unclassified`. |
+| Deficit layer is unvalidatable | Resolved by removal | No clinical outcomes exist in our data (Finding C), so the layer does not ship. State in the paper's limitations that this was a deliberate omission and why. |
 | Scope drift into clinical claims | High | §2 non-goals; disclaimer enforced by test. |
-| Deficit layer is unvalidatable | Medium — inherent | No clinical outcomes exist in our data (Finding C). Present as cited literature association, never as prediction. Say so in the paper's limitations. |
+| Atlas parcellation is a single brain, twice removed | Medium — inherent | SRI24/TZO descends from AAL, parcellated on **one** subject (Colin27), then transferred into SRI24 indirectly via 300 archival 1.5T images by label fusion. So a structure name carries one person's macroanatomy → label fusion → population template → *then* this patient's displaced tissue. Report structure involvement as approximate and say this in the limitations. |
 | Atlas parcellation too fine/coarse | Low | Merge to a coarser scheme; a ~128-region merge is precedented. |
 | NITRC unavailable | Low | Mirror the checksum; fall back to another parcellation registered once, offline. |
 
@@ -388,10 +556,44 @@ Old framing (dead): *"A dual-encoder fusion architecture with an
 ambiguity-conditioned gate achieves competitive Dice with substantially better
 calibration and boundary accuracy."*
 
-New framing (supported): *"An end-to-end pipeline producing anatomically
-grounded, quantified, uncertainty-aware reports from multi-modal brain MRI,
-built on a segmentation model that reduces enhancing-tumour error by 17%
-relative to a matched baseline."*
+Second framing (**also dead, as of Finding F**): *"An end-to-end pipeline
+producing anatomically grounded, quantified reports from multi-modal brain
+MRI."* VASARI-auto and BTReport already do this, the latter on BraTS
+specifically. Claiming it would be caught immediately.
+
+Third framing (the one to test): the pipeline is the **instrument**, not the
+result. The question nobody in that prior work answers is *how much the
+segmentation actually matters to the report* — and we are unusually well
+equipped to ask it, because we have a matched baseline, a capacity control, a
+paired-statistics harness, calibrated probabilities, and MC-dropout maps
+already built and already honestly measured.
+
+Concretely, three things are ours rather than theirs:
+
+1. **Registration-free by construction.** VASARI-auto nonlinearly registers to
+   MNI with enantiomorphic correction; BTReport normalises to MNI with
+   SynthMorph. Both spend accuracy on a per-patient warp that is worst exactly
+   where the lesion is. We spend none, because BraTS is already on the atlas's
+   own grid (Finding A). That is a property to state and quantify, not just
+   assert.
+2. **Report-level error propagation.** Phase 5's experiment — how often does a
+   segmentation error change the reported structure list, and which structures
+   are most fragile — turns a Dice difference into a statement about the
+   artifact a reader would actually act on. VASARI-auto touched the edge of this
+   (κ 0.94 ± 0.10 between reports from manual vs. model masks) but did not
+   relate it to segmentation quality or to per-structure fragility.
+3. **Uncertainty attached to report fields.** Neither prior system propagates
+   calibrated per-voxel uncertainty into the reported quantities. We already
+   produce it, and the reliability work — a *negative* result, honestly measured
+   against a matched baseline — is itself worth reporting rather than hiding.
+
+Caveat that must be settled first: item 2's force depends on the capacity
+control (§11 decision 2). If the wide U-Net matches `neurovision`, the framing
+survives — the experiment is about segmentation quality in general, not about
+our architecture — but the architectural contribution does not, and the paper
+becomes a pipeline-and-analysis paper with a controlled negative result about
+architecture. That is still publishable and still honest. It is just a smaller
+claim, and it should be planned for rather than discovered.
 
 What carries over unchanged: the segmentation result, the honest statistics
 machinery, the calibration analysis (as a *negative* result, which is
@@ -407,11 +609,22 @@ arms were deliberately cut to a 64³/80-epoch budget.
 ## 11. Open decisions
 
 1. **Cortical parcellation granularity** — full SRI24/TZO, or merged to ~128
-   regions? Affects report readability more than correctness.
+   regions? Affects report readability more than correctness. Open.
 2. **Does the capacity control change the framing?** If the wide U-Net matches
    `neurovision`, the accuracy result becomes "capacity, not architecture", and
    the paper's model contribution weakens further — the pipeline would then
-   have to carry the entire contribution. Running now; decide after.
-3. **Is Phase 6 (grading) wanted at all**, given it needs a new dataset?
-4. **Who reviews the knowledge base?** It should not ship on my authority or
-   the author's alone.
+   have to carry the entire contribution. Running now; decide after. See §10 for
+   what survives either way.
+3. **Is Phase 6 (grading) wanted at all**, given it needs a new dataset? Open.
+4. ~~**Who reviews the knowledge base?**~~ **Resolved 2026-08-16: nobody, and
+   the design no longer requires it.** No reviewer with the relevant background
+   is available (Finding E). Rather than ship on model authority, the layer was
+   restricted to claims that need no expertise to check — see §2's two
+   categories and §5 Phase 2's tier table. The deficit layer is cut.
+5. **Should the registration-free property be *measured* rather than asserted?**
+   §10 item 1 claims an advantage over MNI-registered pipelines. Demonstrating
+   it needs the MNI route implemented as a comparison arm — which is exactly the
+   dependency Finding D declined. Options: assert it as a design property and
+   cite the known failure mode of peri-lesional registration; or reopen the
+   bridge decision solely to build a comparison arm. Decide before §10 item 1
+   goes in the paper as a claim rather than as a description.
