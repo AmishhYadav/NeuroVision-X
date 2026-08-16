@@ -209,9 +209,22 @@ sessions by resume is still ONE row — sum the GPU hours.
 18. **BURDEN PROFILE, first real run — and the first evidence that segmentation
     quality changes the REPORT, which is the pivoted paper's actual claim.**
     Local, CPU, zero GPU hours. `scripts/burden.py` over the 189-case test
-    split, three times: ground-truth labels, `neurovision` predictions
-    (`outputs/eval_test`), and `baseline_unet3d` predictions. 189/189 succeeded
-    in every run.
+    split. 189/189 succeeded in every run.
+
+    **Correction to the first version of this note.** It labelled
+    `outputs/eval_test` as `neurovision`. It is not — it is the **superseded
+    200-epoch / 96³ `baseline_unet3d`** (test Dice ET 0.8587). The matched
+    80-epoch / 64³ baseline is `outputs/eval_test_baseline_unet3d` (0.8442),
+    and `neurovision` (0.8709) lives in `outputs/neurovision/eval_test`, which
+    ships **logits but no `predictions/`**. So the first table below compares
+    **two U-Nets of different quality**, not the proposed model against its
+    baseline. The finding — better segmentation gives a report that agrees more
+    with the ground truth — is unaffected in direction, but the attribution was
+    wrong and the column headers are now what they actually are. Worth naming
+    the trap: three directories in `outputs/` differ by a suffix, two of them
+    hold a U-Net, and every one of them produces a plausible table. Check
+    `eval_config.yaml` for the resolved checkpoint path before labelling a
+    column, not the directory name.
 
     Absolute values are sane, which is the first thing to establish: median
     WT volume **96,630 mm³** (GT) against 97,496 and 96,430 mm³ predicted;
@@ -223,7 +236,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 
     Agreement with the ground-truth-derived profile, per case:
 
-    | Quantity | `neurovision` | `baseline_unet3d` |
+    | Quantity | U-Net 200ep/96³ (ET 0.8587) | U-Net 80ep/64³ (ET 0.8442) |
     |---|---|---|
     | median relative error, WT volume | 0.0443 | **0.0386** |
     | median relative error, ET volume | **0.0500** | 0.0615 |
@@ -231,14 +244,14 @@ sessions by resume is still ONE row — sum the GPU hours.
     | `dominant_side_WT` agreement | **100.0%** | 99.5% |
     | multifocal (`n_components_WT > 1`) agreement | **78.3%** | 70.4% |
 
-    Two things follow. **The ET advantage propagates to the report**: 5.00% vs
-    6.15% median relative error on ET volume, the same direction as the
-    +0.0267 ET Dice of note 12. And the largest effect is not a volume at all
-    — it is **multifocality**, where the baseline disagrees with the ground
-    truth on 29.6% of cases against `neurovision`'s 21.7%. Measured focus
-    rates: GT **22.8%**, `neurovision` **30.7%**, baseline **40.7%** — the
-    baseline nearly doubles the true multifocality rate by fragmenting single
-    lesions. That is a categorical, clinically-meaningful field of the report
+    Two things follow. **A segmentation advantage propagates to the report**:
+    5.00% vs 6.15% median relative error on ET volume, tracking the two models'
+    ET Dice in the right direction. And the largest effect is not a volume at
+    all — it is **multifocality**, where the weaker model disagrees with the
+    ground truth on 29.6% of cases against the stronger one's 21.7%. Measured
+    focus rates: GT **22.8%**, stronger model **30.7%**, weaker **40.7%** — the
+    weaker model nearly doubles the true multifocality rate by fragmenting
+    single lesions. That is a categorical, clinically-meaningful field of the report
     being wrong, from a Dice difference, which is exactly the
     "report-level error propagation" the interpretable-pipeline plan (§10 item
     2) identifies as ours rather than VASARI-auto's or BTReport's. Both
