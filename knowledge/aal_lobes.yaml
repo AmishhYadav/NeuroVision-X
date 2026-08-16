@@ -1,0 +1,197 @@
+# AAL/TZO structure -> lobe mapping.
+#
+# THIS FILE IS OUR OWN COMPILATION, NOT AN ATLAS PRODUCT. SRI24 ships structure
+# names; it does not ship lobe membership. Every assignment below is a judgement,
+# and the contested ones are flagged `arguable: true` with the reason. It is a
+# committed, versioned, reviewable artifact precisely so that a reader who
+# disagrees can point at a line rather than at a heuristic buried in a function.
+#
+# Why it exists: the Phase 0 alignment gate compares our tumour-location
+# distribution against published epidemiology (Larjavaara et al.,
+# Neuro-Oncology 2007). That check is only as good as this mapping, so the
+# mapping is a THIRD confound in it, alongside the two the planning document
+# already pre-registered (BraTS 2021 is overwhelmingly high-grade, and we
+# measure voxel overlap where the reference counts tumours). See
+# docs/research/phase0_atlas_findings.md, Finding G.
+#
+# Keyed on the BASE structure name, i.e. the merged parent with any `_L`/`_R`
+# suffix removed. 66 base names cover all 122 merged structures.
+
+version: 1
+atlas: SRI24/TZO (tzo116plus)
+n_base_names: 66
+
+# `lobe` is the anatomical grouping used for reporting.
+lobes:
+  [
+    frontal,
+    temporal,
+    parietal,
+    occipital,
+    insula,
+    limbic,
+    deep,
+    cerebellum,
+    vermis,
+    ventricle,
+    callosum,
+    brainstem,
+  ]
+
+# `epidemiology_lobe` exists for ONE purpose: the Larjavaara comparison in the
+# Phase 0 gate. It is deliberately coarser and collapses categories that the
+# reference pools. Do not use it for reporting -- use `lobe`.
+# `excluded` means the structure is left out of that comparison entirely,
+# because the reference figures are for supratentorial glioma.
+epidemiology_lobes: [frontal, temporal, parietal, occipital, deep, excluded]
+
+structures:
+  # --- frontal -----------------------------------------------------------
+  Precentral: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Sup: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Sup_Orb: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Mid: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Mid_Orb: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Inf_Oper: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Inf_Tri: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Inf_Orb: { lobe: frontal, epidemiology_lobe: frontal }
+  Supp_Motor_Area: { lobe: frontal, epidemiology_lobe: frontal }
+  Olfactory: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Sup_Medial: { lobe: frontal, epidemiology_lobe: frontal }
+  Frontal_Med_Orb: { lobe: frontal, epidemiology_lobe: frontal }
+  Rectus: { lobe: frontal, epidemiology_lobe: frontal }
+  Rolandic_Oper:
+    lobe: frontal
+    epidemiology_lobe: frontal
+    arguable: true
+    note: >
+      The Rolandic operculum straddles the frontal and parietal opercula. AAL
+      groups it with frontal and we follow AAL, but a parietal assignment is
+      defensible and would move mass from frontal to parietal in the gate.
+  Paracentral_Lobule:
+    lobe: frontal
+    epidemiology_lobe: frontal
+    arguable: true
+    note: >
+      Straddles the frontal and parietal lobes across the central sulcus on the
+      medial surface. AAL groups it with frontal. A split assignment is not
+      possible with a single label.
+
+  # --- insula ------------------------------------------------------------
+  Insula:
+    lobe: insula
+    epidemiology_lobe: deep
+    arguable: true
+    note: >
+      Insula is its own lobe anatomically and is reported separately in many
+      series. Larjavaara has no insula category, so for the gate only it is
+      folded into `deep`. This is the single largest judgement call in this file
+      -- insular gliomas are common and this choice moves real mass.
+
+  # --- limbic ------------------------------------------------------------
+  Cingulum_Ant:
+    lobe: limbic
+    epidemiology_lobe: deep
+    arguable: true
+    note: Medial frontal by position; limbic by AAL grouping.
+  Cingulum_Mid:
+    lobe: limbic
+    epidemiology_lobe: deep
+    arguable: true
+    note: Medial frontoparietal by position; limbic by AAL grouping.
+  Cingulum_Post:
+    lobe: limbic
+    epidemiology_lobe: deep
+    arguable: true
+    note: Medial parietal by position; limbic by AAL grouping.
+  Hippocampus:
+    lobe: limbic
+    epidemiology_lobe: temporal
+    note: Medial temporal. Counted as temporal in the gate, which is standard.
+  ParaHippocampal: { lobe: limbic, epidemiology_lobe: temporal }
+  Amygdala: { lobe: limbic, epidemiology_lobe: temporal }
+
+  # --- occipital ---------------------------------------------------------
+  Calcarine: { lobe: occipital, epidemiology_lobe: occipital }
+  Cuneus: { lobe: occipital, epidemiology_lobe: occipital }
+  Lingual: { lobe: occipital, epidemiology_lobe: occipital }
+  Occipital_Sup: { lobe: occipital, epidemiology_lobe: occipital }
+  Occipital_Mid: { lobe: occipital, epidemiology_lobe: occipital }
+  Occipital_Inf: { lobe: occipital, epidemiology_lobe: occipital }
+
+  # --- temporal ----------------------------------------------------------
+  Fusiform:
+    lobe: temporal
+    epidemiology_lobe: temporal
+    arguable: true
+    note: >
+      Occipitotemporal. AAL groups it with temporal. An occipital assignment
+      would move a few percent from temporal to occipital in the gate.
+  Heschl: { lobe: temporal, epidemiology_lobe: temporal }
+  Temporal_Sup: { lobe: temporal, epidemiology_lobe: temporal }
+  Temporal_Pole_Sup: { lobe: temporal, epidemiology_lobe: temporal }
+  Temporal_Mid: { lobe: temporal, epidemiology_lobe: temporal }
+  Temporal_Pole_Mid: { lobe: temporal, epidemiology_lobe: temporal }
+  Temporal_Inf: { lobe: temporal, epidemiology_lobe: temporal }
+
+  # --- parietal ----------------------------------------------------------
+  Postcentral: { lobe: parietal, epidemiology_lobe: parietal }
+  Parietal_Sup: { lobe: parietal, epidemiology_lobe: parietal }
+  Parietal_Inf: { lobe: parietal, epidemiology_lobe: parietal }
+  SupraMarginal: { lobe: parietal, epidemiology_lobe: parietal }
+  Angular: { lobe: parietal, epidemiology_lobe: parietal }
+  Precuneus: { lobe: parietal, epidemiology_lobe: parietal }
+
+  # --- deep grey ---------------------------------------------------------
+  Caudate: { lobe: deep, epidemiology_lobe: deep }
+  Putamen: { lobe: deep, epidemiology_lobe: deep }
+  Pallidum: { lobe: deep, epidemiology_lobe: deep }
+  Thalamus: { lobe: deep, epidemiology_lobe: deep }
+
+  # --- infratentorial ----------------------------------------------------
+  # Excluded from the epidemiology gate: the reference figures are for
+  # supratentorial glioma, and posterior-fossa tumours are a different
+  # population. They are still reported normally under `lobe`.
+  Cerebelum_Crus1: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Cerebelum_Crus2: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Cerebelum_3: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Cerebelum_4_5: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Cerebelum_6: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Cerebelum_7b: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Cerebelum_8: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Cerebelum_9: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Cerebelum_10: { lobe: cerebellum, epidemiology_lobe: excluded }
+  Vermis_1_2: { lobe: vermis, epidemiology_lobe: excluded }
+  Vermis_3: { lobe: vermis, epidemiology_lobe: excluded }
+  Vermis_4_5: { lobe: vermis, epidemiology_lobe: excluded }
+  Vermis_6: { lobe: vermis, epidemiology_lobe: excluded }
+  Vermis_7: { lobe: vermis, epidemiology_lobe: excluded }
+  Vermis_8: { lobe: vermis, epidemiology_lobe: excluded }
+  Vermis_9: { lobe: vermis, epidemiology_lobe: excluded }
+  Vermis_10: { lobe: vermis, epidemiology_lobe: excluded }
+  Pons:
+    lobe: brainstem
+    epidemiology_lobe: excluded
+    note: >
+      Brainstem, and one of the structures the Sawaya classification calls
+      eloquent. Excluded from the gate for the same supratentorial reason,
+      never from reporting.
+
+  # --- non-parenchymal ---------------------------------------------------
+  # These are the SRI24 "plus" structures. They matter for VASARI F19
+  # (ependymal invasion) and for the Phase 3b mass-effect measures, and they
+  # are the reason no MNI bridge is needed for either.
+  LateralVentricle:
+    lobe: ventricle
+    epidemiology_lobe: deep
+    note: >
+      A tumour "in" a ventricle is displacing or invading its wall, not
+      occupying CSF. Involvement here should be read as ependymal contact.
+  ThirdVentricle: { lobe: ventricle, epidemiology_lobe: deep }
+  CorpusCallosum:
+    lobe: callosum
+    epidemiology_lobe: deep
+    note: >
+      The classic route for midline crossing (VASARI F22/F23). Merged from nine
+      `_AP_*` sub-labels that the atlas names only by index, so genu / body /
+      splenium are deliberately not distinguished.

@@ -10,6 +10,7 @@ defaults:
   - inference: default
   - calibration: default
   - explainability: default
+  - anatomy: sri24
   - _self_
 
 # --- Run identity ---

@@ -1,0 +1,144 @@
+# SRI24 atlas — the anatomical reference for the interpretable pipeline.
+#
+# Measured facts behind every value here live in
+# docs/research/phase0_atlas_findings.md. Read it before changing anything:
+# two of the planning document's assumptions about this atlas were wrong.
+
+# Where fetch_atlas.py puts the extracted tree. Relative on purpose, like
+# data.preprocess.out_dir. `/data/` is gitignored AT THE REPO ROOT, and .gitignore
+# also carries `*.nii`, so nothing here can be committed -- SRI24 is CC-BY-SA and
+# must never be vendored (interpretable_pipeline_plan.md §7).
+dir: data/atlas/sri24
+
+# Recorded in every generated report, so a report traces to the parcellation
+# that produced it.
+version: "2.0"
+source: "NITRC group_id=214 (https://www.nitrc.org/projects/sri24)"
+licence: "CC-BY-SA"
+
+# Archives fetch_atlas.py downloads. Checksums measured 2026-08-16; a mismatch
+# is a hard failure, not a warning -- a silently different atlas produces
+# plausible reports about the wrong anatomy.
+archives:
+  labels:
+    url: "https://www.nitrc.org/frs/download.php/4508/sri24_labels_nifti.zip"
+    sha256: "ed47fde305baefb687a38e0daa8527896480e4e0159a0a0f56c8cbe09fc97e1f"
+    bytes: 399821
+  tissue:
+    url: "https://www.nitrc.org/frs/download.php/4511/sri24_tissue_nifti.zip"
+    sha256: "1375bf8f44a2f6a0704056d87c51ab8dd8d499132d9b06bf9f7e1b6b857673a2"
+    bytes: 15686657
+  anatomy:
+    url: "https://www.nitrc.org/frs/download.php/4499/sri24_anatomy_nifti.zip"
+    sha256: "c2a66abd5bb37ba443b935ef4732a3e3a2f34ca57bedcdac6cf5902b50f013b6"
+    bytes: 6522201
+
+# Every archive extracts into a single `sri24/` directory, so all files land here.
+subdir: "sri24"
+
+# --- Parcellation ---------------------------------------------------------
+# tzo116plus: AAL-derived, 116 cortical/subcortical + manually delineated
+#   ventricles, pons and corpus callosum. 130 structures after merging.
+# lpba40: 56 regions, coarser, no ventricles. Kept as an alternative only.
+parcellation:
+  name: tzo116plus
+  image: "tzo116plus.nii"
+  lut: "SRI24-tzo116plus.txt"
+
+  # The LUT mixes TABS (labels 1-116) and SPACES (labels 201+) as separators.
+  # Splitting on "\t" silently stops mapping at 116 while the volume carries
+  # 424 values, so every unmapped voxel would read as background. Parse on
+  # generic whitespace; no structure name contains a space.
+  lut_whitespace_split: true
+
+  # Labels 201+ are single structures SLICED PER ANATOMICAL PLANE -- an artifact
+  # of how the atlas was built, not anatomy. LateralVentricle_L_y48 .. _y139 are
+  # 107 sub-labels of one ventricle. Stripping these suffixes yields 130 parent
+  # structures, which is the atlas's own structure count with its slicing undone.
+  # This is the answer to plan open decision #1 (granularity).
+  merge_patterns:
+    - '(_[xyz][0-9]+)$'
+    - '(_AP_[0-9]+)$'
+
+  # A volume value with no LUT row becomes this. Never "background": 9 such
+  # values exist, and silently folding them into background would delete real
+  # tissue from every involvement fraction. Counted in the report coverage line.
+  unmapped_name: "unclassified"
+
+# --- Tissue maps ----------------------------------------------------------
+# `tissues.nii` is a hard segmentation on the SAME frame as the parcellation.
+# `pbmap_*` are probability maps on a LEFT-RIGHT MIRRORED frame (measured; see
+# findings Finding H). Default to tissues: fewer moving parts on the path that
+# VASARI F20/F21 depend on. pbmap is opt-in and the loader flips it.
+tissue:
+  source: tissues # tissues | pbmap
+  image: "tissues.nii"
+  # Measured by matching pbmap_GM against each tissues value, NOT assumed:
+  # tissues==2 vs pbmap_GM Dice 0.9521 after the axis-0 flip.
+  codes:
+    CSF: 1
+    GM: 2
+    WM: 3
+  pbmap:
+    GM: "pbmap_GM.nii"
+    WM: "pbmap_WM.nii"
+    CSF: "pbmap_CSF.nii"
+
+# --- Anatomy channels (for visual QC only) --------------------------------
+anatomy:
+  t1: "spgr.nii" # skull-stripped, matches BraTS
+  t2_late: "late.nii"
+  t2_early: "erly.nii"
+
+# --- Target geometry ------------------------------------------------------
+# The BraTS grid. The atlas is native to it, but NOT in the same index
+# orientation -- see `reorient` below.
+target:
+  shape: [240, 240, 155]
+  spacing: [1.0, 1.0, 1.0]
+  # BraTS meta.json affine, identical across all 1251 cases.
+  affine: [[-1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 239.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+  # Axis 0 runs right -> left, so LOW index = patient RIGHT.
+  left_is_high_index: true
+
+reorient:
+  # Derive each file's flip from ITS OWN affine, never one transform for the
+  # whole atlas: pbmap_* disagrees with tissues/tzo/spgr on axis 0 INSIDE the
+  # same distribution. Solving affines gives exact index reversals with no
+  # offset, so this stays resampling-free.
+  per_file_from_affine: true
+  # Refuse to proceed if the solved transform is anything other than a pure
+  # axis reversal (a shear, a non-unit scale, a fractional offset). Silent
+  # interpolation would break the plan's "registration-free by construction"
+  # claim without anything failing.
+  require_pure_flip: true
+
+# --- Validation (Phase 0's gate) ------------------------------------------
+# Gate order matters and is NOT the planning document's order. Measured: the
+# population lobe check is the WEAKEST of the three, and scoring it by rank
+# correlation actively prefers a mirrored atlas (+0.975 wrong vs +0.872 right).
+# Brain-mask Dice has the widest margin and laterality is the only check that
+# can see a left-right flip at all. See findings Finding K.
+validation:
+  # Cases sampled for the population lobe check. 400 was enough to separate
+  # flipped from unflipped decisively.
+  n_cases: 400
+  seed: 0
+  # Our own compilation, not an atlas product. 7 of its 66 assignments are
+  # flagged `arguable` and it is a confound in the lobe check.
+  lobe_map: knowledge/aal_lobes.yaml
+  # The lobe check is ADVISORY. It is reported, never gated on -- no threshold
+  # here on purpose. Score by absolute deviation in percentage points; a rank
+  # statistic gets this backwards.
+  lobe_check_is_advisory: true
+  # Brain-mask Dice below this fails the gate. Measured 0.9350 when correct,
+  # 0.7341 when A-P mirrored, so the two regimes are far apart.
+  min_brain_dice: 0.85
+  # Laterality: fraction of _L/_R pairs that must satisfy
+  # (L centroid > midline) and (R centroid < midline). Measured 54/54.
+  min_laterality_pairs_correct: 1.0
+  # Independent midline estimate from _L/_R centroid midpoint, measured 119.1
+  # against the 119.5 grid centre that anatomy/burden.py assumes.
+  midline_index: 119.5
+  max_midline_deviation: 1.5
+  qc_cases: 10

@@ -13,7 +13,7 @@ Read alongside `docs/research/interpretable_pipeline_plan.md` §3 (Finding A) an
 |---|---|
 | "an SRI24 parcellation drops onto every one of our cases with zero registration and zero resampling" | Grid and spacing are exactly right, **but the atlas is anterior–posterior mirrored relative to BraTS voxel indexing.** A flip is required. It is a pure index reversal — still zero resampling, still zero registration. |
 | (not anticipated) | **The `pbmap_*` tissue probability maps are left–right mirrored relative to every other file in the same SRI24 distribution.** |
-| "SRI24/TZO … 116 regions" | The volume carries **424 distinct label values**; 1–116 are AAL/TZO, 201+ are manually delineated structures **sliced per anatomical plane**. Merging to parents gives **130 structures**. |
+| "SRI24/TZO … 116 regions" | The volume carries **424 distinct label values**; 1–116 are AAL/TZO, 201+ are manually delineated structures **sliced per anatomical plane**. Merging to parents gives **122 structures**. |
 | (not anticipated) | **9 label values present in the volume have no LUT entry**, and 7 LUT entries never appear in the volume. |
 | Phase 0 check 1 (brain-mask Dice) treated as a general alignment check | **Brain-mask Dice is structurally blind to a left–right flip** (0.9350 vs 0.9363). It cannot be the laterality check. A content-based replacement is given below. |
 
@@ -88,6 +88,43 @@ proof rather than vibes: frontal **62%**, temporal 24%, deep 12%, parietal
 **2%**. An A–P mirror reads occipital and parietal content as frontal, and that
 is exactly the signature observed.
 
+### Finding K (new) — the lobe check is NOT the strongest check, and its natural summary statistic prefers the wrong answer
+
+The plan calls the population lobe distribution "the strongest [check]
+available". Measured, it is not, and summarising it the obvious way is actively
+harmful.
+
+Scored with Spearman rank correlation against the reference ordering:
+
+| Orientation | Spearman rho |
+|---|---|
+| correct (A–P flipped) | **+0.872** |
+| **mirrored (unflipped)** | **+0.975** |
+
+The mirrored atlas scores *higher*. Its ranking is frontal > temporal > deep >
+parietal > occipital, which misorders only the adjacent deep/parietal pair,
+whereas the correct orientation swaps the top two for the real cohort reason
+below. **A Phase 0 gate built on rank correlation would have preferred a
+mirrored atlas.** Rank correlation over five bins is close to useless here: it
+throws away exactly the magnitudes that carry the signal.
+
+Mean absolute deviation in percentage points is better but still not decisive —
+5.7 pp correct vs 7.9 pp mirrored. The single discriminating quantity is
+**parietal share: 17.8% correct vs 2.5% mirrored, against a reference of 14%.**
+An A–P mirror reads parietal and occipital content as frontal, so parietal
+collapses by 5.6x and occipital vanishes from the ranking entirely.
+
+Consequence for the gate, and it is a reordering of the plan's Phase 0:
+
+1. **Primary — brain-mask Dice.** 0.9350 correct vs 0.7341 mirrored. The widest
+   margin of any check by far, and the one to gate on.
+2. **Primary — laterality from `_L`/`_R` centroid pairs** (Finding J). The only
+   check that can see a left–right flip at all.
+3. **Supporting — lobe distribution.** Report per-lobe percentages with all
+   three caveats. Score by absolute deviation, **never by rank correlation**.
+   Advisory, not pass/fail.
+4. **Visual QC on ~10 cases**, unchanged.
+
 **Honest deviation to report, not hide:** frontal and temporal are rank-swapped
 against the reference. Two reasons, both pre-registered in the plan: BraTS 2021
 is overwhelmingly high-grade glioma, and GBM has a documented temporal
@@ -143,7 +180,7 @@ Labels 201+ are the "plus": manually delineated structures **sliced per
 anatomical plane** — `LateralVentricle_L_y48 … _y139`, `Pons_x111 … _x114`,
 `ThirdVentricle_{L,R}_y*`, `CorpusCallosum_AP_0 … _AP_8`. They are construction
 artifacts of the atlas, not anatomical categories. Merging on
-`(_[xyz]\d+|_AP_\d+)$` gives **130 parent structures**:
+`(_[xyz]\d+|_AP_\d+)$` gives **122 parent structures** = 116 AAL + 6:
 
 | Parent | sub-labels | voxels |
 |---|---|---|
@@ -155,8 +192,16 @@ artifacts of the atlas, not anatomical categories. Merging on
 | `CorpusCallosum` | 9 (`_AP_0..8`) | 1,635 |
 
 **This resolves plan open decision #1** (full TZO vs merge to ~128): merge to
-**130**, which is the atlas's own structure count once its per-plane slicing is
+**122**, which is the atlas's own structure count once its per-plane slicing is
 undone. Nothing is invented and nothing is thrown away.
+
+Leaving `CorpusCallosum_AP_*` unmerged would give 130 instead, and genu / body /
+splenium involvement is genuinely more informative than "corpus callosum". It is
+still merged, for a specific reason: **the atlas names those nine sub-labels
+`_AP_0` … `_AP_8` and nothing else.** Splitting genu from splenium would mean
+assigning anatomical names to bare A–P indices ourselves, which is the kind of
+invention this pipeline exists to avoid. "Tumour involves the corpus callosum"
+is a claim the atlas supports; "tumour involves the splenium" is not.
 
 It also delivers something the plan did not expect to have: **ventricle labels**.
 Lateral and third ventricles are present, so VASARI F19 (ependymal invasion) and
