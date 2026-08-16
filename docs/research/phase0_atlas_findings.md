@@ -284,6 +284,50 @@ are the same 1,451,706 voxels exactly, so the tissue map is the brain mask and
 
 ---
 
+## THE GATE PASSED — 2026-08-16
+
+Run through `anatomy.alignment.run_checks` on the real atlas against real
+preprocessed cases: 60 cases for the brain-mask check (it reads `image.npy`,
+which is 4-channel float16 and expensive), 400 for the lobe distribution, the
+60 being a prefix of the same 400-case draw so the report describes one cohort.
+
+```
+[PASS] (gating)   brain_mask_dice    0.9211  >= 0.8500
+                  median 0.9211, min 0.8431, max 0.9598 over 60 cases;
+                  2 cases below threshold
+[PASS] (gating)   laterality_pairs   56/56 satisfy (L > 119.5) and (R < 119.5)
+[PASS] (gating)   midline_estimate   119.0997 vs assumed 119.5, deviation 0.40
+                  (max allowed 1.5)
+[PASS] (advisory) lobe_distribution  mean absolute deviation 5.70 pp
+                  frontal 30.5% (ref 40) | temporal 38.0% (ref 29)
+                  parietal 17.8% (ref 14) | deep 9.2% (ref 14)
+                  occipital 4.5% (ref 3)
+Overall: PASS
+```
+
+**Everything downstream of Phase 0 is now unblocked.**
+
+Three things worth keeping from the run itself.
+
+The per-case median brain Dice is **0.9211**, lower than the **0.9394** reported
+above, and the difference is not a discrepancy: the earlier figure compared the
+atlas against a *population-averaged* brain mask (voxels present in more than
+half of 40 cases), which smooths away individual variation. Per-case Dice
+against individual brains is the honest number and it is the one the gate uses.
+
+**Two of 60 cases sit below the 0.85 threshold** while the median passes
+comfortably. That is why the check gates on the median and reports the tail in
+its `detail` string rather than gating on the minimum — a handful of unusual
+heads or large mass-effect cases should not fail an atlas that is demonstrably
+correct for the cohort. The tail is worth a look before the paper, but it is not
+a blocker.
+
+The lobe percentages reproduce an independent, separately-written ad-hoc script
+to the digit (30.5 / 38.0 / 17.75 / 9.25 / 4.5), which is a cheap cross-check
+that the module and the exploratory analysis agree.
+
+---
+
 ## What the load path must therefore do
 
 1. Squeeze the trailing singleton axis — every file is 4-D.
