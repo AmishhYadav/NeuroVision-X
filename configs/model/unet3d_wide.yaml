@@ -1,0 +1,52 @@
+# Capacity control: the SAME plain 3D U-Net as unet3d.yaml, widened until its
+# parameter count matches `neurovision`.
+#
+# This file exists to answer one question and only one: is `neurovision`'s Dice
+# advantage over `baseline_unet3d` caused by the ARCHITECTURE, or merely by
+# having 2.7x the parameters?
+#
+# Measured on the test split, `neurovision` (34,911,341 params) beats
+# `baseline_unet3d` (12,873,571) by +0.0267 Dice ET and +0.0103 TC, both
+# comfortably significant. Nothing in that comparison separates the fusion
+# design from raw capacity, and `ablation_content_only_gate` CANNOT separate
+# them either -- it is parameter-matched to `neurovision`, so both of its arms
+# are large. Only a large BASELINE closes that gap.
+#
+# Every field below is identical to unet3d.yaml except `channels`. Do not
+# "improve" anything else here: the moment this file differs from unet3d.yaml
+# in more than width, it stops being a capacity control and becomes a second
+# architecture, and the comparison it exists to support is gone.
+
+name: unet3d # same registry entry -- this is a width change, not a new model
+
+in_channels: ${data.in_channels}
+out_channels: ${data.num_classes}
+
+# Base width 53 rather than 32, i.e. ~1.66x wider at every level. Parameters
+# scale roughly with the square of width, so 1.66^2 ~ 2.7x, which is the ratio
+# needed.
+#
+# MEASURED, not derived: this gives 34,829,696 parameters against
+# `neurovision`'s 34,911,341 -- a delta of 81,645, or 0.23%. Found by searching
+# the base width and the bottleneck width against the real builder, because
+# `num_res_units: 2` and the decoder's skip concatenations make the closed-form
+# estimate wrong by several percent.
+#
+# 53 is a deliberately unlovely number. It was chosen to hit the parameter
+# target, not because 53 channels is meaningful, and rounding it to 48 or 56
+# would put the control 17% under or 13% over -- large enough that a reader
+# could reasonably attribute a difference to the mismatch.
+channels: [53, 106, 212, 424, 520]
+
+strides: [2, 2, 2, 2]
+num_res_units: 2
+
+norm: instance
+activation: leakyrelu
+
+# Kept at 0.1, identical to unet3d.yaml. Dropout placement and rate are
+# training-time choices that MC-dropout at inference depends on, so a control
+# trained at a different rate could not be compared on uncertainty either.
+dropout: 0.1
+
+deep_supervision: false

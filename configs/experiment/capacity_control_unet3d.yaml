@@ -1,0 +1,47 @@
+# @package _global_
+#
+# CAPACITY CONTROL. A parameter-matched plain U-Net, to test whether
+# `neurovision`'s accuracy advantage is architectural or just capacity.
+#
+#   python scripts/train.py +experiment=capacity_control_unet3d
+#
+# Includes _baseline_common exactly like baseline_unet3d.yaml, neurovision.yaml
+# and ablation_content_only_gate.yaml, so data, augmentation, optimizer, LR
+# schedule, patch size, epochs, seed and stopping rule are identical to all
+# three by construction. The ONLY difference from `baseline_unet3d` is the
+# width of the network.
+#
+# Why this run exists, in one paragraph. On the test split `neurovision` beats
+# `baseline_unet3d` by +0.0267 Dice ET (p_holm 1.4e-21) and +0.0103 TC. It also
+# has 2.7x the parameters. Those two facts are currently confounded, and the
+# planned P2 ablation cannot separate them because it is parameter-matched to
+# `neurovision` -- both of ITS arms are large. A reviewer's first question about
+# this project's headline result is "is it just a bigger model?", and until this
+# run exists the honest answer is "we do not know".
+#
+# What each outcome means, written BEFORE the run so it cannot be
+# rationalised afterwards:
+#
+#   * lands near `baseline_unet3d` (~0.844 ET) -- capacity is not the driver at
+#     this schedule, and the gain is attributable to architecture. The P2
+#     ablation then localises it within the architecture.
+#   * lands between (~0.855 ET) -- the gain decomposes. Report the split
+#     honestly: roughly half capacity, roughly half architecture.
+#   * lands near `neurovision` (~0.871 ET) -- the gain is capacity. The
+#     architectural claim collapses, and P2 becomes close to pointless. This is
+#     the outcome that makes running THIS experiment first worth 4 GPU-hours
+#     against the ablation's 23.
+#
+# Record the result in docs/experiments.md before starting the next run.
+
+defaults:
+  - _baseline_common
+  - override /model: unet3d_wide
+  - _self_
+
+experiment_name: capacity_control_unet3d
+
+wandb:
+  # Same group as the runs it is compared against, so W&B overlays the curves.
+  group: milestone1_baselines
+  tags: [baseline, capacity_control, milestone1]
