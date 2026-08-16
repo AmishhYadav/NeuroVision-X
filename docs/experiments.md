@@ -45,6 +45,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 | Run | Config | Seed | Model | Epochs | GPU h | Dice ET | Dice TC | Dice WT | HD95 ET | HD95 TC | HD95 WT | ECE | W&B | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `baseline_unet3d` (80ep/64³) | `+experiment=baseline_unet3d data.num_workers=2`, `GIT_REF=6ee28a7` | 42 | `unet3d`, 12.87M | 80 / 80 | ~3.2 | 0.8442 | 0.9058 | 0.9276 | 4.91 | 5.24 | 6.72 | — | `pzu8y5fo` (offline) | 6–10 below |
+| `neurovision` | `+experiment=neurovision data.num_workers=2`, `GIT_REF=7caacfa` | 42 | `neurovision`, 34.91M | 80 / 80 | 23.1 | 0.8709 | 0.9161 | 0.9321 | 4.20 | 4.98 | 7.09 | — | `cc2l5j1c` (offline) | 11–15 below |
 | `baseline_unet3d` | root config, **not** `+experiment=` — see note 1. Overrides: `model=unet3d training.epochs=200 training.val_interval=2 data.dataset_type=dataset data.num_workers=2` | 42 | `unet3d`, 12.87M | 200 / 200 | 16.5 | 0.8587 | 0.9157 | 0.9354 | 4.02 | 5.21 | 5.36 | — | `nz5y7li7` | 1–5 below |
 
 **Notes for `baseline_unet3d` / `nz5y7li7`**
@@ -110,6 +111,51 @@ sessions by resume is still ONE row — sum the GPU hours.
     training set — an independent check that split and label handling are
     intact. Evaluation ran on the **Mac CPU** in ~35 min for both splits
     (6.49 s/case), consuming zero GPU hours.
+
+**Notes for `neurovision` / `cc2l5j1c`**
+
+11. **Scored from `best.pt` at epoch 69, not `last.pt` at epoch 79.** The run
+    peaked at epoch 69 (`val/dice_mean` 0.8938) and the two later validation
+    points did not improve on it. `best.pt` therefore lives in **session 2's**
+    Kaggle output, not the final session's — see the session-3 row below for
+    why that is not where you would first look. Trained over three chained
+    sessions, 10.34 + 10.5 + 2.3 = 23.1 GPU-h.
+12. **Against `baseline_unet3d` (80ep/64³), paired over the same 189 test
+    cases, bootstrap CI + Wilcoxon, Holm-corrected across all six metrics:**
+    Dice ET **+0.0267** CI [+0.0143, +0.0432] p_holm 1.4e-21 → **better**;
+    Dice TC **+0.0103** CI [+0.0033, +0.0180] p_holm 1.2e-10 → **better**;
+    Dice WT +0.0045 CI [−0.0007, +0.0098] → **inconclusive**; HD95 ET −0.67 mm,
+    TC −0.27 mm, WT **+0.37 mm (worse)**, all inconclusive. So the Dice half of
+    the claim holds on ET and TC, and **no HD95 difference is claimable in any
+    region.** `dice_WT` is the case where the CI and the p-value disagree
+    (p_holm 5.6e-09 with a CI spanning 0): the sign is consistent across most
+    cases while a few large regressions pull the mean CI across zero, and
+    `compare_models` resolves that conservatively. 93 of 184 HD95 ET pairs are
+    exact ties, so that test runs on a minority of cases.
+13. **Boundary-stratified error does NOT show a boundary-specific improvement,
+    and this is the note to read before writing the boundary section.** Total
+    error voxels (per-band rate × band size, summed over cases — never the mean
+    of the rates, see the correction recorded in `CLAUDE.md`) come to
+    neurovision/baseline of **0.870 (ET), 0.908 (TC), 0.952 (WT)** — uniformly
+    fewer errors. But the *share* falling in the 0–2 mm band is essentially
+    unchanged (ET 77.6% vs 78.6%, TC 62.3% vs 63.1%, WT 72.3% vs 73.7%). The
+    model is better roughly proportionally at every distance, so on this
+    evidence the honest claim is "fewer errors overall", **not** "better
+    specifically at the margin". The 10 mm+ band remains almost entirely false
+    positives in both models (WT: 166,692 of 171,202 error voxels for
+    neurovision), i.e. the confident-prediction-far-from-any-lesion failure
+    mode is reduced but not solved.
+14. **HD95 ET is over n = 186, not 189** (3 cases NaN from a one-sided-empty ET
+    region), against the baseline's n = 184. `gt_empty_ET` is **0.0265** (5 of
+    189), identical to the baseline — an independent check that both rows were
+    scored on the same split with the same convention.
+15. **Evaluation ran on a Kaggle T4 at 11.9 s/case (35:43 for 189 cases), not
+    on the Mac.** Measured first on the Mac at **136 s/case**, i.e. ~21× the
+    6.49 s/case that `baseline_unet3d` achieves there. The note elsewhere that
+    deterministic evaluation is free on CPU was measured on the U-Net and
+    **does not transfer to this architecture**; both splits locally would be
+    ~14 h. Cost on GPU was ~0.6 h. `save_logits: true`, so temperature scaling
+    does not require re-running the split.
 
 ---
 
