@@ -45,7 +45,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 | Run | Config | Seed | Model | Epochs | GPU h | Dice ET | Dice TC | Dice WT | HD95 ET | HD95 TC | HD95 WT | ECE | W&B | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `baseline_unet3d` (80ep/64³) | `+experiment=baseline_unet3d data.num_workers=2`, `GIT_REF=6ee28a7` | 42 | `unet3d`, 12.87M | 80 / 80 | ~3.2 | 0.8442 | 0.9058 | 0.9276 | 4.91 | 5.24 | 6.72 | — | `pzu8y5fo` (offline) | 6–10 below |
-| `neurovision` | `+experiment=neurovision data.num_workers=2`, `GIT_REF=7caacfa` | 42 | `neurovision`, 34.91M | 80 / 80 | 23.1 | 0.8709 | 0.9161 | 0.9321 | 4.20 | 4.98 | 7.09 | — | `cc2l5j1c` (offline) | 11–15 below |
+| `neurovision` | `+experiment=neurovision data.num_workers=2`, `GIT_REF=7caacfa` | 42 | `neurovision`, 34.91M | 80 / 80 | 23.1 | 0.8709 | 0.9161 | 0.9321 | 4.20 | 4.98 | 7.09 | 0.0446 → **0.0135** | `cc2l5j1c` (offline) | 11–16 below |
 | `baseline_unet3d` | root config, **not** `+experiment=` — see note 1. Overrides: `model=unet3d training.epochs=200 training.val_interval=2 data.dataset_type=dataset data.num_workers=2` | 42 | `unet3d`, 12.87M | 200 / 200 | 16.5 | 0.8587 | 0.9157 | 0.9354 | 4.02 | 5.21 | 5.36 | — | `nz5y7li7` | 1–5 below |
 
 **Notes for `baseline_unet3d` / `nz5y7li7`**
@@ -156,6 +156,33 @@ sessions by resume is still ONE row — sum the GPU hours.
     **does not transfer to this architecture**; both splits locally would be
     ~14 h. Cost on GPU was ~0.6 h. `save_logits: true`, so temperature scaling
     does not require re-running the split.
+16. **CALIBRATION: the headline claim does NOT hold. Mean ECE is within noise
+    against the baseline, calibrated or not.** T fit on val, reported on test,
+    `predicted` (label-free) mask, `T = [2.05, 1.99, 1.63]` against the
+    baseline's `[1.92, 2.02, 1.93]` — i.e. **this architecture is not
+    intrinsically less overconfident**; it needs about the same correction.
+    Split-level ECE mean: neurovision **0.0446 uncalibrated / 0.0135 scaled**
+    vs baseline **0.0395 / 0.0175**. So uncalibrated it is nominally WORSE and
+    after scaling nominally better — but per-case paired statistics (bootstrap
+    CI + Wilcoxon, Holm over 5 metrics) return **`ece_mean` INCONCLUSIVE in
+    both variants** (uncalibrated CI [−0.0006, +0.0105]; scaled CI [+0.0005,
+    +0.0089], p_holm 0.38). What IS claimable, in both variants: **`ece_TC`**
+    (uncalibrated +0.0120 CI [+0.0047, +0.0199] p_holm 3.6e-10; scaled +0.0085
+    CI [+0.0023, +0.0153] p_holm 7.1e-05) and **`brier_mean`** (+0.0062 and
+    +0.0065, both p_holm < 1e-5).
+    **Consequence for the paper, stated before anyone writes the abstract: of
+    the three parts of the stated claim — competitive Dice, better calibration,
+    better boundary accuracy — only the Dice part is supported, and it is
+    supported more strongly than "competitive" (see note 12). Calibration and
+    boundary accuracy are both unsupported (notes 12, 13). The result is a
+    more ACCURATE model, not a more RELIABLE one, and the contribution has to
+    be rewritten around that or the reliability claim has to be earned by
+    something not yet measured (MC-dropout risk-coverage is the remaining
+    candidate and has not been run).**
+    Note also the earlier figure of **0.0158** recorded in `CLAUDE.md` as "the
+    bar" is from the **96³ / epoch-130** baseline, not the 64³ / 80-epoch row
+    this run is comparable to. The correct bar is **0.0175**. Comparing against
+    the wrong baseline's calibration would have flattered this run.
 
 ---
 
