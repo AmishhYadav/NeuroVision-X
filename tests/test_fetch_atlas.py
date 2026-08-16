@@ -17,9 +17,8 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from omegaconf import OmegaConf
-
 import scripts.fetch_atlas as fetch_atlas_mod
+from omegaconf import OmegaConf
 
 ArchiveSpec = fetch_atlas_mod.ArchiveSpec
 REQUIRED_MEMBERS = fetch_atlas_mod.REQUIRED_MEMBERS

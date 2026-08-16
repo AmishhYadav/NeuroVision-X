@@ -1,0 +1,202 @@
+# SRI24/TZO structure -> Sawaya eloquence class.
+#
+# Tier C of docs/research/interpretable_pipeline_plan.md §5 Phase 2: a geometric
+# statement about a named published list, NOT an assessment of any patient.
+# The source owns the claim; we own only the mapping.
+#
+# HOW TO AUDIT THIS FILE WITHOUT A NEUROANATOMY BACKGROUND.
+# Every entry carries the same `evidence` sentence, because the source IS a
+# single list. All the judgement therefore sits in one field, `matched_term`,
+# and the question to ask of each entry is not "is this neuroanatomy correct?"
+# but "does the quoted sentence's term `matched_term` cover this structure?".
+# That is checkable line by line in one sitting, which is the point.
+#
+# NOTHING HERE IS A DEFICIT CLAIM, A PROGNOSIS, OR AN ELOQUENCE ASSESSMENT.
+# Tier D (function and deficit text) is cut and must not be added.
+
+version: 1
+atlas: SRI24/TZO (tzo116plus), 122 merged structures
+
+classification:
+  name: Sawaya eloquence grading
+  primary_citation: >
+    Sawaya R, Hammoud M, Schoppa D, Hess KR, Wu SZ, Shi WM, Wildrick DM.
+    Neurosurgical outcomes in a modern series of 400 craniotomies for treatment
+    of parenchymal tumors. Neurosurgery. 1998 May;42(5):1044-1056.
+    PMID 9588549. DOI 10.1097/00006123-199805000-00054.
+
+  # HONESTY NOTE, and it belongs in the artifact rather than in a commit
+  # message: the primary paper was NOT read. The verbatim sentences below were
+  # taken from the open-access secondary source named here, which attributes
+  # them to the primary. Anyone re-deriving this file should say the same.
+  read_via: >
+    Kellogg RG, Munoz LF. Selective excision of cerebral metastases from the
+    precentral gyrus. Surg Neurol Int. 2013;4:66. PMID 23776752,
+    PMCID PMC3683173, DOI 10.4103/2152-7806.112189. Open access, CC-BY.
+
+  eloquent_structures_verbatim: >
+    Eloquent locations in the Sawaya study are the motor/sensory cortices,
+    visual center, speech center, internal capsule, basal ganglia,
+    hypothalamus/thalamus, brainstem, and dentate nucleus.
+
+  grades_verbatim: >
+    Grade I lesions are located in noneloquent brain, Grade II lesions in
+    near-eloquent brain, and Grade III lesions in eloquent brain.
+
+# Closed vocabulary. Anything else must raise.
+#
+# There is deliberately NO `non-eloquent` value. Absence of a source is not
+# evidence of functional silence, and a `non-eloquent` label would manufacture
+# a reassuring claim out of a gap in our sourcing.
+vocabulary: [eloquent, unclassified]
+default: unclassified
+
+near_eloquent_rule:
+  # Sawaya's grade II ("near-eloquent") is documented in the literature as
+  # ambiguous -- Frontiers in Oncology 2021 (doi 10.3389/fonc.2021.748229):
+  # "application of Sawaya's grading was found ambiguous due to its definition
+  # of the near-eloquent brain". So we do not reproduce grade II. The report
+  # emits the MEASURED millimetre distance to the nearest eloquent structure
+  # and applies this explicit, configurable threshold, stated in the artifact.
+  distance_mm: 10
+  emit_measured_distance: true
+
+# -------------------------------------------------------------------------
+# LANGUAGE DOMINANCE -- read before changing any speech entry.
+#
+# Speech areas are marked eloquent BILATERALLY. Hemispheric language dominance
+# is not determinable from structural MRI: it varies with handedness and is
+# established clinically (fMRI, Wada, or intraoperative stimulation), none of
+# which we have. Marking only the left would silently assume left dominance and
+# would be wrong for a real minority of patients -- and it would be wrong in the
+# unsafe direction, reporting a right-hemisphere speech-area tumour as involving
+# nothing eloquent. Bilateral is the conservative choice and it is deliberate.
+# -------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------
+# COVERAGE GAPS: terms in the verbatim list with NO corresponding structure in
+# this parcellation. They are recorded rather than dropped, because a reader
+# must be able to tell "not eloquent" from "not representable". The report
+# prints this list.
+# -------------------------------------------------------------------------
+coverage_gaps:
+  - term: internal capsule
+    reason: >
+      TZO/AAL parcellates grey-matter structures; it carries no white-matter
+      internal capsule label. Finding D of the planning document declined the
+      MNI bridge that would have supplied one.
+  - term: dentate nucleus
+    reason: >
+      The TZO cerebellar labels are cortical lobules (Cerebelum_*, Vermis_*).
+      No deep cerebellar nuclei are represented.
+  - term: hypothalamus
+    reason: >
+      "hypothalamus/thalamus" is only half representable. Thalamus_L/R exist;
+      there is no hypothalamus label.
+  - term: brainstem (midbrain, medulla)
+    reason: >
+      Only Pons is represented among the SRI24 "plus" structures. Midbrain and
+      medulla have no label, so brainstem coverage is partial.
+
+# -------------------------------------------------------------------------
+# CONTESTED: structures a reasonable reader might argue belong under one of the
+# verbatim terms, left `unclassified` on purpose. The rule applied throughout is
+# to be conservative about ADDING to a published list -- the claim this layer
+# makes is "structures the source designates eloquent", not "structures we
+# consider important". Listed so the choice is visible and arguable.
+# -------------------------------------------------------------------------
+contested:
+  - structures: [Supp_Motor_Area_L, Supp_Motor_Area_R]
+    term: motor/sensory cortices
+    reason: >
+      SMA is premotor rather than primary motor cortex, and SMA syndrome is
+      characteristically transient. Not obviously inside "motor/sensory
+      cortices".
+  - structures: [Rolandic_Oper_L, Rolandic_Oper_R]
+    term: motor/sensory cortices
+    reason: >
+      Peri-Rolandic operculum carries face and tongue motor-sensory
+      representation, but the AAL label is an opercular parcel rather than a
+      pre/postcentral one.
+  - structures: [Cuneus_L, Cuneus_R, Lingual_L, Lingual_R]
+    term: visual center
+    reason: >
+      These flank the calcarine sulcus and carry V1 extensions, but "visual
+      center" most directly names the calcarine cortex itself.
+  - structures: [SupraMarginal_L, SupraMarginal_R, Angular_L, Angular_R]
+    term: speech center
+    reason: >
+      Included in broad definitions of Wernicke's area; the core is the
+      posterior superior temporal gyrus, which is mapped instead.
+
+# -------------------------------------------------------------------------
+# ENTRIES. Only `eloquent` structures are listed; every other structure in the
+# atlas takes the `default` above. 23 of 122.
+# -------------------------------------------------------------------------
+entries:
+  # --- motor/sensory cortices -------------------------------------------
+  - { structure_name: Precentral_L, eloquence: eloquent, matched_term: motor/sensory cortices }
+  - { structure_name: Precentral_R, eloquence: eloquent, matched_term: motor/sensory cortices }
+  - { structure_name: Postcentral_L, eloquence: eloquent, matched_term: motor/sensory cortices }
+  - { structure_name: Postcentral_R, eloquence: eloquent, matched_term: motor/sensory cortices }
+  - structure_name: Paracentral_Lobule_L
+    eloquence: eloquent
+    matched_term: motor/sensory cortices
+    note: >
+      Medial continuation of the pre- and postcentral gyri, carrying the lower
+      limb motor and sensory representation. The AAL name does not contain
+      "motor", so this mapping is an anatomical inference and is flagged as one.
+  - structure_name: Paracentral_Lobule_R
+    eloquence: eloquent
+    matched_term: motor/sensory cortices
+    note: Same inference as Paracentral_Lobule_L.
+
+  # --- visual center ------------------------------------------------------
+  - structure_name: Calcarine_L
+    eloquence: eloquent
+    matched_term: visual center
+    note: Primary visual cortex (V1) lines the calcarine sulcus.
+  - structure_name: Calcarine_R
+    eloquence: eloquent
+    matched_term: visual center
+    note: Primary visual cortex (V1) lines the calcarine sulcus.
+
+  # --- speech center (bilateral -- see the LANGUAGE DOMINANCE note) --------
+  - structure_name: Frontal_Inf_Oper_L
+    eloquence: eloquent
+    matched_term: speech center
+    note: Pars opercularis, one of the two gyri of Broca's area.
+  - { structure_name: Frontal_Inf_Oper_R, eloquence: eloquent, matched_term: speech center }
+  - structure_name: Frontal_Inf_Tri_L
+    eloquence: eloquent
+    matched_term: speech center
+    note: Pars triangularis, the other gyrus of Broca's area.
+  - { structure_name: Frontal_Inf_Tri_R, eloquence: eloquent, matched_term: speech center }
+  - structure_name: Temporal_Sup_L
+    eloquence: eloquent
+    matched_term: speech center
+    note: Posterior superior temporal gyrus is the core of Wernicke's area.
+  - { structure_name: Temporal_Sup_R, eloquence: eloquent, matched_term: speech center }
+
+  # --- basal ganglia ------------------------------------------------------
+  # Partial: subthalamic nucleus and substantia nigra are in most definitions
+  # of the basal ganglia and have no label in this parcellation.
+  - { structure_name: Caudate_L, eloquence: eloquent, matched_term: basal ganglia }
+  - { structure_name: Caudate_R, eloquence: eloquent, matched_term: basal ganglia }
+  - { structure_name: Putamen_L, eloquence: eloquent, matched_term: basal ganglia }
+  - { structure_name: Putamen_R, eloquence: eloquent, matched_term: basal ganglia }
+  - { structure_name: Pallidum_L, eloquence: eloquent, matched_term: basal ganglia }
+  - { structure_name: Pallidum_R, eloquence: eloquent, matched_term: basal ganglia }
+
+  # --- hypothalamus/thalamus ---------------------------------------------
+  - { structure_name: Thalamus_L, eloquence: eloquent, matched_term: hypothalamus/thalamus }
+  - { structure_name: Thalamus_R, eloquence: eloquent, matched_term: hypothalamus/thalamus }
+
+  # --- brainstem ----------------------------------------------------------
+  - structure_name: Pons
+    eloquence: eloquent
+    matched_term: brainstem
+    note: >
+      The only brainstem structure in this parcellation. Midbrain and medulla
+      are coverage gaps, so brainstem involvement is under-detected, never
+      over-detected.

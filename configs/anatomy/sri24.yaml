@@ -8,7 +8,9 @@
 # data.preprocess.out_dir. `/data/` is gitignored AT THE REPO ROOT, and .gitignore
 # also carries `*.nii`, so nothing here can be committed -- SRI24 is CC-BY-SA and
 # must never be vendored (interpretable_pipeline_plan.md §7).
-dir: data/atlas/sri24
+# NOTE this is the EXTRACT ROOT, not the atlas directory: every archive contains
+# a top-level `sri24/` folder, so the files land in `<dir>/<subdir>`.
+dir: data/atlas
 
 # Recorded in every generated report, so a report traces to the parcellation
 # that produced it.
@@ -101,17 +103,21 @@ target:
   # Axis 0 runs right -> left, so LOW index = patient RIGHT.
   left_is_high_index: true
 
-reorient:
-  # Derive each file's flip from ITS OWN affine, never one transform for the
-  # whole atlas: pbmap_* disagrees with tissues/tzo/spgr on axis 0 INSIDE the
-  # same distribution. Solving affines gives exact index reversals with no
-  # offset, so this stays resampling-free.
-  per_file_from_affine: true
-  # Refuse to proceed if the solved transform is anything other than a pure
-  # axis reversal (a shear, a non-unit scale, a fractional offset). Silent
-  # interpolation would break the plan's "registration-free by construction"
-  # claim without anything failing.
-  require_pure_flip: true
+# Reorientation deliberately has NO config keys.
+#
+# Each file's flip is solved from ITS OWN affine -- pbmap_* disagrees with
+# tissues/tzo/spgr on axis 0 inside this same distribution, so one transform for
+# the whole atlas is wrong. The solver additionally REFUSES anything that is not
+# a pure axis reversal (a shear, a non-unit scale, a fractional offset), because
+# silent interpolation would break the "registration-free by construction" claim
+# with nothing failing.
+#
+# Both behaviours are unconditional. An earlier draft exposed them as
+# `per_file_from_affine` and `require_pure_flip`; neither was ever read, because
+# there is no safe unvalidated path to switch to. A config key that is read but
+# not honoured -- or present but never read -- is the exact failure mode the
+# "config objects passed in, never global state" rule exists to prevent, so the
+# keys are gone rather than decorative.
 
 # --- Validation (Phase 0's gate) ------------------------------------------
 # Gate order matters and is NOT the planning document's order. Measured: the
@@ -131,8 +137,19 @@ validation:
   # here on purpose. Score by absolute deviation in percentage points; a rank
   # statistic gets this backwards.
   lobe_check_is_advisory: true
-  # Brain-mask Dice below this fails the gate. Measured 0.9350 when correct,
-  # 0.7341 when A-P mirrored, so the two regimes are far apart.
+  # Brain-mask Dice below this fails the gate.
+  #
+  # The atlas brain mask is `tissue > 0`, NOT `parcellation > 0`. TZO/AAL
+  # parcellates grey matter, so the parcellation covers 1,053,253 voxels of a
+  # 1,451,706-voxel brain and scores only 0.80 against BraTS -- which looks like
+  # a failed gate and is not one. `tissue > 0` equals `spgr > 0` exactly
+  # (1,451,706 both), so the tissue map is the brain mask and spgr need not be
+  # loaded at all.
+  #
+  # Measured on the loaded Atlas object over 40 cases: 0.9394 correct, 0.7334
+  # A-P mirrored. The two regimes are far apart, which is what makes this the
+  # primary gate.
+  brain_mask_source: tissue
   min_brain_dice: 0.85
   # Laterality: fraction of _L/_R pairs that must satisfy
   # (L centroid > midline) and (R centroid < midline). Measured 54/54.

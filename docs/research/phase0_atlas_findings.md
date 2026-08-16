@@ -242,6 +242,48 @@ centred in its own grid when it shipped; it is now confirmed from atlas content.
 
 ---
 
+---
+
+## Verified end to end, 2026-08-16, on the real atlas through `load_atlas`
+
+Unit tests on synthetic NIfTI files prove the transform algebra, not the atlas.
+These are measurements on the loaded `Atlas` object against the real
+preprocessed BraTS tree — the standard this project adopted after the
+calibration-mask bug shipped behind a green suite.
+
+| Quantity | Measured |
+|---|---|
+| shape / dtype / contiguity | `(240, 240, 155)`, `int16`, C-contiguous |
+| structures after merge | **122** |
+| labelled voxels | 1,053,253 |
+| unmapped label values | 9, covering **22 voxels** total |
+| tissue GM / WM / CSF | 648,426 / 520,983 / 282,297, zero overlap |
+| ventricles present | `LateralVentricle_{L,R}`, `ThirdVentricle_{L,R}` |
+| `Pons`, `CorpusCallosum` present | yes |
+| `_L`/`_R` pairs | 56, **0 violations** |
+| midline from `_L`/`_R` centroids | **119.10** (assumed 119.5) |
+
+**Brain-mask gate, 40 cases:**
+
+| Atlas orientation | Dice vs BraTS |
+|---|---|
+| correct | **0.9394** |
+| A–P mirrored | 0.7334 — fails the 0.85 gate |
+| L–R mirrored | **0.9416** — *passes*, and scores higher than correct |
+
+The last row is Finding J proved on the shipped object rather than argued:
+the primary gate cannot see a left–right flip, which is why the `_L`/`_R`
+laterality check is not optional.
+
+**One trap worth naming.** The atlas brain mask is `tissue > 0`, **not**
+`parcellation > 0`. AAL parcellates grey matter, so the parcellation covers
+1,053,253 of 1,451,706 brain voxels and scores **0.8013** against BraTS — which
+reads as a failed gate and is nothing of the kind. `tissue > 0` and `spgr > 0`
+are the same 1,451,706 voxels exactly, so the tissue map is the brain mask and
+`spgr.nii` need never be loaded.
+
+---
+
 ## What the load path must therefore do
 
 1. Squeeze the trailing singleton axis — every file is 4-D.
