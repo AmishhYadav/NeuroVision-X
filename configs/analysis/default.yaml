@@ -1,0 +1,46 @@
+# Post-hoc analysis drivers. Everything here is CPU-only and consumes artifacts
+# that scripts/evaluate.py has already written -- no checkpoint, no GPU, no
+# training run. Kept out of configs/inference/ because none of it runs a model.
+
+burden:
+  # Which masks to profile.
+  #   prediction - <eval_dir>/predictions/<case>.npy, saved in ORIGINAL BraTS
+  #                geometry (240x240x155) by uncrop_to_original.
+  #   label      - <preprocessed>/<case>/label.npy, CROPPED to the nonzero bbox.
+  # The two live in different geometries, so the midline index differs by the
+  # crop offset. Getting that wrong silently reports the wrong hemisphere, so
+  # the script derives `cropped` from `source` and never takes it as a flag.
+  source: prediction
+
+  # Directory holding predictions/ and per_case_metrics.csv. Required when
+  # source=prediction, ignored when source=label.
+  eval_dir: null
+
+  # Root of the preprocessed tree (holds <case>/meta.json and <case>/label.npy).
+  # Always required: even for source=prediction, meta.json supplies spacing,
+  # the affine and the crop bbox.
+  preprocessed_dir: ${data.preprocessing.out_dir}
+
+  # Which frozen split to profile. Phase 5 compares label-derived against
+  # prediction-derived profiles, so both runs must name the same split.
+  split: test
+
+  # A component below this is not counted as a separate focus. 50 mm3 at 1 mm
+  # isotropic matches inference.postprocess.min_component_size, so the
+  # prediction side and the ground-truth side of a comparison use the same
+  # floor -- ground-truth masks never went through that filter and would
+  # otherwise count single-voxel specks as foci.
+  min_volume_mm3: 50.0
+
+  # 3 = 26-neighbourhood. Deliberately NOT inference.postprocess.connectivity
+  # (which is 1): postprocess uses 6-connectivity to be aggressive about
+  # REMOVING speckle, whereas counting foci must be conservative about
+  # CLAIMING multifocality. See anatomy/burden.py's docstring.
+  connectivity: 3
+
+  # null -> derive from meta.json as (original_shape[0] - 1) / 2, minus the crop
+  # offset when the source is cropped. Confirmed against atlas content: the
+  # midpoint of the TZO _L and _R structure centroids lands at 119.1.
+  midline_index: null
+
+  out_name: burden.csv

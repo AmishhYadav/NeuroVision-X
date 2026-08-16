@@ -11,6 +11,7 @@ defaults:
   - calibration: default
   - explainability: default
   - anatomy: sri24
+  - analysis: default
   - _self_
 
 # --- Run identity ---
