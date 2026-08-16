@@ -94,6 +94,17 @@ of this plan relied on.
 Three facts, established by inspecting the data on disk and by literature
 search, that determine the entire implementation.
 
+> **Findings A–F below were written before the atlas was downloaded. Two of
+> them turned out to be wrong, and Phase 0 was executed on 2026-08-16.**
+> `docs/research/phase0_atlas_findings.md` supersedes this section wherever
+> they disagree. In brief: the grid claim in Finding A is exactly right, but
+> SRI24 is **anterior–posterior mirrored** relative to BraTS voxel indexing and
+> needs one exact index reversal (still no registration, still no resampling);
+> the `pbmap_*` files are additionally **left–right mirrored relative to the
+> rest of the same distribution**; the LUT is 422 whitespace-separated rows,
+> not 116 tab-separated ones, giving **122** merged structures; and the Phase 0
+> check ordering below is wrong — see Finding K there.
+
 **Finding A — the atlas needs no registration.** BraTS preprocessing
 co-registers every case to the **SRI24** template, resamples to 1 mm isotropic
 and skull-strips it. SRI24's native grid is **240 × 240 × 155 at 1 mm
@@ -417,6 +428,37 @@ source. That was designed and costed; it was cut on scope, not on feasibility.
 
 ### Phase 3 — Tumour characterisation profile (3–4 days)
 
+> **Split into 3a and 3b on 2026-08-16, and 3a is DONE.** This phase was listed
+> as "independent, can start now", but four of its items secretly need Phase 0:
+> mass effect and ventricular compression need ventricle labels, VASARI
+> F19/F20/F21 need the tissue maps, and epicentre *naming* needs the
+> parcellation. Only the atlas-free subset could actually start first.
+>
+> **3a (shipped):** `src/neurovision/anatomy/burden.py` + `scripts/burden.py` —
+> volumes, component fractions, multifocality, shape (surface area, sphericity,
+> surface-to-volume), midline *crossing* laterality, centroids. Run over the
+> test split against ground truth and two models; see `docs/experiments.md`
+> note 18.
+>
+> **3b (after Phase 0, now unblocked):** ependymal contact (F19), cortical
+> involvement (F20), deep white-matter invasion (F21), epicentre naming.
+>
+> **Mass effect — midline shift is DECLINED, not deferred.** The atlas says
+> where a healthy midline *should* be; it cannot say where this patient's
+> actually is. Measuring real shift needs the patient's own septum or third
+> ventricle segmented, which we do not have and could not validate if we did —
+> BraTS ships no midline-shift ground truth. A number in millimetres, presented
+> with millimetre precision and unvalidatable, is the same category the plan
+> already cut Tier D for. A global brain-mask symmetry proxy is worse than
+> nothing: the cases are rigidly registered and skull-stripped, so that quantity
+> is dominated by registration and individual anatomy rather than by mass
+> effect.
+>
+> What *is* honest and already delivered by Phase 1: `frac_of_structure` for
+> `LateralVentricle_{L,R}`, i.e. "N% of where the left lateral ventricle should
+> be is occupied by tumour". That is geometric, checkable, and must be phrased
+> as overlap with the atlas position — never as measured compression.
+
 `src/neurovision/anatomy/burden.py` — the honest replacement for "stage".
 
 - Volumes of ET / TC / WT in mm³ (1 mm isotropic, so voxel count *is* volume)
@@ -505,7 +547,12 @@ immediately if a quick win is wanted.
   committed**, for the same reason BraTS is not committed: licence hygiene and
   repo size. Attribution goes in the README and in every generated report.
 - The knowledge base **is** committed — it is our own compilation — with each
-  entry's citation.
+  entry's citation. **It lives in `knowledge/` at the repo root, not the
+  `data/knowledge/` this document originally specified: `.gitignore` anchors
+  `/data/`, so the versioned, deliberately-committed knowledge base would have
+  been silently uncommittable.** `knowledge/eloquence_map.yaml` (Tier C) and
+  `knowledge/aal_lobes.yaml` (the lobe grouping the Phase 0 gate consumes) are
+  both there.
 - Atlas version is recorded in every report, so a report can be traced to the
   parcellation that produced it.
 - No new Python dependency. Nibabel handles NIfTI, scipy handles connected
@@ -608,8 +655,14 @@ arms were deliberately cut to a 64³/80-epoch budget.
 
 ## 11. Open decisions
 
-1. **Cortical parcellation granularity** — full SRI24/TZO, or merged to ~128
-   regions? Affects report readability more than correctness. Open.
+1. ~~**Cortical parcellation granularity**~~ **Resolved 2026-08-16: 122
+   structures.** Not a preference — it is the atlas's own structure count once
+   its per-plane slicing is undone. Labels 201+ are single structures sliced by
+   anatomical plane (`LateralVentricle_L_y48`, `Pons_x114`), so merging on
+   `(_[xyz]\d+|_AP_\d+)$` invents nothing and discards nothing. The corpus
+   callosum's nine `_AP_*` sub-labels are merged too, because the atlas names
+   them only by index: splitting genu from splenium would mean assigning
+   anatomical names to bare A–P indices ourselves.
 2. **Does the capacity control change the framing?** If the wide U-Net matches
    `neurovision`, the accuracy result becomes "capacity, not architecture", and
    the paper's model contribution weakens further — the pipeline would then
