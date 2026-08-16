@@ -206,71 +206,91 @@ sessions by resume is still ONE row — sum the GPU hours.
     are now measured and none supports an advantage. The accuracy result
     (note 12) is the finding.**
 
-18. **BURDEN PROFILE, first real run — and the first evidence that segmentation
-    quality changes the REPORT, which is the pivoted paper's actual claim.**
-    Local, CPU, zero GPU hours. `scripts/burden.py` over the 189-case test
-    split. 189/189 succeeded in every run.
+18. **BURDEN PROFILE, first real run — and the first measurement of how much
+    the segmentation actually changes the REPORT, which is the pivoted paper's
+    claim.** Local, CPU, zero GPU hours. `scripts/burden.py` over the 189-case
+    test split, four times: ground-truth labels and three models. 189/189
+    succeeded every time.
 
-    **Correction to the first version of this note.** It labelled
-    `outputs/eval_test` as `neurovision`. It is not — it is the **superseded
-    200-epoch / 96³ `baseline_unet3d`** (test Dice ET 0.8587). The matched
-    80-epoch / 64³ baseline is `outputs/eval_test_baseline_unet3d` (0.8442),
-    and `neurovision` (0.8709) lives in `outputs/neurovision/eval_test`, which
-    ships **logits but no `predictions/`**. So the first table below compares
-    **two U-Nets of different quality**, not the proposed model against its
-    baseline. The finding — better segmentation gives a report that agrees more
-    with the ground truth — is unaffected in direction, but the attribution was
-    wrong and the column headers are now what they actually are. Worth naming
-    the trap: three directories in `outputs/` differ by a suffix, two of them
-    hold a U-Net, and every one of them produces a plausible table. Check
-    `eval_config.yaml` for the resolved checkpoint path before labelling a
-    column, not the directory name.
+    `neurovision` had saved **logits but no `predictions/`**, so they were
+    reconstructed from the logits through the project's own `postprocess_logits`
+    with that run's own recorded config (identical to the baseline's:
+    `threshold 0.5`, `min_component_size 50`, `connectivity 1`,
+    `enforce_nesting`). Verified the only way worth trusting — recomputing test
+    Dice from the reconstruction and matching the already-published
+    `summary.csv`: **ET 0.870859 vs 0.870859, delta 0.00e+00** (TC and WT match
+    to 1e-16).
 
-    Absolute values are sane, which is the first thing to establish: median
-    WT volume **96,630 mm³** (GT) against 97,496 and 96,430 mm³ predicted;
-    median sphericity 0.553 (GT) vs 0.596 / 0.591. Predictions are slightly
-    *smoother* than human annotation, as expected. Note the sphericity
-    estimator's reachable ceiling is ~0.92, not 1.0 (marching cubes on a binary
-    mask overstates curved area by ~9%, flat from r=5 to r=40), so 0.553 is
-    0.60 of the reachable maximum, not 0.55.
+    The three models, and note two of them are U-Nets:
 
-    Agreement with the ground-truth-derived profile, per case:
+    | Run | test Dice ET | patch | epochs |
+    |---|---|---|---|
+    | `neurovision` | 0.8709 | 64³ | 80 |
+    | `baseline_unet3d` (matched) | 0.8442 | 64³ | 80 |
+    | `baseline_unet3d` (superseded) | 0.8587 | 96³ | 200 |
 
-    | Quantity | U-Net 200ep/96³ (ET 0.8587) | U-Net 80ep/64³ (ET 0.8442) |
-    |---|---|---|
-    | median relative error, WT volume | 0.0443 | **0.0386** |
-    | median relative error, ET volume | **0.0500** | 0.0615 |
-    | median relative error, sphericity WT | **0.0610** | 0.0633 |
-    | `dominant_side_WT` agreement | **100.0%** | 99.5% |
-    | multifocal (`n_components_WT > 1`) agreement | **78.3%** | 70.4% |
+    Agreement of each model's profile with the ground-truth-derived profile,
+    per case, over the same 189:
 
-    Two things follow. **A segmentation advantage propagates to the report**:
-    5.00% vs 6.15% median relative error on ET volume, tracking the two models'
-    ET Dice in the right direction. And the largest effect is not a volume at
-    all — it is **multifocality**, where the weaker model disagrees with the
-    ground truth on 29.6% of cases against the stronger one's 21.7%. Measured
-    focus rates: GT **22.8%**, stronger model **30.7%**, weaker **40.7%** — the
-    weaker model nearly doubles the true multifocality rate by fragmenting
-    single lesions. That is a categorical, clinically-meaningful field of the report
-    being wrong, from a Dice difference, which is exactly the
-    "report-level error propagation" the interpretable-pipeline plan (§10 item
-    2) identifies as ours rather than VASARI-auto's or BTReport's. Both
-    prediction sets had already been through `min_component_size: 50`
-    postprocessing and all three were scored under the same 50 mm³ floor, so
-    the comparison is fair.
+    | Quantity | `neurovision` | U-Net 64³/80ep | U-Net 96³/200ep |
+    |---|---|---|---|
+    | median rel. err., WT volume | 0.0394 | **0.0386** | 0.0443 |
+    | median rel. err., ET volume | 0.0533 | 0.0615 | **0.0500** |
+    | median rel. err., sphericity WT | **0.0504** | 0.0633 | 0.0610 |
+    | `dominant_side_WT` agreement | **100.0%** | 99.5% | **100.0%** |
+    | multifocality agreement | 73.0% | 70.4% | **78.3%** |
+    | multifocal rate (GT = 22.8%) | 33.9% | 40.7% | **30.7%** |
+    | empty-ET cases found (GT = 5) | **2** | 0 | 1 |
 
-    **The 100% `dominant_side_WT` agreement is also the end-to-end proof of the
+    **Against its matched baseline, `neurovision` wins where it should.** ET
+    volume error 0.0533 vs 0.0615, sphericity error 0.0504 vs 0.0633,
+    multifocality agreement 73.0% vs 70.4%, and it correctly reports no
+    enhancing tumour in 2 of the 5 cases that have none where the baseline
+    reports ET in all 189. The ET accuracy result of note 12 does propagate to
+    the report. WT volume error is a tie (0.0394 vs 0.0386).
+
+    **But report agreement is NOT monotonic in Dice, and that is the finding
+    worth carrying.** The superseded 96³/200-epoch U-Net has *lower* ET Dice
+    than `neurovision` (0.8587 vs 0.8709) and yet produces the better report on
+    ET volume agreement (0.0500) and on multifocality agreement (78.3%). A
+    plausible mechanism is patch size: 96³ gives more global context per
+    forward pass, and the failure being measured is *fragmentation of a single
+    lesion into several*, which is a context failure rather than a boundary
+    one. That run differs in both patch size and epochs, so this is a flag, not
+    a conclusion — but it is a flag that lands directly on the Phase 5
+    experiment, which must therefore **control patch size** rather than
+    treating Dice as the single explanatory variable. Discovering this after
+    designing that experiment would have been expensive.
+
+    **All three models over-report multifocality** — 30.7% to 40.7% against a
+    true 22.8%. That is a systematic, model-independent property of thresholded
+    segmentation output at this component floor, and it is the single least
+    reliable field in the whole burden profile. It should be reported with that
+    caveat rather than as a finding about any one model.
+
+    **The 100% `dominant_side_WT` agreement is the end-to-end proof of the
     crop-geometry handling**, not a boring row. Ground truth is read cropped to
-    the nonzero bbox and predictions are read in original 240×240×155 geometry,
-    so the midline index differs between them by the crop offset. If `cropped`
-    were mishandled on either side, laterality would disagree on roughly half
-    the cases. It disagrees on none. This is the "recompute a known quantity
-    end-to-end" verification the plan demanded in place of a unit test.
+    the nonzero bbox; predictions are read in original 240×240×155 geometry; the
+    midline index therefore differs between them by the crop offset. Mishandle
+    it on either side and laterality disagrees on roughly half the cases. It
+    disagrees on none. That is the "recompute a known quantity end to end"
+    check the plan demanded in place of a unit test.
 
-    Caveat to carry: this is a *descriptive* profile and none of it is a grade,
-    a stage or a prognosis. Mass effect, ependymal/cortical/deep-WM involvement
-    and epicentre naming are Phase 3b and need the atlas, so they are absent
-    from these numbers.
+    Identities verified on all 189 real cases in every run: `vol_TC == vol_NCR +
+    vol_ET`, `vol_WT ==` the three-class sum, `vol_right + vol_left == vol_WT`,
+    ET ⊆ TC ⊆ WT, and sphericity within [0.232, 0.874] — never above the ~0.92
+    ceiling of the marching-cubes estimator.
+
+    **A trap that cost a wrong committed claim:** the first version of this note
+    labelled `outputs/eval_test` as `neurovision`. It is the superseded 96³
+    U-Net. Three eval directories differ only by suffix and two of them hold a
+    U-Net. Read the resolved checkpoint path in `eval_config.yaml` before
+    labelling a column; the directory name is not evidence.
+
+    Caveat: this is a *descriptive* profile — no grade, no stage, no prognosis.
+    Ependymal/cortical/deep-WM involvement and epicentre naming are Phase 3b and
+    need the atlas, so they are absent here. Midline shift is declined outright,
+    not pending; see the plan's Phase 3 note.
 
 ---
 
