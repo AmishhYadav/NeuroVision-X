@@ -183,6 +183,28 @@ sessions by resume is still ONE row — sum the GPU hours.
     bar" is from the **96³ / epoch-130** baseline, not the 64³ / 80-epoch row
     this run is comparable to. The correct bar is **0.0175**. Comparing against
     the wrong baseline's calibration would have flattered this run.
+17. **MC-DROPOUT RISK-COVERAGE: no advantage either. This closes the last route
+    to a reliability claim.** N=10, `seed=42`, `predictions_from:
+    deterministic` — verified additive: per-case Dice/HD95 are **bit-identical**
+    (max diff 0.00000000) to the deterministic run for BOTH models, so the
+    published rows are untouched. Cost: `neurovision` 4:12:07 on a T4
+    (83 s/case); `baseline_unet3d` 2.5 h on the Mac's CPU (48 s/case), which is
+    why the cheap arm belongs on CPU and the expensive one does not.
+    Raw AURC is **not comparable across models** — a better model has a lower
+    oracle and random curve too — so the comparison is the normalised fraction
+    of the achievable gain over random. **neurovision 37.6% vs baseline 40.6%
+    (diff −0.029, 95% CI [−0.176, +0.143]); Spearman(uncertainty, Dice)
+    −0.392 vs −0.463 (diff +0.071, CI [−0.032, +0.173]). Both WITHIN NOISE**
+    under a paired bootstrap resampling case indices. So `neurovision`'s
+    epistemic uncertainty ranks its own failures neither better nor worse than
+    a plain U-Net's.
+    Note the baseline's uncertainty is genuinely informative on its own
+    (Spearman −0.463, p 1.9e-11, capturing ~40% of the oracle gain), which is
+    exactly why "our model can flag its own failures" is not a claim: MC-dropout
+    on a U-Net already does it about as well. **All three reliability routes —
+    calibration (note 16), boundary accuracy (notes 12–13), and risk-coverage —
+    are now measured and none supports an advantage. The accuracy result
+    (note 12) is the finding.**
 
 ---
 
