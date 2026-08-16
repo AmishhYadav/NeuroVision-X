@@ -206,6 +206,59 @@ sessions by resume is still ONE row — sum the GPU hours.
     are now measured and none supports an advantage. The accuracy result
     (note 12) is the finding.**
 
+18. **BURDEN PROFILE, first real run — and the first evidence that segmentation
+    quality changes the REPORT, which is the pivoted paper's actual claim.**
+    Local, CPU, zero GPU hours. `scripts/burden.py` over the 189-case test
+    split, three times: ground-truth labels, `neurovision` predictions
+    (`outputs/eval_test`), and `baseline_unet3d` predictions. 189/189 succeeded
+    in every run.
+
+    Absolute values are sane, which is the first thing to establish: median
+    WT volume **96,630 mm³** (GT) against 97,496 and 96,430 mm³ predicted;
+    median sphericity 0.553 (GT) vs 0.596 / 0.591. Predictions are slightly
+    *smoother* than human annotation, as expected. Note the sphericity
+    estimator's reachable ceiling is ~0.92, not 1.0 (marching cubes on a binary
+    mask overstates curved area by ~9%, flat from r=5 to r=40), so 0.553 is
+    0.60 of the reachable maximum, not 0.55.
+
+    Agreement with the ground-truth-derived profile, per case:
+
+    | Quantity | `neurovision` | `baseline_unet3d` |
+    |---|---|---|
+    | median relative error, WT volume | 0.0443 | **0.0386** |
+    | median relative error, ET volume | **0.0500** | 0.0615 |
+    | median relative error, sphericity WT | **0.0610** | 0.0633 |
+    | `dominant_side_WT` agreement | **100.0%** | 99.5% |
+    | multifocal (`n_components_WT > 1`) agreement | **78.3%** | 70.4% |
+
+    Two things follow. **The ET advantage propagates to the report**: 5.00% vs
+    6.15% median relative error on ET volume, the same direction as the
+    +0.0267 ET Dice of note 12. And the largest effect is not a volume at all
+    — it is **multifocality**, where the baseline disagrees with the ground
+    truth on 29.6% of cases against `neurovision`'s 21.7%. Measured focus
+    rates: GT **22.8%**, `neurovision` **30.7%**, baseline **40.7%** — the
+    baseline nearly doubles the true multifocality rate by fragmenting single
+    lesions. That is a categorical, clinically-meaningful field of the report
+    being wrong, from a Dice difference, which is exactly the
+    "report-level error propagation" the interpretable-pipeline plan (§10 item
+    2) identifies as ours rather than VASARI-auto's or BTReport's. Both
+    prediction sets had already been through `min_component_size: 50`
+    postprocessing and all three were scored under the same 50 mm³ floor, so
+    the comparison is fair.
+
+    **The 100% `dominant_side_WT` agreement is also the end-to-end proof of the
+    crop-geometry handling**, not a boring row. Ground truth is read cropped to
+    the nonzero bbox and predictions are read in original 240×240×155 geometry,
+    so the midline index differs between them by the crop offset. If `cropped`
+    were mishandled on either side, laterality would disagree on roughly half
+    the cases. It disagrees on none. This is the "recompute a known quantity
+    end-to-end" verification the plan demanded in place of a unit test.
+
+    Caveat to carry: this is a *descriptive* profile and none of it is a grade,
+    a stage or a prognosis. Mass effect, ependymal/cortical/deep-WM involvement
+    and epicentre naming are Phase 3b and need the atlas, so they are absent
+    from these numbers.
+
 ---
 
 ## Planned
