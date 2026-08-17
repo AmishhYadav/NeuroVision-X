@@ -263,6 +263,13 @@ config through Hydra, no hardcoded paths).
 
 ### Phase 0 — Atlas acquisition and alignment proof (2–3 days)
 
+> **SHIPPED, and the gate PASSED 2026-08-16.** All three deliverables exist
+> (`scripts/fetch_atlas.py`, `configs/anatomy/sri24.yaml`,
+> `src/neurovision/anatomy/atlas.py`), plus `anatomy/alignment.py` and the
+> `scripts/validate_atlas.py` driver. Read
+> `docs/research/phase0_atlas_findings.md` — it supersedes Findings A–F above
+> wherever they disagree, and two of them were wrong.
+
 **The gate for everything else.** If the atlas does not provably align, nothing
 downstream means anything.
 
@@ -315,6 +322,11 @@ conversion.
 
 ### Phase 1 — Anatomical localisation engine (3–4 days)
 
+> **SHIPPED and run on the real 189-case test split.**
+> `src/neurovision/anatomy/localize.py` + `scripts/localize.py`. Note the
+> measured reality that `unlabelled` is ~31% of a real glioma, because AAL
+> parcellates grey matter only.
+
 `src/neurovision/anatomy/localize.py`
 
 Core function: given a binary region mask and the atlas, produce a table.
@@ -346,6 +358,11 @@ entire structure must give `frac_of_structure == 1.0`; laterality round-trip;
 empty mask → empty table, not a crash.
 
 ### Phase 2 — Eloquence reference layer (2–3 days)
+
+> **Tier C SHIPPED.** `knowledge/eloquence_map.yaml` (23 of 122 structures)
+> and `knowledge/aal_lobes.yaml` — in `knowledge/`, NOT the `data/knowledge/`
+> this section names, because `/data/` is gitignored and the versioned
+> knowledge base would have been silently uncommittable.
 
 `data/knowledge/eloquence_map.yaml` (versioned, in-repo)
 
@@ -466,7 +483,7 @@ source. That was designed and costed; it was cut on scope, not on feasibility.
 > **3a (shipped):** `src/neurovision/anatomy/burden.py` + `scripts/burden.py` —
 > volumes, component fractions, multifocality, shape (surface area, sphericity,
 > surface-to-volume), midline *crossing* laterality, centroids. Run over the
-> test split against ground truth and two models; see `docs/experiments.md`
+> test split against ground truth and three models; see `docs/experiments.md`
 > note 18.
 >
 > **3b (after Phase 0, now unblocked):** ependymal contact, cortical
@@ -546,6 +563,12 @@ sphericity 1.0; midline shift of a deliberately displaced synthetic mask.
 
 ### Phase 4 — Report generation and demo integration (4–5 days)
 
+> **PARTIALLY SHIPPED.** `src/neurovision/reporting/report.py` is built and
+> tested — `build_report` / `render_markdown` / `write_report`, with the
+> disclaimer, atlas provenance, mass-effect caveat and a `not_claimed` block
+> as required fields of the artifact. Still missing: `scripts/report.py`, the
+> `/api/report/<case_id>` route, and the frontend panel.
+
 - `src/neurovision/reporting/report.py` — assembles a versioned JSON report
   and renders Markdown/HTML.
 - `scripts/report.py` — Hydra entry point, one report per case.
@@ -560,6 +583,10 @@ Presentation requirements, non-negotiable and enforced by tests:
 - Deficit statements render in hedged language with their citation visible.
 
 ### Phase 5 — Validation, documentation, paper (5–7 days)
+
+> **NOT STARTED**, and it is the highest-value remaining experiment. Design
+> it to control patch size — report agreement is not monotonic in Dice
+> (`docs/experiments.md` note 18).
 
 - Population-level anatomical statistics across all 1,251 cases as a headline
   figure (it is both a validation and a genuinely interesting result).
@@ -577,14 +604,17 @@ Presentation requirements, non-negotiable and enforced by tests:
 
 ## 6. Total effort and sequencing
 
-| Phase | Days | Blocking? |
-|---|---|---|
-| 0 — Atlas + alignment proof | 2–3 | **Gate for everything** |
-| 1 — Localisation engine | 3–4 | needs 0 |
-| 2 — Eloquence reference layer | 2–3 | parallel with 1 |
-| 3 — Burden profile | 3–4 | independent, can start now |
-| 4 — Report + demo | 4–5 | needs 1, 2, 3 |
-| 5 — Validation + paper | 5–7 | needs 4 |
+Status column added 2026-08-17; the days and dependencies are as originally
+planned and are left unedited.
+
+| Phase | Days | Blocking? | State |
+|---|---|---|---|
+| 0 — Atlas + alignment proof | 2–3 | **Gate for everything** | **PASSED** |
+| 1 — Localisation engine | 3–4 | needs 0 | **shipped, run on real data** |
+| 2 — Eloquence reference layer | 2–3 | parallel with 1 | **Tier C shipped** |
+| 3 — Burden profile | 3–4 | independent, can start now | **3a shipped**; 3b not started (needs 0) |
+| 4 — Report + demo | 4–5 | needs 1, 2, 3 | **library shipped**; driver, API route and panel outstanding |
+| 5 — Validation + paper | 5–7 | needs 4 | not started |
 
 **≈ 19–26 working days**, zero GPU hours (was 21–29; Phase 2's rewrite removed
 2–3 days of sourcing). Phase 3 depends on nothing new and could start

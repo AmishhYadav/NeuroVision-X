@@ -1,5 +1,22 @@
 # Contribution
 
+> **STATUS UPDATE, 2026-08-17 — read this before the text below.** Everything
+> from "## The claim, in one paragraph" onward is the **pre-registration**,
+> written 2026-08-04 before any of it was measured. It is kept verbatim on
+> purpose: predictions that are edited after the fact are not predictions. What
+> actually happened is in `## Measured outcomes` near the bottom of this file,
+> and in `docs/experiments.md` notes 11–17 and 19–21.
+>
+> The short version. The prediction that the benefit "should appear as improved
+> calibration and boundary accuracy rather than as a uniform Dice gain" is
+> **backwards relative to the data**: calibration, boundary accuracy and
+> MC-dropout risk-coverage all came back within noise against a matched
+> baseline, while Dice improved substantially and significantly (ET +0.0267,
+> p_holm 7.2e-22). A parameter-matched capacity control then showed ~79% of that
+> ET gain is architecture rather than width. So the model is more **accurate**,
+> not more **reliable**, and P2 — the ablation that would say whether the
+> *ambiguity conditioning specifically* is what does it — **has not been run**.
+
 > **Status:** draft, 2026-08-04. Written *before* `related_work.md` existed. Every claim
 > about what prior work does is marked `[cite]` and must be checked against
 > `related_work.md` once written. If any of them turns out to be false — i.e. someone
@@ -72,6 +89,39 @@ the mechanism on the strength of it.
 lightweight uncertainty map. Predicted: it is a worse-calibrated but far cheaper
 predictor of error than MC-dropout — nonzero AUROC for error detection, well above
 chance. This is a bonus result, not load-bearing.
+
+## Measured outcomes
+
+Added 2026-08-17. The predictions above are untouched; this section says what
+came back. Sources: `docs/experiments.md` notes 11–17 (the reliability
+measurements) and 19–21 (the capacity control).
+
+| Prediction | State | Outcome |
+|---|---|---|
+| **P1 — mechanism fires** | Producer built, not yet reported | `scripts/extract_gates.py` writes gate maps per case and `metrics/boundary.py` supplies the distance bands; `notebooks/09_paper_figures.ipynb` §10 renders gate-vs-boundary with a CI. The correlation has not been written into the experiment log, so P1 is **undecided**, not passed |
+| **P2 — ambiguity conditioning is necessary** | **NOT RUN** | `configs/experiment/ablation_content_only_gate.yaml` exists, is a one-key diff, and is parameter-matched to 0.018%. It needs ~23 GPU-h that the budget no longer has. This is the load-bearing experiment and its absence is the single largest hole in the contribution |
+| **P3 — the gain is where the claim says it is** | **FAILED as stated** | Boundary-stratified error is within noise against the matched baseline. The improvement is a Dice improvement concentrated in ET, not a demonstrated near-boundary effect |
+| **P4 — gate as a cheap error predictor** | Not measured | Bonus result, never load-bearing |
+
+Two further results that the pre-registration did not anticipate and that any
+rewrite of this document must account for:
+
+- **Calibration is not an advantage.** Fitted temperatures are comparable to the
+  baseline's (`[2.05, 1.99, 1.63]` vs `[1.92, 2.02, 1.93]`), so the architecture
+  is not intrinsically less overconfident, and `ece_mean` is inconclusive under
+  paired statistics in both the uncalibrated and the temperature-scaled variant.
+- **The capacity control decomposes the gain.** A plain U-Net widened to within
+  0.23% of `neurovision`'s parameter count gains +0.0055 ET on its own; the
+  remaining +0.0211 is architecture. That keeps an architectural claim alive —
+  but "architecture" here means the whole dual-encoder-plus-gated-fusion design,
+  **not** the ambiguity conditioning, which is precisely what P2 exists to
+  separate and which remains unmeasured.
+
+**What the paper can honestly say today:** a dual-encoder model with gated
+cross-attention fusion beats both a matched-schedule U-Net and a
+parameter-matched wide U-Net on ET and TC Dice, with the mechanism argued from
+design and pre-registration rather than from an ablation. Any sentence claiming
+the *disagreement signal* is what produces the gain requires P2 first.
 
 ## What this contribution is not
 

@@ -20,13 +20,16 @@ run) on 2026-08-06. Everything marked *estimate* is arithmetic, and says so.
 |---|---|
 | Preprocessed BraTS 2021 cache (1251 cases) | **Reproducible.** Deterministic transform, no RNG involved |
 | Frozen split 875 / 187 / 189 | **Reproducible.** Seed 42, and the file is checked in |
-| `baseline_unet3d` training run | **Re-runnable, not bit-exact.** See §4 and §8 |
-| `baseline_unet3d` test metrics (`outputs/eval_test/`) | **Reproducible from the checkpoint.** Inference is deterministic |
-| `baseline_swinunetr`, `neurovision`, the 6-row ablation grid | **Not run yet.** No GPU hours spent on them |
-| ECE / calibration, MC-dropout uncertainty, fusion gate maps, explainability panels | **No producer wired into a script yet.** `notebooks/09_paper_figures.ipynb` §10 is the authoritative list |
+| `baseline_unet3d`, `neurovision`, `capacity_control_unet3d` training runs | **Re-runnable, not bit-exact.** See §4 and §8 |
+| Test metrics for all three runs | **Reproducible from the checkpoint.** Inference is deterministic |
+| Calibration / temperature scaling, MC-dropout risk-coverage, boundary-stratified error, fusion gate maps, explainability | **Produced.** `scripts/calibrate.py`, `scripts/evaluate.py` (`mc_dropout`, `boundary_bands`), `scripts/extract_gates.py`, `scripts/explain.py` — all CPU |
+| Anatomical localisation, burden profile, per-case report | **Produced.** `scripts/validate_atlas.py`, `scripts/localize.py`, `scripts/burden.py`, `reporting/report.py` — all CPU |
+| `baseline_swinunetr`, `ablation_content_only_gate`, the 6-row ablation grid | **Not run.** Cut or unstarted for GPU budget — see `docs/experiments.md` § Planned |
 
-One run of record exists. Everything else in this document describes the
-procedure that run followed, so the next run can follow it identically.
+Four training runs of record now exist: the superseded 200-epoch/96³ U-Net,
+and the three 80-epoch/64³ runs `baseline_unet3d`, `neurovision`, and
+`capacity_control_unet3d`. §8 documents the first one and where it diverges
+from the checked-in config, and every run's row lives in `docs/experiments.md`.
 
 ---
 
@@ -267,7 +270,7 @@ broken P100 — the only honest check is executing a kernel, which
 | Step | Wall time | How measured |
 |---|---|---|
 | Preprocess 1251 cases, `num_workers=8` | **~5 min** | Span of `image.npy` mtimes: 17:14:18 → 17:19:15, 2026-08-01 |
-| `pytest` (819 tests) | **9.8 s** | Live run, 2026-08-06 |
+| `pytest` (1224 tests) | **20.1 s** | Live run, 2026-08-17 |
 | `python scripts/smoke_test.py` | **3.7 s** | Live run, 2026-08-06 |
 | Package for Kaggle | minutes | Hardlinks, so it does not copy 34 GB |
 | Upload 11.3 GB zipped | ~1 h | Upload log; bandwidth-bound |
@@ -297,29 +300,48 @@ step. `175000 / 875 = 200` exactly, which is what pins the epoch count.
 
 **Peak VRAM of 1.17 GB against a 16 GB card is the headline number for
 planning.** The 3D U-Net leaves enormous headroom; SwinUNETR-B (62.19M params,
-~754 MB checkpoints) and NeuroVision-X (34.88M) will not. Projected activation
-memory for NeuroVision-X at 96³, 4 patches/step is ~4.5–5.5 GB unchecked (an
-*estimate*, from saved-tensor byte measurements on CPU — not from a GPU run).
+~754 MB checkpoints) and NeuroVision-X (34.91M) will not.
 
-Evaluation: ~1.3 s/case, so a 189-case split is roughly 15 minutes on a T4 —
-this figure comes from `notebooks/kaggle_evaluate.ipynb`'s own header, not from
-a timing instrument in the code.
+**The pre-run activation estimate for NeuroVision-X was wrong, and it cost two
+OOM'd probes.** This section used to project ~4.5–5.5 GB at 96³ / 4 patches per
+step from CPU saved-tensor byte counts. Measured on a real T4: the model OOM'd
+mid-forward at 14.22 GiB, because a T4's *usable* capacity is **14.56 GiB, not
+16**, and the AMP conversion factor for this architecture is ≈1.0× the fp32
+saved-tensor figure plus ~1.6 GB of weights, Adam moments and workspace — not
+the 0.5–0.6 rule of thumb. At the shipped 64³ schedule, measured: **1.12 s/step,
+peak 6.17 GiB allocated / 7.31 GiB reserved**, gradient checkpointing off.
 
-### Cost estimates for the runs not yet done (*estimates, not measurements*)
+Evaluation: **~1.3 s/case on a T4** (from `notebooks/kaggle_evaluate.ipynb`'s
+header, not a timing instrument), and **~4 s/case on the M4 CPU** — 15 cases per
+minute, so a 189-case split takes ~25 min locally. The `capacity_control_unet3d`
+test evaluation was run that way and took ~24 min at 7.5 s/case. Deterministic
+evaluation therefore does not need a GPU session; MC-dropout at N=10 does
+(measured 83 s/case on a T4 for `neurovision`, 48 s/case on CPU for the U-Net).
 
-| Run | Est. GPU-h | Basis |
+### Kaggle T4 — the remaining runs, measured
+
+| Run | GPU-h | Basis |
 |---|---|---|
-| `baseline_swinunetr` | ~30 | ~3× the U-Net per epoch (62M params + gradient checkpointing) |
-| `neurovision` | between the two | 34.88M params, plus fusion and two auxiliary heads |
-| 6-row ablation grid @ 40 epochs | see `python scripts/run_ablation_grid.py` | That script exists to price the grid; re-run it with a measured `--sec-per-step` once one exists |
+| `neurovision`, 80 ep / 64³ | **23.1**, measured | Three chained sessions, W&B `cc2l5j1c` |
+| `capacity_control_unet3d`, 80 ep / 64³ | **~8**, approximate | One session under `max_hours: 10.5`; the kernel log was not retained, so this is bounded above by 10.5 rather than read off a clock |
+| `baseline_unet3d`, 80 ep / 64³ | **~3.2**, measured | |
+| `baseline_swinunetr` | not run | Cut for budget: ~25 h, 42% of the total, and it proves nothing about the mechanism |
+| `ablation_content_only_gate` | not run | ~23 h estimated; same architecture as `neurovision` to within 0.018% of its parameters |
 
-Free-tier Kaggle is ~30 GPU-hours per week.
+Free-tier Kaggle is ~30 GPU-hours per week, and the 60-hour budget for this
+milestone is spent (~62 h including 10.5 h lost to the fp16-entropy NaN — see
+`docs/experiments.md` § Abandoned / failed runs).
 
 ---
 
-## 8. The run of record — and where it diverges from the checked-in config
+## 8. The FIRST run of record — and where it diverges from the checked-in config
 
-**Read this before comparing anything to it.**
+**Read this before comparing anything to it. This run is superseded** — it is
+the 200-epoch / 96³ U-Net, and the comparison baseline for every current result
+is the 80-epoch / 64³ `baseline_unet3d` row in `docs/experiments.md`. The
+section is kept because the divergence documented below is exactly why that
+re-run was necessary, and because the superseded run still appears in the
+report-agreement analysis (`docs/experiments.md` note 18).
 
 | | |
 |---|---|
@@ -433,7 +455,7 @@ git clone https://github.com/AmishhYadav/NeuroVision-X.git
 cd NeuroVision-X
 uv venv --python 3.11 .venv && .venv/bin/pip install -r requirements.txt -e .
 
-./scripts/reproduce.sh verify     # 819 tests ~10 s, smoke test ~4 s, ruff
+./scripts/reproduce.sh verify     # 1224 tests ~20 s, smoke test ~4 s, ruff
 ./scripts/reproduce.sh            # what has and has not been produced here
 ```
 

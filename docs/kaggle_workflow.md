@@ -135,11 +135,19 @@ data pipeline, the model, checkpointing) lives in `src/neurovision/` and
 `scripts/`, exactly as it does when run locally. This is what makes "runs
 unmodified on Kaggle" (a hard constraint in `CLAUDE.md`) meaningful: if
 training logic lived in notebook cells, it would drift from what runs and
-gets tested on the Mac. See `notebooks/` in the repository layout for where
-these driver notebooks live (currently only the analysis notebook
-`01_verify_preprocessing.ipynb` exists there; the Kaggle driver notebook
-itself does not exist yet — write it when you set up your first Kaggle
-session, and link it here).
+gets tested on the Mac. Two driver notebooks now exist in `notebooks/`:
+
+- `notebooks/kaggle_train.ipynb` — training. Clones the repo at a pinned
+  `GIT_REF`, installs `requirements.txt` minus torch/torchvision, reads
+  `WANDB_API_KEY` from Kaggle Secrets, discovers the mounted data root by
+  globbing (a dataset does **not** reliably mount at
+  `/kaggle/input/<slug>`), validates any resume checkpoint, composes the real
+  Hydra config and calls `run_training`. Only cell 1 is edited per session.
+- `notebooks/kaggle_evaluate.ipynb` — evaluation, ~15 min on GPU for a U-Net.
+  Usually unnecessary: deterministic evaluation measured **15 cases/min on the
+  M4 CPU**, so a 189-case split finishes locally in ~25 min for zero GPU
+  hours. Reach for the GPU version only when the local run would be too slow
+  to be worth the wall clock (MC-dropout at N=10 is 10× the passes).
 
 **Attach the dataset.** In the notebook editor: "Add Data" (Kaggle's label
 for this action may change; the intent is "attach a dataset to this
@@ -359,6 +367,8 @@ the CLI instead of the notebook UI).
 | `RuntimeError: Device 'cuda' was requested but torch.cuda.is_available() is False` | Either the GPU accelerator isn't enabled in the notebook's settings panel, or the same `torch` reinstall problem above (`get_device` in `neurovision.utils.device` raises rather than silently falling back to CPU — see the "Decisions worth remembering" note in `CLAUDE.md`). |
 | Out of disk in `/kaggle/working` | Too many periodic checkpoints retained. Lower `training.checkpoint.keep_last_n` (default 2 in `configs/training/default.yaml`); `last.pt` and `best.pt` are never pruned, but `epoch_NNNN.pt` snapshots are, down to the newest `keep_last_n`. Checkpoints are large — roughly 155 MB for unet3d, roughly 754 MB for SwinUNETR-B — so a handful of stale snapshots can consume a meaningful fraction of the ~20 GB `/kaggle/working` cap. |
 | `pip install` fails | Internet is not enabled in the notebook's settings panel, or the account is not phone-verified (Section 1) — without phone verification, the internet toggle isn't available at all. |
+| Kernel shows **ERROR** but training finished | Check *which cell* failed before assuming work was lost. A real case: the final verification cell raised `FileNotFoundError: best.pt missing` after all 80 epochs trained, because `save_checkpoint` writes `best.pt` only when validation improves and that session never beat the earlier best. Kaggle **does** persist a failed version's output, so `last.pt` was intact. Confirm the epoch count arithmetically from `global_step` (steps ÷ steps-per-epoch), not from the kernel's status badge. |
+| GPU hours for a finished run are unknown | The checkpoint stores epoch, step, config and RNG state but **no wall clock**. If `kaggle kernels output` is never run, the session log is gone and the run's GPU-h can only be bounded by `training.max_hours`. Fetch and keep the log as part of finishing a run. |
 | Resume silently starts from epoch 0 | `last.pt` was never copied into the writable `training.checkpoint.dir` — it's still sitting in the read-only `/kaggle/input/...` mount, so `find_resume_checkpoint` finds nothing there and `scripts/train.py` takes the fresh-start branch. Check the very first line of the training log: it prints `FRESH: starting a new training run from epoch 0` or `RESUME: continuing training from epoch N (checkpoint: ...)` — this is the direct way to confirm which branch actually ran, rather than inferring it from Dice curves later. |
 
 ---
@@ -385,9 +395,10 @@ python scripts/train.py \
     data.splits.path=/kaggle/input/<slug>/splits.yaml \
     training.checkpoint.dir=/kaggle/working/checkpoints
 
-# Resume (same command; last.pt must be copied into the writable dir first)
+# Resume (same command; last.pt AND best.pt must be copied into the writable dir first)
 mkdir -p /kaggle/working/checkpoints
 cp /kaggle/input/<previous-notebook-slug>/checkpoints/last.pt /kaggle/working/checkpoints/
+cp /kaggle/input/<previous-notebook-slug>/checkpoints/best.pt /kaggle/working/checkpoints/  # may not exist
 python scripts/train.py ... training.checkpoint.dir=/kaggle/working/checkpoints
 
 # Kernel management
