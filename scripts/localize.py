@@ -67,6 +67,11 @@ _VALID_SOURCES = ("prediction", "label")
 # `min_frac` filtering may never drop.
 _UNLABELLED_STRUCTURE_NAME = "unlabelled"
 
+# Below this, `min_frac` is discarding so much of the tumour that the per-case
+# table no longer describes it. Expected retention is high; a little filtering
+# is by design.
+_MIN_RETAINED_FRAC_WARN = 0.5
+
 
 @dataclass(frozen=True)
 class LocalizeSource:
@@ -259,6 +264,30 @@ def _crop_eloquent_mask(eloquent_mask: np.ndarray, meta: dict, *, cropped: bool)
     return eloquent_mask[slices]
 
 
+def _summary_region_scope(table: pd.DataFrame) -> pd.DataFrame:
+    """Restricts `table` to whatever rows `summarize_case` itself would summarize.
+
+    Mirrors `neurovision.anatomy.localize.summarize_case`'s own region
+    selection exactly: when `table` carries a `region` column, only the
+    `"WT"` rows count (falling back to an empty slice if there are none);
+    without a `region` column, the whole table counts. Kept in lockstep with
+    `summarize_case` on purpose -- `frac_of_tumour_retained` has to describe
+    the same slice of the table that the rest of the summary row describes,
+    or it would be a number about a different region sitting next to one
+    about WT.
+
+    Args:
+        table: A `localize_case` (or `localize_mask`) output table.
+
+    Returns:
+        The scoped `DataFrame` (a view/slice, possibly empty).
+    """
+    if "region" in table.columns:
+        wt_only = table[table["region"] == "WT"]
+        return wt_only if not wt_only.empty else table.iloc[0:0]
+    return table
+
+
 def localize_one(
     source: LocalizeSource,
     atlas: Atlas,
@@ -281,9 +310,13 @@ def localize_one(
         then `region` and `neurovision.anatomy.localize`'s columns, filtered
         by `cfg.analysis.localize.min_frac` (the `"unlabelled"` row is never
         dropped by that filter). `summary_row` is `summarize_case`'s output
-        with `case_id` first and `distance_to_eloquent_mm` / `near_eloquent`
-        overwritten with the real measured distance -- `summarize_case`
-        alone cannot compute it, since a tidy table carries no coordinates.
+        (computed on the FILTERED table) with `case_id` first,
+        `distance_to_eloquent_mm` / `near_eloquent` overwritten with the real
+        measured distance -- `summarize_case` alone cannot compute it, since a
+        tidy table carries no coordinates -- and an added
+        `frac_of_tumour_retained` field: the fraction of the WT-scoped tumour
+        (the same scope `summarize_case` itself summarizes, see
+        `_summary_region_scope`) that survived `min_frac` filtering.
 
     Raises:
         ValueError: See `load_case` and `neurovision.anatomy.localize`.
@@ -297,6 +330,24 @@ def localize_one(
     )
     table.insert(0, "case_id", source.case_id)
 
+    # frac_of_tumour is documented to sum to 1.0 per region -- checked here,
+    # on the table as localize_case returned it, BEFORE any filtering.
+    # min_frac is designed to drop small non-zero rows, so checking this
+    # identity AFTER filtering would fire on essentially every case of every
+    # run; a violation HERE instead means localize_case's own output is
+    # wrong, not that the filter did its job.
+    for region, group in table.groupby("region"):
+        total = float(group["frac_of_tumour"].sum())
+        if not math.isclose(total, 1.0, abs_tol=1e-6):
+            logger.warning(
+                "localize_one(%s): localize_case's UNFILTERED frac_of_tumour sums to %.9f "
+                "(expected 1.0) for region %s. This indicates a problem in localize_case's own "
+                "output, not in min_frac filtering.",
+                source.case_id,
+                total,
+                region,
+            )
+
     min_frac = float(localize_cfg.min_frac)
     drop_mask = (
         (table["frac_of_structure"] < min_frac)
@@ -305,18 +356,29 @@ def localize_one(
     )
     filtered = table.loc[~drop_mask].reset_index(drop=True)
 
-    # frac_of_tumour is documented to sum to 1.0 per region; min_frac
-    # filtering must not silently break that identity.
-    for region, group in filtered.groupby("region"):
-        total = float(group["frac_of_tumour"].sum())
-        if not math.isclose(total, 1.0, abs_tol=1e-6):
-            logger.warning(
-                "localize_one(%s): frac_of_tumour sums to %.9f (expected 1.0) for region "
-                "%s after min_frac filtering.",
-                source.case_id,
-                total,
-                region,
-            )
+    # How much of the tumour survived filtering, scoped to exactly what
+    # summarize_case summarizes below (WT, when the table has a region
+    # column) -- a diagnostic quantified in the summary CSV rather than
+    # announced in a log nobody keeps.
+    unfiltered_scope = _summary_region_scope(table)
+    filtered_scope = _summary_region_scope(filtered)
+    unfiltered_total = float(unfiltered_scope["frac_of_tumour"].sum())
+    if unfiltered_total > 0.0:
+        frac_of_tumour_retained = float(filtered_scope["frac_of_tumour"].sum()) / unfiltered_total
+    else:
+        # No tumour in scope to begin with -- vacuously fully "retained",
+        # rather than a division by zero.
+        frac_of_tumour_retained = 1.0
+
+    if frac_of_tumour_retained < _MIN_RETAINED_FRAC_WARN:
+        logger.warning(
+            "localize_one(%s): min_frac filtering retained only %.3f of the tumour "
+            "(threshold %.3f) at min_frac=%s. Consider lowering min_frac.",
+            source.case_id,
+            frac_of_tumour_retained,
+            _MIN_RETAINED_FRAC_WARN,
+            min_frac,
+        )
 
     # summarize_case can only report 0.0-on-overlap / NaN-otherwise for
     # distance_to_eloquent_mm, since a tidy table carries no coordinates.
@@ -336,6 +398,7 @@ def localize_one(
     }
     summary_row["distance_to_eloquent_mm"] = distance_mm
     summary_row["near_eloquent"] = near_eloquent
+    summary_row["frac_of_tumour_retained"] = frac_of_tumour_retained
 
     return filtered, summary_row
 
@@ -347,13 +410,18 @@ def _log_sanity_summary(summary_rows: list[dict[str, object]]) -> None:
         summary_rows: The successfully-computed per-case summary rows.
     """
     df = pd.DataFrame.from_records(summary_rows)
+    n_low_retention = int((df["frac_of_tumour_retained"] < _MIN_RETAINED_FRAC_WARN).sum())
     logger.info(
         "Sanity summary over %d case(s): median n_structures_involved=%.1f, median "
-        "frac_unlabelled=%.3f, fraction with any eloquent involvement=%.3f.",
+        "frac_unlabelled=%.3f, fraction with any eloquent involvement=%.3f, median "
+        "frac_of_tumour_retained=%.3f, %d case(s) below the %.3f retention warn threshold.",
         len(df),
         df["n_structures_involved"].median(),
         df["frac_unlabelled"].median(),
         (df["n_eloquent_structures"] > 0).mean(),
+        df["frac_of_tumour_retained"].median(),
+        n_low_retention,
+        _MIN_RETAINED_FRAC_WARN,
     )
 
 

@@ -368,6 +368,35 @@ domain expertise.
 Tier C is strictly weaker than VASARI F3 and deliberately so. It is a geometric
 statement about a published list, not an assessment of this patient.
 
+> **MEASURED 2026-08-17 on all 189 test cases, and it changes how Tier C must
+> be reported: the binary form of this claim is uninformative.**
+>
+> | Quantity | Measured |
+> |---|---|
+> | cases overlapping an eloquent structure (distance 0 mm) | **99.47%** |
+> | cases flagged `near_eloquent` at the 10 mm threshold | **100.0%** |
+> | `n_eloquent_structures` involved | median **7**, IQR 5–9, range 0–15 |
+> | `eloquent_frac_of_tumour` | median **0.167**, p90 0.304 |
+>
+> Every case is near-eloquent and essentially every case is eloquent-involved,
+> so **"is this tumour near eloquent cortex?" has no discriminative content on
+> this cohort** and must not be presented as a finding. The cause is structural,
+> not a bug: the Sawaya list covers basal ganglia, thalamus, and bilateral
+> motor/sensory and speech cortex — most of the central brain — while gliomas
+> are large infiltrative lesions whose whole-tumour region includes oedema.
+>
+> Consequences, all mandatory:
+> - The report must lead with the **graded** quantities (`n_eloquent_structures`,
+>   `eloquent_frac_of_tumour`, and the per-structure `frac_of_structure`), which
+>   do vary meaningfully, and never with a yes/no eloquence flag.
+> - `near_eloquent` stays in the schema because the threshold is configurable and
+>   stated, but the paper must report that it saturates at 100% here rather than
+>   quoting it as a result.
+> - This is also an argument the paper can make rather than hide: a binary
+>   eloquence flag is exactly what VASARI F3 and Sawaya grade III encode, and on
+>   a high-grade glioma cohort it is nearly constant. The graded, per-structure
+>   form is strictly more informative and is what the pipeline produces.
+
 **Schema.** One entry per SRI24/TZO label, and `evidence` is the field that
 makes the whole layer auditable by a non-expert:
 

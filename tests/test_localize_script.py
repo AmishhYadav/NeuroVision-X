@@ -585,14 +585,24 @@ def test_zero_successes_raises_runtime_error(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 7. min_frac filtering drops a tiny row, never drops 'unlabelled', and the
-#    frac_of_tumour identity is nearly preserved.
+# 7. min_frac filtering drops a tiny row, never drops 'unlabelled', a normal
+#    filtering run logs no warning, and frac_of_tumour_retained is reported.
 # ---------------------------------------------------------------------------
 
 
-def test_min_frac_filtering_drops_tiny_row_but_never_unlabelled(tmp_path: Path) -> None:
+def _filter_case_paths(
+    tmp_path: Path, case_id: str = "FILTER_CASE"
+) -> tuple[Path, Path, Path, Path, Path, Path]:
+    """Writes the shared min_frac fixture: one dominant WT structure (Frontal_L,
+    13500 voxels), one tiny non-'unlabelled' structure (1 voxel inside
+    Precentral_L), and one tiny 'unlabelled' voxel -- so the default min_frac
+    genuinely drops the non-unlabelled row while keeping the dominant one and
+    the (never-dropped) unlabelled one.
+
+    Returns:
+        `(atlas_root, eloq_path, lobe_path, prep_dir, splits_path, eval_dir)`.
+    """
     atlas_root, eloq_path, lobe_path = _build_knowledge_fixtures(tmp_path)
-    case_id = "FILTER_CASE"
     prep_dir = tmp_path / "preprocessed"
     case_dir = ensure_dir(prep_dir / case_id)
     _write_meta(case_dir, case_id)
@@ -609,6 +619,13 @@ def test_min_frac_filtering_drops_tiny_row_but_never_unlabelled(tmp_path: Path) 
     splits_path = tmp_path / "splits.yaml"
     _write_splits(splits_path, [case_id])
 
+    return atlas_root, eloq_path, lobe_path, prep_dir, splits_path, eval_dir
+
+
+def test_min_frac_filtering_drops_tiny_row_but_never_unlabelled_and_warns_nothing(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    atlas_root, eloq_path, lobe_path, prep_dir, splits_path, eval_dir = _filter_case_paths(tmp_path)
     output_dir = tmp_path / "out"
     cfg = _compose_cfg(
         tmp_path,
@@ -622,7 +639,9 @@ def test_min_frac_filtering_drops_tiny_row_but_never_unlabelled(tmp_path: Path) 
         eval_dir=eval_dir,
     )
 
-    anatomy_csv, _summary_csv = run_localize(cfg)
+    with caplog.at_level(logging.WARNING, logger="localize_script"):
+        anatomy_csv, _summary_csv = run_localize(cfg)
+
     table = pd.read_csv(anatomy_csv)
     wt_rows = table[table["region"] == "WT"]
 
@@ -631,10 +650,62 @@ def test_min_frac_filtering_drops_tiny_row_but_never_unlabelled(tmp_path: Path) 
     assert "Precentral_L" not in structures  # dropped: both fractions < min_frac
     assert "unlabelled" in structures  # never dropped, even though also tiny
 
-    total_frac = float(wt_rows["frac_of_tumour"].sum())
-    # The dropped row's own frac_of_tumour was ~1/13502 =~ 7.4e-5, so the sum
-    # over the surviving rows stays extremely close to the un-filtered 1.0.
-    assert total_frac == pytest.approx(1.0, abs=1e-3)
+    # Regression guard for the fixed defect: min_frac genuinely dropped a row
+    # here, and that is BY DESIGN -- a normal run must not warn about the
+    # (correctly-unfiltered) sum identity or about the retained fraction
+    # (which is still high). This is exactly the case that made the old
+    # post-filter check fire on essentially every case of every run.
+    messages = [record.getMessage() for record in caplog.records]
+    assert not any("sums to" in m for m in messages)
+    assert not any("retained" in m for m in messages)
+
+
+def test_frac_of_tumour_retained_present_and_less_than_one_when_dropped(tmp_path: Path) -> None:
+    atlas_root, eloq_path, lobe_path, prep_dir, splits_path, eval_dir = _filter_case_paths(tmp_path)
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        output_dir,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="prediction",
+        eval_dir=eval_dir,
+    )
+
+    _anatomy_csv, summary_csv = run_localize(cfg)
+    summary = pd.read_csv(summary_csv)
+
+    assert "frac_of_tumour_retained" in summary.columns
+    retained = float(summary.loc[0, "frac_of_tumour_retained"])
+    assert 0.0 <= retained <= 1.0
+    assert retained < 1.0  # the tiny Precentral_L row was dropped
+
+
+def test_frac_of_tumour_retained_equals_one_when_nothing_dropped(tmp_path: Path) -> None:
+    atlas_root, eloq_path, lobe_path, prep_dir, splits_path, eval_dir = _filter_case_paths(tmp_path)
+    output_dir = tmp_path / "out"
+    # min_frac=0.0: a fraction is never strictly less than 0.0, so nothing is
+    # dropped and the reported retention must be exactly 1.0.
+    cfg = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        output_dir,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="prediction",
+        eval_dir=eval_dir,
+        min_frac=0.0,
+    )
+
+    _anatomy_csv, summary_csv = run_localize(cfg)
+    summary = pd.read_csv(summary_csv)
+    retained = float(summary.loc[0, "frac_of_tumour_retained"])
+    assert retained == pytest.approx(1.0, abs=1e-9)
 
 
 # ---------------------------------------------------------------------------
@@ -894,3 +965,186 @@ def test_determinism(tmp_path: Path) -> None:
 
     assert anatomy_a.read_bytes() == anatomy_b.read_bytes()
     assert summary_a.read_bytes() == summary_b.read_bytes()
+
+
+# ---------------------------------------------------------------------------
+# 13. Unfiltered identity check, retained-fraction scoping and warning,
+#     monkeypatching localize_case for full control over the table.
+# ---------------------------------------------------------------------------
+
+
+def _prepare_localize_one_env(
+    tmp_path: Path, case_id: str, *, min_frac: float | None = None
+) -> tuple:
+    """Builds everything `localize_one` needs for one case, so a test can
+    monkeypatch `localize_case` (the thing `localize_one` calls) before
+    invoking it directly, and drive the returned table exactly.
+
+    Returns:
+        `(atlas, knowledge, eloquent_mask, source, cfg)`.
+    """
+    atlas_root, eloq_path, lobe_path = _build_knowledge_fixtures(tmp_path)
+    prep_dir = tmp_path / f"prep_{case_id}"
+    case_dir = ensure_dir(prep_dir / case_id)
+    _write_meta(case_dir, case_id)
+
+    array = np.zeros(ATLAS_SHAPE, dtype=np.uint8)
+    array[0, 0, 0] = 2  # a single WT voxel so region_mask('WT') is non-empty
+    eval_dir = tmp_path / f"eval_{case_id}"
+    predictions_dir = ensure_dir(eval_dir / "predictions")
+    array_path = predictions_dir / f"{case_id}.npy"
+    np.save(array_path, array)
+
+    splits_path = tmp_path / f"splits_{case_id}.yaml"
+    _write_splits(splits_path, [case_id])
+    output_dir = tmp_path / f"out_{case_id}"
+    cfg = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        output_dir,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="prediction",
+        eval_dir=eval_dir,
+        min_frac=min_frac,
+    )
+
+    atlas = load_atlas(cfg.anatomy)
+    knowledge = load_knowledge(
+        cfg.analysis.localize.eloquence_map, cfg.analysis.localize.lobe_map, atlas
+    )
+    eloquent_mask = eloquent_union_mask(atlas, knowledge)
+    source = LocalizeSource(
+        case_id=case_id, array_path=array_path, meta_path=case_dir / "meta.json", cropped=False
+    )
+    return atlas, knowledge, eloquent_mask, source, cfg
+
+
+def _synthetic_localize_table(rows: list[dict]) -> pd.DataFrame:
+    """A minimal, correctly-columned stand-in for `localize_case`'s output.
+
+    Used to monkeypatch `localize_case` so a test can drive
+    `frac_of_tumour` / `frac_of_structure` exactly, rather than deriving them
+    from a real mask/atlas intersection.
+    """
+    records = []
+    for row in rows:
+        records.append(
+            {
+                "region": row["region"],
+                "structure": row["structure"],
+                "laterality": row.get("laterality", "unknown"),
+                "lobe": row.get("lobe", ""),
+                "eloquence": row.get("eloquence", "unclassified"),
+                "matched_term": row.get("matched_term", ""),
+                "n_voxels": row.get("n_voxels", 1),
+                "volume_mm3": row.get("volume_mm3", 1.0),
+                "frac_of_tumour": row["frac_of_tumour"],
+                "frac_of_structure": row["frac_of_structure"],
+            }
+        )
+    return pd.DataFrame.from_records(records)
+
+
+def test_unfiltered_identity_check_fires_before_filtering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    atlas, knowledge, eloquent_mask, source, cfg = _prepare_localize_one_env(tmp_path, "BAD_SUM")
+    # frac_of_tumour sums to 0.5, not 1.0 -- a bug in localize_case's own
+    # output, not something min_frac filtering could ever cause (min_frac
+    # only removes rows, which can only make a filtered sum smaller than 1.0,
+    # never larger, and this check runs BEFORE filtering anyway).
+    bad_table = _synthetic_localize_table(
+        [{"region": "WT", "structure": "X", "frac_of_tumour": 0.5, "frac_of_structure": 0.5}]
+    )
+    monkeypatch.setattr(localize_script, "localize_case", lambda *a, **k: bad_table.copy())
+
+    with caplog.at_level(logging.WARNING, logger="localize_script"):
+        localize_one(source, atlas, knowledge, eloquent_mask, cfg)
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("localize_case" in r.getMessage() for r in warnings)
+
+
+def test_retained_fraction_scoped_to_wt_like_summarize_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    atlas, knowledge, eloquent_mask, source, cfg = _prepare_localize_one_env(
+        tmp_path, "SCOPE", min_frac=0.5
+    )
+    # WT: B (frac 0.1) is dropped at min_frac=0.5 -> WT retains 0.9.
+    # ET: D (frac 0.4) is dropped at min_frac=0.5 -> ET retains 0.6.
+    # summarize_case (and therefore frac_of_tumour_retained) must use WT.
+    table = _synthetic_localize_table(
+        [
+            {"region": "WT", "structure": "A", "frac_of_tumour": 0.9, "frac_of_structure": 0.9},
+            {"region": "WT", "structure": "B", "frac_of_tumour": 0.1, "frac_of_structure": 0.1},
+            {"region": "ET", "structure": "C", "frac_of_tumour": 0.6, "frac_of_structure": 0.6},
+            {"region": "ET", "structure": "D", "frac_of_tumour": 0.4, "frac_of_structure": 0.4},
+        ]
+    )
+    monkeypatch.setattr(localize_script, "localize_case", lambda *a, **k: table.copy())
+
+    _table, summary = localize_one(source, atlas, knowledge, eloquent_mask, cfg)
+
+    assert summary["frac_of_tumour_retained"] == pytest.approx(0.9)
+
+
+def test_low_retained_fraction_warns_once_naming_case_and_min_frac(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    case_id = "LOWRET"
+    atlas, knowledge, eloquent_mask, source, cfg = _prepare_localize_one_env(
+        tmp_path, case_id, min_frac=1.5
+    )
+    # The lone row's fractions (1.0) are both below min_frac=1.5, so it is
+    # entirely dropped -- retention is 0.0, well under the 0.5 warn threshold.
+    table = _synthetic_localize_table(
+        [{"region": "WT", "structure": "A", "frac_of_tumour": 1.0, "frac_of_structure": 1.0}]
+    )
+    monkeypatch.setattr(localize_script, "localize_case", lambda *a, **k: table.copy())
+
+    with caplog.at_level(logging.WARNING, logger="localize_script"):
+        _table, summary = localize_one(source, atlas, knowledge, eloquent_mask, cfg)
+
+    assert summary["frac_of_tumour_retained"] == pytest.approx(0.0, abs=1e-9)
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert case_id in message
+    assert "1.5" in message
+
+
+# ---------------------------------------------------------------------------
+# 14. _log_sanity_summary surfaces the retained fraction at the run level
+# ---------------------------------------------------------------------------
+
+
+def test_log_sanity_summary_reports_retained_fraction_and_low_count(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    summary_rows = [
+        {
+            "n_structures_involved": 2,
+            "frac_unlabelled": 0.1,
+            "n_eloquent_structures": 1,
+            "frac_of_tumour_retained": 0.95,
+        },
+        {
+            "n_structures_involved": 3,
+            "frac_unlabelled": 0.05,
+            "n_eloquent_structures": 0,
+            "frac_of_tumour_retained": 0.2,  # below the 0.5 warn threshold
+        },
+    ]
+
+    with caplog.at_level(logging.INFO, logger="localize_script"):
+        localize_script._log_sanity_summary(summary_rows)
+
+    message = " ".join(record.getMessage() for record in caplog.records)
+    # median([0.95, 0.2]) == 0.575; exactly one row (0.2) is below 0.5.
+    assert "frac_of_tumour_retained=0.575" in message
+    assert "1 case(s) below" in message
