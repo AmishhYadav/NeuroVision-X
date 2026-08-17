@@ -44,3 +44,48 @@ burden:
   midline_index: null
 
   out_name: burden.csv
+
+localize:
+  # Which masks to localise. Same convention as burden.source above -- see its
+  # comment for the crop-offset hazard this mirrors exactly (the atlas is
+  # cropped to match via anatomy/localize.py's atlas_for_case, so `cropped`
+  # must follow `source`, never be set independently).
+  #   prediction - <eval_dir>/predictions/<case>.npy, saved in ORIGINAL BraTS
+  #                geometry (240x240x155) by uncrop_to_original.
+  #   label      - <preprocessed>/<case>/label.npy, CROPPED to the nonzero bbox.
+  source: prediction
+
+  # Directory holding predictions/. Required when source=prediction, ignored
+  # when source=label.
+  eval_dir: null
+
+  # Root of the preprocessed tree (holds <case>/meta.json and <case>/label.npy).
+  # Always required: even for source=prediction, meta.json supplies spacing
+  # and the crop bbox needed to align the atlas.
+  preprocessed_dir: ${data.preprocessing.out_dir}
+
+  # Which frozen split to localise.
+  split: test
+
+  # Regions to localise per case. ET and TC are kept alongside WT (rather than
+  # collapsing to WT only) because enhancing-tumour involvement of an eloquent
+  # structure is a clinically different statement from oedema simply reaching
+  # it -- WT alone would erase that distinction.
+  regions: [ET, TC, WT]
+
+  # The two committed, versioned knowledge artifacts. localize_case validates
+  # both against the loaded atlas at load time, so a stale or mistyped
+  # structure name raises rather than silently mapping nothing.
+  eloquence_map: knowledge/eloquence_map.yaml
+  lobe_map: knowledge/aal_lobes.yaml
+
+  # A structure row is dropped only when BOTH frac_of_structure AND
+  # frac_of_tumour fall below this. 122 structures x 3 regions x 189 cases is
+  # a large file, and a one-voxel clip of a neighbouring gyrus is measurement
+  # noise, not a reportable involvement. The 'unlabelled' row is NEVER
+  # dropped regardless of its fractions: frac_of_tumour is documented to sum
+  # to 1.0 over the table, and dropping it would silently break that identity.
+  min_frac: 0.001
+
+  out_name: anatomy.csv
+  summary_name: anatomy_summary.csv

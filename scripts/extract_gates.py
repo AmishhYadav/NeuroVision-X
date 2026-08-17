@@ -124,9 +124,9 @@ def select_cases(cfg: DictConfig) -> list[str]:
     return case_ids
 
 
-def tumor_centroid(label: Tensor, region_index: int, case_id: str | None = None) -> tuple[
-    int, int, int
-]:
+def tumor_centroid(
+    label: Tensor, region_index: int, case_id: str | None = None
+) -> tuple[int, int, int]:
     """Finds the centroid of one region's nonzero voxels.
 
     Args:
