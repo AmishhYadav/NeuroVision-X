@@ -19,6 +19,13 @@ target-version = ["py311"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests", "scripts"]
+# Ruff lints .ipynb by default. Exclude them: notebooks here are thin drivers
+# and analysis surfaces, not library code, and Black skips them too (the
+# jupyter extra is not installed), so linting them enforces a standard nothing
+# else applies and nothing can auto-fix. The rule that matters -- no training
+# logic in a notebook cell -- is architectural, not a lint. Library code
+# (src/, scripts/, tests/, app/) stays fully linted.
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 # E/F  = pycodestyle + pyflakes (the baseline)

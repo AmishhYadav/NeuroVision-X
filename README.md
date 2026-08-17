@@ -218,7 +218,7 @@ produced output on this machine.
 ```bash
 pytest                  # 1224 tests, CPU only, ~20 s
 python scripts/smoke_test.py
-ruff check .            # library code is clean; notebooks carry pre-existing E501
+ruff check .            # notebooks are excluded — see the comment in pyproject.toml
 black .
 ```
 
