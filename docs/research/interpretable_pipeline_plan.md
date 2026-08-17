@@ -440,8 +440,30 @@ source. That was designed and costed; it was cut on scope, not on feasibility.
 > test split against ground truth and two models; see `docs/experiments.md`
 > note 18.
 >
-> **3b (after Phase 0, now unblocked):** ependymal contact (F19), cortical
-> involvement (F20), deep white-matter invasion (F21), epicentre naming.
+> **3b (after Phase 0, now unblocked):** ependymal contact, cortical
+> involvement, deep white-matter involvement, epicentre naming.
+>
+> **Do NOT label 3b's outputs as VASARI F19/F20/F21.** Checked 2026-08-17: the
+> verbatim operational definitions and bin boundaries are not obtainable from
+> any accessible secondary source (Radiopaedia 403s; the open-access structured-
+> reporting papers reference the features without quoting the scoring system).
+> Claiming VASARI equivalence from feature *names* alone is the same
+> unverified-assertion failure that produced the A–P mirror and the "130
+> structures" error in this very phase. Emit geometrically-named quantities with
+> our own stated operational definitions, and describe the VASARI relationship as
+> *approximate and unverified* until someone reads the primary NCI CIP VASARI
+> documentation.
+>
+> Two facts found in that search that are worth more than the definitions, and
+> that argue *for* building this layer rather than against it: **F20 cortical
+> involvement has an inter-rater κ of 0.167 between radiologists** — close to
+> chance — and **F21 is documented as "difficult to be sure of whether this is
+> present on structural MRI."** So the human gold standard for two of these three
+> features is barely reproducible. That makes a deterministic, published,
+> re-runnable operational definition genuinely valuable — the same argument
+> VASARI-auto makes for itself — but it also means these fields must never be
+> presented as agreeing with, or validated against, expert reading. There is no
+> stable expert reading to agree with. Cite the κ next to the field.
 >
 > **Mass effect — midline shift is DECLINED, not deferred.** The atlas says
 > where a healthy midline *should* be; it cannot say where this patient's
