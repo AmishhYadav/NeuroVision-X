@@ -46,6 +46,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | `baseline_unet3d` (80ep/64³) | `+experiment=baseline_unet3d data.num_workers=2`, `GIT_REF=6ee28a7` | 42 | `unet3d`, 12.87M | 80 / 80 | ~3.2 | 0.8442 | 0.9058 | 0.9276 | 4.91 | 5.24 | 6.72 | — | `pzu8y5fo` (offline) | 6–10 below |
 | `neurovision` | `+experiment=neurovision data.num_workers=2`, `GIT_REF=7caacfa` | 42 | `neurovision`, 34.91M | 80 / 80 | 23.1 | 0.8709 | 0.9161 | 0.9321 | 4.20 | 4.98 | 7.09 | 0.0446 → **0.0135** | `cc2l5j1c` (offline) | 11–16 below |
+| `capacity_control_unet3d` | `+experiment=capacity_control_unet3d`, `GIT_REF=f363067` | 42 | `unet3d` widened, 34.83M | 80 / 80 | ~8 (see note 19) | 0.8497 | 0.9092 | 0.9295 | 4.84 | 5.67 | 7.09 | — | `k9j5uba2` (offline) | 19–21 below |
 | `baseline_unet3d` | root config, **not** `+experiment=` — see note 1. Overrides: `model=unet3d training.epochs=200 training.val_interval=2 data.dataset_type=dataset data.num_workers=2` | 42 | `unet3d`, 12.87M | 200 / 200 | 16.5 | 0.8587 | 0.9157 | 0.9354 | 4.02 | 5.21 | 5.36 | — | `nz5y7li7` | 1–5 below |
 
 **Notes for `baseline_unet3d` / `nz5y7li7`**
@@ -292,6 +293,70 @@ sessions by resume is still ONE row — sum the GPU hours.
     need the atlas, so they are absent here. Midline shift is declined outright,
     not pending; see the plan's Phase 3 note.
 
+
+19. **CAPACITY CONTROL: the architectural claim SURVIVES. Capacity explains
+    about a fifth of the ET gain; architecture explains the rest.** Completed
+    2026-08-17, 80/80 epochs (`global_step` 70000 = 80 x 875, the arithmetic
+    proof every epoch ran), `best.pt` at epoch 79, `val/dice_mean` 0.8916.
+    Params **34,829,696** against `neurovision`'s 34,911,341 — matched to
+    0.23%. Every controlled variable verified identical to `baseline_unet3d`
+    from the checkpoint's own stored config: seed 42, 64³ patches, 4
+    samples/volume, batch 1, 80 epochs, `val_interval` 10, AdamW 1e-4 / wd
+    1e-5, warmup 5, `grad_clip_norm` 5.0, `dice_ce`, deep supervision off.
+    Only `model.channels` differs.
+
+    Evaluated on the **test** split on the Mac CPU, 189/189 cases, ~24 min at
+    7.5 s/case, same postprocessing as every other arm (`threshold` 0.5,
+    `min_component_size` 50, `connectivity` 1, `enforce_nesting`), so the row
+    is directly comparable.
+
+    Test Dice: **ET 0.8497, TC 0.9092, WT 0.9295.** Against the pre-registered
+    outcomes written into `configs/experiment/capacity_control_unet3d.yaml`
+    *before* the run — "near 0.844 = architecture", "~0.855 = decomposes",
+    "near 0.871 = capacity" — this lands just above the first branch.
+
+    Paired comparisons over the same 189 cases, bootstrap CI + Wilcoxon +
+    Holm across the table:
+
+    | Comparison | ET | TC | WT |
+    |---|---|---|---|
+    | `neurovision` vs `capacity_control` | **+0.0211**, p_holm 7.3e-19, better | **+0.0068**, p_holm 5.1e-07, better | +0.0026, inconclusive |
+    | `capacity_control` vs `baseline_unet3d` | **+0.0055**, p_holm 1.6e-09, better | +0.0034, inconclusive | +0.0019, inconclusive |
+    | `neurovision` vs `baseline_unet3d` | **+0.0267**, p_holm 7.2e-22, better | **+0.0103**, p_holm 4.6e-11, better | +0.0045, inconclusive |
+
+    **Decomposition of the +0.0267 ET gain: capacity +0.0055 (20.6%),
+    architecture +0.0211 (79.4%).** `neurovision` beats a
+    parameter-matched U-Net by +0.0211 ET at p_holm 7.3e-19. This is the
+    outcome that keeps the architectural contribution alive, and it is the
+    single most important number this project has produced since note 12,
+    because it is the one a reviewer asks for first.
+
+    Two honest qualifications. Widening the U-Net **did** help ET on its own
+    (+0.0055, p_holm 1.6e-09) — capacity is not zero and the paper must report
+    the decomposition rather than claiming architecture alone. And TC/WT for
+    the capacity control are both **inconclusive** against the baseline, so
+    the capacity effect is an ET effect only; the ET-specific reading is that
+    extra width helps the smallest, hardest region a little, and the fusion
+    design helps it about four times as much.
+
+20. **`dice_WT` is "inconclusive" in every single comparison despite p_holm
+    values as low as 1.4e-09.** That is `compare_models` working as designed,
+    not a bug: the verdict is conservative and returns `inconclusive` if
+    EITHER the bootstrap CI contains 0 or Holm-adjusted p exceeds alpha. Every
+    WT interval straddles zero (e.g. `neurovision` vs `capacity_control`:
+    +0.0026, CI [-0.0018, +0.0069]). Whole tumour is nearly saturated at
+    ~0.93 for all three models, so no WT claim may be made from any of these
+    runs. Do not quote a WT difference from this table.
+
+21. **GPU hours are approximate (~8) because the kernel log was not
+    retained.** The checkpoint stores epoch, step, config and RNG state but no
+    wall-clock, and the `kaggle kernels output` fetch that would have carried
+    the log was cancelled to free bandwidth for the local evaluation. The run
+    completed in a single session under `max_hours: 10.5`, so the true figure
+    is bounded above by 10.5 and the 80-epoch schedule at the measured
+    `baseline_unet3d` rate puts it near 8. **Fetch and keep the log next
+    time** — this is the same provenance gap as note 4's missing commit SHA,
+    in a different field.
 ---
 
 ## Planned
