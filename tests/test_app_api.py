@@ -187,6 +187,80 @@ def client(backend: tuple[Path, Path]) -> TestClient:
     return TestClient(api.create_app())
 
 
+@pytest.fixture
+def report_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: tuple[Path, Path]) -> Path:
+    """Points `NVX_REPORT_DIR` at a not-yet-created directory under `tmp_path`.
+
+    Deliberately not created here -- a demo with no reports generated yet is
+    a valid configuration, and the "absent report dir" tests rely on this
+    fixture NOT pre-creating it.
+    """
+    report_root = tmp_path / "reports"
+    monkeypatch.setenv("NVX_REPORT_DIR", str(report_root))
+    _clear_caches()
+    return report_root
+
+
+def _make_report(case_id: str, segmentation_source: str, segmentation_dir: Path) -> dict:
+    """A minimal but schema-complete `build_report`-shaped dict, built by hand.
+
+    Not imported from `neurovision.reporting.report` -- `api.py` deliberately
+    imports nothing from the training package (see the module docstring), and
+    this test mirrors that boundary rather than depending on the real
+    schema module.
+    """
+    return {
+        "report_version": 1,
+        "case_id": case_id,
+        "generated_utc": "2026-08-18T00:00:00+00:00",
+        "disclaimer": (
+            "This report is a research and educational decision-support artifact. It is "
+            "not a diagnostic tool."
+        ),
+        "not_claimed": [
+            ["cell type", "MRI resolves millimetre-scale tissue, not individual cells."],
+        ],
+        "burden": {"volumes": {"vol_WT_mm3": 1234.0}},
+        "anatomy": {
+            "atlas": {"name": "SRI24/TZO", "version": "1.0"},
+            "region": "WT",
+            "structures": [],
+        },
+        "eloquence": {
+            "classification": "Sawaya eloquence grading",
+            "involved": [],
+            "distance_mm": 12.5,
+        },
+        "provenance": {
+            "atlas_name": "SRI24/TZO",
+            "atlas_version": "1.0",
+            "atlas_source": "https://www.nitrc.org/projects/sri24",
+            "atlas_licence": "CC-BY-SA",
+            "knowledge_versions": {"eloquence_map": 1, "aal_lobes": 1},
+            "segmentation_source": segmentation_source,
+            "segmentation_dir": str(segmentation_dir),
+            "code_revision": "deadbeef",
+            "generated_utc": "2026-08-18T00:00:00+00:00",
+        },
+    }
+
+
+def _write_report(
+    report_dir: Path,
+    case_id: str,
+    *,
+    segmentation_source: str,
+    segmentation_dir: Path,
+    markdown: bool = True,
+) -> None:
+    """Writes `<report_dir>/<case_id>.json` (and, optionally, `.md`) for one synthetic case."""
+    report_dir.mkdir(parents=True, exist_ok=True)
+    report = _make_report(case_id, segmentation_source, segmentation_dir)
+    (report_dir / f"{case_id}.json").write_text(json.dumps(report))
+    if markdown:
+        (report_dir / f"{case_id}.md").write_text(f"# Structured Report -- Case {case_id}\n")
+
+
 # --- /api/health -------------------------------------------------------
 
 
@@ -358,3 +432,179 @@ def test_bad_geometry_is_500_not_404(client: TestClient) -> None:
     assert response.status_code == 500
     detail = response.json()["detail"]
     assert "meta.json" in detail
+
+
+# --- /api/report/{case_id} --------------------------------------------------
+
+
+def test_report_ok_roundtrips_required_fields(
+    client: TestClient, backend: tuple[Path, Path], report_dir: Path
+) -> None:
+    prep_dir, eval_dir = backend
+    _write_report(
+        report_dir,
+        "CaseHigh",
+        segmentation_source="prediction",
+        segmentation_dir=eval_dir / "predictions",
+    )
+    response = client.get("/api/report/CaseHigh")
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body.keys()) == {
+        "report_version",
+        "case_id",
+        "generated_utc",
+        "disclaimer",
+        "not_claimed",
+        "burden",
+        "anatomy",
+        "eloquence",
+        "provenance",
+    }
+    assert body["case_id"] == "CaseHigh"
+    assert body["disclaimer"]
+    assert body["not_claimed"]
+    assert body["provenance"]["segmentation_source"] == "prediction"
+
+
+def test_report_unknown_case_is_404(client: TestClient, report_dir: Path) -> None:
+    response = client.get("/api/report/DoesNotExist")
+    assert response.status_code == 404
+
+
+def test_report_provenance_mismatch_is_500_and_names_both_dirs(
+    client: TestClient, backend: tuple[Path, Path], report_dir: Path, tmp_path: Path
+) -> None:
+    prep_dir, eval_dir = backend
+    wrong_dir = tmp_path / "some-other-eval" / "predictions"
+    _write_report(
+        report_dir, "CaseHigh", segmentation_source="prediction", segmentation_dir=wrong_dir
+    )
+
+    response = client.get("/api/report/CaseHigh")
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert str(wrong_dir.resolve()) in detail
+    assert str((eval_dir / "predictions").resolve()) in detail
+
+
+def test_report_from_ground_truth_labels_is_refused_even_though_it_is_self_consistent(
+    client: TestClient, backend: tuple[Path, Path], report_dir: Path
+) -> None:
+    """A ground-truth report is internally consistent with prep_dir and must STILL be refused.
+
+    Checking a label-source report against prep_dir passes -- that is where its
+    mask really came from. But every overlay this viewer draws comes from
+    predictions_dir, so serving it would describe a mask that is not on screen,
+    with every number in the panel correct about the wrong thing. Comparing
+    ground truth against a prediction is Phase 5's experiment, not something an
+    NVX_REPORT_DIR typo should turn on silently.
+    """
+    prep_dir, eval_dir = backend
+    _write_report(report_dir, "CaseGTOk", segmentation_source="label", segmentation_dir=prep_dir)
+
+    response = client.get("/api/report/CaseGTOk")
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert "ground-truth labels" in detail
+    assert str((eval_dir / "predictions").resolve()) in detail
+    assert "NVX_REPORT_DIR" in detail
+
+
+def test_report_malformed_json_is_500(client: TestClient, report_dir: Path) -> None:
+    report_dir.mkdir(parents=True, exist_ok=True)
+    (report_dir / "CaseBadJson.json").write_text("{not valid json")
+
+    response = client.get("/api/report/CaseBadJson")
+    assert response.status_code == 500
+    assert response.status_code != 200
+    detail = response.json()["detail"]
+    assert "CaseBadJson.json" in detail
+
+
+# --- /api/report/{case_id}/markdown -----------------------------------------
+
+
+def test_report_markdown_ok(
+    client: TestClient, backend: tuple[Path, Path], report_dir: Path
+) -> None:
+    prep_dir, eval_dir = backend
+    _write_report(
+        report_dir,
+        "CaseHigh",
+        segmentation_source="prediction",
+        segmentation_dir=eval_dir / "predictions",
+        markdown=True,
+    )
+    response = client.get("/api/report/CaseHigh/markdown")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert "CaseHigh" in response.text
+
+
+def test_report_markdown_missing_sibling_json_is_404(
+    client: TestClient, backend: tuple[Path, Path], report_dir: Path
+) -> None:
+    report_dir.mkdir(parents=True, exist_ok=True)
+    (report_dir / "CaseOrphanMd.md").write_text("# orphan\n")
+
+    response = client.get("/api/report/CaseOrphanMd/markdown")
+    assert response.status_code == 404
+
+
+def test_report_markdown_provenance_mismatch_is_500(
+    client: TestClient, backend: tuple[Path, Path], report_dir: Path, tmp_path: Path
+) -> None:
+    wrong_dir = tmp_path / "some-other-eval" / "predictions"
+    _write_report(
+        report_dir,
+        "CaseBadProv",
+        segmentation_source="prediction",
+        segmentation_dir=wrong_dir,
+        markdown=True,
+    )
+    response = client.get("/api/report/CaseBadProv/markdown")
+    assert response.status_code == 500
+
+
+# --- has_report / has_reports -----------------------------------------------
+
+
+def test_has_report_flag_in_cases_list_and_detail(
+    client: TestClient, backend: tuple[Path, Path], report_dir: Path
+) -> None:
+    prep_dir, eval_dir = backend
+    _write_report(
+        report_dir,
+        "CaseHigh",
+        segmentation_source="prediction",
+        segmentation_dir=eval_dir / "predictions",
+    )
+
+    cases = client.get("/api/cases").json()["cases"]
+    high = next(c for c in cases if c["case_id"] == "CaseHigh")
+    low = next(c for c in cases if c["case_id"] == "CaseLow")
+    assert high["has_report"] is True
+    assert low["has_report"] is False
+
+    assert client.get("/api/cases/CaseHigh").json()["has_report"] is True
+    assert client.get("/api/cases/CaseLow").json()["has_report"] is False
+
+
+def test_health_has_reports_false_then_true(
+    client: TestClient, backend: tuple[Path, Path], report_dir: Path
+) -> None:
+    prep_dir, eval_dir = backend
+    before = client.get("/api/health").json()
+    assert before["has_reports"] is False
+    assert before["report_dir"] == str(report_dir)
+
+    _write_report(
+        report_dir,
+        "CaseHigh",
+        segmentation_source="prediction",
+        segmentation_dir=eval_dir / "predictions",
+    )
+    after = client.get("/api/health").json()
+    assert after["has_reports"] is True

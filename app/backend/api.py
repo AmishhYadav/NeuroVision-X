@@ -14,9 +14,11 @@ try/except copied into every route.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -25,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import REPO_ROOT, get_settings
+from .config import REPO_ROOT, Settings, get_settings
 from .volumes import (
     MODALITIES,
     case_metrics,
@@ -72,6 +74,109 @@ def _binary_response(data: bytes, shape: tuple[int, int, int]) -> Response:
 router = APIRouter(prefix="/api")
 
 
+def _report_json_path(case_id: str, settings: Settings) -> Path:
+    """`<report_dir>/<case_id>.json` -- the one file every report route reads first."""
+    return settings.report_dir / f"{case_id}.json"
+
+
+def _has_report(case_id: str, settings: Settings) -> bool:
+    """Cheap existence check, used by `/cases`, `/cases/{case_id}` and `/health`."""
+    return _report_json_path(case_id, settings).exists()
+
+
+def _has_any_reports(settings: Settings) -> bool:
+    """Whether `report_dir` exists and holds at least one `*.json` report."""
+    return settings.report_dir.exists() and any(settings.report_dir.glob("*.json"))
+
+
+def _expected_segmentation_dir(settings: Settings, segmentation_source: str | None) -> Path:
+    """Which directory a `"prediction"` report's provenance must name.
+
+    Always `predictions_dir` -- the directory the demo's mask overlay is
+    actually read from. A `"label"` report never reaches this function; see
+    `_reject_ground_truth_report` for why it is refused outright rather than
+    checked against `prep_dir`.
+    """
+    return settings.predictions_dir.resolve()
+
+
+def _reject_ground_truth_report(path: Path, settings: Settings) -> None:
+    """Refuses a ground-truth-derived report, because the viewer displays a prediction.
+
+    Checking a `"label"` report against `prep_dir` proves only that the
+    report is internally consistent with where its mask came from -- and a
+    ground-truth report IS consistent with `prep_dir`, so that check passes
+    and the report is served. But every overlay this demo draws comes from
+    `predictions_dir`, so the panel would then describe the ground-truth mask
+    while the picture shows the model's. The structure list, the eloquent
+    involvement and every burden number would be right about a mask that is
+    not on screen, and nothing would fail.
+
+    That is the same failure the provenance guard exists to prevent, one
+    level up: it is not enough for a report to be self-consistent, it has to
+    describe the segmentation being displayed. Comparing ground truth against
+    a prediction is a real and wanted capability -- it is the whole of Phase
+    5 -- but it is a deliberate two-column feature, not something an
+    `NVX_REPORT_DIR` typo should turn on silently.
+    """
+    raise ValueError(
+        f"report {path} was generated from ground-truth labels "
+        "(provenance.segmentation_source='label'), but this viewer displays the prediction "
+        f"from {settings.predictions_dir.resolve()}. Serving it would describe a mask that is "
+        "not the one on screen. Point NVX_REPORT_DIR at a report directory generated from that "
+        "same prediction directory."
+    )
+
+
+def _load_verified_report(case_id: str, settings: Settings) -> dict[str, Any]:
+    """Reads one case's report JSON and checks it describes the segmentation being served.
+
+    See the module docstring and CLAUDE.md's "Three eval directories differ
+    only by suffix" note: `outputs/report_gt`, `outputs/report_baseline` and
+    `outputs/report_neurovision` are sibling directories that each hold a
+    complete, plausible report for every case, so a misconfigured
+    `NVX_REPORT_DIR` would silently show a reader a structure list the
+    picture on screen does not support.
+
+    Raises:
+        FileNotFoundError: No report file for this case -> 404 via the
+            registered handler.
+        json.JSONDecodeError: The file is not valid JSON -> 500.
+        ValueError: The report's provenance names a different segmentation
+            directory than the one this server displays -> 500.
+    """
+    path = _report_json_path(case_id, settings)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"no report at {path}; scripts/report.py has not been run for case {case_id!r}"
+        )
+    try:
+        report: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        # Re-raised with the path folded into the message -- json.loads has
+        # no way to know which file it was given, and a 500 with no path is
+        # not enough to find the broken file later.
+        raise json.JSONDecodeError(f"{path}: {exc.msg}", exc.doc, exc.pos) from exc
+
+    provenance = report.get("provenance", {})
+    source = provenance.get("segmentation_source")
+    if source == "label":
+        _reject_ground_truth_report(path, settings)
+
+    raw_dir = provenance.get("segmentation_dir")
+    report_seg_dir = Path(str(raw_dir)).resolve() if raw_dir else None
+    expected = _expected_segmentation_dir(settings, source)
+
+    if report_seg_dir != expected:
+        raise ValueError(
+            f"report {path} describes segmentation_source={source!r}, "
+            f"segmentation_dir={report_seg_dir}, but this server is configured to display "
+            f"segmentation from {expected}. This report describes a different segmentation "
+            "than the masks currently being displayed."
+        )
+    return report
+
+
 @router.get("/health")
 def get_health() -> dict[str, Any]:
     """Reports what the server can currently see, without ever raising.
@@ -94,6 +199,8 @@ def get_health() -> dict[str, Any]:
         "checkpoint_present": settings.checkpoint.exists(),
         "case_count": case_count,
         "has_metrics": settings.metrics_csv.exists(),
+        "report_dir": str(settings.report_dir),
+        "has_reports": _has_any_reports(settings),
     }
 
 
@@ -121,6 +228,7 @@ def get_cases() -> dict[str, Any]:
                 "dice": dice,
                 "has_label": meta.has_label,
                 "has_logits": meta.has_logits,
+                "has_report": _has_report(case_id, settings),
             }
         )
     return {"cases": cases}
@@ -146,7 +254,12 @@ def get_case(case_id: str) -> dict[str, Any]:
         )
         regions["label"] = region_voxel_counts(label, meta.spacing)
 
-    return {"meta": meta.to_json(), "metrics": metrics, "regions": regions}
+    return {
+        "meta": meta.to_json(),
+        "metrics": metrics,
+        "regions": regions,
+        "has_report": _has_report(case_id, settings),
+    }
 
 
 @router.get("/cases/{case_id}/volume/{modality}")
@@ -263,14 +376,57 @@ def get_case_profile(case_id: str) -> dict[str, Any]:
     return _compute_profile(case_id)
 
 
+@router.get("/report/{case_id}")
+def get_report(case_id: str) -> dict[str, Any]:
+    """Returns one case's Phase 4 structured report, unchanged, as JSON.
+
+    The report is read from `<settings.report_dir>/<case_id>.json` (written
+    by `scripts/report.py`) and returned exactly as written -- the
+    disclaimer, `not_claimed` block and provenance are required fields of
+    the artifact, not something this route is allowed to drop. See
+    `_load_verified_report` for the provenance guard that must pass first.
+    """
+    settings = get_settings()
+    return _load_verified_report(case_id, settings)
+
+
+@router.get("/report/{case_id}/markdown")
+def get_report_markdown(case_id: str) -> Response:
+    """Returns the rendered `<case_id>.md` report, after the same provenance guard as JSON.
+
+    The sibling JSON is read and verified FIRST -- a markdown file with no
+    JSON next to it (or one that fails the provenance guard) is unverifiable
+    text and is refused rather than served.
+    """
+    settings = get_settings()
+    _load_verified_report(case_id, settings)  # raises 404/500 exactly as the JSON route does
+
+    md_path = settings.report_dir / f"{case_id}.md"
+    if not md_path.exists():
+        raise FileNotFoundError(
+            f"no markdown report at {md_path}; scripts/report.py has not been run with "
+            f"markdown=true for case {case_id!r}"
+        )
+    return Response(
+        content=md_path.read_text(encoding="utf-8"),
+        media_type="text/markdown; charset=utf-8",
+    )
+
+
 def _register_exception_handlers(app: FastAPI) -> None:
     """Maps `volumes.py`'s exceptions onto HTTP responses, once for every route.
 
     `FileNotFoundError` and `KeyError` mean "the thing you asked for isn't
     there" -> 404. `ValueError` from `_crop_to_meta` means the saved
-    prediction and `meta.json` came from different preprocessing runs -- a
-    server-side data inconsistency the caller did nothing wrong to trigger,
-    so it is a 500 with the message intact rather than a 404.
+    prediction and `meta.json` came from different preprocessing runs, and
+    `ValueError` from `_load_verified_report` means a report's provenance
+    names a different segmentation than the one being displayed -- both are
+    server-side data inconsistencies the caller did nothing wrong to
+    trigger, so they are a 500 with the message intact rather than a 404.
+    `json.JSONDecodeError` (a malformed report file) is registered
+    separately, ahead of `ValueError`, because it IS a `ValueError` subclass
+    and would otherwise be caught by that handler first with a less specific
+    message.
     """
 
     @app.exception_handler(FileNotFoundError)
@@ -284,6 +440,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
         # that is already a plain sentence. Read the original arg instead.
         message = exc.args[0] if exc.args else str(exc)
         return JSONResponse(status_code=404, content={"detail": str(message)})
+
+    @app.exception_handler(json.JSONDecodeError)
+    async def _handle_bad_json(request: Request, exc: json.JSONDecodeError) -> JSONResponse:
+        return JSONResponse(status_code=500, content={"detail": f"malformed report JSON: {exc}"})
 
     @app.exception_handler(ValueError)
     async def _handle_bad_geometry(request: Request, exc: ValueError) -> JSONResponse:

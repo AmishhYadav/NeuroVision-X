@@ -47,6 +47,16 @@ class Settings:
             difference is imperceptible. The demo is a viewer, not a
             measuring instrument -- reported numbers still come from
             `scripts/evaluate.py` at 0.5.
+        report_dir: `scripts/report.py` output directory -- one
+            `<case_id>.json` (and, optionally, `<case_id>.md`) per case. It
+            must have been generated from the SAME segmentation the demo is
+            serving from `eval_dir`: `report.py`'s own provenance block
+            names the directory its segmentation came from, and
+            `api.get_report` refuses to serve a report whose provenance
+            names a different directory than `predictions_dir` (or
+            `prep_dir`, for a ground-truth report) -- see the "Three eval
+            directories differ only by suffix" note in CLAUDE.md, which this
+            guard exists to prevent from happening to reports too.
     """
 
     prep_dir: Path
@@ -56,6 +66,7 @@ class Settings:
     cache_dir: Path
     max_cases: int
     demo_overlap: float
+    report_dir: Path
 
     @property
     def predictions_dir(self) -> Path:
@@ -85,6 +96,10 @@ def get_settings() -> Settings:
         # exactly the failures the demo exists to show.
         max_cases=int(os.environ.get("NVX_MAX_CASES", "200")),
         demo_overlap=float(os.environ.get("NVX_DEMO_OVERLAP", "0.25")),
+        report_dir=_path_env("NVX_REPORT_DIR", "outputs/report_baseline/reports"),
     )
     settings.cache_dir.mkdir(parents=True, exist_ok=True)
+    # Unlike cache_dir, report_dir is NOT created here: a demo with no reports
+    # generated yet is a valid configuration, and /api/health and has_report
+    # are what report that honestly rather than a silently-created empty dir.
     return settings
