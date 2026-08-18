@@ -105,6 +105,20 @@ KNOWN_METRIC_DIRECTIONS: dict[str, bool] = {
     "loss": False,
     "aurc": False,
     "risk": False,
+    # Report-agreement metrics (Phase 5). Every one of these compares a
+    # prediction-derived report against the ground-truth-derived report for the
+    # same case, so "better" always means "closer to the ground-truth report".
+    # Signed errors are deliberately absent from this table and from the
+    # agreement CSV: a signed bias has no higher/lower-is-better direction at
+    # all (-5 is not better than +1), and giving it one here would let
+    # compare_models report a direction that does not exist.
+    "agree": True,
+    "jaccard": True,
+    "match": True,
+    "precision": True,
+    "recall": True,
+    "abserr": False,
+    "relerr": False,
 }
 
 
