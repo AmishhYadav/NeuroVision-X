@@ -1,0 +1,130 @@
+# Structure and tissue groups for the involvement layer (Phase 3b).
+#
+# WHAT THIS FILE IS. A committed, versioned, reviewable list saying which
+# SRI24/TZO structures and which tissue classes stand for four named
+# quantities: ventricular contact, cortical involvement, deep white-matter
+# involvement, and the tumour epicentre. Like knowledge/aal_lobes.yaml, it is
+# OUR OWN COMPILATION, not an atlas product: SRI24 ships structure names, it
+# does not ship these groupings. Every membership below is a judgement, and it
+# is in a file rather than in a function so that a reader who disagrees can
+# point at a line.
+#
+# WHAT THIS FILE IS NOT. It is not VASARI. See relationship_to_vasari below.
+# It is not a claim about function, deficit or prognosis. Nothing here says a
+# structure is destroyed, compressed or displaced -- every quantity computed
+# from this file is an OVERLAP WITH THE ATLAS POSITION of a structure in a
+# healthy template, and the report says exactly that. A tumour that pushes a
+# ventricle aside and a tumour that grows through it produce the same overlap
+# number, and this pipeline cannot distinguish them.
+
+version: 1
+atlas: SRI24/TZO (tzo116plus), 122 merged structures
+
+relationship_to_vasari:
+  # Checked 2026-08-17. The VASARI feature set (NCI Cancer Imaging Program) has
+  # features named "ependymal invasion" (F19), "cortical involvement" (F20) and
+  # "deep white matter invasion" (F21) that plainly overlap with the three
+  # groups below. The verbatim operational definitions and bin boundaries were
+  # NOT obtainable from any accessible secondary source, so this project does
+  # not claim equivalence with them, does not reuse the F-numbers as field
+  # names, and does not report a VASARI score.
+  #
+  # Claiming equivalence from feature NAMES alone would be the same
+  # unverified-assertion failure that produced this phase's anterior-posterior
+  # mirror error and its "130 structures" error.
+  status: approximate_and_unverified
+  claim: >
+    These fields are geometrically named quantities with the operational
+    definitions stated in this file. Their relationship to VASARI F19, F20 and
+    F21 is approximate and has not been verified against the primary NCI CIP
+    VASARI documentation.
+
+  # The reason to build this layer at all, and the reason it must never be
+  # presented as validated against expert reading: for two of these three
+  # features the human gold standard is barely reproducible.
+  inter_rater_evidence:
+    - feature: cortical involvement (VASARI F20)
+      kappa: 0.167
+      note: >
+        Inter-rater agreement between radiologists is close to chance. A
+        deterministic, published, re-runnable definition is therefore
+        genuinely useful -- but there is no stable expert reading for it to
+        agree with, so no agreement claim may be made.
+    - feature: deep white matter invasion (VASARI F21)
+      kappa: null
+      note: >
+        Documented in the structured-reporting literature as difficult to be
+        sure of on structural MRI. Same consequence as above.
+
+groups:
+  ventricles:
+    # Reported as "ventricular contact / overlap", never as "ependymal
+    # invasion": ependyma is a cell layer, it is not resolvable at 1 mm, and
+    # this measurement cannot see it. What is measured is overlap between the
+    # tumour mask and where the atlas places the ventricle.
+    label: ventricular overlap
+    definition: >
+      Fraction of the tumour mask lying inside the union of the structures
+      listed here, and fraction of each listed structure lying inside the
+      tumour mask. Contact is reported as a boolean at a stated minimum
+      overlap, never inferred from adjacency.
+    structures:
+      - LateralVentricle_L
+      - LateralVentricle_R
+      - ThirdVentricle_L
+      - ThirdVentricle_R
+    missing:
+      - term: fourth ventricle
+        reason: >
+          Not delineated as a separate structure in tzo116plus. A tumour
+          involving it will show as Pons / cerebellar involvement instead, so
+          the ventricular fraction UNDERSTATES posterior-fossa cases.
+
+  deep_white_matter:
+    # Named structures only. A distance-from-cortex heuristic was considered
+    # and rejected: it would invent a threshold this project cannot cite, and
+    # the resulting number would look exactly as authoritative as the
+    # structure-based one.
+    label: deep white-matter overlap
+    definition: >
+      Fraction of the tumour mask lying inside the union of the structures
+      listed here, and fraction of each listed structure lying inside the
+      tumour mask.
+    structures:
+      - CorpusCallosum
+      - Pons
+    missing:
+      - term: internal capsule
+        reason: >
+          Absent from tzo116plus -- the same coverage gap that
+          knowledge/eloquence_map.yaml already records. Deep white-matter
+          overlap is therefore a LOWER BOUND, and the report says so.
+      - term: corona radiata / centrum semiovale
+        reason: >
+          AAL parcellates grey matter; these have no structure in this
+          parcellation. Tumour there falls in the `unlabelled` row, which on
+          real data is roughly a third of a glioma.
+
+tissue:
+  # Tissue-class overlaps, from the atlas tissue map (tissues.nii), NOT from
+  # the parcellation. They are the tissue-level complement to the two
+  # structure groups above: the parcellation covers 1,053,253 of 1,451,706
+  # brain voxels, so a structure-only view silently drops white matter.
+  cortical: GM
+  white_matter: WM
+  csf: CSF
+
+epicentre:
+  # The single structure the tumour is centred on -- a location statement, not
+  # a claim about origin. A glioma's true origin is not recoverable from one
+  # timepoint, so the field is named `epicentre_structure` and is defined
+  # purely as "the structure at the centroid voxel".
+  definition: >
+    The atlas structure containing the centroid of the region mask. When the
+    centroid falls on an unlabelled voxel -- common, since AAL parcellates
+    grey matter and a glioma centroid frequently sits in white matter -- the
+    nearest labelled structure within `search_radius_mm` is reported and the
+    `epicentre_exact` flag is False. Beyond that radius the epicentre is
+    reported as `unlabelled` rather than guessed.
+  search_radius_mm: 10.0
+  side_from_midline: true
