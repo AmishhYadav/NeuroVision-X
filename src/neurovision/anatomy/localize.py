@@ -55,6 +55,8 @@ from neurovision.anatomy import burden
 from neurovision.anatomy.atlas import Atlas
 
 __all__ = [
+    "Classification",
+    "load_classification",
     "KnowledgeBase",
     "load_knowledge",
     "atlas_for_case",
@@ -88,6 +90,93 @@ _UNLABELLED_NAME = "unlabelled"
 
 
 @dataclass(frozen=True)
+class Classification:
+    """The eloquence map's own metadata, read WITHOUT an atlas.
+
+    Split out of `KnowledgeBase` so a consumer that only needs the published
+    classification's identity and citation -- `scripts/report.py`, which joins
+    already-written CSVs and never touches a volume -- does not have to load
+    the atlas to get them. `load_knowledge` calls `load_classification`, so
+    there is exactly ONE parser for these fields and the two paths cannot
+    drift apart.
+
+    Attributes:
+        name: `classification.name`, the NAME of the published system being
+            looked up (e.g. `"Sawaya eloquence grading"`). It is never a
+            computed verdict about a patient -- this project maps atlas
+            structures onto that source's list and nothing more.
+        evidence: `classification.eloquent_structures_verbatim`, the one
+            verbatim sentence backing every `eloquent` entry.
+        citation: `classification.primary_citation`, combined with
+            `classification.read_via` when present.
+        coverage_gaps: The `term` field of every `coverage_gaps` entry --
+            source terms with no representable structure in this parcellation.
+        near_eloquent_mm: `near_eloquent_rule.distance_mm`.
+        version: The file's own `version` field, recorded in report
+            provenance.
+    """
+
+    name: str
+    evidence: str
+    citation: str
+    coverage_gaps: tuple[str, ...]
+    near_eloquent_mm: float
+    version: int
+
+
+def load_classification(eloquence_path: str | Path) -> Classification:
+    """Reads the eloquence map's classification metadata, with no atlas required.
+
+    Args:
+        eloquence_path: Path to `knowledge/eloquence_map.yaml`.
+
+    Returns:
+        The parsed `Classification`.
+
+    Raises:
+        ValueError: If `classification.name`,
+            `classification.eloquent_structures_verbatim` or
+            `classification.primary_citation` is empty. The evidence sentence
+            especially: it is this project's substitute for the expert review
+            it does not have, so an artifact without it is exactly the
+            unauditable one the design forbids.
+    """
+    with open(eloquence_path, encoding="utf-8") as f:
+        doc = yaml.safe_load(f)
+
+    classification = doc["classification"]
+
+    name = str(classification["name"]).strip()
+    if not name:
+        raise ValueError(f"load_classification: {eloquence_path}'s classification.name is empty.")
+
+    evidence = str(classification["eloquent_structures_verbatim"]).strip()
+    if not evidence:
+        raise ValueError(
+            f"load_classification: {eloquence_path}'s "
+            "classification.eloquent_structures_verbatim is empty. This sentence is the "
+            "substitute for expert review and must be present."
+        )
+
+    primary_citation = str(classification["primary_citation"]).strip()
+    if not primary_citation:
+        raise ValueError(
+            f"load_classification: {eloquence_path}'s classification.primary_citation is empty."
+        )
+    read_via = str(classification.get("read_via", "")).strip()
+    citation = f"{primary_citation} (read via: {read_via})" if read_via else primary_citation
+
+    return Classification(
+        name=name,
+        evidence=evidence,
+        citation=citation,
+        coverage_gaps=tuple(str(gap["term"]) for gap in doc.get("coverage_gaps", [])),
+        near_eloquent_mm=float(doc["near_eloquent_rule"]["distance_mm"]),
+        version=int(doc["version"]),
+    )
+
+
+@dataclass(frozen=True)
 class KnowledgeBase:
     """The committed knowledge artifacts, loaded and validated against an atlas.
 
@@ -108,6 +197,8 @@ class KnowledgeBase:
             (`classification.eloquent_structures_verbatim`).
         citation: `classification.primary_citation` combined with
             `classification.read_via` when present.
+        classification_name: `classification.name` -- the name of the
+            published system, never a verdict about a patient.
         lobe: Structure name -> lobe, from the lobe map keyed on the
             structure's BASE name (its merged name with a trailing `_L`/`_R`
             stripped).
@@ -122,6 +213,7 @@ class KnowledgeBase:
     matched_term: dict[str, str]
     evidence: str
     citation: str
+    classification_name: str
     lobe: dict[str, str]
     coverage_gaps: tuple[str, ...]
     near_eloquent_mm: float
@@ -224,23 +316,10 @@ def load_knowledge(
         eloquence[name] = value
         matched_term[name] = entry.get("matched_term", "")
 
-    classification = elo_doc["classification"]
-    evidence = str(classification["eloquent_structures_verbatim"]).strip()
-    if not evidence:
-        raise ValueError(
-            f"load_knowledge: {eloquence_path}'s classification.eloquent_structures_verbatim "
-            "is empty. This sentence is the substitute for expert review and must be present."
-        )
-    primary_citation = str(classification["primary_citation"]).strip()
-    if not primary_citation:
-        raise ValueError(
-            f"load_knowledge: {eloquence_path}'s classification.primary_citation is empty."
-        )
-    read_via = str(classification.get("read_via", "")).strip()
-    citation = f"{primary_citation} (read via: {read_via})" if read_via else primary_citation
-
-    coverage_gaps = tuple(str(gap["term"]) for gap in elo_doc.get("coverage_gaps", []))
-    near_eloquent_mm = float(elo_doc["near_eloquent_rule"]["distance_mm"])
+    # Parsed by load_classification rather than inline, so scripts/report.py
+    # -- which needs these fields but has no reason to load an atlas -- reads
+    # them through exactly the same code path this does.
+    classification = load_classification(eloquence_path)
 
     lobe_by_base = lobe_doc["structures"]
     lobe: dict[str, str] = {}
@@ -258,17 +337,18 @@ def load_knowledge(
         "load_knowledge: loaded %d eloquent / %d unclassified structures, %d coverage gaps.",
         sum(1 for v in eloquence.values() if v == "eloquent"),
         sum(1 for v in eloquence.values() if v != "eloquent"),
-        len(coverage_gaps),
+        len(classification.coverage_gaps),
     )
 
     return KnowledgeBase(
         eloquence=eloquence,
         matched_term=matched_term,
-        evidence=evidence,
-        citation=citation,
+        evidence=classification.evidence,
+        citation=classification.citation,
+        classification_name=classification.name,
         lobe=lobe,
-        coverage_gaps=coverage_gaps,
-        near_eloquent_mm=near_eloquent_mm,
+        coverage_gaps=classification.coverage_gaps,
+        near_eloquent_mm=classification.near_eloquent_mm,
     )
 
 

@@ -23,6 +23,7 @@ from neurovision.anatomy.localize import (
     atlas_for_case,
     distance_to_eloquent,
     eloquent_union_mask,
+    load_classification,
     load_knowledge,
     localize_case,
     localize_mask,
@@ -118,6 +119,7 @@ def _write_eloquence_yaml(
     doc = {
         "version": 1,
         "classification": {
+            "name": "Test eloquence grading",
             "primary_citation": "Test R. A test classification. Test Journal. 1998.",
             "eloquent_structures_verbatim": "Eloquent locations are the motor and speech areas.",
             "read_via": "Secondary Source S. Open access review. 2013.",
@@ -371,6 +373,75 @@ def test_atlas_for_case_raises_on_cropped_shape_mismatch() -> None:
     }
     with pytest.raises(ValueError, match="cropped_shape"):
         atlas_for_case(atlas, meta, cropped=True)
+
+
+# --------------------------------------------------------------------------- #
+# load_classification -- the atlas-free half of the knowledge base
+# --------------------------------------------------------------------------- #
+
+
+def test_load_classification_needs_no_atlas_and_reads_every_field(tmp_path: Path) -> None:
+    """scripts/report.py joins already-written CSVs; making it load an atlas for a citation
+    string would cost minutes per run for metadata that is pure file content."""
+    elo_path = tmp_path / "eloquence_map.yaml"
+    _write_eloquence_yaml(
+        elo_path,
+        [{"structure_name": "Precentral_L", "eloquence": "eloquent", "matched_term": "motor"}],
+        coverage_gaps=[{"term": "internal capsule"}, {"term": "dentate nucleus"}],
+        distance_mm=7.5,
+    )
+
+    classification = load_classification(elo_path)
+
+    assert classification.name == "Test eloquence grading"
+    assert classification.evidence.startswith("Eloquent locations")
+    # read_via is present in the fixture, so it must be folded into the citation --
+    # this project did not read the primary source and the artifact has to say so.
+    assert "read via" in classification.citation
+    assert classification.coverage_gaps == ("internal capsule", "dentate nucleus")
+    assert classification.near_eloquent_mm == 7.5
+    assert classification.version == 1
+
+
+def test_load_knowledge_and_load_classification_cannot_disagree(tmp_path: Path) -> None:
+    """One parser, two callers. If these ever drift, a report's citation stops matching the
+    one the localisation run validated against the atlas."""
+    atlas = _make_atlas()
+    elo_path = tmp_path / "eloquence_map.yaml"
+    lobe_path = tmp_path / "aal_lobes.yaml"
+    _write_eloquence_yaml(
+        elo_path,
+        [{"structure_name": "StructA_L", "eloquence": "eloquent", "matched_term": "motor"}],
+        distance_mm=12.0,
+    )
+    _write_lobe_yaml(lobe_path, _FULL_LOBE_MAP)
+
+    knowledge = load_knowledge(elo_path, lobe_path, atlas)
+    classification = load_classification(elo_path)
+
+    assert knowledge.classification_name == classification.name
+    assert knowledge.evidence == classification.evidence
+    assert knowledge.citation == classification.citation
+    assert knowledge.coverage_gaps == classification.coverage_gaps
+    assert knowledge.near_eloquent_mm == classification.near_eloquent_mm
+
+
+@pytest.mark.parametrize("field", ["name", "eloquent_structures_verbatim", "primary_citation"])
+def test_load_classification_raises_on_an_empty_required_field(tmp_path: Path, field: str) -> None:
+    """The evidence sentence is this project's substitute for the expert review it does not
+    have (see docs/research/interpretable_pipeline_plan.md Finding E), so an empty one is a
+    hard failure rather than an empty string flowing into a report."""
+    elo_path = tmp_path / "eloquence_map.yaml"
+    _write_eloquence_yaml(
+        elo_path,
+        [{"structure_name": "Precentral_L", "eloquence": "eloquent", "matched_term": "motor"}],
+    )
+    doc = yaml.safe_load(elo_path.read_text())
+    doc["classification"][field] = "   "
+    elo_path.write_text(yaml.safe_dump(doc))
+
+    with pytest.raises(ValueError, match=field if field != "name" else "classification.name"):
+        load_classification(elo_path)
 
 
 # --------------------------------------------------------------------------- #

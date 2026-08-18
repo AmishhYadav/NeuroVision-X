@@ -111,6 +111,7 @@ def _write_eloquence_yaml(path: Path, *, near_eloquent_mm: float = 10.0) -> None
     doc = {
         "version": 1,
         "classification": {
+            "name": "Test eloquence grading",
             "primary_citation": "Test R. A test classification. Test Journal. 1998.",
             "eloquent_structures_verbatim": "Eloquent locations are the motor cortex.",
         },
