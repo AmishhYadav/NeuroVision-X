@@ -89,3 +89,21 @@ localize:
 
   out_name: anatomy.csv
   summary_name: anatomy_summary.csv
+
+report:
+  # Directory holding burden.csv + burden_config.yaml, written by scripts/burden.py.
+  burden_dir: null
+  # Directory holding anatomy.csv, anatomy_summary.csv and localize_config.yaml,
+  # written by scripts/localize.py.
+  localize_dir: null
+  # Read for `version` (recorded in provenance) and, for the eloquence map,
+  # the classification name / evidence sentence / citation / coverage gaps.
+  eloquence_map: knowledge/eloquence_map.yaml
+  lobe_map: knowledge/aal_lobes.yaml
+  # null -> every case present in BOTH input tables.
+  cases: null
+  # How many structure rows, sorted by frac_of_structure descending, reach the
+  # report's anatomy block.
+  top_n: 10
+  markdown: true
+  out_subdir: reports
