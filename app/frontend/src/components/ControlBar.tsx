@@ -1,4 +1,4 @@
-import { Power } from "lucide-react";
+import { FileText, Power } from "lucide-react";
 import type { Modality } from "../api";
 import type { OverlayMode } from "../lib/render";
 
@@ -16,6 +16,9 @@ interface ControlBarProps {
   hasLogits: boolean;
   showUncertainty: boolean;
   onToggleUncertainty: () => void;
+  hasReport: boolean;
+  reportOpen: boolean;
+  onToggleReport: () => void;
 }
 
 // Visual left-to-right order shown in the control bar; keys 1-4 map to this
@@ -53,6 +56,9 @@ export function ControlBar({
   hasLogits,
   showUncertainty,
   onToggleUncertainty,
+  hasReport,
+  reportOpen,
+  onToggleReport,
 }: ControlBarProps) {
   return (
     // Wraps to a second row on narrow screens rather than clipping. It used to
@@ -171,6 +177,31 @@ export function ControlBar({
       {!hasLogits && (
         <span className="ml-2 hidden shrink-0 font-mono text-[11px] text-text-dim sm:inline">
           No saved logits for this case.
+        </span>
+      )}
+
+      <Divider />
+
+      <button
+        type="button"
+        disabled={!hasReport}
+        onClick={onToggleReport}
+        aria-pressed={reportOpen}
+        title={!hasReport ? "No report has been generated for this case." : undefined}
+        className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+          !hasReport
+            ? "cursor-not-allowed text-text-dim"
+            : reportOpen
+              ? "bg-surface-raised text-text-primary"
+              : "text-text-secondary hover:text-text-primary"
+        }`}
+      >
+        <FileText size={13} aria-hidden="true" />
+        Report
+      </button>
+      {!hasReport && (
+        <span className="ml-2 hidden shrink-0 font-mono text-[11px] text-text-dim sm:inline">
+          No report has been generated for this case.
         </span>
       )}
     </div>

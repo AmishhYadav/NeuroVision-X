@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import {
+  ApiError,
   ApiUnreachableError,
+  fetchReport,
   getCases,
   getHealth,
   type CaseSummary,
   type HealthResponse,
   type Modality,
   type Plane,
+  type ReportResponse,
 } from "./api";
 import type { OverlayMode } from "./lib/render";
 import { useCaseData } from "./hooks/useCaseData";
@@ -18,6 +21,7 @@ import { SliceRibbon } from "./components/SliceRibbon";
 import { MetricsPanel } from "./components/MetricsPanel";
 import { Legend } from "./components/Legend";
 import { ControlBar, MODALITY_ORDER } from "./components/ControlBar";
+import { ReportPanel, type ReportPanelStatus } from "./components/ReportPanel";
 
 const UNCERTAINTY_OPACITY = 0.6;
 const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 };
@@ -47,6 +51,11 @@ export default function App() {
   const [singlePlane, setSinglePlane] = useState<Plane>("axial");
   const [focusedPlane, setFocusedPlane] = useState<Plane>("axial");
   const [sliceIndices, setSliceIndices] = useState<Record<Plane, number>>(ZERO_PLANES);
+
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportStatus, setReportStatus] = useState<ReportPanelStatus>("loading");
+  const [report, setReport] = useState<ReportResponse | null>(null);
+  const [reportErrorMessage, setReportErrorMessage] = useState<string | null>(null);
 
   const { layout, isPanelWidth } = useResponsiveLayout();
   const caseData = useCaseData(selectedCaseId);
@@ -102,6 +111,56 @@ export default function App() {
     if (!caseData.detail.meta.has_logits) setShowUncertainty(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseData.detail?.meta.case_id]);
+
+  // The report panel is per-case data fetched from a different endpoint than
+  // caseData, so it needs its own reset: closing it (rather than leaving it
+  // open showing the PREVIOUS case's report under the new case's header) and
+  // clearing any fetched report/error so the lazy-fetch effect below treats
+  // the next open as a fresh request.
+  useEffect(() => {
+    setReportOpen(false);
+    setReport(null);
+    setReportStatus("loading");
+    setReportErrorMessage(null);
+  }, [selectedCaseId]);
+
+  // Fetch the report lazily on first open, not on every case selection - a
+  // report costs a real request and most case switches never open the panel.
+  // Guarded on `report === null` so a fetch that already succeeded is never
+  // re-requested by closing and re-opening the panel; a fetch that failed
+  // (not_found / server_error / unreachable) leaves `report` null and IS
+  // retried on the next open, which is the only way to recover from
+  // "backend was down, started it, reopened the panel" without a page reload.
+  useEffect(() => {
+    if (!reportOpen || !selectedCaseId || report !== null) return;
+    const controller = new AbortController();
+    setReportStatus("loading");
+    (async () => {
+      try {
+        const r = await fetchReport(selectedCaseId, controller.signal);
+        if (controller.signal.aborted) return;
+        setReport(r);
+        setReportStatus("loaded");
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (err instanceof ApiUnreachableError) {
+          setReportStatus("unreachable");
+        } else if (err instanceof ApiError && err.status === 404) {
+          setReportErrorMessage(err.message);
+          setReportStatus("not_found");
+        } else if (err instanceof ApiError) {
+          setReportErrorMessage(err.message);
+          setReportStatus("server_error");
+        } else {
+          setReportErrorMessage(err instanceof Error ? err.message : "Failed to load report.");
+          setReportStatus("invalid");
+        }
+      }
+    })();
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportOpen, selectedCaseId]);
 
   // Global slice-stepping and modality shortcuts, scoped to the last-focused viewport.
   useEffect(() => {
@@ -178,6 +237,7 @@ export default function App() {
   const hasLabel = detail?.meta.has_label ?? false;
   const hasLogits = detail?.meta.has_logits ?? false;
   const hasPrediction = detail?.meta.has_prediction ?? false;
+  const hasReport = detail?.has_report ?? false;
   const uncertaintyKind = caseData.uncertainty?.kind ?? null;
 
   // Fraction of this case's artifacts that have arrived. Counted against what
@@ -344,6 +404,16 @@ export default function App() {
             />
           </div>
         )}
+
+        <ReportPanel
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+          layout={layout}
+          caseId={selectedCaseId}
+          status={reportStatus}
+          report={report}
+          errorMessage={reportErrorMessage}
+        />
       </div>
 
       <ControlBar
@@ -360,6 +430,9 @@ export default function App() {
         hasLogits={hasLogits}
         showUncertainty={showUncertainty}
         onToggleUncertainty={() => setShowUncertainty((v) => !v)}
+        hasReport={hasReport}
+        reportOpen={reportOpen}
+        onToggleReport={() => setReportOpen((v) => !v)}
       />
     </div>
   );

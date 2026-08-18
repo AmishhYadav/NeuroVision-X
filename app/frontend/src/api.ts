@@ -6,6 +6,11 @@
 // back to a caller-supplied shape when the header is missing (a proxy can
 // strip custom headers).
 
+// `validateReport` is a runtime import; `lib/report.ts` only imports
+// `ReportResponse` (and friends) from this file as a `type`, which is erased
+// at compile time - so this is not a runtime circular dependency.
+import { validateReport } from "./lib/report";
+
 export type Modality = "t1" | "t1ce" | "t2" | "flair";
 export type MaskSource = "prediction" | "label";
 export type Plane = "sagittal" | "coronal" | "axial";
@@ -19,6 +24,8 @@ export interface HealthResponse {
   checkpoint_present: boolean;
   case_count: number;
   has_metrics: boolean;
+  report_dir: string;
+  has_reports: boolean;
 }
 
 export interface CaseSummary {
@@ -27,6 +34,7 @@ export interface CaseSummary {
   dice: Record<RegionKey, number> | null;
   has_label: boolean;
   has_logits: boolean;
+  has_report: boolean;
 }
 
 export interface CasesResponse {
@@ -68,6 +76,7 @@ export interface CaseDetail {
   meta: CaseMeta;
   metrics: CaseMetrics | null;
   regions: CaseRegions;
+  has_report: boolean;
 }
 
 export interface VolumeBuffer {
@@ -99,6 +108,94 @@ export interface ProfilePlaneData {
 export interface CaseProfile {
   case_id: string;
   planes: Record<Plane, ProfilePlaneData>;
+}
+
+// --------------------------------------------------------------------- //
+// Phase 4 structured report - mirrors neurovision.reporting.report.build_report
+// field-for-field. See src/lib/report.ts for formatting/validation logic;
+// this file only names the shape the server actually sends.
+// --------------------------------------------------------------------- //
+
+/** A flat burden sub-block: raw measurement name -> value, exactly as `burden_profile` emits it. */
+export type BurdenValue = number | string | boolean | null;
+export type BurdenBlock = Record<string, BurdenValue>;
+
+export interface ReportBurden {
+  volumes: BurdenBlock;
+  fractions: BurdenBlock;
+  shape: BurdenBlock;
+  multifocality: BurdenBlock;
+  laterality: BurdenBlock;
+  centroid: BurdenBlock;
+  other: BurdenBlock;
+}
+
+export interface AnatomyStructureRow {
+  region: string | null;
+  structure: string;
+  laterality: string | null;
+  lobe: string | null;
+  eloquence: string | null;
+  matched_term: string | null;
+  n_voxels: number | null;
+  volume_mm3: number | null;
+  frac_of_tumour: number | null;
+  frac_of_structure: number | null;
+}
+
+export interface ReportAnatomy {
+  atlas: { name: string; version: string };
+  caveat: string;
+  coverage_line: string;
+  region: string | null;
+  /** Already sorted by frac_of_structure descending and truncated to top_n server-side - render in order received. */
+  structures: AnatomyStructureRow[];
+  n_structures_involved: number | null;
+  frac_unlabelled: number | null;
+}
+
+export interface EloquenceInvolvedRow {
+  structure: string;
+  laterality: string | null;
+  frac_of_tumour: number | null;
+  frac_of_structure: number | null;
+}
+
+export interface ReportEloquence {
+  classification: string;
+  citation: string;
+  evidence: string;
+  source_owns_claim: string;
+  involved: EloquenceInvolvedRow[];
+  distance_mm: number | null;
+  near_eloquent_threshold_mm: number;
+  near_eloquent: boolean;
+  coverage_gaps: string[];
+}
+
+export interface ReportProvenance {
+  atlas_name: string;
+  atlas_version: string;
+  atlas_source: string;
+  atlas_licence: string;
+  knowledge_versions: Record<string, number>;
+  segmentation_source: "prediction" | "label";
+  segmentation_dir: string | null;
+  code_revision: string | null;
+  generated_utc: string;
+}
+
+export interface ReportResponse {
+  report_version: number;
+  case_id: string;
+  generated_utc: string;
+  disclaimer: string;
+  /** (what this artifact refuses to claim, why) pairs. */
+  not_claimed: [string, string][];
+  burden: ReportBurden;
+  anatomy: ReportAnatomy;
+  eloquence: ReportEloquence;
+  provenance: ReportProvenance;
 }
 
 const API_BASE = "/api";
@@ -248,4 +345,41 @@ export async function getUncertainty(
 
 export function getProfile(caseId: string, signal?: AbortSignal): Promise<CaseProfile> {
   return getJson<CaseProfile>(`/cases/${encodeURIComponent(caseId)}/profile`, signal);
+}
+
+/**
+ * Fetches one case's Phase 4 structured report and validates its shape.
+ *
+ * Deliberately does not reuse `getJson`: on a 404 or 500 the backend's body
+ * carries a `detail` message worth showing verbatim - e.g. the provenance
+ * guard's 500 names both the report's own segmentation directory and the one
+ * this server is configured to display, which is exactly what a reader needs
+ * to fix a misconfigured `NVX_REPORT_DIR`. `getJson` only ever builds a
+ * generic "<status> <statusText> on <path>" message from the response line,
+ * which would throw that detail away.
+ */
+export async function fetchReport(caseId: string, signal?: AbortSignal): Promise<ReportResponse> {
+  const path = `/report/${encodeURIComponent(caseId)}`;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (!res.ok) {
+    if (GATEWAY_DOWN.has(res.status)) throw new ApiUnreachableError();
+    let detail: string | undefined;
+    try {
+      const body = (await res.json()) as unknown;
+      if (body && typeof body === "object" && typeof (body as { detail?: unknown }).detail === "string") {
+        detail = (body as { detail: string }).detail;
+      }
+    } catch {
+      // Body wasn't JSON (or was empty) - fall through to the generic message.
+    }
+    throw new ApiError(res.status, detail ?? `${res.status} ${res.statusText} on ${path}`);
+  }
+  const raw = (await res.json()) as unknown;
+  return validateReport(raw);
 }
