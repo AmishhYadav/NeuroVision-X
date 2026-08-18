@@ -47,6 +47,8 @@ run_localize = localize_script.run_localize
 load_atlas = localize_script.load_atlas
 load_knowledge = localize_script.load_knowledge
 eloquent_union_mask = localize_script.eloquent_union_mask
+resolve_involvement = localize_script.resolve_involvement
+load_involvement_groups = localize_script.load_involvement_groups
 
 _CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
 
@@ -103,7 +105,17 @@ def _build_atlas_dir(root: Path) -> None:
         "1 Precentral_L 0 0 0 0\n2 Precentral_R 0 0 0 0\n3 Frontal_L 0 0 0 0\n"
     )
 
+    # Real tissue codes (CSF=1, GM=2, WM=3, matching configs/anatomy/sri24.yaml's
+    # defaults, which _compose_cfg does not override), placed under the
+    # structures they anatomically belong to: grey matter under the two
+    # Precentral (motor cortex) boxes, white matter under Frontal_L. Left
+    # all-zero ("outside_tissue") everywhere else. Was previously all-zero,
+    # which made every tissue_overlap fraction trivially NaN/0 -- no existing
+    # test in this file asserts anything about the tissue array's content.
     tissue = np.zeros(ATLAS_SHAPE, dtype=np.uint8)
+    tissue[_PRECENTRAL_L_SLICE] = 2  # GM
+    tissue[_PRECENTRAL_R_SLICE] = 2  # GM
+    tissue[_FRONTAL_L_SLICE] = 3  # WM
     _write_nifti(root / "tissues.nii", tissue, IDENTITY_AFFINE)
 
 
@@ -131,6 +143,36 @@ def _write_eloquence_yaml(path: Path, *, near_eloquent_mm: float = 10.0) -> None
                 "matched_term": "motor cortex",
             },
         ],
+    }
+    path.write_text(yaml.safe_dump(doc))
+
+
+def _write_involvement_yaml(
+    path: Path,
+    *,
+    ventricle_structures: list[str],
+    deep_wm_structures: list[str],
+    search_radius_mm: float = 10.0,
+    version: int = 1,
+) -> None:
+    """A synthetic, schema-valid stand-in for knowledge/involvement_groups.yaml.
+
+    Names ONLY structures that exist in the synthetic atlas built by
+    `_build_atlas_dir` (Precentral_L, Precentral_R, Frontal_L) -- never the
+    real committed knowledge file and never the real SRI24 structure names.
+    """
+    doc = {
+        "version": version,
+        "groups": {
+            "ventricles": {"structures": ventricle_structures, "missing": []},
+            "deep_white_matter": {"structures": deep_wm_structures, "missing": []},
+        },
+        "tissue": {"cortical": "GM", "white_matter": "WM", "csf": "CSF"},
+        "epicentre": {"search_radius_mm": search_radius_mm},
+        "relationship_to_vasari": {
+            "status": "approximate_and_unverified",
+            "claim": "Test-only synthetic involvement groups; not validated against VASARI.",
+        },
     }
     path.write_text(yaml.safe_dump(doc))
 
@@ -262,6 +304,8 @@ def _compose_cfg(
     eval_dir: Path | None = None,
     split: str = "test",
     min_frac: float | None = None,
+    involvement_path: Path | None = None,
+    omit_involvement_key: bool = False,
 ):
     """Composes the real Hydra config, then points atlas/knowledge fields at tmp_path fixtures.
 
@@ -300,6 +344,21 @@ def _compose_cfg(
     cfg.analysis.localize.lobe_map = str(lobe_path)
     if min_frac is not None:
         cfg.analysis.localize.min_frac = min_frac
+
+    # The real composed default (configs/analysis/default.yaml) has
+    # involvement.enabled: true with groups_map pointing at the real,
+    # committed knowledge/involvement_groups.yaml, which names real SRI24
+    # structures absent from this synthetic 3-structure atlas -- so every
+    # test must explicitly say what it wants here, never inherit the
+    # production default. `omit_involvement_key` simulates an OLDER config
+    # composed before the `involvement` key existed at all.
+    if omit_involvement_key:
+        del cfg.analysis.localize["involvement"]
+    elif involvement_path is not None:
+        cfg.analysis.localize.involvement.enabled = True
+        cfg.analysis.localize.involvement.groups_map = str(involvement_path)
+    else:
+        cfg.analysis.localize.involvement.enabled = False
 
     return cfg
 
@@ -1149,3 +1208,295 @@ def test_log_sanity_summary_reports_retained_fraction_and_low_count(
     # median([0.95, 0.2]) == 0.575; exactly one row (0.2) is below 0.5.
     assert "frac_of_tumour_retained=0.575" in message
     assert "1 case(s) below" in message
+
+
+# ---------------------------------------------------------------------------
+# 15. Phase 3b involvement layer, wired into localize_one / run_localize.
+#
+# The real composed default has involvement.enabled: true pointing at the
+# real, committed knowledge/involvement_groups.yaml, whose structure names
+# (LateralVentricle_L, CorpusCallosum, ...) do not exist in the tiny
+# synthetic atlas every other test in this file uses. `_compose_cfg` was
+# extended (not replaced) so every earlier test explicitly disables the
+# layer via the new `involvement_path=None` default -- see its docstring.
+# ---------------------------------------------------------------------------
+
+_INVOLVEMENT_BOX = (slice(32, 38), slice(32, 38), slice(16, 22))  # entirely inside Frontal_L
+
+
+def _write_involvement_case(tmp_path: Path, case_id: str) -> tuple[Path, Path, Path]:
+    """A single WT box entirely inside Frontal_L (tissue=WM there, see `_build_atlas_dir`),
+    nowhere near the ventricle group (Precentral_L) -- chosen so every
+    `involvement_profile` field is hand-computable: the box contributes its
+    full voxel count to deep-white-matter overlap and zero to ventricle
+    overlap, its tissue is entirely white matter, and its centroid lands
+    (after round-half-to-even) exactly inside Frontal_L, giving an EXACT
+    epicentre at 0.0 mm.
+
+    Returns:
+        `(prep_dir, splits_path, eval_dir)`.
+    """
+    prep_dir = tmp_path / f"prep_{case_id}"
+    case_dir = ensure_dir(prep_dir / case_id)
+    _write_meta(case_dir, case_id)
+
+    array = np.zeros(ATLAS_SHAPE, dtype=np.uint8)
+    array[_INVOLVEMENT_BOX] = 2  # ED -> completes WT via region_mask
+    eval_dir = tmp_path / f"eval_{case_id}"
+    predictions_dir = ensure_dir(eval_dir / "predictions")
+    np.save(predictions_dir / f"{case_id}.npy", array)
+
+    splits_path = tmp_path / f"splits_{case_id}.yaml"
+    _write_splits(splits_path, [case_id])
+    return prep_dir, splits_path, eval_dir
+
+
+def test_involvement_columns_hand_computed_when_enabled(tmp_path: Path) -> None:
+    atlas_root, eloq_path, lobe_path = _build_knowledge_fixtures(tmp_path)
+    involvement_path = tmp_path / "involvement_groups.yaml"
+    _write_involvement_yaml(
+        involvement_path,
+        ventricle_structures=["Precentral_L"],
+        deep_wm_structures=["Frontal_L"],
+    )
+    case_id = "INVOLVE"
+    prep_dir, splits_path, eval_dir = _write_involvement_case(tmp_path, case_id)
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        output_dir,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="prediction",
+        eval_dir=eval_dir,
+        involvement_path=involvement_path,
+    )
+
+    _anatomy_csv, summary_csv = run_localize(cfg)
+    summary = pd.read_csv(summary_csv)
+    assert len(summary) == 1
+    row = summary.iloc[0]
+
+    n_voxels = 6 * 6 * 6  # the involvement box, 216 voxels at 1mm^3 spacing
+    frontal_l_voxels = 30 * 30 * 15  # _FRONTAL_L_SLICE, 13500
+    precentral_l_voxels = 19 * 10 * 10  # _PRECENTRAL_L_SLICE, 1900
+
+    assert row["deep_wm_overlap_mm3"] == pytest.approx(float(n_voxels))
+    assert row["deep_wm_frac_of_tumour"] == pytest.approx(1.0)
+    assert row["deep_wm_frac_of_group"] == pytest.approx(n_voxels / frontal_l_voxels)
+    assert bool(row["deep_wm_contact"]) is True  # 216 mm3 >= min_overlap_mm3 (50.0)
+
+    assert row["ventricle_overlap_mm3"] == pytest.approx(0.0)
+    assert row["ventricle_frac_of_tumour"] == pytest.approx(0.0)
+    assert row["ventricle_frac_of_group"] == pytest.approx(0.0 / precentral_l_voxels)
+    assert bool(row["ventricle_contact"]) is False
+
+    # The box's tissue is entirely WM (see _build_atlas_dir), so the four
+    # tissue fractions sum to 1.0 with all of it in white_matter.
+    assert row["white_matter_frac_of_tumour"] == pytest.approx(1.0)
+    assert row["cortical_frac_of_tumour"] == pytest.approx(0.0)
+    assert row["csf_frac_of_tumour"] == pytest.approx(0.0)
+    assert row["outside_tissue_frac_of_tumour"] == pytest.approx(0.0)
+
+    assert row["epicentre_structure"] == "Frontal_L"
+    assert bool(row["epicentre_exact"]) is True
+    assert row["epicentre_distance_mm"] == pytest.approx(0.0)
+    assert row["epicentre_laterality"] == "L"
+    assert row["epicentre_side"] == "right"
+    assert row["epicentre_lobe"] == "frontal"
+
+
+def test_involvement_disabled_no_columns_and_enabling_is_additive_only(tmp_path: Path) -> None:
+    atlas_root, eloq_path, lobe_path = _build_knowledge_fixtures(tmp_path)
+    involvement_path = tmp_path / "involvement_groups.yaml"
+    _write_involvement_yaml(
+        involvement_path,
+        ventricle_structures=["Precentral_L"],
+        deep_wm_structures=["Frontal_L"],
+    )
+    prep_dir, splits_path, eval_dir = _standard_split(tmp_path)
+
+    out_off = tmp_path / "out_off"
+    cfg_off = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        out_off,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="prediction",
+        eval_dir=eval_dir,
+    )
+    anatomy_off, summary_off = run_localize(cfg_off)
+
+    out_on = tmp_path / "out_on"
+    cfg_on = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        out_on,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="prediction",
+        eval_dir=eval_dir,
+        involvement_path=involvement_path,
+    )
+    anatomy_on, summary_on = run_localize(cfg_on)
+
+    df_off = pd.read_csv(summary_off)
+    df_on = pd.read_csv(summary_on)
+
+    involvement_columns = {
+        "ventricle_overlap_mm3",
+        "ventricle_frac_of_tumour",
+        "ventricle_frac_of_group",
+        "ventricle_contact",
+        "deep_wm_overlap_mm3",
+        "deep_wm_frac_of_tumour",
+        "deep_wm_frac_of_group",
+        "deep_wm_contact",
+        "cortical_frac_of_tumour",
+        "white_matter_frac_of_tumour",
+        "csf_frac_of_tumour",
+        "outside_tissue_frac_of_tumour",
+        "epicentre_structure",
+        "epicentre_exact",
+        "epicentre_distance_mm",
+        "epicentre_laterality",
+        "epicentre_side",
+        "epicentre_lobe",
+    }
+    assert involvement_columns.isdisjoint(df_off.columns)
+    assert involvement_columns.issubset(df_on.columns)
+
+    # Additive-only: every column the disabled run wrote has an IDENTICAL
+    # value in the enabled run, aligned by case_id -- same approach as
+    # tests/test_evaluate_script.py's boundary-metrics additive-only check.
+    shared_columns = [c for c in df_off.columns if c in df_on.columns]
+    left = df_off[shared_columns].sort_values("case_id").reset_index(drop=True)
+    right = df_on[shared_columns].sort_values("case_id").reset_index(drop=True)
+    pd.testing.assert_frame_equal(left, right)
+
+    # anatomy.csv (the per-structure table) is untouched by this layer either way.
+    assert anatomy_off.read_bytes() == anatomy_on.read_bytes()
+
+
+def test_missing_involvement_key_runs_with_layer_off(tmp_path: Path) -> None:
+    atlas_root, eloq_path, lobe_path = _build_knowledge_fixtures(tmp_path)
+    prep_dir, splits_path, _eval_dir = _standard_split(tmp_path)
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        output_dir,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="label",
+        omit_involvement_key=True,
+    )
+    assert "involvement" not in cfg.analysis.localize
+    assert resolve_involvement(cfg.analysis.localize) is None
+
+    _anatomy_csv, summary_csv = run_localize(cfg)
+    summary = pd.read_csv(summary_csv)
+    assert "ventricle_contact" not in summary.columns
+
+
+def test_localize_config_yaml_records_involvement_settings_and_version(tmp_path: Path) -> None:
+    atlas_root, eloq_path, lobe_path = _build_knowledge_fixtures(tmp_path)
+    involvement_path = tmp_path / "involvement_groups.yaml"
+    _write_involvement_yaml(
+        involvement_path,
+        ventricle_structures=["Precentral_L"],
+        deep_wm_structures=["Frontal_L"],
+        version=7,
+    )
+    prep_dir, splits_path, eval_dir = _standard_split(tmp_path)
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        output_dir,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="prediction",
+        eval_dir=eval_dir,
+        involvement_path=involvement_path,
+    )
+    run_localize(cfg)
+
+    record = read_yaml(output_dir / "localize_config.yaml")
+    assert record["involvement"]["enabled"] is True
+    assert record["involvement"]["groups_map"] == str(involvement_path)
+    assert record["involvement"]["min_overlap_mm3"] == pytest.approx(50.0)
+    assert record["involvement"]["version"] == 7
+
+
+def test_localize_config_yaml_records_involvement_disabled(tmp_path: Path) -> None:
+    atlas_root, eloq_path, lobe_path = _build_knowledge_fixtures(tmp_path)
+    prep_dir, splits_path, _eval_dir = _standard_split(tmp_path)
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        output_dir,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="label",
+    )
+    run_localize(cfg)
+
+    record = read_yaml(output_dir / "localize_config.yaml")
+    assert record["involvement"] == {"enabled": False}
+
+
+def test_involvement_groups_built_once_per_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    atlas_root, eloq_path, lobe_path = _build_knowledge_fixtures(tmp_path)
+    involvement_path = tmp_path / "involvement_groups.yaml"
+    _write_involvement_yaml(
+        involvement_path,
+        ventricle_structures=["Precentral_L"],
+        deep_wm_structures=["Frontal_L"],
+    )
+    prep_dir, splits_path, eval_dir = _standard_split(tmp_path)
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        output_dir,
+        atlas_root,
+        eloq_path,
+        lobe_path,
+        source="prediction",
+        eval_dir=eval_dir,
+        involvement_path=involvement_path,
+    )
+
+    calls = {"n": 0}
+    original_load_involvement_groups = localize_script.load_involvement_groups
+
+    def counting_load_involvement_groups(*args, **kwargs):
+        calls["n"] += 1
+        return original_load_involvement_groups(*args, **kwargs)
+
+    monkeypatch.setattr(
+        localize_script, "load_involvement_groups", counting_load_involvement_groups
+    )
+
+    run_localize(cfg)  # 3 cases in CASE_IDS
+
+    assert calls["n"] == 1

@@ -41,8 +41,14 @@ from tqdm import tqdm
 
 from neurovision.anatomy import burden
 from neurovision.anatomy.atlas import Atlas, load_atlas
+from neurovision.anatomy.involvement import (
+    InvolvementGroups,
+    involvement_profile,
+    load_involvement_groups,
+)
 from neurovision.anatomy.localize import (
     KnowledgeBase,
+    atlas_for_case,
     distance_to_eloquent,
     eloquent_union_mask,
     load_knowledge,
@@ -288,12 +294,38 @@ def _summary_region_scope(table: pd.DataFrame) -> pd.DataFrame:
     return table
 
 
+def resolve_involvement(localize_cfg: DictConfig) -> DictConfig | None:
+    """Reads `cfg.analysis.localize.involvement`, defaulting to disabled.
+
+    The key is read with `.get(..., None)`, not attribute access, the same
+    way `scripts/evaluate.py::resolve_boundary_bands` reads
+    `boundary_bands` -- so a config composed before this key existed (an
+    older saved `localize_config.yaml`, a minimal test config) still runs,
+    with the involvement layer simply off, rather than raising.
+
+    Args:
+        localize_cfg: `cfg.analysis.localize`.
+
+    Returns:
+        The `involvement` sub-config when the key is present AND
+        `enabled: true`, otherwise `None`.
+    """
+    involvement_cfg = localize_cfg.get("involvement", None)
+    if involvement_cfg is None:
+        return None
+    if not bool(involvement_cfg.get("enabled", False)):
+        return None
+    return involvement_cfg
+
+
 def localize_one(
     source: LocalizeSource,
     atlas: Atlas,
     knowledge: KnowledgeBase,
     eloquent_mask: np.ndarray,
     cfg: DictConfig,
+    *,
+    groups: InvolvementGroups | None = None,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     """Localises one case: the per-structure table plus its case-level summary row.
 
@@ -304,6 +336,12 @@ def localize_one(
         eloquent_mask: The whole-atlas eloquent-union mask (built ONCE by the
             caller, via `eloquent_union_mask`).
         cfg: The full composed Hydra config.
+        groups: The loaded `InvolvementGroups` (built ONCE by the caller, via
+            `load_involvement_groups`), or `None` when
+            `cfg.analysis.localize.involvement` is absent or disabled -- see
+            `resolve_involvement`. Keyword-only and defaulted so every
+            existing positional call site keeps working unchanged with
+            involvement off.
 
     Returns:
         `(table, summary_row)`. `table` has `case_id` as its FIRST column,
@@ -313,10 +351,14 @@ def localize_one(
         (computed on the FILTERED table) with `case_id` first,
         `distance_to_eloquent_mm` / `near_eloquent` overwritten with the real
         measured distance -- `summarize_case` alone cannot compute it, since a
-        tidy table carries no coordinates -- and an added
+        tidy table carries no coordinates -- an added
         `frac_of_tumour_retained` field: the fraction of the WT-scoped tumour
         (the same scope `summarize_case` itself summarizes, see
-        `_summary_region_scope`) that survived `min_frac` filtering.
+        `_summary_region_scope`) that survived `min_frac` filtering; and,
+        when `groups` is not `None`, the 18 `involvement_profile` fields
+        (Phase 3b: ventricle / deep-white-matter overlap, tissue composition,
+        epicentre), merged in. `groups is None` leaves `summary_row` exactly
+        as it was before Phase 3b existed.
 
     Raises:
         ValueError: See `load_case` and `neurovision.anatomy.localize`.
@@ -400,6 +442,30 @@ def localize_one(
     summary_row["near_eloquent"] = near_eloquent
     summary_row["frac_of_tumour_retained"] = frac_of_tumour_retained
 
+    # Phase 3b: group-level (ventricles, deep white matter) and tissue-level
+    # overlap, plus epicentre naming. Computed on WT (`wt_mask`, already built
+    # above for distance_to_eloquent), never ET/TC: this layer answers "what
+    # does the lesion touch", and whole tumour -- including oedema -- is the
+    # right scope for that question. ET/TC scoping is what the per-structure
+    # eloquence table above already does; duplicating it here would answer a
+    # narrower question under the same field names.
+    if groups is not None:
+        involvement_cfg = localize_cfg.involvement
+        min_overlap_mm3 = float(involvement_cfg.min_overlap_mm3)
+        geom = burden.CaseGeometry.from_meta(meta, cropped=source.cropped)
+        parcellation, tissue = atlas_for_case(atlas, meta, cropped=source.cropped)
+        involvement_fields = involvement_profile(
+            wt_mask,
+            parcellation,
+            tissue,
+            atlas,
+            groups,
+            geom,
+            min_overlap_mm3=min_overlap_mm3,
+            lobe=knowledge.lobe,
+        )
+        summary_row.update(involvement_fields)
+
     return filtered, summary_row
 
 
@@ -423,6 +489,21 @@ def _log_sanity_summary(summary_rows: list[dict[str, object]]) -> None:
         n_low_retention,
         _MIN_RETAINED_FRAC_WARN,
     )
+
+    # Phase 3b involvement columns only exist when
+    # cfg.analysis.localize.involvement.enabled=true -- logged only then, so
+    # a disabled run's log output is exactly what it was before this layer
+    # existed. A broken measure (e.g. every case reading 0.0 ventricle
+    # contact) belongs in the log, not only in anatomy_summary.csv.
+    if "ventricle_contact" in df.columns:
+        logger.info(
+            "Involvement summary over %d case(s): fraction with ventricle contact=%.3f, "
+            "fraction with deep white-matter contact=%.3f, median cortical_frac_of_tumour=%.3f.",
+            len(df),
+            df["ventricle_contact"].mean(),
+            df["deep_wm_contact"].mean(),
+            df["cortical_frac_of_tumour"].median(),
+        )
 
 
 def run_localize(cfg: DictConfig) -> tuple[Path, Path]:
@@ -458,6 +539,15 @@ def run_localize(cfg: DictConfig) -> tuple[Path, Path]:
     knowledge = load_knowledge(localize_cfg.eloquence_map, localize_cfg.lobe_map, atlas)
     eloquent_mask = eloquent_union_mask(atlas, knowledge)
 
+    # Phase 3b: loaded ONCE here, next to the atlas and the knowledge base
+    # above -- same reasoning as both: building it per case would dominate
+    # runtime, and it validates its structure/tissue names against the atlas
+    # at load time. None when the layer is absent or disabled.
+    involvement_cfg = resolve_involvement(localize_cfg)
+    groups: InvolvementGroups | None = None
+    if involvement_cfg is not None:
+        groups = load_involvement_groups(involvement_cfg.groups_map, atlas)
+
     out_dir = ensure_dir(cfg.output_dir)
     anatomy_csv_path = out_dir / localize_cfg.out_name
     summary_csv_path = out_dir / localize_cfg.summary_name
@@ -468,7 +558,9 @@ def run_localize(cfg: DictConfig) -> tuple[Path, Path]:
 
     for source in tqdm(sources, desc=f"Localize ({localize_cfg.split})"):
         try:
-            table, summary_row = localize_one(source, atlas, knowledge, eloquent_mask, cfg)
+            table, summary_row = localize_one(
+                source, atlas, knowledge, eloquent_mask, cfg, groups=groups
+            )
         except Exception:
             n_failed += 1
             logger.error(
@@ -515,6 +607,19 @@ def run_localize(cfg: DictConfig) -> tuple[Path, Path]:
         "licence": str(cfg.anatomy.licence),
     }
     config_record["coverage_line"] = coverage_line
+
+    # Traces anatomy_summary.csv's involvement columns (if any) back to the
+    # knowledge file that produced them -- same reasoning as the atlas block
+    # and the coverage line just above. Always written, even when the layer
+    # is off or the key is absent from an older config, so a reader never has
+    # to infer "involvement was off" from a missing key.
+    if groups is not None:
+        involvement_record = OmegaConf.to_container(involvement_cfg, resolve=True)
+        involvement_record["version"] = groups.version
+    else:
+        involvement_record = {"enabled": False}
+    config_record["involvement"] = involvement_record
+
     write_yaml(config_record, out_dir / "localize_config.yaml")
 
     _log_sanity_summary(list(summary_rows.values()))

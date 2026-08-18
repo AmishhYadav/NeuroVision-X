@@ -90,6 +90,18 @@ localize:
   out_name: anatomy.csv
   summary_name: anatomy_summary.csv
 
+  # Phase 3b: group-level and tissue-level overlap plus epicentre naming, from
+  # the atlas this driver already has loaded. Adds columns to
+  # anatomy_summary.csv; adds no new file and changes no existing column.
+  involvement:
+    enabled: true
+    groups_map: knowledge/involvement_groups.yaml
+    # A group overlap below this is not reported as contact. 50 mm3 matches
+    # analysis.burden.min_volume_mm3 and inference.postprocess.min_component_size,
+    # so a "touches the ventricles" claim needs the same amount of tissue that
+    # counts as a real component everywhere else in this project.
+    min_overlap_mm3: 50.0
+
 report:
   # Directory holding burden.csv + burden_config.yaml, written by scripts/burden.py.
   burden_dir: null
