@@ -1663,6 +1663,183 @@ def plot_band_profile(
 
 
 # --------------------------------------------------------------------------- #
+# Population anatomy (Phase 5)
+# --------------------------------------------------------------------------- #
+def plot_structure_involvement(
+    table: pd.DataFrame,
+    *,
+    top_n: int = 20,
+    eloquence_column: str = "eloquence",
+    title: str | None = None,
+    figsize: tuple[float, float] | None = None,
+) -> Figure:
+    """Horizontal bar chart of how often each atlas structure is involved across a cohort.
+
+    Consumes `neurovision.analysis.population.structure_involvement_frequency`
+    output. Horizontal bars because structure names are long enough
+    (`Frontal_Inf_Orb_L`) that vertical ticks would have to be rotated to
+    unreadability.
+
+    The bar for a structure the knowledge base marks `eloquent` is hatched
+    rather than recoloured. Colour is already carrying nothing else here, so a
+    second colour would work -- but the hatch survives a greyscale print and a
+    colour-blind reader, and this is the figure most likely to be read from a
+    printed page.
+
+    Args:
+        table: One row per structure, with `structure`, `frac_cases_involved`,
+            `n_cases`, and `eloquence_column`.
+        top_n: How many structures to show, taken from the top of `table`'s
+            existing order. The order is `structure_involvement_frequency`'s
+            own (descending involvement) and is NOT re-sorted here -- a figure
+            function that re-sorts its input can silently disagree with the
+            table printed next to it.
+        eloquence_column: Column holding `"eloquent"` / `"unclassified"`.
+        title: Axes title.
+        figsize: Explicit size; by default scales with the number of bars.
+
+    Returns:
+        The assembled `Figure`.
+
+    Raises:
+        ValueError: `table` is empty or is missing a required column (named).
+    """
+    required = ["structure", "frac_cases_involved", "n_cases", eloquence_column]
+    missing = [c for c in required if c not in table.columns]
+    if missing:
+        raise ValueError(f"plot_structure_involvement: table is missing column(s) {missing}.")
+    if table.empty:
+        raise ValueError("plot_structure_involvement: table is empty.")
+
+    shown = table.head(top_n)
+    n_cases = int(shown["n_cases"].iloc[0])
+
+    if figsize is None:
+        figsize = (4.6, max(2.4, 0.22 * len(shown) + 0.9))
+    fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
+
+    # Highest value at the TOP: matplotlib's y axis grows upward, so the
+    # already-descending table has to be drawn in reverse to read top-down.
+    positions = np.arange(len(shown))[::-1]
+    values = shown["frac_cases_involved"].to_numpy(dtype=float)
+    eloquent = (shown[eloquence_column].astype(str) == "eloquent").to_numpy()
+
+    style = model_style(0)
+    # The hatch is drawn in the EDGE colour, so it must never be the bar's own
+    # face colour -- matplotlib would report a hatch that is invisible on the
+    # page, and the legend would go on advertising it.
+    bars = ax.barh(
+        positions,
+        values,
+        color=style["color"],
+        edgecolor=_HATCH_COLOR(),
+        linewidth=0.6,
+    )
+    for bar, is_eloquent in zip(bars, eloquent, strict=True):
+        if is_eloquent:
+            bar.set_hatch("///")
+
+    ax.set_yticks(positions)
+    ax.set_yticklabels(shown["structure"].astype(str).tolist())
+    ax.set_xlabel(f"Fraction of cases involved (n = {n_cases})")
+    ax.set_xlim(0.0, 1.0)
+
+    if eloquent.any():
+        ax.legend(
+            handles=[
+                Patch(
+                    facecolor=style["color"],
+                    edgecolor=_HATCH_COLOR(),
+                    hatch="///",
+                    label="listed eloquent",
+                )
+            ],
+            loc="lower right",
+        )
+
+    if title is not None:
+        ax.set_title(title)
+    return fig
+
+
+def plot_lobe_distribution(
+    table: pd.DataFrame,
+    *,
+    value_column: str = "total_frac_of_tumour",
+    unlabelled_name: str = "unlabelled",
+    title: str | None = None,
+    figsize: tuple[float, float] | None = None,
+) -> Figure:
+    """Bar chart of the mean share of a tumour that falls in each lobe.
+
+    Consumes `neurovision.analysis.population.lobe_burden_distribution`
+    output.
+
+    The `unlabelled` bar is drawn, in a muted colour and labelled as not a
+    lobe. It is roughly a third of a real glioma -- AAL parcellates grey
+    matter, so deep white matter matches no structure -- and a lobe chart that
+    dropped it would show the remaining bars summing to about 0.7 while
+    implying they were the whole tumour. Dropping it AND renormalising would
+    be worse still: every lobe's share would be inflated by about 45% and the
+    chart would look entirely reasonable.
+
+    Args:
+        table: One row per lobe, with `lobe` and `value_column`.
+        value_column: The share column to plot.
+        unlabelled_name: The row treated as "not a lobe" and drawn muted.
+        title: Axes title.
+        figsize: Explicit size.
+
+    Returns:
+        The assembled `Figure`.
+
+    Raises:
+        ValueError: `table` is empty or is missing a required column (named).
+    """
+    required = ["lobe", value_column]
+    missing = [c for c in required if c not in table.columns]
+    if missing:
+        raise ValueError(f"plot_lobe_distribution: table is missing column(s) {missing}.")
+    if table.empty:
+        raise ValueError("plot_lobe_distribution: table is empty.")
+
+    labels = table["lobe"].astype(str).tolist()
+    values = table[value_column].to_numpy(dtype=float)
+
+    if figsize is None:
+        figsize = (max(3.4, 0.5 * len(labels) + 1.4), 2.9)
+    fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
+
+    style = model_style(0)
+    colors = [
+        plt.rcParams["axes.edgecolor"] if label == unlabelled_name else style["color"]
+        for label in labels
+    ]
+    positions = np.arange(len(labels))
+    ax.bar(positions, values, color=colors, alpha=0.9)
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    total = float(np.nansum(values))
+    ax.set_ylabel(f"Mean share of tumour volume (bars sum to {total:.2f})")
+
+    if unlabelled_name in labels:
+        ax.annotate(
+            f"{unlabelled_name}: no structure in this parcellation, not a lobe",
+            xy=(0.5, 1.0),
+            xycoords="axes fraction",
+            ha="center",
+            va="bottom",
+            fontsize=plt.rcParams["font.size"] * 0.85,
+            color=plt.rcParams["axes.edgecolor"],
+        )
+
+    if title is not None:
+        ax.set_title(title)
+    return fig
+
+
+# --------------------------------------------------------------------------- #
 # Modality attribution
 # --------------------------------------------------------------------------- #
 def _normalize_region_column(regions: pd.Series) -> pd.Series:

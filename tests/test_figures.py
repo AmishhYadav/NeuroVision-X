@@ -38,11 +38,13 @@ from neurovision.visualization.figures import (  # noqa: E402
     plot_band_profile,
     plot_comparison_forest,
     plot_gate_maps,
+    plot_lobe_distribution,
     plot_metric_distributions,
     plot_modality_attribution,
     plot_qualitative_panel,
     plot_reliability_diagram,
     plot_risk_coverage,
+    plot_structure_involvement,
     plot_training_curves,
     save_figure,
     take_slice,
@@ -1213,3 +1215,107 @@ def test_modality_attribution_reserves_headroom_for_its_legend() -> None:
         assert ax.get_ylim()[1] > tallest * 1.15
     finally:
         plt.close(fig)
+
+
+# --------------------------------------------------------------------------- #
+# Population anatomy figures (Phase 5)
+# --------------------------------------------------------------------------- #
+
+
+def _involvement_table() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "structure": ["Frontal_Mid_L", "Insula_L", "Putamen_L", "Precentral_L"],
+            "laterality": ["L", "L", "L", "L"],
+            "lobe": ["frontal", "insula", "deep", "frontal"],
+            "eloquence": ["unclassified", "unclassified", "eloquent", "eloquent"],
+            "n_cases_involved": [90, 70, 40, 30],
+            "frac_cases_involved": [0.9, 0.7, 0.4, 0.3],
+            "median_frac_of_structure": [0.4, 0.3, 0.2, 0.1],
+            "median_frac_of_tumour": [0.05, 0.04, 0.02, 0.01],
+            "n_cases": [100, 100, 100, 100],
+        }
+    )
+
+
+def _lobe_table() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "lobe": ["frontal", "temporal", "unlabelled", "deep"],
+            "total_frac_of_tumour": [0.30, 0.22, 0.31, 0.17],
+        }
+    )
+
+
+def test_structure_involvement_hatches_exactly_the_eloquent_bars() -> None:
+    fig = plot_structure_involvement(_involvement_table())
+    hatched = [bar for bar in fig.axes[0].patches if bar.get_hatch()]
+    assert len(hatched) == 2
+    plt.close(fig)
+
+
+def test_structure_involvement_hatch_is_not_drawn_in_its_own_face_colour() -> None:
+    """Matplotlib renders hatching in the EDGE colour, so edge == face paints it invisibly --
+    while the artist still reports a hatch and the legend keeps advertising it."""
+    fig = plot_structure_involvement(_involvement_table())
+    for bar in fig.axes[0].patches:
+        assert bar.get_facecolor() != bar.get_edgecolor()
+    plt.close(fig)
+
+
+def test_structure_involvement_states_the_denominator_on_the_axis() -> None:
+    fig = plot_structure_involvement(_involvement_table())
+    assert "n = 100" in fig.axes[0].get_xlabel()
+    plt.close(fig)
+
+
+def test_structure_involvement_keeps_the_table_order_with_the_top_row_at_the_top() -> None:
+    """A figure function that re-sorts its input can silently disagree with the table
+    printed next to it."""
+    fig = plot_structure_involvement(_involvement_table())
+    labels = [t.get_text() for t in fig.axes[0].get_yticklabels()]
+    assert labels[0] == "Frontal_Mid_L"
+    assert labels[-1] == "Precentral_L"
+    plt.close(fig)
+
+
+def test_structure_involvement_top_n_truncates() -> None:
+    fig = plot_structure_involvement(_involvement_table(), top_n=2)
+    assert len(fig.axes[0].get_yticklabels()) == 2
+    plt.close(fig)
+
+
+def test_structure_involvement_raises_on_missing_column_and_names_it() -> None:
+    table = _involvement_table().drop(columns=["n_cases"])
+    with pytest.raises(ValueError, match="n_cases"):
+        plot_structure_involvement(table)
+
+
+def test_structure_involvement_raises_on_empty_table() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        plot_structure_involvement(_involvement_table().iloc[:0])
+
+
+def test_lobe_distribution_reports_the_true_sum_including_unlabelled() -> None:
+    """Dropping the unlabelled share would show the remaining bars summing to ~0.7 while
+    implying they were the whole tumour; renormalising would inflate every lobe by ~45%."""
+    fig = plot_lobe_distribution(_lobe_table())
+    assert "1.00" in fig.axes[0].get_ylabel()
+    assert "unlabelled" in [t.get_text() for t in fig.axes[0].get_xticklabels()]
+    plt.close(fig)
+
+
+def test_lobe_distribution_draws_unlabelled_in_a_different_colour_from_the_lobes() -> None:
+    fig = plot_lobe_distribution(_lobe_table())
+    bars = fig.axes[0].patches
+    colours = {
+        t.get_text(): bar.get_facecolor()
+        for t, bar in zip(fig.axes[0].get_xticklabels(), bars, strict=True)
+    }
+    assert colours["unlabelled"] != colours["frontal"]
+    plt.close(fig)
+
+
+def test_lobe_distribution_raises_on_missing_column_and_names_it() -> None:
+    with pytest.raises(ValueError, match="total_frac_of_tumour"):
+        plot_lobe_distribution(_lobe_table().drop(columns=["total_frac_of_tumour"]))
