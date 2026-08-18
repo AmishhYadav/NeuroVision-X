@@ -17,8 +17,10 @@ import pytest
 from neurovision.reporting import report as report_module
 from neurovision.reporting.report import (
     DISCLAIMER,
+    INVOLVEMENT_CAVEAT,
     MASS_EFFECT_CAVEAT,
     NOT_CLAIMED,
+    NOT_VASARI,
     Provenance,
     build_report,
     json_safe,
@@ -256,7 +258,12 @@ def test_disclaimer_present_and_nonempty_in_dict_and_markdown() -> None:
 
 
 def test_not_claimed_covers_six_items_with_reasons() -> None:
-    assert len(NOT_CLAIMED) == 6
+    # Was 6 -- now 7. The new module keyword task requires appending a
+    # mass-effect/midline-shift/ventricular-compression entry to NOT_CLAIMED
+    # (see the involvement tests below), which necessarily moves this count.
+    # This is the one line in the existing suite that has to change as a
+    # direct consequence of that required addition.
+    assert len(NOT_CLAIMED) == 7
     report = _build()
     assert report["not_claimed"] == NOT_CLAIMED
     for what, why in NOT_CLAIMED:
@@ -643,3 +650,155 @@ def test_math_isnan_sanity_for_helper() -> None:
     # negative: 'stage' as a substring must not accidentally appear in
     # ordinary report vocabulary used in these tests' fixtures.
     assert not math.isnan(1.0)
+
+
+# --------------------------------------------------------------------------- #
+# 18. Optional `involvement` block
+# --------------------------------------------------------------------------- #
+
+
+def _involvement() -> dict[str, object]:
+    """A representative `involvement_profile` output -- 18 keys, no overlap."""
+    return {
+        "ventricle_overlap_mm3": 120.0,
+        "ventricle_frac_of_tumour": 0.02,
+        "ventricle_frac_of_group": 0.6,
+        "ventricle_contact": True,
+        "deep_wm_overlap_mm3": 450.0,
+        "deep_wm_frac_of_tumour": 0.08,
+        "deep_wm_frac_of_group": 0.15,
+        "deep_wm_contact": True,
+        "cortical_frac_of_tumour": 0.30,
+        "white_matter_frac_of_tumour": 0.55,
+        "csf_frac_of_tumour": 0.02,
+        "outside_tissue_frac_of_tumour": 0.13,
+        "epicentre_structure": "Precentral_L",
+        "epicentre_exact": True,
+        "epicentre_distance_mm": 0.0,
+        "epicentre_laterality": "left",
+        "epicentre_side": "left",
+        "epicentre_lobe": "frontal",
+    }
+
+
+def _involvement_caveats() -> list[str]:
+    return [
+        "Deep white-matter overlap is a lower bound: internal capsule is absent from tzo116plus."
+    ]
+
+
+def test_involvement_none_by_default_leaves_dict_and_key_order_unchanged() -> None:
+    report = _build()
+    assert "involvement" not in report
+    assert list(report.keys()) == [
+        "report_version",
+        "case_id",
+        "generated_utc",
+        "disclaimer",
+        "not_claimed",
+        "burden",
+        "anatomy",
+        "eloquence",
+        "provenance",
+    ]
+
+
+def test_involvement_key_positioned_between_anatomy_and_eloquence() -> None:
+    report = _build(involvement=_involvement())
+    keys = list(report.keys())
+    assert keys.index("anatomy") < keys.index("involvement") < keys.index("eloquence")
+
+
+def test_involvement_block_regroups_with_no_field_lost() -> None:
+    involvement = _involvement()
+    report = _build(involvement=involvement, involvement_caveats=_involvement_caveats())
+    block = report["involvement"]
+
+    leaf_keys: set[str] = set()
+    for sub_block_name in ("groups", "tissue", "epicentre", "other"):
+        leaf_keys.update(block[sub_block_name].keys())
+    assert leaf_keys == set(involvement.keys())
+
+    assert block["groups"]["ventricle_contact"] is True
+    assert block["groups"]["deep_wm_overlap_mm3"] == 450.0
+    assert block["tissue"]["cortical_frac_of_tumour"] == 0.30
+    assert block["epicentre"]["epicentre_structure"] == "Precentral_L"
+    assert block["lower_bound_notes"] == _involvement_caveats()
+
+
+def test_unrecognised_involvement_key_lands_in_other() -> None:
+    involvement = {**_involvement(), "totally_unknown_involvement_xyz": 7}
+    report = _build(involvement=involvement)
+    assert report["involvement"]["other"]["totally_unknown_involvement_xyz"] == 7
+
+
+def test_involvement_caveat_and_not_vasari_present_and_nonempty() -> None:
+    report = _build(involvement=_involvement())
+    block = report["involvement"]
+    assert block["caveat"] == INVOLVEMENT_CAVEAT
+    assert block["not_vasari"] == NOT_VASARI
+    assert INVOLVEMENT_CAVEAT.strip()
+    assert NOT_VASARI.strip()
+
+
+def test_involvement_markdown_renders_when_present_and_absent_when_not() -> None:
+    report_with = _build(involvement=_involvement())
+    md_with = render_markdown(report_with)
+    assert INVOLVEMENT_CAVEAT in md_with
+    assert NOT_VASARI in md_with
+    assert "Precentral_L" in md_with  # the epicentre structure name
+
+    report_without = _build()
+    md_without = render_markdown(report_without)
+    assert "## Involvement Profile" not in md_without
+
+
+def test_vasari_mention_always_qualified() -> None:
+    """`"VASARI"` must never appear as an unqualified claim: every occurrence
+
+    must sit in the same section as `"approximate"` and `"not been
+    verified"`. The counterpart of `test_non_eloquent_verdict_never_appears...`
+    """
+    report = _build(involvement=_involvement())
+    md = render_markdown(report)
+    assert "VASARI" in md  # sanity: the word is actually exercised here
+
+    found_any = False
+    for line in md.splitlines():
+        if "VASARI" in line:
+            found_any = True
+            assert "approximate" in line, line
+            assert "not been verified" in line, line
+    assert found_any
+
+    safe = json_safe(report)
+    text = json.dumps(safe)
+    assert "VASARI" in text
+    # The whole not_vasari sentence is one JSON string value, so the same
+    # per-occurrence check applies to the raw serialised text too.
+    for idx in range(len(text)):
+        if text.startswith("VASARI", idx):
+            window = text[max(0, idx - 500) : idx + 500]
+            assert "approximate" in window
+            assert "not been verified" in window
+
+
+def test_new_not_claimed_entry_about_mass_effect_renders() -> None:
+    report = _build()
+    md = render_markdown(report)
+    assert "mass effect, midline shift, or ventricular compression" in md
+    not_claimed_text, _ = _not_claimed_text_from_markdown(md)
+    assert "mass effect, midline shift, or ventricular compression" in not_claimed_text
+
+    what_values = [what for what, _ in NOT_CLAIMED]
+    assert "mass effect, midline shift, or ventricular compression" in what_values
+
+
+def test_involvement_block_json_round_trips_with_nan() -> None:
+    involvement = {**_involvement(), "deep_wm_frac_of_group": float("nan")}
+    report = _build(involvement=involvement, involvement_caveats=_involvement_caveats())
+    safe = json_safe(report)
+    text = json.dumps(safe, allow_nan=False)
+    restored = json.loads(text)
+    assert restored["involvement"]["groups"]["deep_wm_frac_of_group"] is None
+    assert restored["involvement"]["epicentre"]["epicentre_structure"] == "Precentral_L"

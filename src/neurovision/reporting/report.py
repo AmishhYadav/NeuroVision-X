@@ -56,6 +56,8 @@ __all__ = [
     "DISCLAIMER",
     "NOT_CLAIMED",
     "MASS_EFFECT_CAVEAT",
+    "INVOLVEMENT_CAVEAT",
+    "NOT_VASARI",
     "Provenance",
     "build_report",
     "render_markdown",
@@ -65,6 +67,11 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+# Stays 1. A report with no `involvement` block is still a valid version-1
+# report (the block is optional and every field that existed before is
+# unchanged in position and meaning), so version 1 is the schema both shapes
+# belong to. "we added a field, bump the version" is the obvious wrong move
+# here -- do not make it without a reason beyond "a field was added".
 REPORT_VERSION: int = 1
 
 DISCLAIMER: str = (
@@ -78,6 +85,23 @@ MASS_EFFECT_CAVEAT: str = (
     "around it, so near a lesion the atlas can mislabel tissue that has moved out of its usual "
     "position -- structure involvement reported here is therefore approximate, not a direct "
     "measurement of this patient's own anatomy."
+)
+
+INVOLVEMENT_CAVEAT: str = (
+    "Every value in this block is an overlap between the tumour mask and where a healthy-brain "
+    "atlas places a structure -- never a measurement of this patient's own anatomy. A tumour "
+    "that displaces a ventricle aside and one that grows through it produce the same overlap "
+    "number, and this pipeline cannot tell the two apart."
+)
+
+NOT_VASARI: str = (
+    "These fields are geometrically named quantities with the operational definitions given in "
+    "knowledge/involvement_groups.yaml. Their relationship to VASARI features F19 (ependymal "
+    "invasion), F20 (cortical involvement) and F21 (deep white matter invasion) is approximate "
+    "and has not been verified against the primary NCI CIP VASARI documentation -- and "
+    "inter-rater agreement between radiologists on cortical involvement (VASARI F20) is close "
+    "to chance (kappa 0.167), so there is no stable expert reading for these fields to agree "
+    "with."
 )
 
 _SOURCE_OWNS_CLAIM: str = (
@@ -123,6 +147,12 @@ NOT_CLAIMED: tuple[tuple[str, str], ...] = (
         "any deficit the patient has or will experience",
         "A deficit claim is unvalidatable against the outcomes data this project has, so no "
         "deficit or functional-loss text is generated anywhere in this artifact.",
+    ),
+    (
+        "mass effect, midline shift, or ventricular compression",
+        "The atlas encodes where a healthy midline and healthy ventricles sit, not where this "
+        "patient's own are, and BraTS ships no midline-shift ground truth to validate a "
+        "displacement estimate against -- so none is computed.",
     ),
 )
 
@@ -310,6 +340,71 @@ def _group_burden(burden: Mapping[str, object]) -> dict[str, dict[str, object]]:
 
 
 # --------------------------------------------------------------------------- #
+# Involvement regrouping (optional block; see `_build_involvement_block`)
+# --------------------------------------------------------------------------- #
+
+# Reporting order: how the involvement sub-blocks are grouped AND rendered.
+_INVOLVEMENT_BLOCKS: tuple[str, ...] = ("groups", "tissue", "epicentre", "other")
+
+# `ventricle_*` / `deep_wm_*` are checked first, ahead of the generic
+# `*_frac_of_tumour` suffix rule below, because e.g. `ventricle_frac_of_tumour`
+# matches both -- the more specific (group) block wins, same precedence
+# reasoning as `_classify_burden_key`.
+_INVOLVEMENT_GROUP_PREFIXES: tuple[str, ...] = ("ventricle_", "deep_wm_")
+
+
+def _classify_involvement_key(key: str) -> str:
+    """Which report sub-block one `involvement_profile` key belongs to.
+
+    Checked in a fixed precedence order: group prefixes first (they would
+    otherwise also match the tissue suffix rule), then the `epicentre_`
+    prefix, then any remaining `*_frac_of_tumour` key (the tissue-class
+    fields). Anything matching none of them lands in `"other"` rather than
+    being dropped, because silently discarding a field the caller computed
+    is worse than an untidy block -- same rule as `_classify_burden_key`.
+    """
+    if key.startswith(_INVOLVEMENT_GROUP_PREFIXES):
+        return "groups"
+    if key.startswith("epicentre_"):
+        return "epicentre"
+    if key.endswith("_frac_of_tumour"):
+        return "tissue"
+    return "other"
+
+
+def _group_involvement(involvement: Mapping[str, object]) -> dict[str, dict[str, object]]:
+    """Regroups a flat `involvement_profile` dict into the named sub-blocks a person can read.
+
+    See `_classify_involvement_key` for the precedence rule that resolves
+    overlapping suffixes/prefixes. Mirrors `_group_burden` exactly.
+    """
+    grouped: dict[str, dict[str, object]] = {name: {} for name in _INVOLVEMENT_BLOCKS}
+    for key, value in involvement.items():
+        grouped[_classify_involvement_key(key)][key] = value
+    return grouped
+
+
+def _build_involvement_block(
+    involvement: Mapping[str, object], caveats: Sequence[str]
+) -> dict[str, object]:
+    """Assembles the optional `"involvement"` report block from a raw `involvement_profile` dict.
+
+    `caveat` and `not_vasari` are REQUIRED fields of the block, not README
+    text -- same reasoning as `MASS_EFFECT_CAVEAT` inside `anatomy`.
+    """
+    grouped = _group_involvement(involvement)
+    return {
+        "caveat": INVOLVEMENT_CAVEAT,
+        "not_vasari": NOT_VASARI,
+        "lower_bound_notes": list(caveats),
+        "groups": grouped["groups"],
+        "tissue": grouped["tissue"],
+        "epicentre": grouped["epicentre"],
+        "other": grouped["other"],
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Eloquence proximity (purely geometric, from distance + threshold -- no
 # verdict is derived from these; the classification NAME is a caller-supplied
 # string identifying the published source, see `classification_name` below)
@@ -356,6 +451,8 @@ def build_report(
     coverage_gaps: Sequence[str],
     near_eloquent_mm: float,
     top_n: int = 10,
+    involvement: Mapping[str, object] | None = None,
+    involvement_caveats: Sequence[str] = (),
 ) -> dict:
     """Assembles one case's report dict from already-computed artifacts.
 
@@ -388,13 +485,25 @@ def build_report(
             mm.
         top_n: How many `anatomy_table` rows (sorted by `frac_of_structure`
             descending) to keep in `anatomy.structures`.
+        involvement: An optional `neurovision.anatomy.involvement.
+            involvement_profile` output (or an equivalent flat mapping). When
+            `None` (the default), the returned dict has no `"involvement"`
+            key at all -- byte-for-byte the same shape this function
+            produced before this parameter existed. When given, an
+            `"involvement"` block is inserted between `"anatomy"` and
+            `"eloquence"`.
+        involvement_caveats: Free-text lower-bound notes to carry into the
+            block's `lower_bound_notes` (e.g. from
+            `InvolvementGroups.ventricle_missing` / `.deep_wm_missing`).
+            Ignored when `involvement` is `None`.
 
     Returns:
         A plain dict, field order `report_version, case_id, generated_utc,
-        disclaimer, not_claimed, burden, anatomy, eloquence, provenance`.
-        Values may still include numpy-like scalars and non-finite floats
-        pulled from `anatomy_table` / `burden` -- pass the result through
-        `json_safe` before serialising.
+        disclaimer, not_claimed, burden, anatomy, [involvement,] eloquence,
+        provenance` -- `involvement` present only when the `involvement`
+        argument is given. Values may still include numpy-like scalars and
+        non-finite floats pulled from `anatomy_table` / `burden` -- pass the
+        result through `json_safe` before serialising.
 
     Raises:
         ValueError: If `case_id`, `evidence`, `citation`,
@@ -462,7 +571,7 @@ def build_report(
         "coverage_gaps": list(coverage_gaps),
     }
 
-    return {
+    result: dict[str, object] = {
         "report_version": REPORT_VERSION,
         "case_id": case_id,
         "generated_utc": provenance.generated_utc,
@@ -470,9 +579,12 @@ def build_report(
         "not_claimed": NOT_CLAIMED,
         "burden": _group_burden(burden),
         "anatomy": anatomy_block,
-        "eloquence": eloquence_block,
-        "provenance": asdict(provenance),
     }
+    if involvement is not None:
+        result["involvement"] = _build_involvement_block(involvement, involvement_caveats)
+    result["eloquence"] = eloquence_block
+    result["provenance"] = asdict(provenance)
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -486,6 +598,13 @@ _BURDEN_BLOCK_TITLES: dict[str, str] = {
     "multifocality": "Multifocality",
     "laterality": "Laterality",
     "centroid": "Centroid (voxel index)",
+    "other": "Other",
+}
+
+_INVOLVEMENT_BLOCK_TITLES: dict[str, str] = {
+    "groups": "Structural Groups (Ventricles / Deep White Matter)",
+    "tissue": "Tissue Composition",
+    "epicentre": "Epicentre",
     "other": "Other",
 }
 
@@ -554,6 +673,17 @@ def _format_burden_value(key: str, value: object) -> str:
     return f"{safe:.3f}"
 
 
+def _format_involvement_value(key: str, value: object) -> str:
+    """Formats one involvement value from its key name, mirroring `_format_burden_value`."""
+    if key.endswith("_frac_of_tumour") or key.endswith("_frac_of_group"):
+        return _fmt_fraction(value)
+    if key.endswith("_mm3"):
+        return _fmt_volume(value)
+    if key.endswith("_distance_mm"):
+        return _fmt_distance(value)
+    return _cell(value)
+
+
 def _pipe_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     """A hand-rolled Markdown pipe table.
 
@@ -575,9 +705,18 @@ def render_markdown(report: Mapping) -> str:
 
     Section order: title, the disclaimer (first, before any content), the
     tumour burden profile, anatomical involvement (atlas name/version and
-    the mass-effect caveat immediately under the heading), the eloquence
-    reference (verbatim evidence as a blockquote, plus citation), what this
-    report refuses to claim, and provenance last.
+    the mass-effect caveat immediately under the heading), an optional
+    "Involvement Profile" section (groups/tissue/epicentre, rendered only
+    when `report["involvement"]` is present -- absent entirely otherwise),
+    the eloquence reference (verbatim evidence as a blockquote, plus
+    citation), what this report refuses to claim, and provenance last.
+
+    The "Involvement Profile" heading is deliberately distinct from the
+    "Anatomical Involvement" heading above it: the latter is the
+    `localize.py`-derived per-structure table, this one is the coarser
+    group/tissue/epicentre block from `involvement.py` -- reusing the same
+    heading text for two different sections would make "no heading present"
+    unobservable when the block is absent.
 
     Args:
         report: A `build_report` output (or anything with the same shape).
@@ -654,6 +793,30 @@ def render_markdown(report: Mapping) -> str:
     else:
         lines.append("_No structures recorded._")
     lines.append("")
+
+    # --- Involvement (optional) ------------------------------------------ #
+    involvement = report.get("involvement")
+    if involvement is not None:
+        lines.append("## Involvement Profile (Groups, Tissue & Epicentre)")
+        lines.append("")
+        lines.append(str(involvement["caveat"]))
+        lines.append("")
+        lines.append(str(involvement["not_vasari"]))
+        lines.append("")
+        notes = involvement.get("lower_bound_notes") or []
+        if notes:
+            lines.append("Lower-bound notes:")
+            for note in notes:
+                lines.append(f"- {note}")
+            lines.append("")
+        for block_name in ("groups", "tissue", "epicentre", "other"):
+            block = involvement.get(block_name) or {}
+            if not block:
+                continue
+            lines.append(f"### {_INVOLVEMENT_BLOCK_TITLES[block_name]}")
+            for key in sorted(block):
+                lines.append(f"- **{key}**: {_format_involvement_value(key, block[key])}")
+            lines.append("")
 
     # --- Eloquence ------------------------------------------------------- #
     eloquence = report["eloquence"]
