@@ -136,38 +136,65 @@ gap opens up under shift.
 
 ---
 
-### Phase C — Spend the GPU hours (~25 h, one experiment)
+### Phase C — Training programme (GPU access assumed, ~350 T4-equivalent hours)
 
-Only one training run is affordable. It must serve the new story.
+Costs are quoted in **T4-equivalent hours**, derived from measured runs:
+`neurovision` @64³/80ep = 23.1 h, `baseline_unet3d` = 3.2 h,
+`capacity_control` ≈ 8 h, `swinunetr` ≈ 25 h (estimate), 96³ ≈ 3.4× the 64³
+voxel count.
 
-**Run: `ablation_content_only_gate`** (~23 h, 3 chained sessions, already
-specced in `configs/experiment/ablation_content_only_gate.yaml`, parameter-matched
-to 0.018%).
+**First action on any new hardware: a 2-epoch timing probe** reporting measured
+step time and peak memory. Replace the estimated speedup with a measured one
+before scheduling any long run. This project has twice lost GPU-hours to probes
+that ran without reaching the condition they needed to test.
 
-It now does **double duty**, which is why it is the right spend:
+| # | Run set | Cost | Priority | Lost without it |
+|---|---|---|---|---|
+| C1 | **Multi-seed**: 2 more seeds × {neurovision, baseline, capacity_control} @64³ | ~70 | Essential | No error bars on any claim in the project |
+| C2 | **Ablation ladder**: cnn_only → add → concat → content_only_gate → ambiguity | ~110 | Essential | The contribution stays argued, never measured |
+| C3 | `baseline_swinunetr` @64³, 2 seeds | ~50 | High | No transformer comparator on our splits |
+| C4 | `neurovision` + baseline @96³, 1 seed | ~80 | High | The report-agreement null stays unexplained |
+| C5 | Multi-cohort (GLI + SSA + PED pooled), 1 seed | ~40 | Valuable | Generalisation measured, never improved |
+| C6 | 5-fold cross-validation | ~115 | Stretch | "Your split was lucky" answerable only by argument |
 
-1. It is the pre-registered P2 rung that tests whether the ambiguity
-   conditioning — rather than the mere existence of a gate — carries the
-   architectural gain. Without it the contribution is argued from design, not
-   measured.
-2. Under the new framing it is the **direct control for the uncertainty claim**:
-   `use_ambiguity: false` removes the disagreement signal from the gate, so this
-   run answers "is the disagreement map useful *because* the model was trained
-   to consume it, or would any dual-encoder produce it anyway?"
+Core (C1+C2) = 180 T4-h. Core + high = 310. Everything but CV = 350.
+At ~4× T4 on a 24 GB card, core ≈ 45 h wall-clock — under a week at 10 h/night.
 
-Pre-run checklist (from `docs/experiments.md` and CLAUDE.md):
+**C1 is the highest-value spend and is not optional.** Every number in the repo
+comes from a single seed; `docs/experiments.md` already records that no claim may
+rest on a margin smaller than noise we cannot measure. Three seeds turns every
+result into mean ± std. The same runs also yield a **deep ensemble** — the
+gold-standard uncertainty baseline and the strongest comparator for Phase A's
+claim. One expenditure, two deliverables.
+
+**C2 does double duty under the new framing.** `use_ambiguity: false` removes the
+disagreement signal by construction, so the content-only rung is the control for
+the *uncertainty* claim as well as the accuracy one.
+
+**Also folded into C2:** one rung with distance-weighted loss on the segmentation
+logits rather than a separate boundary read-out head — the mechanism aimed at the
+boundary claim that died.
+
+Pre-run checklist for every session:
 - Pin `GIT_REF` to a **SHA**, not `main`. Clone the pinned tree and assert the
   fp16-entropy fix is in it before launching.
-- `grad_clip_norm: 5.0` — must match the `neurovision` run (it does; verified in
-  `eval_config.yaml`). Do not change it mid-comparison.
-- Run `scripts/smoke_test.py` before the session.
-- Fetch and keep the kernel log this time (the capacity control's hours are
-  approximate because it was not fetched).
+- `grad_clip_norm: 5.0` must match the existing `neurovision` run (verified in
+  `outputs/neurovision/eval_test/eval_config.yaml`). Do not change mid-comparison.
+- Run `scripts/smoke_test.py`.
+- Fetch and keep the kernel/training log. The capacity control's hours are
+  approximate because it was not fetched.
 
-**If Phase A's gates both fail**, do not spend these hours here — spend them on
-multi-cohort training (§5).
+**Hardware:** minimum 16 GB VRAM (current behaviour, needs gradient
+checkpointing); recommended 24 GB (enables 96³ and lets checkpointing be turned
+*off*, recovering 20–30% step time); ideal 40 GB+ (128³ and real batch sizes).
+**Storage:** ~250 GB working, 500 GB comfortable — ~20 checkpoints at ~420 MB,
+logits at ~3.5 GB per model per split, ~95 GB of preprocessed cohorts.
 
----
+**CPU workstation:** all evaluation, calibration, uncertainty extraction,
+explainability, statistics and figures already run on CPU by design and are
+parallel across cases. A many-core box turns each 25-minute evaluation pass into
+minutes — and this plan needs ~20 models × 4 cohorts × several uncertainty
+methods. Keep the existing rule: **the GPU does gradient descent and nothing else.**
 
 ### Phase D — Cheap accuracy and robustness wins (zero GPU, opportunistic)
 
@@ -237,16 +264,19 @@ which explicitly accepts negative and replication results.
 ## 6. Sequencing
 
 ```
-Week 1   A1 A2 A3 A4          -> Gate A-1, Gate A-2
-Week 2   B1 B2 B3 B4          -> Gate B          (parallel: D1 D3)
-Week 3   Phase C session 1-2  (parallel: D2 D4)
-Week 4   Phase C session 3, evaluate ablation on CPU
-Week 5+  figures, tables, write-up
+Week 1  A1 A2 A3 A4        -> Gate A-1, Gate A-2   | GPU: timing probe, launch C1
+Week 2  B1 B2 B3 B4        -> Gate B               | GPU: C1 done -> Gate 3; launch C2
+Week 3  D1 D3 (CPU)                                | GPU: C2
+Week 4  demo overlay                -> Gate 4      | GPU: C2 done, C3
+Week 5  D2 D4 (CPU)                                | GPU: C4, C5
+Week 6  full evaluation sweep, all targets resolved
+Week 7  figures, tables, paper draft
+Week 8  buffer + capstone demonstration
 ```
 
-Phase C is the only item that consumes GPU hours. Everything else runs on the
-Mac. That is deliberate — the budget is spent, and the plan is built so that a
-failed gate costs days, not GPU sessions.
+Phases A, B and D consume no GPU and are front-loaded deliberately: they test the
+plan's central premise before compute is committed to it. A failed gate in week 1
+costs days, not a training programme.
 
 ---
 
