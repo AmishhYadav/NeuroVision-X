@@ -434,6 +434,55 @@ class NeuroVisionX(nn.Module):
         logits = self.heads.seg_heads[0](feats[0])
         return logits, gates
 
+    def forward_with_ambiguity(self, x: Tensor) -> tuple[Tensor, list[Tensor | None]]:
+        """Runs the network and also returns each fusion block's ambiguity map.
+
+        Modelled directly on `forward_with_gates` -- same shape of method, same reason
+        it exists: an inference-time read-out of a per-voxel signal that `forward`
+        computes internally (inside `AdaptiveGatedFusion._fuse`) and discards. This is
+        the explainability / inference path, not a training path — it always returns a
+        single full-resolution logits tensor, regardless of `self.training`, which is
+        what makes it usable under sliding-window inference the same way
+        `forward_with_gates` is.
+
+        Args:
+            x: Input MRI volume, shape `(B, in_channels, D, H, W)`.
+
+        Returns:
+            A tuple `(logits, ambiguity_maps)`:
+
+            - `logits`: full-resolution logits, shape `(B, out_channels, D, H, W)`.
+            - `ambiguity_maps`: one entry per fusion block, fine to coarse.
+              `AdaptiveGatedFusion` blocks built with `use_ambiguity=True` contribute a
+              real ambiguity tensor, shape `(B, 3 * num_regions, D_i, H_i, W_i)` (see
+              `neurovision.models.fusion.adaptive_fusion.AMBIGUITY_CHANNEL_GROUPS` for
+              the channel layout). `ConcatFusion`, `AddFusion`, and
+              `AdaptiveGatedFusion(use_ambiguity=False)` blocks have no such concept and
+              contribute `None` — so this list may contain a mix of tensors and `None`,
+              and callers must check each entry before using it. When the Swin branch is
+              disabled (`swin_encoder is None`), there are no fusion blocks at all, so
+              `ambiguity_maps` is the EMPTY list `[]` — different from a list of `None`s,
+              since there is nothing to report rather than several blocks each reporting
+              nothing.
+        """
+        cnn_pyramid = self.cnn_encoder(x)
+
+        if self.use_swin:
+            swin_pyramid = self.swin_encoder(x)
+            skips = [cnn_pyramid[0]]
+            ambiguity_maps: list[Tensor | None] = []
+            for i, block in enumerate(self.fusion_blocks):
+                fused, ambiguity = block.forward_with_ambiguity(cnn_pyramid[i + 1], swin_pyramid[i])
+                skips.append(fused)
+                ambiguity_maps.append(ambiguity)
+        else:
+            skips = cnn_pyramid
+            ambiguity_maps = []
+
+        feats = self.decoder(skips)
+        logits = self.heads.seg_heads[0](feats[0])
+        return logits, ambiguity_maps
+
 
 @register_model("neurovision")
 def build_neurovision(cfg: Any) -> nn.Module:

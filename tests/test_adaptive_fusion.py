@@ -830,3 +830,87 @@ def test_branch_ambiguity_entropy_is_one_at_maximum_uncertainty() -> None:
     assert ambiguity[:, 3:].mean().item() == pytest.approx(1.0, abs=1e-5)
     # Both branches predict 0.5, so they agree exactly.
     assert ambiguity[:, :3].abs().max().item() < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# forward_with_ambiguity -- inference-time exposure of the ambiguity signal
+# ---------------------------------------------------------------------------
+
+
+def test_forward_with_ambiguity_shape_matches_fused_spatial_dims() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    fused, ambiguity = block.forward_with_ambiguity(cnn_feat, swin_feat)
+
+    assert fused.shape == (1, CNN_CHANNELS, 8, 8, 8)
+    assert ambiguity is not None
+    assert ambiguity.shape == (1, 3 * NUM_REGIONS, 8, 8, 8)
+
+
+def test_forward_with_ambiguity_values_are_bounded_zero_one() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    cnn_feat = torch.randn(2, CNN_CHANNELS, 6, 6, 6)
+    swin_feat = torch.randn(2, SWIN_CHANNELS, 6, 6, 6)
+
+    _fused, ambiguity = block.forward_with_ambiguity(cnn_feat, swin_feat)
+
+    assert ambiguity is not None
+    assert torch.all(ambiguity >= 0.0)
+    assert torch.all(ambiguity <= 1.0)
+
+
+def test_concat_and_add_fusion_forward_with_ambiguity_returns_none() -> None:
+    # Neither variant overrides forward_with_ambiguity -- the base class default must
+    # make this work for free.
+    concat_block = ConcatFusion(CNN_CHANNELS, SWIN_CHANNELS)
+    add_block = AddFusion(CNN_CHANNELS, SWIN_CHANNELS)
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 6, 6, 6)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 6, 6, 6)
+
+    fused, ambiguity = concat_block.forward_with_ambiguity(cnn_feat, swin_feat)
+    assert fused.shape == (1, CNN_CHANNELS, 6, 6, 6)
+    assert ambiguity is None
+    assert "forward_with_ambiguity" not in type(concat_block).__dict__
+
+    fused, ambiguity = add_block.forward_with_ambiguity(cnn_feat, swin_feat)
+    assert fused.shape == (1, CNN_CHANNELS, 6, 6, 6)
+    assert ambiguity is None
+    assert "forward_with_ambiguity" not in type(add_block).__dict__
+
+
+def test_adaptive_gated_fusion_use_ambiguity_false_forward_with_ambiguity_returns_none() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=False
+    )
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 6, 6, 6)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 6, 6, 6)
+
+    fused, ambiguity = block.forward_with_ambiguity(cnn_feat, swin_feat)
+
+    assert fused.shape == (1, CNN_CHANNELS, 6, 6, 6)
+    assert ambiguity is None
+
+
+def test_forward_with_ambiguity_fused_output_matches_plain_forward_exactly() -> None:
+    # The test that catches a divergent second code path: forward_with_ambiguity must
+    # compute the SAME fused tensor forward() does, not an approximation of it.
+    torch.manual_seed(0)
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block.eval()
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    with torch.no_grad():
+        expected = block(cnn_feat, swin_feat)
+        fused, _ambiguity = block.forward_with_ambiguity(cnn_feat, swin_feat)
+
+    assert isinstance(expected, torch.Tensor)
+    torch.testing.assert_close(fused, expected)

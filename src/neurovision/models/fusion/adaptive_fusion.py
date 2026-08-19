@@ -73,6 +73,16 @@ from neurovision.models.fusion.registry import register_fusion
 logger = logging.getLogger(__name__)
 
 
+# The channel layout of the ambiguity tensor `BranchAmbiguity.forward` /
+# `AdaptiveGatedFusion.forward_with_ambiguity` produce: 3 groups of
+# `num_regions` channels each, concatenated in this order. Exposed as a
+# module-level constant so a consumer (e.g. a figure or an inference script)
+# reads the split from here rather than hardcoding channel indices that would
+# silently go stale if the concatenation order in `BranchAmbiguity.forward`
+# ever changed.
+AMBIGUITY_CHANNEL_GROUPS: tuple[str, str, str] = ("disagreement", "entropy_cnn", "entropy_swin")
+
+
 # -----------------------------------------------------------------------------
 # base class
 # -----------------------------------------------------------------------------
@@ -168,6 +178,30 @@ class FusionBlock(nn.Module):
 
         Returns:
             `(fused, branch_logits)`, `branch_logits` always `None` here.
+        """
+        return self.forward(cnn_feat, swin_feat), None
+
+    def forward_with_ambiguity(
+        self, cnn_feat: Tensor, swin_feat: Tensor
+    ) -> tuple[Tensor, Tensor | None]:
+        """Fuse, and additionally return the per-voxel ambiguity signal.
+
+        Default implementation for variants with no ambiguity mechanism
+        (`ConcatFusion`, `AddFusion`): just runs `forward` and reports no
+        ambiguity tensor. `AdaptiveGatedFusion` overrides this to actually
+        return it. Same idiom as `forward_with_branch_logits` /
+        `return_gate`.
+
+        Args:
+            cnn_feat: CNN branch feature, shape `(B, cnn_channels, D, H, W)`.
+            swin_feat: Swin branch feature, shape
+                `(B, swin_channels, D, H, W)`.
+
+        Returns:
+            `(fused, ambiguity)`. `fused` matches `forward`'s output exactly.
+            `ambiguity` is `None` for fusion variants that compute no such
+            signal -- they have no notion of inter-branch disagreement and
+            must not fabricate one, the same contract `return_gate` uses.
         """
         return self.forward(cnn_feat, swin_feat), None
 
@@ -767,20 +801,30 @@ class AdaptiveGatedFusion(FusionBlock):
 
     def _fuse(
         self, cnn_feat: Tensor, swin_feat: Tensor
-    ) -> tuple[Tensor, Tensor, tuple[Tensor, Tensor] | None]:
+    ) -> tuple[Tensor, Tensor, tuple[Tensor, Tensor] | None, Tensor | None]:
         """The actual fusion computation, factored out so it can be
         optionally wrapped in `torch.utils.checkpoint.checkpoint`.
+
+        Private: nothing outside `AdaptiveGatedFusion` calls this. Every
+        public method that fuses (`forward`, `forward_with_branch_logits`,
+        `forward_with_ambiguity`) routes through this single implementation
+        of the merge line `fused = cnn_feat + self.layer_scale * gate *
+        attn_out` -- see that line's comment for why the merge takes this
+        specific form and must not be duplicated.
 
         Args:
             cnn_feat: shape `(B, cnn_channels, D, H, W)`.
             swin_feat: shape `(B, swin_channels, D, H, W)`.
 
         Returns:
-            `(fused, gate, branch_logits)`. `fused` shape
+            `(fused, gate, branch_logits, ambiguity)`. `fused` shape
             `(B, cnn_channels, D, H, W)`, `gate` shape
             `(B, 1 or cnn_channels, D, H, W)`. `branch_logits` is the
             `(l_c, l_s)` pair from `BranchAmbiguity` when `use_ambiguity` is
-            True, else `None`.
+            True, else `None`. `ambiguity` is the `BranchAmbiguity` output
+            itself (shape `(B, 3 * num_regions, D, H, W)`) under the same
+            condition, else `None` -- already computed to build `gate` in
+            that branch, simply carried out here instead of being dropped.
         """
         swin_proj = self.swin_proj_norm(self.swin_proj_conv(swin_feat))
 
@@ -791,12 +835,13 @@ class AdaptiveGatedFusion(FusionBlock):
         else:
             gate = self.gate_generator(cnn_feat, swin_proj)
             branch_logits = None
+            ambiguity = None
 
         attn_out = self.cross_attn(cnn_feat, swin_proj)
         # Broadcasting handles both the scalar gate (1 channel) and the
         # per-channel gate (cnn_channels channels) with the same expression.
         fused = cnn_feat + self.layer_scale * gate * attn_out
-        return fused, gate, branch_logits
+        return fused, gate, branch_logits, ambiguity
 
     def forward(
         self, cnn_feat: Tensor, swin_feat: Tensor, return_gate: bool = False
@@ -818,7 +863,7 @@ class AdaptiveGatedFusion(FusionBlock):
             # for what is only a debug/visualization path (plotting the gate
             # map for the paper) -- always take the plain, non-checkpointed
             # path when the caller wants the gate.
-            fused, gate, _branch_logits = self._fuse(cnn_feat, swin_feat)
+            fused, gate, _branch_logits, _ambiguity = self._fuse(cnn_feat, swin_feat)
             return fused, gate
 
         # Same guard as CNNEncoder.forward: only checkpoint in training with
@@ -826,11 +871,11 @@ class AdaptiveGatedFusion(FusionBlock):
         # gradient at all when nothing in the input requires grad, which is
         # exactly the eval/no_grad case.
         if self.use_checkpoint and self.training and torch.is_grad_enabled():
-            fused, _gate, _branch_logits = checkpoint(
+            fused, _gate, _branch_logits, _ambiguity = checkpoint(
                 self._fuse, cnn_feat, swin_feat, use_reentrant=False
             )
         else:
-            fused, _gate, _branch_logits = self._fuse(cnn_feat, swin_feat)
+            fused, _gate, _branch_logits, _ambiguity = self._fuse(cnn_feat, swin_feat)
         return fused
 
     def forward_with_branch_logits(
@@ -858,12 +903,54 @@ class AdaptiveGatedFusion(FusionBlock):
         self._validate_inputs(cnn_feat, swin_feat)
 
         if self.use_checkpoint and self.training and torch.is_grad_enabled():
-            fused, _gate, branch_logits = checkpoint(
+            fused, _gate, branch_logits, _ambiguity = checkpoint(
                 self._fuse, cnn_feat, swin_feat, use_reentrant=False
             )
         else:
-            fused, _gate, branch_logits = self._fuse(cnn_feat, swin_feat)
+            fused, _gate, branch_logits, _ambiguity = self._fuse(cnn_feat, swin_feat)
         return fused, branch_logits
+
+    def forward_with_ambiguity(
+        self, cnn_feat: Tensor, swin_feat: Tensor
+    ) -> tuple[Tensor, Tensor | None]:
+        """Fuses one level and also returns the per-voxel ambiguity signal.
+
+        `_fuse` already computes the ambiguity tensor internally (feeding it
+        to the gate) -- this is the inference-time read-out of that value,
+        which `forward` and `forward_with_branch_logits` both discard. Uses
+        the SAME checkpointing guard as those two methods: checkpointing is
+        what keeps this block inside the 16 GB VRAM budget, and this is a
+        training-adjacent path (an explainability/inference read-out) that
+        must not diverge from how the fused output is actually computed
+        during training. All three public methods route through the same
+        `_fuse`, so the fused tensor this returns is identical to `forward`'s
+        by construction, not merely by a matching implementation kept in
+        sync by hand.
+
+        Args:
+            cnn_feat: shape `(B, cnn_channels, D, H, W)`.
+            swin_feat: shape `(B, swin_channels, D, H, W)`.
+
+        Returns:
+            `(fused, ambiguity)`. `fused` matches `forward`'s output exactly.
+            `ambiguity` has shape `(B, 3 * num_regions, D, H, W)`, every
+            channel in `[0, 1]`, when `use_ambiguity` is True; `None`
+            otherwise. Channel layout along dim 1, in three
+            `num_regions`-wide groups (see `AMBIGUITY_CHANNEL_GROUPS`):
+            `[0:num_regions]` is `|p_cnn - p_swin|` disagreement,
+            `[num_regions:2*num_regions]` is the CNN branch's normalised
+            Bernoulli entropy, `[2*num_regions:3*num_regions]` is the Swin
+            branch's.
+        """
+        self._validate_inputs(cnn_feat, swin_feat)
+
+        if self.use_checkpoint and self.training and torch.is_grad_enabled():
+            fused, _gate, _branch_logits, ambiguity = checkpoint(
+                self._fuse, cnn_feat, swin_feat, use_reentrant=False
+            )
+        else:
+            fused, _gate, _branch_logits, ambiguity = self._fuse(cnn_feat, swin_feat)
+        return fused, ambiguity
 
 
 class ConcatFusion(FusionBlock):

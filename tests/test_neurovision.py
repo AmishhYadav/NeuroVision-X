@@ -357,6 +357,66 @@ def test_forward_with_gates_returns_single_tensor_even_in_training_mode() -> Non
 
 
 # ---------------------------------------------------------------------------
+# 6b. forward_with_ambiguity
+# ---------------------------------------------------------------------------
+
+
+def test_forward_with_ambiguity_returns_tensor_logits_in_both_modes() -> None:
+    model = _build_model(fusion_name="adaptive_gated")
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    model.train()
+    logits, ambiguity_maps = model.forward_with_ambiguity(x)
+    assert isinstance(logits, Tensor)
+    assert not isinstance(logits, list)
+    assert logits.shape == (1, 3, 32, 32, 32)
+    assert len(ambiguity_maps) == len(model.fusion_blocks) == SWIN_NUM_LEVELS
+
+    model.eval()
+    with torch.no_grad():
+        logits, ambiguity_maps = model.forward_with_ambiguity(x)
+    assert isinstance(logits, Tensor)
+    assert not isinstance(logits, list)
+    assert logits.shape == (1, 3, 32, 32, 32)
+    assert len(ambiguity_maps) == SWIN_NUM_LEVELS
+
+
+def test_forward_with_ambiguity_concat_returns_none_ambiguity() -> None:
+    model = _build_model(fusion_name="concat")
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        logits, ambiguity_maps = model.forward_with_ambiguity(x)
+
+    assert logits.shape == (1, 3, 32, 32, 32)
+    assert len(ambiguity_maps) == SWIN_NUM_LEVELS
+    assert all(a is None for a in ambiguity_maps)
+
+
+def test_cnn_only_forward_with_ambiguity_returns_empty_list() -> None:
+    cnn = _build_cnn()
+    decoder = _build_decoder(cnn)
+    model = NeuroVisionX(
+        cnn_encoder=cnn,
+        swin_encoder=None,
+        fusion_blocks=nn.ModuleList(),
+        decoder=decoder,
+        out_channels=3,
+        deep_supervision_levels=1,
+        head_dropout=0.0,
+    )
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        logits, ambiguity_maps = model.forward_with_ambiguity(x)
+
+    assert logits.shape == (1, 3, 32, 32, 32)
+    assert ambiguity_maps == []
+
+
+# ---------------------------------------------------------------------------
 # 7. gradient flow through both encoders and the decoder
 # ---------------------------------------------------------------------------
 
@@ -623,6 +683,24 @@ def test_eval_mode_returns_tensor_even_with_both_aux_heads_and_deep_supervision(
         out = model(x)
 
     assert isinstance(out, Tensor)
+    assert out.shape == (1, 3, 32, 32, 32)
+
+
+def test_forward_return_type_switch_unperturbed_by_forward_with_ambiguity() -> None:
+    # Regression guard for the addition of forward_with_ambiguity: NeuroVisionX.forward
+    # must still return a plain Tensor in eval mode with both auxiliary heads enabled,
+    # not a MultiTaskOutput or a list -- forward_with_ambiguity walks its own separate
+    # encode/fuse/decode path and must not have touched forward's own switch.
+    model = _build_model_with_heads(deep_supervision_levels=3, confidence=True, boundary=True)
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        out = model(x)
+
+    assert isinstance(out, Tensor)
+    assert not isinstance(out, list)
+    assert not isinstance(out, MultiTaskOutput)
     assert out.shape == (1, 3, 32, 32, 32)
 
 
