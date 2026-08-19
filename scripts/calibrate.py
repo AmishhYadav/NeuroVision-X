@@ -165,6 +165,54 @@ def resolve_eval_dirs(cfg: DictConfig) -> tuple[Path, Path]:
     return fit_dir, apply_dir
 
 
+def resolve_prep_dirs(cfg: DictConfig) -> tuple[Path, Path]:
+    """Resolves the preprocessed-labels roots for the FIT and APPLY splits.
+
+    `calibration.fit_prep_dir` defaults to `None`, meaning "use
+    `data.preprocessing.out_dir` for both splits" -- the normal, same-dataset
+    case, and the only behaviour this project has ever had. Setting it points
+    the FIT split (see `fit_split_temperature`) at a DIFFERENT preprocessed
+    root than the APPLY split, for cross-cohort calibration: fit the
+    temperature on one dataset's val split, apply it to an external cohort's
+    labels. The APPLY side always reads `data.preprocessing.out_dir` --
+    `run_calibration` is the only caller of both halves of this return and
+    threads them accordingly.
+
+    The key is read with `cfg.calibration.get("fit_prep_dir", None)`, not
+    plain attribute access, so a config composed before this key existed
+    (an older cached Hydra compose, or a caller building a minimal DictConfig
+    by hand) still resolves instead of raising -- same pattern as
+    `resolve_boundary_bands` in scripts/evaluate.py.
+
+    Args:
+        cfg: The full composed Hydra config.
+
+    Returns:
+        `(fit_prep_dir, apply_prep_dir)`. Equal paths when `fit_prep_dir` is
+        unset -- that is the common case and is deliberately NOT an error
+        (unlike `resolve_eval_dirs`, where the two directories must differ):
+        two different eval_dirs sharing one labels root is normal, so the
+        analogous "must differ" check does not apply here.
+    """
+    apply_prep_dir = Path(cfg.data.preprocessing.out_dir)
+    fit_prep_dir_raw = cfg.calibration.get("fit_prep_dir", None)
+    fit_prep_dir = Path(fit_prep_dir_raw) if fit_prep_dir_raw is not None else apply_prep_dir
+
+    if fit_prep_dir == apply_prep_dir:
+        logger.info("resolve_prep_dirs: fit and apply both read labels from %s.", apply_prep_dir)
+    else:
+        logger.warning(
+            "resolve_prep_dirs: CROSS-COHORT calibration -- fitting the temperature against "
+            "labels under %s and reporting against labels under %s. This is the unusual "
+            "configuration (does an in-domain temperature still calibrate off-distribution?), "
+            "not the normal same-dataset one.",
+            fit_prep_dir,
+            apply_prep_dir,
+        )
+
+    return fit_prep_dir, apply_prep_dir
+
+
 def _nonempty_npy_dir(path: Path) -> bool:
     """True if `path` is a directory containing at least one `.npy` file."""
     return path.is_dir() and any(path.glob("*.npy"))
@@ -1085,14 +1133,14 @@ def run_calibration(cfg: DictConfig) -> dict[str, Any]:
     calib_cfg = cfg.calibration
     mask_mode = resolve_mask_mode(str(calib_cfg.mask_mode))
     fit_dir, apply_dir = resolve_eval_dirs(cfg)
-    prep_dir = Path(cfg.data.preprocessing.out_dir)
+    fit_prep_dir, apply_prep_dir = resolve_prep_dirs(cfg)
     out_dir = ensure_dir(calib_cfg.out_dir)
 
     apply_source = resolve_source(apply_dir, calib_cfg.source)
-    apply_case_ids = _shared_case_ids(apply_dir, apply_source, prep_dir)
+    apply_case_ids = _shared_case_ids(apply_dir, apply_source, apply_prep_dir)
     if not apply_case_ids:
         raise ValueError(
-            f"No cases found in both {apply_dir / apply_source} and {prep_dir}; nothing to "
+            f"No cases found in both {apply_dir / apply_source} and {apply_prep_dir}; nothing to "
             "calibrate."
         )
     logger.info(
@@ -1123,7 +1171,7 @@ def run_calibration(cfg: DictConfig) -> dict[str, Any]:
             temperature.tolist(),
         )
     else:
-        temp_result = fit_split_temperature(cfg, fit_dir, prep_dir, mask_mode)
+        temp_result = fit_split_temperature(cfg, fit_dir, fit_prep_dir, mask_mode)
         if temp_result is None:
             temp_reason = (
                 "fit_split_temperature returned None (fit_dir has no logits/ source, the LBFGS "
@@ -1169,7 +1217,7 @@ def run_calibration(cfg: DictConfig) -> dict[str, Any]:
         cfg,
         apply_dir,
         apply_source,
-        prep_dir,
+        apply_prep_dir,
         apply_case_ids,
         temperature=temp_result.temperature if apply_temperature_now else None,
     )

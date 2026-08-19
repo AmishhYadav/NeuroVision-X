@@ -20,6 +20,18 @@ apply_dir: null
 
 out_dir: ${output_dir}/calibration
 
+# Preprocessed root holding the ground-truth labels for the FIT split.
+# null means "same as data.preprocessing.out_dir", which is correct whenever
+# fit and apply come from the same dataset.
+#
+# Set this for CROSS-COHORT calibration: fit the temperature on the source
+# dataset's val split and apply it to an EXTERNAL cohort, whose labels live
+# under a different preprocessed root. That comparison -- does an in-domain
+# temperature still calibrate off-distribution? -- is the whole point of
+# fitting on one cohort and reporting on another, and it cannot be expressed
+# with a single labels root.
+fit_prep_dir: null
+
 # auto | logits | probabilities. "auto" prefers logits/ and falls back to
 # probabilities/. Probabilities CANNOT substitute for logits when FITTING a
 # temperature: fp16's gap below 1.0 is 0.000488, so any probability above

@@ -36,6 +36,7 @@ sys.modules["calibrate_script"] = calibrate_script
 _spec.loader.exec_module(calibrate_script)
 
 resolve_eval_dirs = calibrate_script.resolve_eval_dirs
+resolve_prep_dirs = calibrate_script.resolve_prep_dirs
 resolve_source = calibrate_script.resolve_source
 resolve_mask_mode = calibrate_script.resolve_mask_mode
 load_case = calibrate_script.load_case
@@ -230,6 +231,143 @@ def test_resolve_eval_dirs_raises_on_missing_directory(tmp_path: Path):
 
     with pytest.raises(FileNotFoundError):
         resolve_eval_dirs(cfg)
+
+
+# ---------------------------------------------------------------------------
+# 2b. resolve_prep_dirs -- cross-cohort calibration (fit_prep_dir)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_prep_dirs_defaults_to_out_dir_for_both_when_unset(tmp_path: Path):
+    prep_dir = tmp_path / "prep"
+    cfg = _make_cfg(tmp_path / "fit", tmp_path / "apply", prep_dir, tmp_path / "out")
+
+    fit_prep_dir, apply_prep_dir = resolve_prep_dirs(cfg)
+
+    assert fit_prep_dir == prep_dir
+    assert apply_prep_dir == prep_dir
+
+
+def test_resolve_prep_dirs_uses_fit_prep_dir_when_set(tmp_path: Path):
+    apply_prep = tmp_path / "prep_brats"
+    fit_prep = tmp_path / "prep_brats_ssa"
+    cfg = _make_cfg(
+        tmp_path / "fit",
+        tmp_path / "apply",
+        apply_prep,
+        tmp_path / "out",
+        fit_prep_dir=str(fit_prep),
+    )
+
+    fit_prep_dir, apply_prep_dir = resolve_prep_dirs(cfg)
+
+    assert fit_prep_dir == fit_prep
+    assert apply_prep_dir == apply_prep
+
+
+def test_resolve_prep_dirs_resolves_with_no_fit_prep_dir_key_at_all(tmp_path: Path):
+    """An older composed config, cached before `fit_prep_dir` existed, must still resolve.
+
+    Same backward-compatibility contract as `resolve_boundary_bands` in
+    scripts/evaluate.py: the key is read with a safe default rather than
+    plain attribute access, so its absence does not raise.
+    """
+    prep_dir = tmp_path / "prep"
+    cfg = OmegaConf.create(
+        {
+            "seed": 0,
+            "data": {"preprocessing": {"out_dir": str(prep_dir)}},
+            "calibration": {
+                "fit_dir": str(tmp_path / "fit"),
+                "apply_dir": str(tmp_path / "apply"),
+                # deliberately no "fit_prep_dir" key at all
+            },
+        }
+    )
+
+    fit_prep_dir, apply_prep_dir = resolve_prep_dirs(cfg)
+
+    assert fit_prep_dir == prep_dir
+    assert apply_prep_dir == prep_dir
+
+
+def test_cross_cohort_fit_prep_dir_lets_temperature_fit_succeed(tmp_path: Path):
+    """The exact scenario that fails today: fit and apply labels under DIFFERENT roots.
+
+    Without `fit_prep_dir`, `fit_split_temperature` looks for the fit split's
+    logits case ids under `data.preprocessing.out_dir` (the APPLY cohort's
+    labels root) and finds none in common, so no temperature is ever fit.
+    """
+    fit_case_ids = ["src0", "src1", "src2"]
+    apply_case_ids = ["ext0", "ext1", "ext2"]
+
+    # _write_split shares one prep_dir per tmp_path root (`tmp_path / "prep"`,
+    # regardless of tag), so the two cohorts get genuinely separate roots by
+    # using two separate tmp_path subdirectories, not by tag alone.
+    source_root = tmp_path / "cohort_source"
+    external_root = tmp_path / "cohort_external"
+    fit_dir, fit_prep_dir = _write_split(source_root, "val_source", fit_case_ids, source="logits")
+    apply_dir, apply_prep_dir = _write_split(
+        external_root, "test_external", apply_case_ids, source="logits", seed_offset=100
+    )
+    assert fit_prep_dir != apply_prep_dir
+    assert not set(fit_case_ids) & set(apply_case_ids)
+
+    out_dir = tmp_path / "calib_out"
+    cfg = _make_cfg(
+        fit_dir,
+        apply_dir,
+        apply_prep_dir,
+        out_dir,
+        fit_prep_dir=str(fit_prep_dir),
+    )
+
+    run_calibration(cfg)
+
+    temp_payload = json.loads((out_dir / "temperature.json").read_text())
+    assert temp_payload["converged"] is True
+    assert set(temp_payload["temperature"].keys()) == set(REGIONS)
+    for value in temp_payload["temperature"].values():
+        assert np.isfinite(value)
+
+    # The apply-side report still only ever sees the EXTERNAL cohort's cases.
+    per_case = pd.read_csv(out_dir / "per_case_calibration.csv")
+    assert set(per_case["case_id"]) == set(apply_case_ids)
+
+
+def test_fit_prep_dir_null_reproduces_prior_single_root_behaviour(tmp_path: Path):
+    """`fit_prep_dir` unset (the pre-change config shape) fits the exact same temperature.
+
+    Every existing test in this file builds its config via `_make_cfg`, whose
+    default `calibration` dict carries no `fit_prep_dir` key at all -- so this
+    is also, implicitly, what every one of those tests already exercises.
+    Here it is pinned explicitly and numerically: a run with the key entirely
+    absent must recover the SAME fitted per-channel temperature (to machine
+    precision, same seed) as a run where `fit_prep_dir` is explicitly pointed
+    at the very root `data.preprocessing.out_dir` already names -- since
+    `resolve_prep_dirs` must treat "unset" and "explicitly equal" identically.
+    """
+    case_ids = [f"c{i}" for i in range(6)]
+    fit_dir, prep_dir = _write_split(tmp_path, "val", case_ids, source="logits")
+    apply_dir, _ = _write_split(tmp_path, "test", case_ids, source="logits", seed_offset=100)
+
+    out_dir_implicit = tmp_path / "calib_out_implicit"
+    cfg_implicit = _make_cfg(fit_dir, apply_dir, prep_dir, out_dir_implicit)
+    assert "fit_prep_dir" not in cfg_implicit.calibration
+    run_calibration(cfg_implicit)
+    payload_implicit = json.loads((out_dir_implicit / "temperature.json").read_text())
+
+    out_dir_explicit = tmp_path / "calib_out_explicit"
+    cfg_explicit = _make_cfg(
+        fit_dir, apply_dir, prep_dir, out_dir_explicit, fit_prep_dir=str(prep_dir)
+    )
+    run_calibration(cfg_explicit)
+    payload_explicit = json.loads((out_dir_explicit / "temperature.json").read_text())
+
+    assert payload_implicit["converged"] is True
+    assert payload_implicit["temperature"] == pytest.approx(payload_explicit["temperature"])
+    assert payload_implicit["nll_before"] == pytest.approx(payload_explicit["nll_before"])
+    assert payload_implicit["nll_after"] == pytest.approx(payload_explicit["nll_after"])
 
 
 # ---------------------------------------------------------------------------
