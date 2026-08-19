@@ -472,6 +472,136 @@ sessions by resume is still ONE row — sum the GPU hours.
     would catch a left-right flipped atlas, which brain-mask Dice provably
     cannot (see the Phase 0 findings).
 
+26. **EXTERNAL VALIDATION ON BraTS-Africa (SSA): the ET Dice advantage does
+    NOT transfer.** ASNR-MICCAI BraTS2023-SSA Challenge TrainingData V2, 60
+    cases, sub-Saharan African adult glioma, entirely held out —
+    `configs/data/splits_ssa.yaml` puts all 60 in `test` with `train`/`val`
+    deliberately empty, so nothing — no model, no temperature, no threshold —
+    was ever fitted on it. Evaluated on the Mac CPU, `roi_size [64,64,64]`,
+    `overlap 0.5`, identical to the published in-domain runs, zero GPU hours.
+    Models: `neurovision` and `baseline_unet3d`. **The capacity control could
+    NOT be included** — its checkpoint was never retrieved off Kaggle (it
+    lived at `/tmp/capout/checkpoints/best.pt`), the same provenance gap as
+    note 4's missing commit SHA, now costing an actual comparison.
+
+    Two source-format differences had to be handled, and one of them was
+    dangerous. SSA ships BraTS 2023 label values `{0,1,2,3}` (ET = 3), which
+    `remap_labels` correctly refused. It also ships voxel axis codes
+    `('R','A','S')` against BraTS 2021's `('L','P','S')` — anterior-posterior
+    AND left-right reversed. Confirmed from CONTENT, not from headers:
+    brain-mask Dice against SRI24 is **0.6772 as-is, 0.9082 A-P flipped**,
+    versus **0.8795 as-is** for BraTS 2021. Fixed by deriving the transform
+    from each file's own affine (`reorient_to_axcodes`), not by hardcoding a
+    flip — which mattered immediately, because BraTS-PED ships LPS and needs
+    no reorientation at all. Verified additive: three already-preprocessed
+    BraTS 2021 cases re-preprocessed under the change are **bitwise
+    identical** in image, label, bbox and affine, so the 1251 cached cases
+    stay valid.
+
+    Left-right could not be verified and rests on the affine. Brain-mask Dice
+    is structurally blind to mirroring — measured 0.6772 as-is vs 0.6777 L-R
+    flipped, and 0.9082 vs 0.9099 after the A-P fix. This is the same
+    blindness recorded in the Phase 0 findings. The affine was independently
+    confirmed correct on the other two axes. It was deliberately NOT settled
+    by running the model both ways and keeping the better score, which would
+    be selection on the outcome — the same error that manufactured 41-57% of
+    the reported ECE. Bounded risk: training augmentation is `flip_prob: 0.5`
+    applied independently on all three axes, so the model is approximately
+    mirror-invariant by construction.
+
+    Cohort differences. SSA tumours are ~1.7x larger than BraTS 2021: WT
+    median 163,749 voxels vs 96,630 on the BraTS test split; ET median 28,427
+    vs 17,337. **0.0%** of SSA cases have empty ground-truth ET, against 2.6%
+    of BraTS 2021 — so the `ignore_empty=False` convention hands BraTS free
+    Dice 1.0 on cases where SSA gets none, mildly flattering the in-domain ET
+    number before any model behaviour is involved. 8.3% of SSA cases have no
+    necrotic core, vs 3.4% in BraTS.
+
+    **Result — the ET Dice advantage does not transfer.**
+
+    | metric | in-domain BraTS test (n=189) | external SSA (n=60) |
+    |---|---|---|
+    | dice_ET | neurovision 0.8709 vs baseline 0.8442, **+0.0267, p_holm 1.4e-21, better** | 0.7784 vs 0.7792, **−0.0008, p_holm 0.3557, inconclusive** |
+    | dice_TC | 0.9161 vs 0.9058, +0.0103, better | 0.7846 vs 0.7745, +0.0101, p_holm 1.0000, inconclusive |
+    | dice_WT | 0.9321 vs 0.9276, +0.0045, inconclusive | 0.8959 vs 0.8975, −0.0016, inconclusive |
+    | hd95_ET | 4.2410 vs 4.9088, +0.67 mm, inconclusive | 5.8353 vs 8.0536, +2.22 mm, inconclusive |
+    | hd95_TC | 4.9764 vs 5.2430, +0.27 mm, inconclusive | 13.4473 vs 15.5019, +2.05 mm, inconclusive |
+    | hd95_WT | 7.0868 vs 6.7210, **−0.37 mm (worse)**, inconclusive | 16.3541 vs 17.8657, +1.51 mm, inconclusive |
+
+    Positive = `neurovision` better. **Zero of eight comparisons survive Holm
+    on SSA. Every effect size is `negligible`.** Absolute drop for the
+    baseline: ET −0.0650, TC −0.1313, WT −0.0301. For `neurovision`: ET
+    −0.0925. `neurovision` therefore degrades MORE than the baseline —
+    direction only, NOT statistically tested, because it compares two gaps
+    measured on two different case sets and is unpaired.
+
+    A correction trap worth recording. Uncorrected, `dice_ET` has
+    p_wilcoxon = 0.0445 in the BASELINE's favour. Without Holm the conclusion
+    would have been "neurovision is significantly worse out of distribution".
+    Holm returns it to inconclusive. HD95 rows additionally discard 9-10
+    exact ties each under `zero_method="wilcox"`, cutting effective sample
+    further.
+
+    Volume-matching makes the shift LARGER, not smaller. Restricting both
+    cohorts to their overlapping WT-volume range (10th-90th percentile,
+    37,045-175,728 voxels; BraTS n=138, SSA n=28), the BraTS→SSA ET gap
+    widens from −0.0650 to **−0.0771** for the baseline and from −0.0925 to
+    **−0.1087** for `neurovision`. So the 1.7x size difference was MASKING
+    part of the shift rather than causing it. Note n=28 — a point estimate,
+    not a tested difference.
+
+    **Do not write the "it generalises" framing.** The headline +0.0267 ET
+    gain, the project's single strongest and most rigorously controlled
+    in-domain result, is worth nothing on an external cohort.
+
+27. **WHERE THE IN-DOMAIN ET GAIN ACTUALLY COMES FROM.** Boundary-stratified
+    error decomposition on the BraTS test split (n=189), summed over cases,
+    from the `berr_`/`bfnr_`/`bfpr_`/`bn_` columns already emitted by
+    `scripts/evaluate.py`. Reproduces the per-case figures recorded earlier
+    exactly (WT 0-2 mm: 1,663,530/189 = 8,802 per case; WT 10 mm+ false
+    positives 197,960/189 = 1,047).
+
+    **ET, error voxels by distance to the true boundary:**
+
+    | band | baseline | neurovision | change |
+    |---|---|---|---|
+    | 0-2 mm | 713,897 (78.6%) | 613,640 (77.6%) | −100,257 |
+    | 2-5 mm | 96,295 | 93,826 | −2,469 |
+    | 5-10 mm | 48,827 | 42,505 | −6,322 |
+    | 10 mm+ | 49,650 | 41,012 | −8,638 |
+
+    The 0-2 mm change is dominated by FALSE NEGATIVES falling 405,168 →
+    313,531, a **23% cut**. Far-field (10 mm+) false positives fall 49,511 →
+    40,990, a **17% cut**. So the ET gain is chiefly recovered enhancing
+    tumour at the margin, plus fewer spurious distant predictions — which is
+    what the architecture was designed to do, and is the strongest
+    mechanistic support the in-domain claim has.
+
+    **WT is mixed and does not support the same story.** Far-field false
+    positives fall 197,960 → 166,692, but far-field false negatives RISE
+    948 → 4,510. Net better, trading in both directions, consistent with WT
+    being inconclusive in every comparison made in this project.
+
+    Caveat: these are sums over 189 cases, so large tumours dominate. The
+    per-case median of the 10 mm+ band is 0.0 — a minority of cases carry all
+    of it.
+
+28. **INFERENCE COST: 2.7x the parameters but 23.7x the FLOPs and latency.**
+    Measured on CPU with `torch.utils.flop_counter.FlopCounterMode`, one 64³
+    patch, batch 1, `torch 2.13.0`:
+
+    | model | params | GFLOPs/patch | ms/patch (CPU) |
+    |---|---|---|---|
+    | `baseline_unet3d` | 12,870,489 | 11.3 | 45.8 |
+    | `neurovision` | 34,911,341 | 267.4 | 1085.5 |
+
+    The gap is far wider than parameter count suggests, because windowed
+    cross-attention at stride 2 operates over 110,592 tokens on a 96³ patch.
+    Set against an in-domain ET gain of +0.0267 that does not survive
+    distribution shift (note 26), this is an unfavourable compute trade and
+    the paper must state it plainly rather than leave a reviewer to compute
+    it.
+
 ---
 
 ## Planned
