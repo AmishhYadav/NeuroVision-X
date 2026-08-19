@@ -72,11 +72,47 @@ __all__ = [
     "tissue_overlap",
     "epicentre",
     "involvement_profile",
+    "INVOLVEMENT_FIELDS",
+    "load_involvement_notes",
 ]
 
 logger = logging.getLogger(__name__)
 
 _UNLABELLED_NAME = "unlabelled"
+
+# Every key `involvement_profile` emits, in emission order.
+#
+# Exists so a CONSUMER can recognise these columns without calling the
+# function. `scripts/report.py` has to split one anatomy_summary.csv row into
+# the localisation summary and the involvement profile, and it has no volume
+# to run the profile on -- it joins CSVs. Recognising them by prefix at the
+# call site would duplicate `report._classify_involvement_key`'s rules in a
+# third place and let the two drift; a field added here and not there would
+# silently land in the report's localisation summary instead of its
+# involvement block.
+#
+# `tests/test_involvement.py` asserts this equals the actual output keys, so
+# the constant cannot fall behind the function.
+INVOLVEMENT_FIELDS: tuple[str, ...] = (
+    "ventricle_overlap_mm3",
+    "ventricle_frac_of_tumour",
+    "ventricle_frac_of_group",
+    "ventricle_contact",
+    "deep_wm_overlap_mm3",
+    "deep_wm_frac_of_tumour",
+    "deep_wm_frac_of_group",
+    "deep_wm_contact",
+    "cortical_frac_of_tumour",
+    "white_matter_frac_of_tumour",
+    "csf_frac_of_tumour",
+    "outside_tissue_frac_of_tumour",
+    "epicentre_structure",
+    "epicentre_exact",
+    "epicentre_distance_mm",
+    "epicentre_laterality",
+    "epicentre_side",
+    "epicentre_lobe",
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -121,6 +157,44 @@ class InvolvementGroups:
     epicentre_search_radius_mm: float
     vasari_status: str
     vasari_claim: str
+
+
+def load_involvement_notes(path: str | Path) -> tuple[str, ...]:
+    """Reads the group definitions' `missing:` entries as lower-bound sentences, with no atlas.
+
+    Every `missing:` entry names something the source concept covers that this
+    parcellation cannot represent -- the internal capsule for deep white
+    matter, the fourth ventricle for the ventricles. Each one makes the
+    corresponding overlap a LOWER BOUND, and a reader who is not told that
+    will read a small number as evidence of little involvement rather than as
+    evidence of limited coverage.
+
+    Split out of `load_involvement_groups` for the same reason
+    `localize.load_classification` is split out of `load_knowledge`:
+    `scripts/report.py` joins already-written CSVs and has no atlas to
+    validate structure names against, but it still has to carry these
+    sentences into the artifact.
+
+    Args:
+        path: Path to `knowledge/involvement_groups.yaml`.
+
+    Returns:
+        One sentence per `missing:` entry, in file order.
+    """
+    with open(path, encoding="utf-8") as f:
+        doc = yaml.safe_load(f)
+
+    notes: list[str] = []
+    for group_key, group in (doc.get("groups") or {}).items():
+        label = str(group.get("label", group_key))
+        for entry in group.get("missing") or []:
+            term = str(entry["term"]).strip()
+            reason = " ".join(str(entry.get("reason", "")).split())
+            sentence = f"{label} is a lower bound: '{term}' has no structure in this parcellation."
+            if reason:
+                sentence = f"{sentence} {reason}"
+            notes.append(sentence)
+    return tuple(notes)
 
 
 def load_involvement_groups(path: str | Path, atlas: Atlas) -> InvolvementGroups:

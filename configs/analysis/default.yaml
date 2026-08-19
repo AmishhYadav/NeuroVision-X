@@ -119,3 +119,54 @@ report:
   top_n: 10
   markdown: true
   out_subdir: reports
+
+report_agreement:
+  # Reports generated with analysis.report.source=label -- the ground-truth
+  # side of every comparison. Everything here is scored AGAINST this.
+  gt_dir: null
+
+  # Model display name -> that model's report directory. Set from the CLI with
+  # '+analysis.report_agreement.pred_dirs.<name>=<dir>'. The name is what
+  # appears in every output filename and in the comparison tables, so it
+  # should be the experiment name, not the directory.
+  pred_dirs: {}
+
+  # Ordered [a, b] pairs to run the paired comparison on. Holm is applied once
+  # per pair, across the whole returned table -- that table IS the declared
+  # family, and splitting it would destroy the error-rate guarantee.
+  #
+  # PATCH SIZE IS A CONTROLLED VARIABLE HERE. neurovision, baseline_unet3d and
+  # capacity_control_unet3d all trained and evaluated at 64^3 (verified from
+  # each run's own eval_config.yaml), so they may share a family. The
+  # superseded 96^3/200-epoch run differs in BOTH patch size and epochs and is
+  # a confounded probe: report it separately, never inside a family with the
+  # controlled three. docs/experiments.md note 18 measured that report
+  # agreement is not monotonic in Dice, which is why this matters.
+  comparisons: []
+
+  # null -> every case present in both report directories.
+  cases: null
+
+  n_boot: 10000
+  alpha: 0.05
+
+population:
+  # scripts/localize.py output directories to concatenate into one cohort.
+  # They must agree on `source` and name DISTINCT splits -- run_population_stats
+  # refuses both, because mixing ground truth with predictions, or counting one
+  # split twice, changes every count while leaving every fraction plausible.
+  localize_dirs: []
+
+  # Which region the structure/lobe/laterality statistics describe. WT is the
+  # right scope for "what does this lesion touch".
+  region: WT
+
+  # A structure counts as involved in a case at or above this frac_of_structure.
+  # Thresholded on frac_of_structure and NOT frac_of_tumour: a structure can
+  # hold a tiny share of the tumour while most of the structure is gone, and
+  # the second quantity is the one a "how often is this affected" statistic
+  # should read.
+  min_frac_of_structure: 0.05
+
+  top_n_structures: 20
+  figures: true

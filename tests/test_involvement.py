@@ -550,3 +550,42 @@ def test_involvement_module_does_not_import_the_deep_learning_stack() -> None:
     """
     source = Path(involvement.__file__).read_text(encoding="utf-8")
     assert "import torch" not in source
+
+
+def test_involvement_fields_constant_matches_what_the_function_actually_emits(
+    tmp_path: Path,
+) -> None:
+    """The constant exists so scripts/report.py can recognise these columns without a volume
+    to run the profile on. A field added to the function and not to the constant would land
+    silently in the report's localisation summary instead of its involvement block."""
+    from neurovision.anatomy.involvement import INVOLVEMENT_FIELDS
+
+    atlas = _make_atlas()
+    yaml_path = tmp_path / "involvement_groups.yaml"
+    _write_involvement_yaml(
+        yaml_path,
+        ventricle_structures=["Vent_L", "Vent_R"],
+        deep_wm_structures=["DeepWM"],
+    )
+    groups = load_involvement_groups(yaml_path, atlas)
+
+    mask = np.zeros(atlas.parcellation.shape, dtype=bool)
+    mask[0:3, 0:3, 0:3] = True
+
+    profile = involvement_profile(
+        mask,
+        atlas.parcellation,
+        atlas.tissue,
+        atlas,
+        groups,
+        _geom(),
+        min_overlap_mm3=1.0,
+    )
+
+    # Compared as SETS, not tuples: the tissue keys are emitted in the order of
+    # the knowledge file's own `tissue:` mapping, so the emission order is a
+    # property of the config rather than of this module. What must not drift is
+    # WHICH fields exist -- a field added to the function and missing from the
+    # constant would land silently in the report's localisation summary instead
+    # of its involvement block.
+    assert set(profile) == set(INVOLVEMENT_FIELDS)

@@ -47,6 +47,7 @@ import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
+from neurovision.anatomy.involvement import INVOLVEMENT_FIELDS, load_involvement_notes
 from neurovision.anatomy.localize import Classification, load_classification
 from neurovision.reporting.report import Provenance, build_report, write_report
 from neurovision.utils.io import ensure_dir, read_yaml, write_yaml
@@ -89,6 +90,11 @@ class ReportInputs:
             `localize_config.yaml` rather than recomputed -- it belongs to
             the run that produced `anatomy.csv`, not to this one.
         split: The frozen split name both input tables were built over.
+        involvement_caveats: One lower-bound sentence per structure the
+            involvement groups could not represent, read from the same
+            knowledge file the localisation run recorded in
+            `localize_config.yaml`. Empty when that run had involvement
+            disabled.
     """
 
     burden: pd.DataFrame
@@ -101,6 +107,7 @@ class ReportInputs:
     segmentation_dir: str
     coverage_line: str
     split: str
+    involvement_caveats: tuple[str, ...] = ()
 
 
 def git_revision(repo_root: Path) -> str | None:
@@ -254,7 +261,41 @@ def load_inputs(cfg: DictConfig) -> ReportInputs:
         segmentation_dir=str(localize_config["resolved_source_dir"]),
         coverage_line=str(localize_config["coverage_line"]),
         split=str(localize_config["split"]),
+        involvement_caveats=_involvement_caveats(localize_config),
     )
+
+
+def _involvement_caveats(localize_config: dict) -> tuple[str, ...]:
+    """Reads the lower-bound sentences from the knowledge file THAT run recorded.
+
+    The path comes from `localize_config.yaml`'s own `involvement` block, not
+    from this run's config: the caveats have to describe the file that
+    actually produced the involvement columns being reported, and pointing at
+    a differently-configured groups map would attach the wrong coverage gaps
+    to real numbers.
+
+    Args:
+        localize_config: The parsed `localize_config.yaml`.
+
+    Returns:
+        The sentences, or an empty tuple when that run had involvement
+        disabled or predates the key entirely.
+    """
+    block = localize_config.get("involvement") or {}
+    if not block.get("enabled"):
+        return ()
+    groups_map = block.get("groups_map")
+    if not groups_map:
+        return ()
+    path = Path(str(groups_map))
+    if not path.exists():
+        logger.warning(
+            "localize_config.yaml names involvement groups_map %s, which does not exist; the "
+            "report's lower-bound caveats will be omitted.",
+            path,
+        )
+        return ()
+    return load_involvement_notes(path)
 
 
 def resolve_cases(inputs: ReportInputs, requested: Sequence[str] | None) -> list[str]:
@@ -342,6 +383,20 @@ def report_one(case_id: str, inputs: ReportInputs, provenance: Provenance, top_n
 
     anatomy_summary_row = inputs.anatomy_summary.loc[case_id].to_dict()
 
+    # Phase 3b's columns live in the SAME anatomy_summary.csv row as the
+    # localisation summary -- scripts/localize.py merges them there rather than
+    # writing a second file. Split them back out by name, from the constant
+    # involvement.py owns, so a field added there reaches the report's
+    # involvement block instead of quietly sitting in the localisation summary
+    # where build_report never looks at it. A run whose localisation had
+    # involvement disabled simply has none of these columns, and the report
+    # comes out with no involvement block at all.
+    involvement = {
+        field: anatomy_summary_row.pop(field)
+        for field in INVOLVEMENT_FIELDS
+        if field in anatomy_summary_row
+    }
+
     classification = inputs.classification
     return build_report(
         case_id,
@@ -356,6 +411,8 @@ def report_one(case_id: str, inputs: ReportInputs, provenance: Provenance, top_n
         coverage_gaps=classification.coverage_gaps,
         near_eloquent_mm=classification.near_eloquent_mm,
         top_n=top_n,
+        involvement=involvement or None,
+        involvement_caveats=inputs.involvement_caveats,
     )
 
 
