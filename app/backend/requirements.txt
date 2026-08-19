@@ -12,6 +12,11 @@
 fastapi==0.141.1
 uvicorn[standard]==0.52.2
 
+# FastAPI needs this to parse multipart/form-data, which is what a browser
+# <input type="file"> + FormData produces. Demo-only: no training code
+# uploads anything.
+python-multipart==0.0.32
+
 # Test-only. `starlette.testclient` imports `httpx2` (the httpx 2.x line,
 # github.com/pydantic/httpx2) and raises "requires the httpx2 package" without
 # it, so `tests/test_app_api.py` cannot run on a fresh clone otherwise. The

@@ -10,10 +10,17 @@ needs no checkpoint to be present.
 Route handlers are thin on purpose: filesystem/geometry errors are translated
 to HTTP responses once, in `_register_exception_handlers`, rather than by a
 try/except copied into every route.
+
+The `/upload` and `/jobs*` routes below are the one exception to "never
+imports torch": they import `app.backend.jobs`, which itself imports torch
+only lazily (inside `run_job`, at the one call that reaches live inference --
+see that module's docstring). Importing `jobs` here at module scope is safe
+for the same reason it is safe in `jobs.py` itself.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -22,11 +29,12 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import inference, jobs
 from .config import REPO_ROOT, Settings, get_settings
 from .volumes import (
     MODALITIES,
@@ -413,6 +421,145 @@ def get_report_markdown(case_id: str) -> Response:
     )
 
 
+def _job_to_json(job: jobs.Job) -> dict[str, Any]:
+    """Serialises one `Job` dataclass to a plain JSON-able dict."""
+    return dataclasses.asdict(job)
+
+
+def _job_settings(settings: Settings, job_id: str) -> Settings:
+    """Per-job `Settings` pointing at that job's own prep/cache directories.
+
+    Mirrors exactly how `jobs.run_job` builds its `job_settings` (via
+    `dataclasses.replace`, overriding only `prep_dir` and `cache_dir`) -- see
+    that function's docstring for why an uploaded case is namespaced under
+    `jobs.job_root`, never under `settings.prep_dir` / `settings.cache_dir`.
+    Built the same way here rather than imported, because `run_job` builds it
+    inline and `jobs.py` exposes no helper for it.
+    """
+    prep_dir = jobs.job_case_dir(settings, job_id).parent
+    cache_dir = jobs.job_root(settings) / job_id / "cache"
+    return dataclasses.replace(settings, prep_dir=prep_dir, cache_dir=cache_dir)
+
+
+@router.post("/upload", status_code=202)
+async def post_upload(
+    t1: UploadFile = File(...),
+    t1ce: UploadFile = File(...),
+    t2: UploadFile = File(...),
+    flair: UploadFile = File(...),
+    label_convention: str = Form("brats2021"),
+) -> dict[str, Any]:
+    """Accepts four raw MRI volumes, validates them, and queues a segmentation job.
+
+    Fields are read into memory and handed to `jobs.create_job` by FIXED role
+    name (`t1` / `t1ce` / `t2` / `flair`) only -- see that module's docstring
+    for why no client-supplied filename ever reaches a path.
+
+    A `ValueError` from validation (missing/extra role, unreadable NIfTI,
+    mismatched shape or affine, oversized payload) surfaces as 400 with the
+    underlying message -- unlike the generic 500
+    `_register_exception_handlers` gives every other `ValueError` in this
+    file, because a bad upload is the caller's fault, not a server-side data
+    inconsistency.
+    """
+    settings = get_settings()
+    uploads = {
+        "t1": await t1.read(),
+        "t1ce": await t1ce.read(),
+        "t2": await t2.read(),
+        "flair": await flair.read(),
+    }
+    try:
+        job = jobs.create_job(settings, uploads, label_convention=label_convention)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    jobs.start_job(settings, job.job_id)
+    return _job_to_json(job)
+
+
+@router.get("/jobs")
+def get_jobs() -> dict[str, Any]:
+    """Lists every known job, newest first."""
+    return {"jobs": [_job_to_json(job) for job in jobs.list_jobs()]}
+
+
+@router.get("/jobs/{job_id}")
+def get_job_detail(job_id: str) -> dict[str, Any]:
+    """Returns one job's current state, or 404 if `job_id` is unknown."""
+    job = jobs.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
+    return _job_to_json(job)
+
+
+@router.delete("/jobs/{job_id}")
+def delete_job_route(job_id: str) -> dict[str, Any]:
+    """Deletes a job and everything it wrote to disk, or 404 if it did not exist."""
+    settings = get_settings()
+    if not jobs.delete_job(settings, job_id):
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
+    return {"job_id": job_id, "deleted": True}
+
+
+def _require_done_job(job_id: str) -> jobs.Job:
+    """Returns a known job in state `"done"`, or raises the matching HTTP error."""
+    job = jobs.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown job {job_id!r}")
+    if job.state != "done":
+        raise HTTPException(
+            status_code=409,
+            detail=f"job {job_id!r} is not done yet (state={job.state!r})",
+        )
+    return job
+
+
+@router.get("/jobs/{job_id}/volume/{modality}")
+def get_job_volume(job_id: str, modality: str) -> Response:
+    """Returns one uploaded case's preprocessed modality volume, exactly like `/cases/.../volume`.
+
+    See `_job_settings` -- reused so this route reads from the same
+    directory `run_job` preprocessed the upload into.
+    """
+    if modality not in MODALITIES:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown modality {modality!r}; expected one of {list(MODALITIES)}",
+        )
+    job = _require_done_job(job_id)
+    job_settings = _job_settings(get_settings(), job_id)
+    meta = read_meta(job.case_id, job_settings)
+    data = load_modality(job.case_id, modality, job_settings)
+    return _binary_response(data, meta.shape)
+
+
+@router.get("/jobs/{job_id}/mask/prediction")
+def get_job_mask(job_id: str) -> Response:
+    """Returns the job's segmentation as a `{0,1,2,3}` class map, raw uint8 bytes.
+
+    Unlike `/cases/{case_id}/mask/prediction`, this does NOT go through
+    `volumes.load_mask`: `inference.segment_case` writes its prediction in
+    the job's own CROPPED geometry (see that function's docstring), not the
+    original BraTS geometry `scripts/evaluate.py` saves and `load_mask`
+    re-crops with `meta.bbox`. So this route takes the same "already cropped,
+    just re-encode" path `load_mask` takes for `source="label"`, applied to
+    the job's cached prediction file instead of `label.npy`.
+    """
+    job = _require_done_job(job_id)
+    settings = get_settings()
+    job_settings = _job_settings(settings, job_id)
+    meta = read_meta(job.case_id, job_settings)
+    pred_path = inference.cached_prediction_path(job_settings, job.case_id)
+    if not pred_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=f"job {job_id!r} is done but has no cached segmentation at {pred_path}",
+        )
+    arr = np.load(pred_path, mmap_mode="r")
+    data = np.ascontiguousarray(arr, dtype=np.uint8).tobytes()
+    return _binary_response(data, meta.shape)
+
+
 def _register_exception_handlers(app: FastAPI) -> None:
     """Maps `volumes.py`'s exceptions onto HTTP responses, once for every route.
 
@@ -467,7 +614,10 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
-        allow_methods=["GET"],
+        # POST/DELETE cover the upload/job routes added alongside the
+        # read-only GET routes above; a cross-origin browser client would
+        # otherwise fail CORS preflight on those two methods.
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
         # Without this, a cross-origin fetch() in the Vite dev server can see
         # the response body but not these headers -- and the frontend cannot
