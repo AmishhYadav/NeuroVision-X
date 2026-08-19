@@ -78,6 +78,55 @@ signal should therefore help most off-distribution — which is where H1 says it
    content; HD95 is NaN when exactly one side of a region is empty, so `n_missing` must
    be reported per row.
 
-## Result
+## Result — H1 NOT CONFIRMED
 
-*To be filled in after the test. Left empty deliberately.*
+Test run 2026-08-19 on BraTS-PED, n = 99, config identical to SSA and to the published
+in-domain runs (`roi_size [64,64,64]`, `overlap 0.5`).
+
+**Primary endpoint, Holm across exactly the three rows fixed above:**
+
+| metric | n | n_missing | neurovision | baseline | improvement (mm) | CI | p_holm | verdict |
+|---|---|---|---|---|---|---|---|---|
+| hd95_ET | 78 | 21 | 9.3291 | 10.2241 | +0.8950 | [-1.9192, 4.3155] | 0.7150 | inconclusive |
+| hd95_TC | 88 | 11 | 18.1827 | 15.8909 | **-2.2918** | [-4.6511, 0.0938] | 0.0071 | inconclusive |
+| hd95_WT | 98 | 1 | 12.5489 | 12.8619 | +0.3130 | [-2.8418, 3.3613] | 0.7150 | inconclusive |
+
+Positive = `neurovision` better. **Zero rows reach `better` after Holm, and the three do
+NOT point the same direction — TC reverses.** Both halves of the decision rule fail, so H1
+is not confirmed on either count.
+
+Note `hd95_TC` has `p_holm` = 0.0071 but its bootstrap CI straddles zero (upper bound
++0.0938). `verdict` resolves that disagreement conservatively, as it is designed to. The
+direction of that row is `neurovision` **worse** by 2.29 mm, so treating the small p-value
+as support for H1 would invert the finding.
+
+**Secondary (reported, deliberately NOT in the primary Holm family):**
+
+| metric | neurovision | baseline | improvement | CI | p_holm | verdict |
+|---|---|---|---|---|---|---|
+| dice_ET | 0.5634 | 0.5733 | -0.0099 | [-0.0554, 0.0385] | 1.0000 | inconclusive |
+| dice_TC | 0.4394 | 0.4990 | **-0.0595** | [-0.0923, -0.0282] | **0.0001** | **worse** |
+| dice_WT | 0.8490 | 0.8710 | -0.0220 | [-0.0463, -0.0037] | 1.0000 | inconclusive |
+| hd95_mean | 13.5520 | 14.1541 | +0.6021 | [-1.5828, 2.9357] | 1.0000 | inconclusive |
+
+**`neurovision` is CONCLUSIVELY WORSE than the baseline on pediatric tumour core** —
+-0.0595 Dice, p_holm 0.0001, CI entirely below zero — and directionally worse on all three
+Dice regions.
+
+**Interpretation.** The SSA-generated pattern did not replicate. Across two independent
+external cohorts the picture is now: on BraTS-Africa the architecture's advantage vanishes;
+on BraTS-PED it reverses and the proposed model is measurably worse on TC. The consistent
+HD95 direction observed on SSA (all four rows favouring `neurovision`) was noise, which is
+exactly why it required a held-out confirmatory cohort rather than a re-analysis of the set
+that generated it.
+
+This closes the last open route to a positive claim for the architecture outside its
+training distribution. Per commitment 3 above, this file stays in the repository and the
+negative outcome is reported. Do not swap to whichever metric happened to work.
+
+**Caveats that do not rescue it.** Pediatric high-grade glioma is a different disease
+entity (necrosis-dominant: 3.77M NCR voxels vs 845k edema, inverted relative to adult
+glioma), so both models drop hard in absolute terms — but H1 concerned the paired
+difference within each case, which is what was tested. `n_missing` is high on ET (21 of 99)
+because HD95 is NaN when exactly one side of a region is empty, and 11.1% of PED cases have
+no ground-truth ET.
