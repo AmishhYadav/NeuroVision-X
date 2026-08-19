@@ -24,6 +24,7 @@ from neurovision.data.preprocessing import (
     normalize_nonzero,
     preprocess_case,
     remap_labels,
+    reorient_to_axcodes,
 )
 
 # --- helpers -----------------------------------------------------------
@@ -235,6 +236,111 @@ def test_remap_labels_raises_on_unexpected_value_5():
     assert "5" in str(exc_info.value)
 
 
+def test_remap_labels_brats2023_convention_is_identity():
+    seg = np.array([0, 1, 2, 3], dtype=np.uint8)
+    out = remap_labels(seg, convention="brats2023")
+    assert out.dtype == np.uint8
+    assert out.tolist() == [0, 1, 2, 3]
+
+
+def test_remap_labels_brats2023_raises_on_raw_label_4():
+    # brats2023 labels are already {0,1,2,3} (ET=3) -- raw 4 is invalid here,
+    # the mirror image of brats2021 rejecting raw 3.
+    seg = np.array([0, 1, 2, 3, 4], dtype=np.uint8)
+    with pytest.raises(ValueError) as exc_info:
+        remap_labels(seg, convention="brats2023")
+    assert "4" in str(exc_info.value)
+
+
+def test_remap_labels_unknown_convention_raises_naming_valid_ones():
+    seg = np.array([0, 1], dtype=np.uint8)
+    with pytest.raises(ValueError) as exc_info:
+        remap_labels(seg, convention="nonsense")
+    message = str(exc_info.value)
+    assert "nonsense" in message
+    assert "brats2021" in message
+    assert "brats2023" in message
+
+
+# --- reorient_to_axcodes --------------------------------------------------
+
+
+def _lps_affine() -> np.ndarray:
+    """BraTS 2021's own affine: diag(-1, -1, 1), axis codes LPS."""
+    affine = np.diag([-1.0, -1.0, 1.0, 1.0])
+    affine[:3, 3] = [239.0, 239.0, 0.0]
+    return affine
+
+
+def _ras_affine() -> np.ndarray:
+    """Identity affine, axis codes RAS (BraTS-Africa's convention)."""
+    return np.eye(4)
+
+
+def test_reorient_to_axcodes_is_exact_noop_when_already_matching():
+    rng = np.random.default_rng(0)
+    array = rng.normal(size=(4, 5, 6)).astype(np.float32)
+    affine = _lps_affine()
+
+    out_array, out_affine = reorient_to_axcodes(array, affine, ("L", "P", "S"))
+
+    assert np.array_equal(out_array, array)
+    np.testing.assert_array_equal(out_affine, affine)
+
+
+def test_reorient_to_axcodes_round_trip_recovers_original():
+    rng = np.random.default_rng(1)
+    array = rng.normal(size=(4, 5, 6)).astype(np.float32)
+    affine = _lps_affine()
+
+    ras_array, ras_affine = reorient_to_axcodes(array, affine, ("R", "A", "S"))
+    lps_array, lps_affine = reorient_to_axcodes(ras_array, ras_affine, ("L", "P", "S"))
+
+    assert np.array_equal(lps_array, array)
+    np.testing.assert_allclose(lps_affine, affine)
+
+
+def test_reorient_to_axcodes_ras_to_lps_flips_first_two_axes():
+    # A known asymmetric array pins the actual geometry of the flip, not
+    # just its shape -- RAS -> LPS reverses R<->L and A<->P, both axis 0
+    # and axis 1, while axis 2 (S) is unchanged.
+    array = np.arange(4 * 5 * 6).reshape(4, 5, 6).astype(np.float32)
+    affine = _ras_affine()
+
+    out_array, _ = reorient_to_axcodes(array, affine, ("L", "P", "S"))
+
+    np.testing.assert_array_equal(out_array, np.flip(array, (0, 1)))
+
+
+def test_reorient_to_axcodes_updated_affine_matches_target_axcodes():
+    array = np.zeros((4, 5, 6), dtype=np.float32)
+    affine = _ras_affine()
+
+    _, out_affine = reorient_to_axcodes(array, affine, ("L", "P", "S"))
+
+    assert nib.aff2axcodes(out_affine) == ("L", "P", "S")
+
+
+def test_reorient_to_axcodes_preserves_label_values():
+    label = np.zeros((4, 5, 6), dtype=np.uint8)
+    label[1:3, 1:3, 1:3] = 3
+    affine = _ras_affine()
+
+    out_label, _ = reorient_to_axcodes(label, affine, ("L", "P", "S"))
+
+    assert out_label.dtype == np.uint8
+    assert set(np.unique(out_label).tolist()) == set(np.unique(label).tolist())
+
+
+def test_reorient_to_axcodes_raises_on_bad_target_axcodes():
+    array = np.zeros((4, 5, 6), dtype=np.float32)
+    affine = _ras_affine()
+    with pytest.raises(ValueError):
+        reorient_to_axcodes(array, affine, ("L", "P"))  # wrong length
+    with pytest.raises(ValueError):
+        reorient_to_axcodes(array, affine, ("X", "P", "S"))  # invalid code
+
+
 # --- load_case_arrays --------------------------------------------------
 
 
@@ -413,3 +519,91 @@ def test_label_voxel_counts_matches_hand_computed(tmp_path: Path):
     summary = preprocess_case(case, out_dir)
     for cls in range(4):
         assert summary[f"n_class_{cls}"] == expected_counts.get(str(cls), 0)
+
+
+# --- reorientation wiring is additive: BraTS 2021 output must not change ---
+
+
+def test_preprocess_case_lps_source_is_bitwise_identical_to_no_reorientation(tmp_path: Path):
+    """BraTS 2021's own affine is LPS, so reorienting to the default
+    target_axcodes=("L", "P", "S") must be an exact no-op end to end.
+
+    Proves this by reconstructing the OLD pipeline by hand (load -> per-
+    channel z-score -> bbox from raw -> crop -> remap, with NO
+    reorientation step anywhere) and asserting the saved arrays from
+    `preprocess_case` match it exactly. This is what guarantees the 1251
+    already-preprocessed BraTS 2021 cases stay valid after this change.
+    """
+    affine = _lps_affine()
+    case = _make_case(tmp_path / "raw", seg_array=_known_label(), affine=affine)
+    out_dir = tmp_path / "out"
+
+    preprocess_case(case, out_dir, target_axcodes=("L", "P", "S"))
+
+    image = np.load(out_dir / case.case_id / "image.npy")
+    label = np.load(out_dir / case.case_id / "label.npy")
+
+    raw_image, raw_label, _ = load_case_arrays(case)
+    normalized = np.stack(
+        [normalize_nonzero(raw_image[c]) for c in range(raw_image.shape[0])], axis=0
+    )
+    bbox = compute_nonzero_bbox(raw_image)
+    expected_image = crop_to_bbox(normalized, bbox).astype(np.float16)
+    expected_label = remap_labels(crop_to_bbox(raw_label, bbox)).astype(np.uint8)
+
+    np.testing.assert_array_equal(image, expected_image)
+    np.testing.assert_array_equal(label, expected_label)
+
+
+def test_preprocess_case_meta_gains_axcodes_and_updates_affine(tmp_path: Path):
+    """`meta.json` records source/target axcodes and stores the UPDATED
+    affine, even in the no-op LPS case."""
+    import json
+
+    affine = _lps_affine()
+    case = _make_case(tmp_path / "raw", seg_array=_known_label(), affine=affine)
+    out_dir = tmp_path / "out"
+    preprocess_case(case, out_dir, target_axcodes=("L", "P", "S"))
+
+    meta = json.loads((out_dir / case.case_id / "meta.json").read_text())
+    assert meta["source_axcodes"] == "LPS"
+    assert meta["target_axcodes"] == "LPS"
+    np.testing.assert_allclose(np.array(meta["affine"]), affine)
+
+
+def test_preprocess_case_reorients_ras_source_to_lps_target(tmp_path: Path):
+    """A RAS-convention case (BraTS-Africa's orientation) gets flipped to
+    LPS before cropping, and `meta.json` records the real transform."""
+    import json
+
+    affine = _ras_affine()
+    case = _make_case(tmp_path / "raw", seg_array=_known_label(), affine=affine)
+    out_dir = tmp_path / "out"
+    preprocess_case(case, out_dir, target_axcodes=("L", "P", "S"))
+
+    meta = json.loads((out_dir / case.case_id / "meta.json").read_text())
+    assert meta["source_axcodes"] == "RAS"
+    assert meta["target_axcodes"] == "LPS"
+    assert nib.aff2axcodes(np.array(meta["affine"])) == ("L", "P", "S")
+
+    # Tumor voxel histogram is invariant under a pure flip/permutation --
+    # same voxels, same values, just relabeled positions.
+    label = np.load(out_dir / case.case_id / "label.npy")
+    values, counts = np.unique(label, return_counts=True)
+    hist = {int(v): int(c) for v, c in zip(values, counts)}
+    assert hist.get(3, 0) == 128  # ET voxel count from _known_label()
+
+
+def test_preprocess_case_brats2023_label_convention(tmp_path: Path):
+    """`label_convention="brats2023"` remaps raw {0,1,2,3} (ET=3) as an
+    identity, not through the brats2021 {0,1,2,4} table."""
+    seg = np.zeros(_SHAPE, dtype=np.uint8)
+    seg[_BRAIN] = 1
+    seg[2:6, 3:11, 4:12] = 2
+    seg[2:4, 3:11, 4:12] = 3  # ET is raw label 3 under brats2023
+
+    case = _make_case(tmp_path / "raw", seg_array=seg, affine=_lps_affine())
+    out_dir = tmp_path / "out"
+    summary = preprocess_case(case, out_dir, label_convention="brats2023")
+
+    assert summary["n_class_3"] == 128  # same 2x8x8 sub-block as _known_label()

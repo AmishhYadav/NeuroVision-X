@@ -25,15 +25,30 @@ from neurovision.utils.io import ensure_dir, read_json, write_json
 
 logger = logging.getLogger(__name__)
 
-# BraTS ships raw labels {0, 1, 2, 4} -- label 3 was retired from the BraTS
-# labeling convention years ago but the gap was never closed, so a raw label
-# array has a hole in it. Anything that indexes by class count (a one-hot
-# encoding, a confusion matrix, a loss with num_classes=4) needs contiguous
-# {0, 1, 2, 3} instead, hence this remap table.
+# BraTS 2020/2021 ships raw labels {0, 1, 2, 4} -- label 3 was retired from
+# the BraTS labeling convention years ago but the gap was never closed, so a
+# raw label array has a hole in it. Anything that indexes by class count (a
+# one-hot encoding, a confusion matrix, a loss with num_classes=4) needs
+# contiguous {0, 1, 2, 3} instead, hence this remap table.
 BRATS_LABEL_MAP: dict[int, int] = {0: 0, 1: 1, 2: 2, 4: 3}
+
+# BraTS 2023+ (including BraTS-Africa) closed the gap and ships raw labels
+# {0, 1, 2, 3} directly -- ET is already 3, so this remap is the identity.
+BRATS2023_LABEL_MAP: dict[int, int] = {0: 0, 1: 1, 2: 2, 3: 3}
+
+# One label map per supported source-dataset convention. Keyed by the string
+# a config or caller passes to `remap_labels`.
+_LABEL_CONVENTIONS: dict[str, dict[int, int]] = {
+    "brats2021": BRATS_LABEL_MAP,
+    "brats2023": BRATS2023_LABEL_MAP,
+}
 
 # Fixed channel order, matching `BratsCase.modality_paths`.
 _MODALITY_ROLES = ("t1", "t1ce", "t2", "flair")
+
+# Valid single-character nibabel axis codes: one of each pair must appear,
+# one per spatial axis, in `reorient_to_axcodes`'s `target_axcodes`.
+_VALID_AXIS_CODES = {"L", "R", "P", "A", "I", "S"}
 
 
 def normalize_nonzero(volume: np.ndarray) -> np.ndarray:
@@ -132,11 +147,19 @@ def crop_to_bbox(array: np.ndarray, bbox: tuple[tuple[int, int], ...]) -> np.nda
     return array[(..., *slices)]
 
 
-def remap_labels(seg: np.ndarray) -> np.ndarray:
-    """Remap raw BraTS labels {0,1,2,4} to contiguous {0,1,2,3}.
+def remap_labels(seg: np.ndarray, convention: str = "brats2021") -> np.ndarray:
+    """Remap raw source labels to contiguous {0,1,2,3}.
 
     0 = background, 1 = NCR/NET (necrotic/non-enhancing tumor core),
-    2 = ED (peritumoral edema), 3 = ET (enhancing tumor, was raw label 4).
+    2 = ED (peritumoral edema), 3 = ET (enhancing tumor). Which raw value
+    means ET depends on which dataset the labels came from:
+
+    - `"brats2021"` (BraTS 2020/2021 convention, default): raw values
+      `{0, 1, 2, 4}`, ET was raw label 4. Label 3 was retired from BraTS
+      years ago and never reused, so raw label 3 is invalid here.
+    - `"brats2023"` (BraTS 2023+, including BraTS-Africa): raw values
+      `{0, 1, 2, 3}` directly, ET is already 3 -- an identity map. Raw
+      label 4 is invalid here.
 
     Note: the three BraTS *evaluation regions* (ET = {3}, TC = {1, 3},
     WT = {1, 2, 3}) are derived from these remapped labels, but that
@@ -144,19 +167,28 @@ def remap_labels(seg: np.ndarray) -> np.ndarray:
     targets, not here -- this function's only job is the label remap.
 
     Args:
-        seg: Raw label array of any shape, values expected to be a subset
-            of `{0, 1, 2, 4}`.
+        seg: Raw label array of any shape.
+        convention: Which source-dataset label convention `seg` follows.
+            One of `"brats2021"` (default) or `"brats2023"`.
 
     Returns:
         `uint8` array of the same shape with values in `{0, 1, 2, 3}`.
 
     Raises:
-        ValueError: If `seg` contains any value outside `{0, 1, 2, 4}`.
-            Silently passing an unexpected label through would corrupt
-            training targets, so this is a hard failure.
+        ValueError: If `convention` is not a recognized convention name, or
+            if `seg` contains any value outside that convention's expected
+            raw values. Silently passing an unexpected label through would
+            corrupt training targets, so this is a hard failure.
     """
+    label_map = _LABEL_CONVENTIONS.get(convention)
+    if label_map is None:
+        raise ValueError(
+            f"remap_labels: unknown convention {convention!r}; "
+            f"expected one of {sorted(_LABEL_CONVENTIONS)}."
+        )
+
     unique_vals = np.unique(seg)
-    valid = set(BRATS_LABEL_MAP.keys())
+    valid = set(label_map.keys())
     bad_vals = sorted(int(v) for v in unique_vals if int(v) not in valid)
     if bad_vals:
         raise ValueError(
@@ -165,9 +197,82 @@ def remap_labels(seg: np.ndarray) -> np.ndarray:
         )
 
     out = np.zeros_like(seg, dtype=np.uint8)
-    for src_label, dst_label in BRATS_LABEL_MAP.items():
+    for src_label, dst_label in label_map.items():
         out[seg == src_label] = dst_label
     return out
+
+
+def _validate_axcodes(axcodes: Any) -> tuple[str, str, str]:
+    """Normalize and validate a 3-axis-code sequence.
+
+    Accepts a tuple or list (Hydra/OmegaConf configs deserialize a YAML
+    list as a `ListConfig`, not a `tuple`), and always returns a plain
+    `tuple[str, str, str]` so downstream nibabel calls get exactly what
+    they expect.
+
+    Raises:
+        ValueError: If `axcodes` is not a 3-element sequence of valid
+            single-character axis codes (one of L/R, P/A, I/S per axis).
+    """
+    is_sequence = not isinstance(axcodes, str) and hasattr(axcodes, "__len__")
+    if not is_sequence or len(axcodes) != 3:
+        raise ValueError(
+            f"axcodes must be a 3-tuple of axis codes from {sorted(_VALID_AXIS_CODES)}, "
+            f"got {axcodes!r}."
+        )
+    codes = tuple(str(c) for c in axcodes)
+    bad = [c for c in codes if c not in _VALID_AXIS_CODES]
+    if bad:
+        raise ValueError(
+            f"axcodes must be a 3-tuple of axis codes from {sorted(_VALID_AXIS_CODES)}, "
+            f"got {axcodes!r} (invalid: {bad})."
+        )
+    return codes  # type: ignore[return-value]
+
+
+def reorient_to_axcodes(
+    array: np.ndarray,
+    affine: np.ndarray,
+    target_axcodes: tuple[str, str, str],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reorient a 3D volume so its voxel axes follow `target_axcodes`.
+
+    Different BraTS releases ship different voxel-axis conventions -- BraTS
+    2021's affine is `diag(-1, -1, 1)` (axis codes `LPS`), while BraTS-Africa
+    (BraTS 2023 convention) ships `RAS`. This function reads the volume's
+    *current* axis codes from `affine` and reorients it (flips and/or
+    transposes, never resamples or interpolates) to match `target_axcodes`,
+    using nibabel's own orientation machinery rather than hand-rolled flips
+    -- the same logic nibabel itself uses to interpret NIfTI headers.
+
+    Args:
+        array: Volume of shape `(D, H, W)`, any dtype (including bool or
+            integer label maps -- this only permutes/flips voxels, it never
+            interpolates, so label values are preserved exactly).
+        affine: The volume's current 4x4 affine (voxel index -> world mm).
+        target_axcodes: Desired voxel axis codes, e.g. `("L", "P", "S")`.
+
+    Returns:
+        `(reoriented_array, updated_affine)`: `array` reordered/flipped to
+        match `target_axcodes`, and `affine` updated so it still correctly
+        describes the returned array (i.e.
+        `nibabel.aff2axcodes(updated_affine) == target_axcodes`). An exact
+        no-op -- identical array values, identical affine -- when `array`
+        already matches `target_axcodes`.
+
+    Raises:
+        ValueError: If `target_axcodes` is not a 3-tuple of valid axis
+            codes.
+    """
+    target = _validate_axcodes(target_axcodes)
+
+    current_ornt = nib.orientations.io_orientation(affine)
+    target_ornt = nib.orientations.axcodes2ornt(target)
+    transform = nib.orientations.ornt_transform(current_ornt, target_ornt)
+
+    reoriented = nib.orientations.apply_orientation(array, transform)
+    updated_affine = np.asarray(affine) @ nib.orientations.inv_ornt_aff(transform, array.shape)
+    return reoriented, updated_affine
 
 
 def load_case_arrays(case: BratsCase) -> tuple[np.ndarray, np.ndarray | None, dict[str, Any]]:
@@ -289,18 +394,36 @@ def preprocess_case(
     case: BratsCase,
     out_dir: str | Path,
     overwrite: bool = False,
+    label_convention: str = "brats2021",
+    target_axcodes: tuple[str, str, str] = ("L", "P", "S"),
 ) -> dict[str, Any]:
     """Normalize, crop, and remap one case, writing results to `out_dir`.
 
-    Pipeline: load -> per-channel z-score (nonzero only) -> crop to the
-    union nonzero bounding box -> remap labels -> write `image.npy`,
-    `label.npy`, `meta.json`.
+    Pipeline: load -> reorient to `target_axcodes` -> per-channel z-score
+    (nonzero only) -> crop to the union nonzero bounding box -> remap
+    labels -> write `image.npy`, `label.npy`, `meta.json`.
+
+    Reorientation happens first, before normalization and before the crop
+    bbox is computed, so every downstream quantity (the bbox, the cropped
+    shape, the saved arrays) describes the reoriented volume. For BraTS
+    2021 -- whose own affine is already `diag(-1, -1, 1)`, i.e. `LPS` --
+    reorienting to the default `target_axcodes=("L", "P", "S")` is an exact
+    no-op (see `reorient_to_axcodes`), so this is purely additive: it does
+    not change the output for any case already preprocessed under the old
+    pipeline.
 
     Args:
         case: Resolved paths for one BraTS case.
         out_dir: Root output directory. Outputs go to `out_dir/<case_id>/`.
         overwrite: If False (default) and the case's outputs already exist,
             skip reprocessing and return the existing summary instead.
+        label_convention: Which source-dataset label convention the case's
+            segmentation follows. Passed straight to `remap_labels` --
+            `"brats2021"` (default, raw ET = 4) or `"brats2023"` (raw
+            ET = 3, e.g. BraTS-Africa).
+        target_axcodes: Voxel axis codes every case is normalized to before
+            cropping. Default `("L", "P", "S")` matches BraTS 2021's own
+            convention.
 
     Returns:
         A summary dict with `case_id`, `original_shape`, `cropped_shape`,
@@ -320,6 +443,30 @@ def preprocess_case(
 
     image, label, load_meta = load_case_arrays(case)
 
+    # Reorient every modality (and the label, if present) to the target
+    # axis convention BEFORE anything else -- the crop bbox and every
+    # downstream quantity must describe the reoriented volume, not the raw
+    # one. All four modalities and the label share one affine (BraTS ships
+    # its modalities already co-registered), so the same transform applies
+    # to each; reorient_to_axcodes recomputes it once per call, which is
+    # cheap (nibabel orientation bookkeeping, no resampling) relative to
+    # the rest of this pipeline.
+    source_affine = np.asarray(load_meta["affine"], dtype=np.float64)
+    source_axcodes = nib.aff2axcodes(source_affine)
+    target = _validate_axcodes(target_axcodes)
+
+    reoriented_channels = []
+    updated_affine = source_affine
+    for c in range(image.shape[0]):
+        reoriented_channel, updated_affine = reorient_to_axcodes(image[c], source_affine, target)
+        reoriented_channels.append(reoriented_channel)
+    image = np.stack(reoriented_channels, axis=0)
+
+    if label is not None:
+        label, _ = reorient_to_axcodes(label, source_affine, target)
+
+    reoriented_shape = tuple(int(s) for s in image.shape[1:])
+
     # Normalize each of the 4 channels independently, not globally: the four
     # MRI sequences (T1, T1CE, T2, FLAIR) have completely different
     # intensity scales, and a single shared mean/std would wash out
@@ -338,7 +485,7 @@ def preprocess_case(
     cropped_label = crop_to_bbox(label, bbox) if label is not None else None
 
     has_label = cropped_label is not None
-    remapped_label = remap_labels(cropped_label) if has_label else None
+    remapped_label = remap_labels(cropped_label, convention=label_convention) if has_label else None
 
     ensure_dir(case_dir)
 
@@ -365,15 +512,21 @@ def preprocess_case(
     # the original volume geometry before they mean anything as a BraTS
     # submission. Losing either makes the preprocessed data unusable for
     # anything that has to be submitted or compared against the raw NIfTI.
+    # Both now describe the REORIENTED volume (post `target_axcodes`), which
+    # is what `bbox` was actually computed against -- for BraTS 2021 this is
+    # numerically identical to the raw volume's own shape, since reorienting
+    # LPS to LPS is a no-op.
     meta: dict[str, Any] = {
         "case_id": case.case_id,
-        "original_shape": load_meta["original_shape"],
+        "original_shape": reoriented_shape,
         "cropped_shape": cropped_shape,
         "bbox": [[start, end] for start, end in bbox],
-        "affine": load_meta["affine"],
+        "affine": updated_affine.tolist(),
         "spacing": load_meta["spacing"],
         "has_label": has_label,
         "label_voxel_counts": label_voxel_counts,
+        "source_axcodes": "".join(source_axcodes),
+        "target_axcodes": "".join(target),
     }
     write_json(meta, case_dir / "meta.json")
 

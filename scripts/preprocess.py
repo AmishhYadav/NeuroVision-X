@@ -53,7 +53,7 @@ _CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
 # import above) so tests/test_preprocess_script.py keeps working unchanged.
 
 
-def _process_one(args: tuple[BratsCase, str, bool]) -> dict[str, Any]:
+def _process_one(args: tuple[BratsCase, str, bool, str, tuple[str, str, str]]) -> dict[str, Any]:
     """Preprocess a single case inside a worker process.
 
     Must be a plain module-level function (not a lambda or a closure) so it
@@ -64,16 +64,23 @@ def _process_one(args: tuple[BratsCase, str, bool]) -> dict[str, Any]:
     1251 over one corrupt volume is unacceptable.
 
     Args:
-        args: `(case, out_dir, overwrite)`, bundled into one tuple since
-            `executor.submit` takes a single argument list per call.
+        args: `(case, out_dir, overwrite, label_convention, target_axcodes)`,
+            bundled into one tuple since `executor.submit` takes a single
+            argument list per call.
 
     Returns:
         The summary dict from `preprocess_case` on success, or
         `{"case_id": ..., "error": ...}` on failure.
     """
-    case, out_dir, overwrite = args
+    case, out_dir, overwrite, label_convention, target_axcodes = args
     try:
-        return preprocess_case(case, out_dir, overwrite=overwrite)
+        return preprocess_case(
+            case,
+            out_dir,
+            overwrite=overwrite,
+            label_convention=label_convention,
+            target_axcodes=target_axcodes,
+        )
     except Exception as exc:  # noqa: BLE001 - any failure must become a record, not crash the pool
         logger.warning("Case %s failed: %s", case.case_id, exc)
         return {"case_id": case.case_id, "error": str(exc)}
@@ -229,11 +236,19 @@ def main(cfg: DictConfig) -> None:
 
     overwrite = bool(cfg.data.preprocessing.overwrite)
     num_workers = int(cfg.data.preprocessing.num_workers)
+    label_convention = str(cfg.data.preprocessing.label_convention)
+    # OmegaConf deserializes a YAML list as a ListConfig, not a tuple --
+    # normalize to a plain tuple of str here so it pickles cleanly for the
+    # worker processes and matches preprocess_case's declared type.
+    target_axcodes = tuple(str(c) for c in cfg.data.preprocessing.target_axcodes)
 
     summaries: list[dict[str, Any]] = []
     with cf.ProcessPoolExecutor(max_workers=num_workers) as executor:
         futures = {
-            executor.submit(_process_one, (case, str(out_dir), overwrite)): case for case in cases
+            executor.submit(
+                _process_one, (case, str(out_dir), overwrite, label_convention, target_axcodes)
+            ): case
+            for case in cases
         }
         # as_completed (not executor.map) so the progress bar advances as
         # each case actually finishes, in whatever order that happens to be,

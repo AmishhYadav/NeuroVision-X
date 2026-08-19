@@ -99,3 +99,11 @@ preprocessing:
   limit: null
   # Written under out_dir. One row per case: shapes, spacing, tumor voxel counts.
   metadata_csv: metadata.csv
+  # Segmentation label convention of the SOURCE dataset.
+  #   brats2021 - raw values {0,1,2,4}, ET = 4  (BraTS 2020/2021)
+  #   brats2023 - raw values {0,1,2,3}, ET = 3  (BraTS 2023+, incl. BraTS-Africa)
+  label_convention: brats2021
+  # Voxel axis codes every preprocessed case is normalised to. BraTS 2021's own
+  # affine is diag(-1,-1,1), i.e. LPS, so this is a no-op for BraTS 2021 and a
+  # real reorientation for datasets shipped in another convention.
+  target_axcodes: [L, P, S]
