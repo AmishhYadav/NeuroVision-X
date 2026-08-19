@@ -138,7 +138,20 @@ def run_report_agreement(cfg: DictConfig) -> Path:
     """
     agreement_cfg = cfg.analysis.report_agreement
 
-    gt_dir = Path(str(agreement_cfg.gt_dir or ""))
+    # `agreement_cfg.gt_dir` is `None` when unset. `Path(str(None or ""))` is
+    # `Path("")`, which is `Path(".")` -- the current working directory,
+    # which always exists. An `is_dir()` check on that would pass silently
+    # and run the whole comparison against whatever happens to be in the
+    # CWD, failing later (if at all) with a confusing, unrelated error
+    # instead of this actionable one. So the unset case is checked BEFORE
+    # any `Path()` construction, not folded into the `is_dir()` check.
+    if agreement_cfg.gt_dir is None:
+        raise ValueError(
+            "run_report_agreement: analysis.report_agreement.gt_dir is unset. It must point at "
+            "reports generated with analysis.report.source=label -- the ground-truth side of "
+            "the comparison."
+        )
+    gt_dir = Path(str(agreement_cfg.gt_dir))
     if not gt_dir.is_dir():
         raise ValueError(
             f"run_report_agreement: analysis.report_agreement.gt_dir={str(gt_dir)!r} is not a "
