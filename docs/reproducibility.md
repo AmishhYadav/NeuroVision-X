@@ -485,3 +485,67 @@ past it: a metrics device mismatch in `evaluate.py`, the CuPy HD95 failure in
 epoch 130 of a real run, after 296 local tests passed). Any code touching
 `.numpy()`, a device transfer, or a MONAI metric needs to be read with "what if
 this tensor is on CUDA?" in mind, because no local test will ask.
+
+---
+
+## 11. Regenerable artifacts and how to rebuild them
+
+On 2026-08-19 this project reclaimed 75 GB by deleting volume-sized artifacts
+(free space went from 58 GiB to 133 GiB). If a directory named below is
+missing, it was deleted deliberately, not lost — this section is how to get it
+back.
+
+**The principle.** `logits/`, `predictions/`, `uncertainty/` are **caches, not
+results**. They cost 3.4 GB per model per split and are rebuilt on demand.
+Results are `per_case_metrics.csv`, `summary.csv`, `eval_config.yaml` and the
+`compare_*` tables — all under 1 MB and kept permanently.
+
+### Rebuild commands
+
+| Artifact | Rebuild command | Cost |
+|---|---|---|
+| `predictions/` | Reconstruct from `logits/` via `postprocess_logits`, using that run's own `eval_config.yaml` | Verified exact: recomputed test Dice reproduced the published `summary.csv` value to a delta of 0 (ET 0.870859 vs 0.870859) |
+| `logits/` | `scripts/evaluate.py` with `save_logits` enabled, on the Mac CPU | ~15 cases/min → ~25 min for a 189-case split. Requires the run's checkpoint to still exist |
+| `uncertainty/` | `scripts/evaluate.py` with `inference.mc_dropout.enabled=true` | 48 s/case on the Mac CPU at N=10 → ~2.5 h for a 189-case split |
+| `outputs/burden_*` | `scripts/burden.py` | Cheap CPU regeneration from predictions |
+| `outputs/localize_*` | `scripts/localize.py` | Cheap CPU regeneration from predictions |
+| `outputs/report_*` | `scripts/report.py` | Cheap CPU regeneration from `burden.csv` + `anatomy.csv` + `anatomy_summary.csv` |
+| `outputs/calibration_*` | `scripts/calibrate.py` | Cheap CPU regeneration from per-case metrics / logits |
+
+### Precondition: the checkpoint must still exist
+
+A cache is only regenerable while its checkpoint exists. Before deleting any
+volume dump, resolve the `checkpoint:` path inside that run's own
+`eval_config.yaml` and confirm the file is still present.
+
+**Two checkpoints in this project are permanently lost:**
+
+| Checkpoint | Was written to |
+|---|---|
+| `capacity_control_unet3d` | `/tmp/capout/checkpoints/best.pt` |
+| `baseline_unet3d` (the superseded 200-epoch run) | `~/Downloads` |
+
+The two surviving checkpoints:
+
+| Checkpoint | Path | Size |
+|---|---|---|
+| `neurovision` | `outputs/neurovision/checkpoints/{best,last}.pt` | 405 MB each |
+| `baseline_unet3d` (80-epoch / 64³) | `outputs/checkpoints/baseline_unet3d/{best,last}.pt` | 147 MB each |
+
+### What was deleted on 2026-08-19, and why
+
+| Deleted | Reason |
+|---|---|
+| `BraTS2021_Training_Data.tar` (12 GB) | Redundant — byte-identical content to the extracted tree, verified by member count 6255 = 1251 cases × 5 files |
+| `predictions/` for 9 of 10 eval directories | Each had an intact sibling `logits/`, so it is exactly reconstructible (see above) |
+| `data/raw/` and `data/external/` (42 GB) | Re-downloadable; SHA-256 manifests committed to `docs/data_manifests/` |
+| Volume dumps of `eval_test_capacity_control` and `baseline_unet3d_e130` | Checkpoints no longer exist for either run — irrecoverable, kept only as long as they were unneeded |
+
+**One deliberate exception: `outputs/eval_test/predictions` was kept.** It has
+no sibling `logits/` and its checkpoint is gone, so it is irreplaceable — and
+it backs the patch-size hypothesis recorded in `docs/experiments.md` note 18
+(the superseded 96³ U-Net produces the better structured report despite lower
+Dice).
+
+See `docs/gpu_session_checklist.md` for the companion rule: only checkpoints
+and logs come back from a GPU box, never caches.
