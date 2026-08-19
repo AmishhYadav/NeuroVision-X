@@ -357,6 +357,120 @@ sessions by resume is still ONE row — sum the GPU hours.
     `baseline_unet3d` rate puts it near 8. **Fetch and keep the log next
     time** — this is the same provenance gap as note 4's missing commit SHA,
     in a different field.
+
+22. **The interpretable pipeline is complete and runs end to end on CPU, for
+    zero GPU hours.** Phases 0-5 all exist: atlas gate, localisation,
+    eloquence (Tier C), burden, involvement (3b), report generation, the demo
+    API route and panel, report agreement and population statistics. One
+    command per stage; 189 cases localise in ~2.5 min and report in under a
+    second on the M4. Five report sets were generated over the test split —
+    ground truth plus `neurovision`, `baseline_unet3d`,
+    `capacity_control_unet3d` and the superseded 96³ run — and the full
+    1251-case cohort was localised for the population figure.
+
+23. **THE PHASE 5 RESULT IS NEGATIVE: the +0.0267 ET Dice gain does NOT
+    produce a measurably better structured report.** 16 report-agreement
+    metrics, 189 paired cases, Holm-corrected within each comparison:
+
+    | Comparison | conclusive metrics | which |
+    |---|---|---|
+    | `neurovision` vs `baseline_unet3d` | **1 of 25** | `relerr_vol_TC` +0.3843, p_holm 0.0215 |
+    | `neurovision` vs `capacity_control_unet3d` | **1 of 25** | `relerr_vol_TC` +0.1057, p_holm 0.0081 |
+    | `capacity_control_unet3d` vs `baseline_unet3d` | **0 of 25** | — |
+
+    Everything else is inconclusive. The agreement metrics themselves are
+    nearly identical across models — structure-list Jaccard 0.9074 /
+    0.9122 / 0.9108 (`neurovision` / capacity control / baseline), structure
+    precision 0.9430 / 0.9463 / 0.9460, recall 0.9497 / 0.9497 / 0.9487 —
+    and **16 of the 25 metrics have the same median for all three models**,
+    because for a typical case the three reports are identical.
+
+    The Phase 3b involvement fields agree just as tightly and discriminate no
+    better: ventricle-contact agreement 0.9841 / 0.9735 / 0.9788,
+    deep white-matter contact 0.9630 / 0.9418 / 0.9577, epicentre-structure
+    match 0.8571 / 0.8466 / **0.8783**, and epicentre SIDE agreement exactly
+    1.0000 for all three models — no model ever puts the tumour's centre on
+    the wrong side of the midline, so that field is saturated too.
+
+    Provenance note on the family. An earlier run of this table had 16
+    metrics, before the involvement fields were added to `compare_reports`;
+    under that smaller Holm family `capacity_control` vs `baseline` also
+    showed `relerr_vol_ET` as better (+0.0719, p_holm 0.0427), and it does not
+    survive the 25-metric family. The 25-metric table is the one to report:
+    the involvement metrics were always intended to be part of the
+    report-agreement family and were absent only because Phase 3b landed
+    later. Enlarging a Holm family is conservative — it cannot manufacture a
+    significant result — which is the opposite of the hazard recorded against
+    `compare_models`, where shrinking a family after seeing its p-values
+    destroys the error-rate guarantee.
+
+    The direction is not even consistently in `neurovision`'s favour:
+    `match_top_structure` is 0.8571 for `neurovision` against **0.8783** for
+    the baseline. Inconclusive, but it rules out the reading that the effect
+    is real and merely underpowered in one direction.
+
+    **Why this happens, and why it is a result rather than a disappointment.**
+    The report is dominated by *which structures the tumour overlaps*, and
+    that is robust to boundary-level segmentation differences: a few voxels
+    at a margin rarely change whether a structure is involved at all. The
+    only metrics that move are the volume ratios, whose tails are driven by a
+    handful of small-region cases. So the interpretable layer is **stable**
+    with respect to segmentation quality across this range — good for
+    deployment, since the report does not swing with the model, and fatal to
+    a "better model gives a better report" claim. The paper must state this,
+    not bury it: it is the direct answer to the question Phase 5 was designed
+    to ask.
+
+    One qualification. `relerr_*` are ratios with a volume denominator and
+    are heavy-tailed (measured max 128.6 for `relerr_vol_TC`), so their means
+    are outlier-driven — mean `relerr_vol_ET` runs 0.4231 / 0.6103 / 0.6822
+    against medians of 0.0533 / 0.0575 / 0.0615. The ordering matches Dice ET
+    in both statistics, so the volume signal is real; it is simply too noisy
+    for 15 of 16 metrics to survive Holm at n=189.
+
+24. **The eloquence layer is DEGENERATE on BraTS 2021, and this is a finding
+    about the layer, not a success rate.** Measured over the full 1251-case
+    cohort: `near_eloquent` is `True` for **100%** of cases, the distance to
+    the nearest Sawaya-listed structure is exactly **0.0 mm for 98.8%**, and
+    98.5% of cases involve at least one eloquent structure. Essentially every
+    glioma in this dataset directly touches a structure on that list.
+
+    Consequences. `agree_near_eloquent` and `agree_eloquent_any` are
+    constant at 1.0 in every model comparison with a confidence interval of
+    exactly [0, 0] — they carry no per-case information and cannot
+    discriminate between anything. Reporting "100% agreement on eloquence"
+    would be true and completely misleading. `analysis/population.py`'s
+    `eloquence_rates` therefore returns a `degenerate_fields` list and
+    `scripts/population_stats.py` logs it at WARNING, so the saturation is
+    surfaced rather than presented as a result. The 10 mm near-eloquent
+    threshold is uninformative on this cohort and any future use of it needs
+    a different threshold or a different cohort.
+
+25. **Population anatomy over all 1,251 cases (ground truth).** Lobe shares
+    of tumour volume: **unlabelled 34.5%**, frontal 20.3%, temporal 16.7%,
+    parietal 8.2%, limbic 6.2%, deep 4.0%, insula 3.3%, occipital 3.3%,
+    ventricle 2.7%, cerebellum 0.6%, callosum 0.1%, vermis 0.08%, brainstem
+    0.05%. Most-involved structures at `frac_of_structure >= 0.05`:
+    `LateralVentricle_R` 45.6% of cases, `LateralVentricle_L` 44.8%,
+    `Insula_L`/`Insula_R` 34.3%, `Putamen_R` 31.7%, `CorpusCallosum` 31.3%.
+    Median 24 structures involved per case, median unlabelled fraction 34.1%.
+    Involvement layer (3b), test split: ventricle contact 81.0% of cases,
+    deep white-matter contact 38.1%, median cortical fraction 0.361, epicentre
+    resolved exactly on the centroid voxel in 47.6% of cases and via the 10 mm
+    nearest-structure fallback otherwise.
+
+    **A bug worth recording: the laterality table read `midline` 34.8% before
+    it was fixed, against a true 0.27%.** `localize.py` gives the `unlabelled`
+    pseudo-structure a `midline` placeholder laterality — it is not a real
+    structure and has no side — and folding that placeholder into the midline
+    bucket made it dominate. The table summed to exactly 1.0 and looked
+    entirely reasonable, and a reader would have concluded that a third of the
+    average glioma sits in midline structures, wrong by two orders of
+    magnitude. Corrected: **L 34.7%, R 30.5%, midline 0.27%, unlabelled
+    34.5%.** The near-symmetry of L and R is the population-scale check that
+    would catch a left-right flipped atlas, which brain-mask Dice provably
+    cannot (see the Phase 0 findings).
+
 ---
 
 ## Planned

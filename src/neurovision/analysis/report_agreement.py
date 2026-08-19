@@ -216,13 +216,47 @@ def compare_reports(gt: Mapping, pred: Mapping) -> dict[str, float]:
         substituted zero, which would enter a population mean as a real
         observation.
 
+        When BOTH reports also carry the optional `"involvement"` block
+        (Phase 3b, `neurovision.reporting.report._build_involvement_block`),
+        nine more keys are added: `agree_ventricle_contact`,
+        `agree_deep_wm_contact`, `abserr_ventricle_frac_of_tumour`,
+        `abserr_ventricle_frac_of_group`, `abserr_cortical_frac_of_tumour`,
+        `abserr_white_matter_frac_of_tumour`, `match_epicentre_structure`,
+        `agree_epicentre_side`, `abserr_epicentre_distance_mm`. When
+        NEITHER report carries the block, none of these nine keys is
+        present at all -- they are never emitted as NaN. This matters for
+        `agreement_table`: comparing a directory of pre-Phase-3b (or
+        `involvement.enabled=false`) reports never puts all-NaN,
+        `n=0`-looking columns into the output, which `compare_models` would
+        otherwise report as "measured and found nothing" rather than "not
+        measured". Consequence: `agreement_table` can return DIFFERENT
+        column sets for different model-pair directories, so a caller
+        comparing two agreement tables must first check both were built
+        from runs with the same involvement setting -- the driver's
+        `report_agreement_config.yaml` records each run's input
+        directories, which is what makes that check possible after the
+        fact.
+
+        `match_epicentre_structure` and `agree_epicentre_side` answer two
+        different questions and both are kept: the structure is the
+        atlas's naming of where the tumour is centred, the side is computed
+        independently from the case's own geometry and the midline index.
+        They can disagree without either being wrong -- see
+        `anatomy/involvement.py` -- and collapsing them into one metric
+        would throw that independence away.
+
     Raises:
         ValueError: `gt["case_id"] != pred["case_id"]` (comparing two
             different cases would produce a plausible-looking but
             meaningless row); `gt["report_version"] != pred["report_version"]`
             (schema drift means the fields being compared may not be the
-            same fields); or either report is missing one of the required
-            top-level blocks `anatomy` / `eloquence` / `burden`.
+            same fields); either report is missing one of the required
+            top-level blocks `anatomy` / `eloquence` / `burden`; or exactly
+            one of the two reports carries an `"involvement"` block (naming
+            which side has it and which does not -- comparing a report that
+            carries an involvement profile against one that does not would
+            silently describe fewer things than the resulting table
+            appears to).
     """
     gt_case = gt["case_id"]
     pred_case = pred["case_id"]
@@ -318,7 +352,7 @@ def compare_reports(gt: Mapping, pred: Mapping) -> dict[str, float]:
         _burden_value(pred_burden, "laterality", "dominant_side_WT"),
     )
 
-    return {
+    result = {
         "jaccard_structures": jaccard_structures,
         "precision_structures": precision_structures,
         "recall_structures": recall_structures,
@@ -336,6 +370,68 @@ def compare_reports(gt: Mapping, pred: Mapping) -> dict[str, float]:
         "agree_multifocal_WT": agree_multifocal_WT,
         "agree_dominant_side_WT": agree_dominant_side_WT,
     }
+
+    # --- Involvement (optional block; Phase 3b) ---------------------------- #
+    # Emitted only when BOTH sides carry it -- see the docstring for why an
+    # absent block must never become nine NaN columns.
+    gt_involvement = gt.get("involvement")
+    pred_involvement = pred.get("involvement")
+    if (gt_involvement is None) != (pred_involvement is None):
+        has_side = "gt" if gt_involvement is not None else "pred"
+        missing_side = "pred" if gt_involvement is not None else "gt"
+        raise ValueError(
+            f"compare_reports: involvement block mismatch for case {gt_case!r} -- {has_side} "
+            f"report carries an 'involvement' block, {missing_side} does not. Comparing a report "
+            "with an involvement profile against one without would silently describe fewer "
+            "things than the resulting row appears to."
+        )
+    if gt_involvement is not None and pred_involvement is not None:
+        gt_groups = gt_involvement.get("groups", {})
+        pred_groups = pred_involvement.get("groups", {})
+        gt_tissue = gt_involvement.get("tissue", {})
+        pred_tissue = pred_involvement.get("tissue", {})
+        gt_epicentre = gt_involvement.get("epicentre", {})
+        pred_epicentre = pred_involvement.get("epicentre", {})
+
+        result.update(
+            {
+                "agree_ventricle_contact": _bool_agree(
+                    gt_groups.get("ventricle_contact"), pred_groups.get("ventricle_contact")
+                ),
+                "agree_deep_wm_contact": _bool_agree(
+                    gt_groups.get("deep_wm_contact"), pred_groups.get("deep_wm_contact")
+                ),
+                "abserr_ventricle_frac_of_tumour": _abs_diff(
+                    gt_groups.get("ventricle_frac_of_tumour"),
+                    pred_groups.get("ventricle_frac_of_tumour"),
+                ),
+                "abserr_ventricle_frac_of_group": _abs_diff(
+                    gt_groups.get("ventricle_frac_of_group"),
+                    pred_groups.get("ventricle_frac_of_group"),
+                ),
+                "abserr_cortical_frac_of_tumour": _abs_diff(
+                    gt_tissue.get("cortical_frac_of_tumour"),
+                    pred_tissue.get("cortical_frac_of_tumour"),
+                ),
+                "abserr_white_matter_frac_of_tumour": _abs_diff(
+                    gt_tissue.get("white_matter_frac_of_tumour"),
+                    pred_tissue.get("white_matter_frac_of_tumour"),
+                ),
+                "match_epicentre_structure": _bool_agree(
+                    gt_epicentre.get("epicentre_structure"),
+                    pred_epicentre.get("epicentre_structure"),
+                ),
+                "agree_epicentre_side": _bool_agree(
+                    gt_epicentre.get("epicentre_side"), pred_epicentre.get("epicentre_side")
+                ),
+                "abserr_epicentre_distance_mm": _abs_diff(
+                    gt_epicentre.get("epicentre_distance_mm"),
+                    pred_epicentre.get("epicentre_distance_mm"),
+                ),
+            }
+        )
+
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -379,12 +475,24 @@ def agreement_table(
     Returns:
         A `DataFrame` indexed by `case_id` (sorted), one numeric column per
         `compare_reports` metric -- directly consumable by
-        `neurovision.analysis.statistics.compare_models`.
+        `neurovision.analysis.statistics.compare_models`. The column set
+        depends on whether the input reports carry an `"involvement"`
+        block (see `compare_reports`): a directory pair built from
+        Phase-3b-enabled reports gains nine extra columns that a directory
+        pair without that block never has. Two `agreement_table` outputs
+        are therefore only directly comparable when both were built from
+        runs with the same involvement setting -- check the two runs'
+        `report_agreement_config.yaml` (or whatever recorded the input
+        directories) before comparing them with `compare_models`.
 
     Raises:
         ValueError: The resolved case set is empty.
         RuntimeError: Every resolved case failed to compare (each failure is
             logged at ERROR with its traceback and does not stop the run).
+            A case where exactly one side carries an `"involvement"` block
+            fails this way too -- `compare_reports` raises `ValueError` for
+            that case, which this function catches and logs like any other
+            per-case failure rather than aborting the whole table.
     """
     gt_path = Path(gt_dir)
     pred_path = Path(pred_dir)

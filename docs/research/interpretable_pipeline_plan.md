@@ -486,8 +486,14 @@ source. That was designed and costed; it was cut on scope, not on feasibility.
 > test split against ground truth and three models; see `docs/experiments.md`
 > note 18.
 >
-> **3b (after Phase 0, now unblocked):** ependymal contact, cortical
-> involvement, deep white-matter involvement, epicentre naming.
+> **3b SHIPPED, 2026-08-19:** `src/neurovision/anatomy/involvement.py` plus
+> `knowledge/involvement_groups.yaml`, wired into `scripts/localize.py` as
+> additive columns on `anatomy_summary.csv` and carried into the report as its
+> own block. Ventricular overlap, deep white-matter overlap, the four tissue
+> fractions and epicentre naming. Measured on the ground-truth test split:
+> ventricle contact 81.0% of cases, deep white-matter contact 38.1%, median
+> cortical fraction 0.361, epicentre resolved exactly on the centroid voxel in
+> 47.6% of cases.
 >
 > **Do NOT label 3b's outputs as VASARI F19/F20/F21.** Checked 2026-08-17: the
 > verbatim operational definitions and bin boundaries are not obtainable from
@@ -563,11 +569,23 @@ sphericity 1.0; midline shift of a deliberately displaced synthetic mask.
 
 ### Phase 4 — Report generation and demo integration (4–5 days)
 
-> **PARTIALLY SHIPPED.** `src/neurovision/reporting/report.py` is built and
-> tested — `build_report` / `render_markdown` / `write_report`, with the
-> disclaimer, atlas provenance, mass-effect caveat and a `not_claimed` block
-> as required fields of the artifact. Still missing: `scripts/report.py`, the
-> `/api/report/<case_id>` route, and the frontend panel.
+> **SHIPPED, 2026-08-19.** `src/neurovision/reporting/report.py` (library),
+> `scripts/report.py` (Hydra driver, a pure CSV join over the burden and
+> localisation tables — 189 cases in under a second, no atlas and no
+> checkpoint), `GET /api/report/<case_id>` and `/markdown`, and the frontend
+> `ReportPanel`. Five report sets exist over the test split: ground truth plus
+> `neurovision`, `baseline_unet3d`, `capacity_control_unet3d` and the
+> superseded 96³ run.
+>
+> Two guards were added that the original design did not anticipate, both
+> against the same failure — an artifact that is internally consistent while
+> describing the wrong mask. `load_inputs` refuses a `burden_dir` and
+> `localize_dir` that disagree on source, split or resolved source directory.
+> And the API refuses to serve a ground-truth report at all while the viewer
+> draws a prediction overlay: checking a label-source report against
+> `prep_dir` passes, because that genuinely is where its mask came from, and
+> the panel would then describe a mask that is not on screen with every number
+> in it correct about the wrong thing.
 
 - `src/neurovision/reporting/report.py` — assembles a versioned JSON report
   and renders Markdown/HTML.
@@ -584,9 +602,29 @@ Presentation requirements, non-negotiable and enforced by tests:
 
 ### Phase 5 — Validation, documentation, paper (5–7 days)
 
-> **NOT STARTED**, and it is the highest-value remaining experiment. Design
-> it to control patch size — report agreement is not monotonic in Dice
-> (`docs/experiments.md` note 18).
+> **RUN, 2026-08-19, AND THE ANSWER IS NO.** Patch size was controlled:
+> `neurovision`, `baseline_unet3d` and `capacity_control_unet3d` all trained
+> and evaluated at 64³, verified from each run's own `eval_config.yaml`.
+>
+> Over 189 paired cases and 16 report-agreement metrics, Holm-corrected within
+> each comparison, **exactly one metric is conclusive in each of the three
+> pairwise comparisons** and everything else is inconclusive. Structure-list
+> Jaccard is 0.9074 / 0.9122 / 0.9108 for `neurovision` / capacity control /
+> baseline, and 12 of the 16 metrics have the same median for all three
+> models. `match_top_structure` is nominally BETTER for the baseline (0.8783
+> vs 0.8571), which rules out an underpowered-but-real effect in one
+> direction.
+>
+> So the +0.0267 ET Dice gain does not produce a measurably better structured
+> report. The report is dominated by which structures the tumour overlaps, and
+> that is robust to boundary-level differences — a few voxels at a margin
+> rarely change whether a structure is involved at all. The interpretable
+> layer is stable with respect to segmentation quality across this range.
+> Full numbers: `docs/experiments.md` note 23.
+>
+> Population statistics ran over all 1,251 cases; note 25. The eloquence
+> layer turned out degenerate on this cohort — every case is "near eloquent" —
+> which is note 24 and a finding about the layer, not a success rate.
 
 - Population-level anatomical statistics across all 1,251 cases as a headline
   figure (it is both a validation and a genuinely interesting result).
@@ -612,9 +650,9 @@ planned and are left unedited.
 | 0 — Atlas + alignment proof | 2–3 | **Gate for everything** | **PASSED** |
 | 1 — Localisation engine | 3–4 | needs 0 | **shipped, run on real data** |
 | 2 — Eloquence reference layer | 2–3 | parallel with 1 | **Tier C shipped** |
-| 3 — Burden profile | 3–4 | independent, can start now | **3a shipped**; 3b not started (needs 0) |
-| 4 — Report + demo | 4–5 | needs 1, 2, 3 | **library shipped**; driver, API route and panel outstanding |
-| 5 — Validation + paper | 5–7 | needs 4 | not started |
+| 3 — Burden profile | 3–4 | independent, can start now | **3a and 3b both shipped** |
+| 4 — Report + demo | 4–5 | needs 1, 2, 3 | **shipped in full** — library, driver, API route, panel |
+| 5 — Validation + paper | 5–7 | needs 4 | **experiment run; the result is negative** |
 
 **≈ 19–26 working days**, zero GPU hours (was 21–29; Phase 2's rewrite removed
 2–3 days of sourcing). Phase 3 depends on nothing new and could start

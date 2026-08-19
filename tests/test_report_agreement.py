@@ -55,6 +55,42 @@ def _eloquent_row(structure: str) -> dict[str, Any]:
     }
 
 
+def _involvement_block(
+    *,
+    ventricle_contact: bool = True,
+    deep_wm_contact: bool = True,
+    ventricle_frac_of_tumour: float = 0.02,
+    ventricle_frac_of_group: float = 0.4,
+    cortical_frac_of_tumour: float = 0.3,
+    white_matter_frac_of_tumour: float = 0.6,
+    epicentre_structure: str = "Insula_L",
+    epicentre_side: str = "left",
+    epicentre_distance_mm: float = 0.0,
+) -> dict[str, Any]:
+    """Builds a small `_build_involvement_block`-shaped dict for one case."""
+    return {
+        "caveat": "involvement caveat",
+        "not_vasari": "not a VASARI reproduction",
+        "lower_bound_notes": [],
+        "groups": {
+            "ventricle_contact": ventricle_contact,
+            "deep_wm_contact": deep_wm_contact,
+            "ventricle_frac_of_tumour": ventricle_frac_of_tumour,
+            "ventricle_frac_of_group": ventricle_frac_of_group,
+        },
+        "tissue": {
+            "cortical_frac_of_tumour": cortical_frac_of_tumour,
+            "white_matter_frac_of_tumour": white_matter_frac_of_tumour,
+        },
+        "epicentre": {
+            "epicentre_structure": epicentre_structure,
+            "epicentre_side": epicentre_side,
+            "epicentre_distance_mm": epicentre_distance_mm,
+        },
+        "other": {},
+    }
+
+
 def _report(
     *,
     case_id: str = "BraTS2021_00002",
@@ -70,13 +106,14 @@ def _report(
     frac_enhancing_of_wt: float = 0.125,
     n_components_wt: int = 1,
     dominant_side_wt: str = "left",
+    involvement: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Builds a small `build_report`-shaped dict for one case."""
     structures = [] if structures is None else structures
     eloquent_involved = [] if eloquent_involved is None else eloquent_involved
     if n_structures_involved is None:
         n_structures_involved = len(structures)
-    return {
+    report = {
         "report_version": report_version,
         "case_id": case_id,
         "generated_utc": "2026-08-18T00:00:00Z",
@@ -113,6 +150,9 @@ def _report(
         },
         "provenance": {},
     }
+    if involvement is not None:
+        report["involvement"] = involvement
+    return report
 
 
 def _write(directory: Path, report: dict[str, Any]) -> Path:
@@ -352,8 +392,20 @@ def test_agreement_table_excludes_case_present_in_only_one_dir(
 
 
 # --------------------------------------------------------------------------- #
-# 12. Every output column is recognised by metric_direction
+# 12. Every output column is recognised by metric_direction (incl. involvement)
 # --------------------------------------------------------------------------- #
+
+_INVOLVEMENT_COLUMNS = (
+    "agree_ventricle_contact",
+    "agree_deep_wm_contact",
+    "abserr_ventricle_frac_of_tumour",
+    "abserr_ventricle_frac_of_group",
+    "abserr_cortical_frac_of_tumour",
+    "abserr_white_matter_frac_of_tumour",
+    "match_epicentre_structure",
+    "agree_epicentre_side",
+    "abserr_epicentre_distance_mm",
+)
 
 
 def test_every_column_has_a_known_metric_direction(tmp_path: Path) -> None:
@@ -364,10 +416,21 @@ def test_every_column_has_a_known_metric_direction(tmp_path: Path) -> None:
 
     structures = [_structure_row("Caudate_L", 0.9, 0.2)]
     for case_id in ("case_001", "case_002"):
-        _write(gt_dir, _report(case_id=case_id, structures=structures))
-        _write(pred_dir, _report(case_id=case_id, structures=structures))
+        _write(
+            gt_dir,
+            _report(case_id=case_id, structures=structures, involvement=_involvement_block()),
+        )
+        _write(
+            pred_dir,
+            _report(case_id=case_id, structures=structures, involvement=_involvement_block()),
+        )
 
     table = agreement_table(gt_dir, pred_dir)
+
+    # The involvement columns must actually be in the table -- otherwise the
+    # loop below would trivially pass without exercising them at all.
+    for column in _INVOLVEMENT_COLUMNS:
+        assert column in table.columns
 
     for column in table.columns:
         # Must not raise.
@@ -425,7 +488,96 @@ def test_agreement_table_raises_on_empty_case_set(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# 14. No deep-learning stack import
+# 14. Involvement block (Phase 3b, optional)
+# --------------------------------------------------------------------------- #
+
+
+def test_identical_involvement_blocks_agree_completely() -> None:
+    involvement = _involvement_block()
+    gt = _report(involvement=involvement)
+    pred = _report(involvement=involvement)
+
+    result = compare_reports(gt, pred)
+
+    for column in _INVOLVEMENT_COLUMNS:
+        assert column in result
+    assert result["agree_ventricle_contact"] == 1.0
+    assert result["agree_deep_wm_contact"] == 1.0
+    assert result["match_epicentre_structure"] == 1.0
+    assert result["agree_epicentre_side"] == 1.0
+    for column in _INVOLVEMENT_COLUMNS:
+        if column.startswith("abserr_"):
+            assert result[column] == 0.0, f"{column} expected 0.0, got {result[column]}"
+
+
+def test_involvement_structure_and_side_are_independent() -> None:
+    # The structure differs while the side agrees -- match_epicentre_structure
+    # and agree_epicentre_side must disagree here, proving they are computed
+    # independently rather than collapsed into one question.
+    gt = _report(
+        involvement=_involvement_block(
+            cortical_frac_of_tumour=0.30,
+            epicentre_structure="Insula_L",
+            epicentre_side="left",
+        )
+    )
+    pred = _report(
+        involvement=_involvement_block(
+            cortical_frac_of_tumour=0.45,
+            epicentre_structure="Putamen_L",
+            epicentre_side="left",
+        )
+    )
+
+    result = compare_reports(gt, pred)
+
+    assert result["abserr_cortical_frac_of_tumour"] == pytest.approx(0.15)
+    assert result["match_epicentre_structure"] == 0.0
+    assert result["agree_epicentre_side"] == 1.0
+
+
+def test_neither_report_has_involvement_block() -> None:
+    gt = _report()
+    pred = _report()
+    assert "involvement" not in gt
+    assert "involvement" not in pred
+
+    result = compare_reports(gt, pred)
+
+    for column in _INVOLVEMENT_COLUMNS:
+        assert column not in result
+    # The pre-existing metrics are unaffected by the block's absence.
+    assert result["jaccard_structures"] == 1.0
+    assert result["agree_dominant_side_WT"] == 1.0
+
+
+@pytest.mark.parametrize("gt_has_it", [True, False])
+def test_exactly_one_side_has_involvement_block_raises(gt_has_it: bool) -> None:
+    gt = _report(involvement=_involvement_block() if gt_has_it else None)
+    pred = _report(involvement=None if gt_has_it else _involvement_block())
+
+    has_side = "gt" if gt_has_it else "pred"
+    with pytest.raises(ValueError, match=has_side):
+        compare_reports(gt, pred)
+
+
+def test_missing_value_inside_involvement_block_is_isolated_nan() -> None:
+    gt = _report(involvement=_involvement_block(epicentre_distance_mm=float("nan")))
+    pred = _report(involvement=_involvement_block(epicentre_distance_mm=4.0))
+
+    result = compare_reports(gt, pred)
+
+    assert math.isnan(result["abserr_epicentre_distance_mm"])
+    # Every other involvement metric is still computed normally.
+    other_columns = [c for c in _INVOLVEMENT_COLUMNS if c != "abserr_epicentre_distance_mm"]
+    for column in other_columns:
+        assert not (
+            isinstance(result[column], float) and math.isnan(result[column])
+        ), f"{column} unexpectedly NaN"
+
+
+# --------------------------------------------------------------------------- #
+# 15. No deep-learning stack import
 # --------------------------------------------------------------------------- #
 
 
