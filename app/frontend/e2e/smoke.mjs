@@ -282,6 +282,151 @@ console.log("\n9. Console hygiene");
 check("no console errors or uncaught exceptions", consoleErrors.length === 0,
   consoleErrors.slice(0, 3).join(" | "));
 
+console.log("\n10. Structured report panel");
+// Load a known case explicitly rather than relying on whatever section 8
+// left active, so this section's expectations are self-contained. The
+// expected values are read from the REAL API response, never hardcoded -
+// a stale fixture would otherwise let this pass against a panel that
+// silently drifted from what report.py actually produces.
+const REPORT_CASE = "BraTS2021_00156";
+await js(
+  `(function(){[...document.querySelectorAll('button')].find(e=>e.textContent.includes(${JSON.stringify(REPORT_CASE)})).click();return 'ok';})()`,
+);
+// Case-detail (which the Report toggle's enabled state depends on) is a
+// separate fetch from the click itself and a fixed sleep proved racy this
+// deep into the suite, with many prior fetches behind it - poll instead of
+// guessing a sleep long enough for the slowest run.
+let reportToggleResult = "DISABLED";
+for (let i = 0; i < 20; i++) {
+  reportToggleResult = await js(clickText("Report"));
+  if (reportToggleResult === "ok") break;
+  await sleep(1000);
+}
+const apiReport = await (await fetch(`http://localhost:8000/api/report/${REPORT_CASE}`)).json();
+
+// Tracked separately from section 9's check (which already ran, and so
+// cannot see errors this section's own interactions might introduce) -
+// this is the check that actually covers the report panel's interactions.
+const consoleErrorsBeforePanel = consoleErrors.length;
+
+check(
+  "Report toggle is present and enabled for a case with a report",
+  reportToggleResult === "ok",
+  reportToggleResult,
+);
+await sleep(2500);
+
+const panelRect = await js(
+  `(function(){const p=document.querySelector('[aria-label="Structured report"]');if(!p)return null;const r=p.getBoundingClientRect();return {w:r.width,h:r.height};})()`,
+);
+check(
+  "opening the toggle reveals the panel at measured, non-zero geometry",
+  !!panelRect && panelRect.w > 100 && panelRect.h > 100,
+  JSON.stringify(panelRect),
+);
+
+const panelText = await js(
+  `(function(){const p=document.querySelector('[aria-label="Structured report"]');return p ? p.innerText : '';})()`,
+);
+check("panel text includes the case id", panelText.includes(REPORT_CASE));
+check(
+  "panel text includes the non-diagnostic disclaimer",
+  panelText.includes("not a diagnostic tool"),
+);
+check("panel text includes the atlas name", panelText.includes(apiReport.anatomy.atlas.name));
+check(
+  "panel text includes the eloquence classification name",
+  panelText.includes(apiReport.eloquence.classification),
+);
+
+// Scoped to the badge element itself (`span.bg-surface-raised` is unique
+// inside the panel - the only other `bg-surface-raised` is the disclaimer
+// `div`), not the whole panel's text: the "Not claimed" section legitimately
+// contains the phrase "ground truth" in its midline-shift caveat, so a
+// panel-wide substring match would false-positive on prose that has nothing
+// to do with which segmentation the report describes. Case-insensitive
+// because the badge carries Tailwind's `uppercase`, which Chrome's innerText
+// reflects (unlike textContent).
+const badgeText = await js(
+  `(function(){const b=document.querySelector('[aria-label="Structured report"] span.bg-surface-raised');return b ? b.innerText : null;})()`,
+);
+check(
+  "badge says Model prediction, never Ground truth, for a prediction-sourced report",
+  !!badgeText && /model prediction/i.test(badgeText) && !/ground truth/i.test(badgeText),
+  JSON.stringify(badgeText),
+);
+
+// The structure table's row order is the SERVER's (frac_of_structure
+// descending) - re-sorted client-side, it would bury exactly the row
+// report.py's own docstring calls out: a structure holding a small share
+// of the tumour but mostly destroyed itself.
+const renderedStructureOrder = await js(
+  `(function(){const t=document.querySelectorAll('[aria-label="Structured report"] table')[0];if(!t)return [];return [...t.querySelectorAll('tbody tr')].map(tr=>tr.querySelector('td').textContent.trim());})()`,
+);
+const expectedStructureOrder = apiReport.anatomy.structures.map((s) => s.structure);
+check(
+  "structure table renders rows in the API's own order",
+  JSON.stringify(renderedStructureOrder) === JSON.stringify(expectedStructureOrder),
+  `${JSON.stringify(renderedStructureOrder)} vs ${JSON.stringify(expectedStructureOrder)}`,
+);
+
+const notClaimedCount = await js(
+  `document.querySelectorAll('[aria-label="Structured report"] li').length`,
+);
+check(
+  "Not Claimed section renders every entry the API returned",
+  notClaimedCount === apiReport.not_claimed.length,
+  `${notClaimedCount} rendered vs ${apiReport.not_claimed.length} from the API`,
+);
+
+// Close and confirm the viewport underneath is still alive, the same
+// pixel-level discipline the rest of this file uses throughout.
+const closeResult = await js(
+  `(function(){const b=document.querySelector('[aria-label="Close report"]');if(!b)return 'MISSING';b.click();return 'ok';})()`,
+);
+check("close button is present and closes the panel", closeResult === "ok", closeResult);
+await sleep(1000);
+const panelAfterClose = await js(
+  `document.querySelector('[aria-label="Structured report"]') !== null`,
+);
+check("panel is gone from the DOM after closing", panelAfterClose === false);
+const afterCloseFp = await js(`${FINGERPRINT}(0)`);
+check(
+  "viewport still renders non-blank pixels after closing the report panel",
+  afterCloseFp && afterCloseFp.nonBlack > 1000,
+  JSON.stringify(afterCloseFp),
+);
+
+// Reopen for this case, then switch to a different case while the panel is
+// open - the same stale-data hazard section 8 already covers for volumes,
+// here for the report panel. It must never go on describing the case that
+// is no longer on screen.
+await js(clickText("Report"));
+await sleep(2000);
+const OTHER_CASE = "BraTS2021_00412";
+await js(
+  `(function(){[...document.querySelectorAll('button')].find(e=>e.textContent.includes(${JSON.stringify(OTHER_CASE)})).click();return 'ok';})()`,
+);
+await sleep(4000);
+const panelAfterSwitch = await js(
+  `(function(){const p=document.querySelector('[aria-label="Structured report"]');return p ? p.innerText : null;})()`,
+);
+const strandedOnOldCase =
+  panelAfterSwitch !== null &&
+  panelAfterSwitch.includes(REPORT_CASE) &&
+  !panelAfterSwitch.includes(OTHER_CASE);
+check(
+  "switching cases with the panel open never leaves it showing the previous case's report",
+  !strandedOnOldCase,
+  panelAfterSwitch === null ? "panel closed on switch" : panelAfterSwitch.slice(0, 160),
+);
+
+check(
+  "no console errors from the report panel's interactions",
+  consoleErrors.length === consoleErrorsBeforePanel,
+  consoleErrors.slice(consoleErrorsBeforePanel).join(" | "),
+);
+
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   console.log("\nFAILURES:");
