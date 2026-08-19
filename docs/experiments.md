@@ -672,6 +672,47 @@ sessions by resume is still ONE row — sum the GPU hours.
     conservative check, exactly as recorded previously; the finding above
     rests on `predicted`.
 
+30. **EXTERNAL VALIDATION, PART 2: BraTS-PED COMPLETES, AND THE POOLED SHIFT
+    RESULT IS NEGATIVE IN THE OTHER DIRECTION — `neurovision` is conclusively
+    WORSE than the baseline on tumour core off-distribution.** Measured
+    2026-08-19. `outputs/eval_ped_neurovision` finished (99/99 cases; it had
+    been interrupted at 19). Paired against `outputs/eval_ped_baseline_unet3d`
+    via `compare_models`, Holm across an 8-metric family, saved to
+    `outputs/compare_shift/`.
+
+    **PED alone, n=99.** `dice_TC` **-0.0595, p_holm 0.0002, verdict `worse`**;
+    `dice_mean` -0.0305, p_holm 0.0036, `worse`. `dice_ET` -0.0099 and
+    `dice_WT` -0.0220 are inconclusive. Every HD95 metric is inconclusive.
+    Absolute numbers are dire for both models — baseline ET Dice 0.5733
+    (std 0.3564), `neurovision` 0.5634 — i.e. bimodal, catastrophic failure on
+    a paediatric cohort for a model trained on adult glioma.
+
+    **Pooled SSA + PED, n=159.** `dice_TC` **-0.0333, p_holm 0.0132, `worse`**.
+    Everything else inconclusive, including all four HD95 metrics.
+
+    **This kills the boundary-robustness-under-shift hypothesis.** Note 26
+    recorded that on SSA alone (n=60) HD95 favoured `neurovision` in all three
+    regions (-2.22 / -2.05 / -1.51 mm) with consistent effect size, and flagged
+    it as underpowered rather than absent. At n=159 it is absent: `hd95_ET`
+    improvement +1.459 mm with CI [-3.942, 0.700], `hd95_mean` +1.003 with CI
+    [-2.699, 0.633]. Both straddle zero. The n=60 pattern was noise. **Do not
+    write the "better boundaries under shift" framing** — this is the second
+    time a promising direction in this project survived only until the sample
+    grew, and the first (note 23) has the same shape.
+
+    **Watch the HD95 denominators.** `hd95_ET` pairs only 78 of 99 PED cases
+    (21 dropped as one-sided-empty NaN) against 88 for TC and 98 for WT. The
+    per-model `summary.csv` means are therefore over DIFFERENT case subsets and
+    must not be differenced by hand — doing so on ET reads as a 3.74 mm
+    improvement where the paired estimate is 0.895 mm and inconclusive.
+
+    **What this does and does not change.** It removes a claim the project did
+    not yet have. It does NOT touch the in-domain results (notes 11-21), which
+    are unaffected. And it strengthens the motivation for the failure-detection
+    direction in `docs/research/improvement_plan.md`: a model that degrades
+    off-distribution *and gives no signal that it has* is exactly what a
+    per-case trust score exists for. That hypothesis remains untested.
+
 ---
 
 ## Planned

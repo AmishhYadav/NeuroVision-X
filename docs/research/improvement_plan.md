@@ -96,10 +96,16 @@ current situation.
 | A3 | New script `scripts/extract_ambiguity.py` — sliding-window extraction of the branch-disagreement field over a whole volume, saved per case. | ~2 h build, ~1.5 h/split CPU |
 | A4 | Score disagreement as a **voxel-level error detector**: AUROC / AUPRC of `disagreement` vs `pred != label`, against three comparators — predictive entropy (1 pass), MC-dropout mutual information (N=10), and a random null. | ~1 h |
 
-**Gate A-1 (robustness):** does HD95 favour `neurovision` on the pooled n=159
-with a Holm-corrected CI excluding zero?
-- *Pass* → the robustness claim is real. It becomes contribution #2.
-- *Fail* → drop the HD95 claim entirely. Phase A4 still stands alone.
+**Gate A-1 (robustness): RESOLVED 2026-08-19 — FAILED.** PED completed (99/99)
+and the pooled n=159 comparison came back inconclusive on every HD95 metric
+(`hd95_ET` +1.459 mm, CI [-3.942, 0.700]; `hd95_mean` +1.003, CI [-2.699,
+0.633]). The n=60 SSA pattern was noise. Worse, `dice_TC` is conclusively
+**worse** for `neurovision` under shift (-0.0333 pooled, p_holm 0.0132; -0.0595
+on PED alone, p_holm 0.0002). See `docs/experiments.md` note 30 and
+`outputs/compare_shift/`. **The boundary-robustness claim is dropped.** A1 and A2
+are done; A3/A4 and Gate A-2 are unaffected and remain the project's live bet —
+a model that degrades off-distribution without signalling it is precisely the
+case for a per-case trust score.
 
 **Gate A-2 (the core bet):** does disagreement beat MC-dropout mutual
 information at error detection, at 1/10 the compute?
@@ -253,8 +259,10 @@ which explicitly accepts negative and replication results.
   (pool BraTS-2023 GLI + SSA + PED) and claim generalisation directly rather
   than measuring it — "cross-cohort training closes the shift gap by X" is a
   real, if less novel, result.
-- **Gate A-1 fails, A-2 passes.** Drop the HD95 robustness claim. The
-  uncertainty story stands alone and is still the headline.
+- **Gate A-1 fails, A-2 passes.** *(A-1 has now failed.)* The HD95 robustness
+  claim is dropped. The uncertainty story stands alone and is the headline —
+  and the shift degradation measured in note 30 is its motivation rather than a
+  competing claim.
 - **Both pass.** Proceed as written; this is the strong version.
 - **Both fail.** Contributions 3, 5, 6, 7 still constitute a complete honest
   paper and a working demo. That is the floor, and the floor is already built.
