@@ -128,9 +128,26 @@ saved predictions, so it costs zero GPU hours.
 | 1 — localisation | **built, run on real data** | `frac_of_tumour` / `frac_of_structure` per structure, lobe, eloquence, distance to nearest eloquent structure |
 | 2 — eloquence reference (Tier C) | **built** | 23 of 122 structures marked eloquent against the published Sawaya list, in `knowledge/eloquence_map.yaml` |
 | 3a — burden profile | **built, run on real data** | volumes, foci, multifocality, sphericity, surface-to-volume, midline crossing, centroids — 57 columns per case |
-| 3b — tissue involvement | not started | ependymal / cortical / deep-WM involvement, epicentre naming |
-| 4 — report | **library built**, driver + demo panel pending | `reporting/report.py` assembles versioned JSON + Markdown with the non-diagnostic disclaimer, provenance and caveats as required fields |
-| 5 — validation + paper | not started | population statistics; agreement between GT-derived and prediction-derived reports |
+| 3b — tissue involvement | **built, run on real data** | ventricular and deep white-matter overlap, four tissue fractions, epicentre naming. Deliberately *not* labelled VASARI — the verbatim definitions were unobtainable |
+| 4 — report | **built in full** | `reporting/report.py` + `scripts/report.py` + `GET /api/report/<case_id>` + the frontend panel. Versioned JSON and Markdown with the non-diagnostic disclaimer, provenance and caveats as required fields |
+| 5 — validation + paper | **experiment run; the result is negative** | population statistics over all 1,251 cases, and the agreement experiment between ground-truth-derived and prediction-derived reports |
+
+**The Phase 5 result, stated plainly: a better segmentation does not produce a
+measurably better report.** Over 189 paired cases and 25 report-agreement
+metrics, Holm-corrected and with patch size controlled at 64³ across all three
+models, `neurovision`'s +0.0267 ET Dice advantage yields exactly one conclusive
+improvement (`relerr_vol_TC`), and the capacity control yields none. Structure-list
+Jaccard is 0.9074 / 0.9122 / 0.9108 across the three models and 16 of 25 metrics
+share a median. The report is dominated by *which structures the tumour overlaps*,
+and a few voxels at a margin rarely change whether a structure is involved at all —
+so the interpretable layer is **stable** with respect to segmentation quality across
+this range. `docs/experiments.md` notes 22–25.
+
+A second finding, about the layer rather than the models: **the eloquence field is
+degenerate on this dataset.** Every one of the 1,251 cases is within 10 mm of a
+structure on the Sawaya list and 98.8% touch one at distance exactly zero, so
+"100% eloquence agreement" is saturation, not a result. The population code
+returns a `degenerate_fields` list so this cannot be misread.
 
 Two design decisions worth knowing before reading the code:
 
@@ -201,8 +218,11 @@ python scripts/extract_gates.py  # fusion gate maps for the mechanism figure
 python scripts/explain.py        # Integrated Gradients, Grad-CAM, faithfulness
 python scripts/fetch_atlas.py    # SRI24 from NITRC, checksum-verified
 python scripts/validate_atlas.py # the Phase 0 alignment gate
-python scripts/localize.py       # per-structure involvement (Phase 1)
+python scripts/localize.py       # per-structure involvement (Phase 1) + involvement layer (3b)
 python scripts/burden.py         # burden profile (Phase 3a)
+python scripts/report.py         # one structured report per case (Phase 4)
+python scripts/report_agreement.py  # GT-vs-prediction report agreement (Phase 5)
+python scripts/population_stats.py  # cohort anatomy + figures (Phase 5)
 ```
 
 `notebooks/09_paper_figures.ipynb` regenerates every paper figure and table in one
@@ -324,22 +344,19 @@ scaler, epoch, global step, RNG states, W&B run id) because sessions get killed 
 val and test, calibrated, MC-dropout risk-coverage measured, capacity control run.
 The accuracy result is established and the reliability claim is refuted.
 
-**Milestone 2 — the interpretable pipeline, in progress.** Phases 0, 1, 2 (Tier C)
-and 3a are built and have run on real data; Phase 4's report library is built.
+**Milestone 2 — the interpretable pipeline, complete.** Phases 0 through 5 are
+all built and have run on real data, for zero GPU hours.
 
 Open work, in priority order:
 
-1. `scripts/report.py` (Hydra driver), the `/api/report/<case_id>` route and the
-   frontend report panel — Phase 4's remaining thirds.
-2. Phase 3b — tissue involvement and epicentre naming, now unblocked by the atlas.
-3. Phase 5 — population statistics, and the agreement experiment between reports
-   generated from ground truth and from predictions. This is the experiment that
-   connects the pipeline to the +0.0267 ET result, and it must control patch size,
-   because report agreement is **not** monotonic in Dice (the superseded 96³ U-Net
-   has lower ET Dice than `neurovision` and still produces the better report on
-   volume and multifocality agreement).
-4. `ablation_content_only_gate` (~23 GPU-h) — the load-bearing mechanism
-   experiment, unstarted and now gated on finding more GPU hours.
+1. The paper. The framing has to be rewritten around what survived — an
+   architectural gain over a parameter-matched control on ET Dice — and what did
+   not: the reliability claim, and now report agreement.
+2. `ablation_content_only_gate` (~23 GPU-h) — the load-bearing mechanism
+   experiment, unstarted and gated on finding more GPU hours. It is what would
+   show whether the ambiguity conditioning specifically carries the architectural
+   gain; until it exists the contribution is argued from design and
+   pre-registration, not from measurement.
 
 Known limitations, to be stated in the paper rather than discovered in review:
 
