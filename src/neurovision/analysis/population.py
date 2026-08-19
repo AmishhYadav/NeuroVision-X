@@ -378,6 +378,23 @@ def laterality_distribution(anatomy: pd.DataFrame, *, region: str = "WT") -> pd.
     left-right flipped atlas" entry) -- this is that same class of check, run
     on tumour location instead of the atlas's own anatomy.
 
+    **The `unlabelled` row is reported as its own laterality, never folded
+    into `midline`.** `neurovision.anatomy.localize` gives the unlabelled
+    pseudo-structure `laterality="midline"` as a placeholder, because it is
+    not a real structure and has no side. Left as-is, that placeholder lands
+    in the midline bucket and dominates it: measured over all 1251 BraTS 2021
+    cases, `midline` read 34.8% of tumour volume, while the actual midline
+    structures (corpus callosum, pons, vermis) account for about 0.2%. A
+    reader would have concluded that a third of the average glioma sits in
+    midline structures, wrong by two orders of magnitude, from a table that
+    summed to exactly 1.0 and looked entirely reasonable.
+
+    Those voxels are not midline and they are not unknown-sided in reality --
+    they have a side, the parcellation just does not name them. So they get
+    their own row rather than being dropped: dropping them would leave the
+    remaining rows summing to ~0.65 with no visible reason, and renormalising
+    would inflate `L` and `R` by about 50%.
+
     Args:
         anatomy: An `anatomy.csv`-shaped long table.
         region: Region to restrict to; see `_filter_by_region`.
@@ -397,6 +414,12 @@ def laterality_distribution(anatomy: pd.DataFrame, *, region: str = "WT") -> pd.
     scoped = _filter_by_region(anatomy, region, caller="laterality_distribution")
     n_cases = int(scoped["case_id"].nunique())
     all_case_ids = scoped["case_id"].unique()
+
+    # See the docstring: the unlabelled pseudo-structure carries a "midline"
+    # placeholder laterality, and folding it in makes the midline bucket read
+    # ~35% instead of ~0.2%.
+    scoped = scoped.copy()
+    scoped.loc[scoped["structure"] == _UNLABELLED_NAME, "laterality"] = _UNLABELLED_NAME
 
     rows: list[dict[str, object]] = []
     for laterality, group in scoped.groupby("laterality"):

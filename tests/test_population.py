@@ -494,9 +494,14 @@ def test_laterality_distribution_computes_mean_median_and_involvement() -> None:
     assert left["n_cases_involved"] == 2
     assert left["frac_cases_involved"] == pytest.approx(2 / 3)
 
-    midline = table[table["laterality"] == "midline"].iloc[0]
-    assert midline["n_cases_involved"] == 1
-    assert midline["frac_cases_involved"] == pytest.approx(1 / 3)
+    # case3's only row is the `unlabelled` pseudo-structure, which localize.py
+    # gives a "midline" placeholder laterality. It is reported under its own
+    # `unlabelled` laterality, never as midline -- see
+    # test_laterality_reports_unlabelled_separately_and_never_as_midline.
+    assert table[table["laterality"] == "midline"].empty
+    unlabelled = table[table["laterality"] == "unlabelled"].iloc[0]
+    assert unlabelled["n_cases_involved"] == 1
+    assert unlabelled["frac_cases_involved"] == pytest.approx(1 / 3)
 
 
 def test_summarize_population_assembles_all_four() -> None:
@@ -530,3 +535,31 @@ def test_summarize_population_assembles_all_four() -> None:
     assert isinstance(bundle["laterality"], pd.DataFrame)
     assert isinstance(bundle["eloquence"], dict)
     assert bundle["eloquence"]["n_cases"] == 2
+
+
+def test_laterality_reports_unlabelled_separately_and_never_as_midline() -> None:
+    """The unlabelled pseudo-structure carries a `midline` placeholder laterality. Folding it
+    in made the midline bucket read 34.8% of tumour volume across all 1251 BraTS 2021 cases,
+    against ~0.2% for the actual midline structures -- a table that summed to 1.0, looked
+    entirely reasonable, and was wrong by two orders of magnitude."""
+    anatomy = pd.DataFrame(
+        {
+            "case_id": ["c1", "c1", "c1", "c2", "c2"],
+            "region": ["WT"] * 5,
+            "structure": ["Frontal_L", "CorpusCallosum", "unlabelled", "Frontal_R", "unlabelled"],
+            "laterality": ["L", "midline", "midline", "R", "midline"],
+            "lobe": ["frontal", "callosum", "unlabelled", "frontal", "unlabelled"],
+            "eloquence": ["unclassified"] * 5,
+            "frac_of_tumour": [0.6, 0.05, 0.35, 0.7, 0.3],
+            "frac_of_structure": [0.5, 0.1, float("nan"), 0.5, float("nan")],
+        }
+    )
+
+    table = laterality_distribution(anatomy).set_index("laterality")
+
+    assert "unlabelled" in table.index
+    # The genuine midline structure contributes 0.05 in one case of two.
+    assert table.loc["midline", "mean_frac_of_tumour"] == pytest.approx(0.025)
+    assert table.loc["unlabelled", "mean_frac_of_tumour"] == pytest.approx(0.325)
+    # Nothing is dropped or renormalised: the four rows still account for the whole tumour.
+    assert table["mean_frac_of_tumour"].sum() == pytest.approx(1.0)
