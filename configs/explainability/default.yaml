@@ -176,3 +176,36 @@ attribution:
   # global RNG. Defaults to the run's own seed so a rerun is reproducible
   # without a separate knob to remember.
   seed: ${seed}
+
+# Fusion-ambiguity map extraction (scripts/extract_ambiguity.py), over a
+# WHOLE split via sliding-window inference -- unlike `gates:` above, which is
+# patch-based. The ambiguity summary feeds per-case failure detection
+# (correlating ambiguity against Dice/boundary error), which needs a scalar
+# computed over the whole predicted volume, not one hand-centred crop.
+ambiguity:
+  # Which frozen split to draw cases from. "test" backs a reported figure;
+  # "val" is for iterating without touching test.
+  split: test
+  # Checkpoint to load. null resolves to <training.checkpoint.dir>/best.pt,
+  # the same convention as inference.evaluation.checkpoint / gates.checkpoint.
+  checkpoint: null
+  out_dir: ${output_dir}/ambiguity_${explainability.ambiguity.split}
+  # null processes every case in the split -- this is a whole-split artifact,
+  # unlike gates.num_cases's "a handful for a figure" default.
+  num_cases: null
+  # Explicit case ids override num_cases entirely. null selects every case
+  # (or the first num_cases) in split-file order.
+  case_ids: null
+  # Which entry of the fine-to-coarse ambiguity pyramid to extract. 0 is the
+  # finest fused level (stride 2, closest to full resolution). Must name a
+  # fusion block actually built with use_ambiguity=True -- see
+  # _AmbiguityAtLevel's docstring for what happens otherwise.
+  level: 0
+  # Save the per-case voxel maps (.npz: disagreement / entropy_cnn /
+  # entropy_swin / logits). At a whole split's worth of cases these are the
+  # large artifact; ambiguity_summary.csv is the primary one and is written
+  # regardless of this flag.
+  save_maps: true
+  # Also save the 4-modality image inside each case's .npz. Only checked
+  # when save_maps is true.
+  save_image: false

@@ -1,0 +1,670 @@
+"""Hydra entry point that extracts fusion-ambiguity maps over a whole split.
+
+`NeuroVisionX.forward_with_ambiguity(x) -> (logits, ambiguity_maps)` (see
+`neurovision.models.neurovision`) exists and is tested, but nothing saves its
+output. This script is that producer, and it is deliberately NOT built like
+`scripts/extract_gates.py`.
+
+## Why this is sliding-window, not patch-based, unlike extract_gates.py
+
+`extract_gates.py` takes exactly one tumor-centred `patch_size` crop per
+case, which is correct for a qualitative figure but wrong here: this
+script's output (`ambiguity_summary.csv`) feeds per-case failure detection
+-- correlating a per-case ambiguity scalar against per-case Dice, boundary
+error, etc. -- which needs a scalar computed over the WHOLE predicted
+volume, not one hand-centred crop that silently excludes anything outside
+it. So this script runs full sliding-window inference
+(`neurovision.inference.sliding_window.sliding_window_predict`, driven by
+`cfg.inference.sliding_window`, exactly like `scripts/evaluate.py`) via a
+thin per-level wrapper (`_AmbiguityAtLevel`) that adapts the model's
+multi-scale ambiguity pyramid into the single input-shaped output MONAI's
+`SlidingWindowInferer` knows how to stitch.
+
+## Masking convention -- read before touching the reducer
+
+The per-case reducer (`summarize_case_ambiguity`) uses the PREDICTED-
+foreground mask (`regions > 0.5`, from the model's own deterministic
+prediction), matching `scripts/evaluate.py`'s `uncertainty_summary.csv`
+convention EXACTLY -- not the union-of-predicted-and-ground-truth mask that
+`neurovision.uncertainty.risk_coverage.case_uncertainty_scalars`
+recommends and uses. That function is tested but UNUSED; do not call it and
+do not introduce a third masking convention here, or the several
+conventions could not be compared against each other, only against
+themselves.
+
+The predicted-foreground convention is chosen over the union convention for
+one hard reason: this scalar must be computable with **no access to the
+ground-truth label at all**. This project has already shipped a bug where a
+reporting mask was built from the label
+(`union_foreground_mask` in `src/neurovision/uncertainty/calibration.py`,
+see CLAUDE.md's "the calibration reporting mask must never be defined using
+the ground-truth label" entry) -- it manufactured 41-57% of a reported ECE
+and passed 984 tests, because the code did exactly what it said. A per-case
+ambiguity scalar that will later be correlated against per-case Dice is the
+same shape of hazard: if the mask that defines the scalar were built from
+the label, the correlation would partly measure "how much of the label did
+we use to build the mask" rather than anything about the model. So
+`summarize_case_ambiguity` takes no label argument at all -- not `None` by
+convention, but structurally absent from its signature.
+
+Example usage:
+
+    python scripts/extract_ambiguity.py explainability.ambiguity.split=test
+    python scripts/extract_ambiguity.py explainability.ambiguity.level=1
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
+
+import hydra
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn.functional as F
+from monai.data import list_data_collate
+from monai.data.utils import dense_patch_slices, fall_back_tuple
+
+try:  # Guarded on purpose -- see _count_sliding_windows.
+    from monai.inferers.utils import _get_scan_interval
+except ImportError:  # pragma: no cover -- only on a MONAI version that renamed it.
+    _get_scan_interval = None  # type: ignore[assignment]
+from omegaconf import DictConfig, OmegaConf
+from torch import Tensor, nn
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from neurovision.data.dataset import build_data_dicts, build_dataset, load_splits
+from neurovision.data.transforms import REGION_NAMES, build_val_transforms
+from neurovision.inference.postprocess import postprocess_logits
+from neurovision.inference.sliding_window import sliding_window_predict
+
+# Importing this registers "unet3d"/"swinunetr" (from baseline.py) AND
+# "neurovision" (models/__init__.py imports neurovision.py too -- see that
+# file's own comment) before build_model is ever called below. Copied from
+# scripts/evaluate.py / scripts/extract_gates.py.
+from neurovision.models import baseline  # noqa: F401
+from neurovision.models.neurovision import NeuroVisionX
+from neurovision.models.registry import build_model
+from neurovision.training.checkpoint import load_checkpoint
+from neurovision.utils.device import get_device
+from neurovision.utils.io import ensure_dir, read_json
+from neurovision.utils.logging import setup_logging
+from neurovision.utils.seed import set_seed
+
+logger = logging.getLogger(__name__)
+
+# Relative to this file, so the script works from any working directory and on
+# any machine -- no absolute paths. Copied from scripts/evaluate.py.
+_CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
+
+# The channel-group layout of one ambiguity map's dim-1 axis. Duplicated here
+# (not imported from adaptive_fusion.py) only as documentation -- the actual
+# split below is computed from `num_regions`, never a hardcoded index, so
+# this stays correct even if the constant's own definition moves.
+_NUM_AMBIGUITY_GROUPS = 3
+
+
+class _AmbiguityAtLevel(nn.Module):
+    """Adapts `NeuroVisionX` to emit exactly one fusion level's ambiguity map.
+
+    MONAI's `SlidingWindowInferer` stitches a single output tensor per call.
+    `NeuroVisionX.forward_with_ambiguity` returns a pyramid -- one ambiguity
+    map per fusion block, at that block's own stride -- so a single level is
+    selected here and trilinearly upsampled back to the input's spatial
+    resolution, giving the inferer the one input-shaped output it requires.
+    """
+
+    def __init__(self, model: NeuroVisionX, level: int) -> None:
+        """Wraps `model` to expose one ambiguity level as its whole output.
+
+        Args:
+            model: A `NeuroVisionX` instance (or anything exposing
+                `forward_with_ambiguity` with the same contract).
+            level: Which entry of the fine-to-coarse ambiguity pyramid to
+                return. Validated lazily, on the first `forward` call (see
+                that method), since the pyramid's length and which entries
+                are real ambiguity tensors vs. `None` are properties of the
+                model that are cheapest to check against the model's own
+                return value rather than duplicated here.
+        """
+        super().__init__()
+        self.model = model
+        self.level = level
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Runs `model.forward_with_ambiguity` and returns one upsampled level.
+
+        Args:
+            x: Input MRI volume/patch, shape `(B, in_channels, D, H, W)`.
+
+        Returns:
+            The chosen level's ambiguity map, upsampled (if needed) to `x`'s
+            spatial shape: `(B, 3 * num_regions, D, H, W)`.
+
+        Raises:
+            ValueError: If `self.level` is out of range for the model's
+                ambiguity pyramid, or if that level's entry is `None` (the
+                fusion block there has no ambiguity signal to give). Names
+                the level and how many maps exist in either case -- never
+                silently falls back to a different level.
+        """
+        _logits, ambiguity_maps = self.model.forward_with_ambiguity(x)
+
+        if not (0 <= self.level < len(ambiguity_maps)):
+            raise ValueError(
+                f"_AmbiguityAtLevel: level={self.level} is out of range for a model whose "
+                f"forward_with_ambiguity returns {len(ambiguity_maps)} map(s) (valid range "
+                f"0..{len(ambiguity_maps) - 1})."
+            )
+
+        ambiguity = ambiguity_maps[self.level]
+        if ambiguity is None:
+            raise ValueError(
+                f"_AmbiguityAtLevel: level={self.level} has no ambiguity map (that fusion "
+                "block was built with use_ambiguity=False, or is a fusion variant such as "
+                f"ConcatFusion/AddFusion with no ambiguity concept). {len(ambiguity_maps)} "
+                "map(s) total; choose a level whose entry is a real tensor."
+            )
+
+        target_shape = tuple(x.shape[2:])
+        if tuple(ambiguity.shape[2:]) != target_shape:
+            ambiguity = F.interpolate(
+                ambiguity, size=target_shape, mode="trilinear", align_corners=False
+            )
+        return ambiguity
+
+
+def select_cases(cfg: DictConfig) -> list[str]:
+    """Chooses which cases to extract ambiguity maps for.
+
+    Same convention as `scripts/extract_gates.py`'s `select_cases`, reading
+    from `cfg.explainability.ambiguity` instead of `cfg.explainability.gates`.
+
+    Args:
+        cfg: The full composed Hydra config.
+
+    Returns:
+        Case ids, in the order they should be processed:
+        `cfg.explainability.ambiguity.case_ids` if set (validated against
+        the split), else the first `cfg.explainability.ambiguity.num_cases`
+        ids of the split in split-file order (`null` -> every case).
+
+    Raises:
+        ValueError: If `cfg.explainability.ambiguity.split` is not a key of
+            the frozen splits file, if an explicit `case_ids` entry is not a
+            member of that split (names the offending ids and the split), or
+            if the resulting selection is empty.
+    """
+    amb_cfg = cfg.explainability.ambiguity
+    splits = load_splits(cfg.data.splits.path)
+
+    split = amb_cfg.split
+    if split not in splits:
+        raise ValueError(f"Unknown split {split!r}. Available splits: {sorted(splits.keys())}.")
+    available_ids = list(splits[split])
+
+    if amb_cfg.case_ids is not None:
+        case_ids = list(amb_cfg.case_ids)
+        missing = [c for c in case_ids if c not in available_ids]
+        if missing:
+            raise ValueError(
+                f"explainability.ambiguity.case_ids names case(s) not present in split "
+                f"{split!r}: {missing}. That split has {len(available_ids)} case(s)."
+            )
+    else:
+        num_cases = amb_cfg.num_cases
+        case_ids = available_ids if num_cases is None else available_ids[:num_cases]
+
+    if not case_ids:
+        raise ValueError(
+            f"select_cases selected 0 cases from split {split!r} "
+            f"(case_ids={amb_cfg.case_ids}, num_cases={amb_cfg.num_cases})."
+        )
+    return case_ids
+
+
+def _validate_labeled_cases(case_ids: Sequence[str], prep_dir: Path) -> None:
+    """Checks every selected case has a `label.npy` on disk.
+
+    `build_ambiguity_dataloader` reuses the shared `build_val_transforms`
+    pipeline, whose `LoadImaged` is built without `allow_missing_keys=True`
+    (see that function's docstring) -- a case with no `label.npy` therefore
+    dies inside MONAI's loader with a message several frames from anything
+    that names the case. Checked up front so that failure is immediate and
+    legible instead.
+
+    Args:
+        case_ids: Cases selected by `select_cases`.
+        prep_dir: Root of the preprocessed data.
+
+    Raises:
+        ValueError: If any selected case has no `label.npy` on disk. Names
+            every offending case id.
+    """
+    missing = [case_id for case_id in case_ids if not (prep_dir / case_id / "label.npy").is_file()]
+    if missing:
+        raise ValueError(
+            f"The following selected case(s) have no label.npy on disk: {missing}. "
+            "build_ambiguity_dataloader reuses build_val_transforms, whose LoadImaged is not "
+            "built with allow_missing_keys=True, so such a case cannot be loaded at all. "
+            "Select cases from a labelled split. Note the reported summary itself never reads "
+            "the label -- this check exists only because the shared loading transform needs "
+            "the file to be present."
+        )
+
+
+def resolve_ambiguity_checkpoint(cfg: DictConfig) -> Path:
+    """Decides which checkpoint file to load for ambiguity extraction.
+
+    Same convention as `scripts/evaluate.py`'s `resolve_checkpoint` /
+    `scripts/extract_gates.py`'s `resolve_gates_checkpoint`, reading from
+    `cfg.explainability.ambiguity.checkpoint` instead.
+
+    Args:
+        cfg: The full composed Hydra config.
+
+    Returns:
+        `Path(cfg.explainability.ambiguity.checkpoint)` if set, else
+        `Path(cfg.training.checkpoint.dir) / "best.pt"`.
+
+    Raises:
+        FileNotFoundError: If the resolved path does not exist. The message
+            lists whatever `.pt` files ARE present in that directory.
+    """
+    explicit = cfg.explainability.ambiguity.checkpoint
+    if explicit is not None:
+        checkpoint_path = Path(explicit)
+    else:
+        checkpoint_path = Path(cfg.training.checkpoint.dir) / "best.pt"
+
+    if not checkpoint_path.is_file():
+        checkpoint_dir = checkpoint_path.parent
+        if checkpoint_dir.is_dir():
+            available = sorted(p.name for p in checkpoint_dir.glob("*.pt"))
+        else:
+            available = []
+        raise FileNotFoundError(
+            f"No checkpoint found at {checkpoint_path.resolve()}. "
+            f".pt files present in {checkpoint_dir.resolve()}: "
+            f"{available if available else '(none -- directory is empty or does not exist)'}."
+        )
+    return checkpoint_path
+
+
+def load_ambiguity_model(cfg: DictConfig, checkpoint_path: Path, device: torch.device) -> nn.Module:
+    """Builds the model from config and loads a checkpoint's weights into it.
+
+    Args:
+        cfg: The full composed Hydra config.
+        checkpoint_path: Path to the checkpoint, as returned by
+            `resolve_ambiguity_checkpoint`.
+        device: The resolved torch device to move the model to.
+
+    Returns:
+        The loaded model, in eval mode.
+    """
+    model = build_model(cfg)
+    model = model.to(device)
+    # restore_rng=False: extraction is deterministic inference, with no
+    # reason to perturb the process's RNG state -- same reasoning as
+    # scripts/evaluate.py's load_eval_model / extract_gates.py's
+    # load_gates_model.
+    load_checkpoint(checkpoint_path, model, map_location=str(device), restore_rng=False)
+    model.eval()
+    return model
+
+
+def _check_forward_with_ambiguity(model: nn.Module, cfg: DictConfig) -> None:
+    """Raises before any output is produced if `model` has no ambiguity maps to give.
+
+    Args:
+        model: The loaded model.
+        cfg: The full composed Hydra config, used only to name the
+            offending model in the error message.
+
+    Raises:
+        TypeError: If `model` has no `forward_with_ambiguity` method. Only
+            `neurovision.models.neurovision.NeuroVisionX` has fusion blocks
+            -- evaluating a `unet3d` or `swinunetr` checkpoint here is a
+            configuration mistake worth catching in the first second, not on
+            the first forward pass.
+    """
+    if not hasattr(model, "forward_with_ambiguity"):
+        raise TypeError(
+            f"model.name={cfg.model.name!r} has no forward_with_ambiguity method. Only the "
+            "'neurovision' model has fusion blocks with ambiguity maps to extract -- point "
+            "cfg.model.name (and cfg.explainability.ambiguity.checkpoint, if set) at a "
+            "'neurovision' checkpoint instead."
+        )
+
+
+def build_ambiguity_dataloader(cfg: DictConfig, case_ids: Sequence[str]) -> DataLoader:
+    """Builds a whole-volume `DataLoader` for the selected cases.
+
+    Uses the same deterministic val transform pipeline as
+    `scripts/evaluate.py` / `scripts/extract_gates.py` (no cropping, no
+    randomness): sliding-window inference does the patching itself, so the
+    dataset must hand back whole volumes.
+
+    Args:
+        cfg: The full composed Hydra config.
+        case_ids: Case ids to load, in the order they should be yielded.
+
+    Returns:
+        A `DataLoader`, `batch_size=1` (whole volumes have per-case shapes
+        and do not collate at any larger batch size), yielding batches in
+        the SAME order as `case_ids`.
+    """
+    prep_dir = cfg.data.preprocessing.out_dir
+    data_dicts = build_data_dicts(list(case_ids), prep_dir)
+    transform = build_val_transforms(cfg)
+    dataset = build_dataset(data_dicts, transform, dataset_type="dataset")
+    return DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=cfg.data.num_workers,
+        collate_fn=list_data_collate,
+    )
+
+
+def _count_sliding_windows(spatial_shape: tuple[int, int, int], cfg: Any) -> int:
+    """Counts the sliding-window inferer's window positions for one volume.
+
+    Diagnostic only, recorded in `ambiguity_summary.csv`'s `n_windows`
+    column so a reader can tell a whole-volume statistic from a
+    single-window one at a glance. Recomputes what
+    `monai.inferers.SlidingWindowInferer` visits internally, via the same
+    (private, but stable and the only source of truth for this) MONAI
+    helpers `sliding_window_inference` itself calls -- an independently
+    reimplemented formula could silently drift from MONAI's own rounding.
+
+    Args:
+        spatial_shape: `(D, H, W)` of the volume sliding-window inference
+            will run over.
+        cfg: The full composed Hydra config, exposing
+            `cfg.inference.sliding_window`.
+
+    Returns:
+        The number of window positions MONAI's inferer would visit for one
+        volume of this shape.
+    """
+    if _get_scan_interval is None:
+        # `_get_scan_interval` is MONAI-private and could be renamed by an
+        # upgrade. It backs ONLY this diagnostic column, so a rename must
+        # degrade that column to -1 rather than break extraction itself --
+        # the ambiguity maps and every reported per-case scalar are
+        # unaffected by it. Deps are pinned, so this is dormant; check it
+        # before bumping MONAI, exactly as with skimage's `min_size`.
+        logger.warning(
+            "monai.inferers.utils._get_scan_interval is unavailable on this MONAI "
+            "version; n_windows will be recorded as -1. Extraction is unaffected."
+        )
+        return -1
+
+    sw_cfg = cfg.inference.sliding_window
+    roi_size = fall_back_tuple(list(sw_cfg.roi_size), spatial_shape)
+    num_spatial_dims = len(roi_size)
+    overlap = [float(sw_cfg.overlap)] * num_spatial_dims
+
+    # MONAI pads the input up to at least roi_size on every axis before
+    # scanning (see sliding_window_inference's own padding step) -- matched
+    # here so a volume shorter than roi_size on some axis is not undercounted.
+    padded_shape = tuple(max(s, r) for s, r in zip(spatial_shape, roi_size))
+
+    scan_interval = _get_scan_interval(padded_shape, roi_size, num_spatial_dims, overlap)
+    slices = dense_patch_slices(padded_shape, roi_size, scan_interval)
+    return len(slices)
+
+
+def summarize_case_ambiguity(
+    disagreement: Tensor,
+    entropy_cnn: Tensor,
+    entropy_swin: Tensor,
+    regions: Tensor,
+    region_names: Sequence[str] = REGION_NAMES,
+) -> dict[str, float]:
+    """Reduces one case's per-voxel ambiguity maps to per-case scalar columns.
+
+    Uses the PREDICTED-foreground mask (`regions > 0.5`) to define each
+    region's foreground -- matching `scripts/evaluate.py`'s
+    `uncertainty_summary.csv` convention exactly. See this module's
+    top-of-file docstring for why that convention (and not the union mask
+    `neurovision.uncertainty.risk_coverage.case_uncertainty_scalars`
+    recommends) is used, and why this function takes no label argument at
+    all: the scalar it returns must be computable with no access to the
+    ground truth.
+
+    Args:
+        disagreement: `|p_cnn - p_swin|`, shape `(num_regions, D, H, W)`.
+        entropy_cnn: CNN branch normalised Bernoulli entropy, same shape.
+        entropy_swin: Swin branch normalised Bernoulli entropy, same shape.
+        regions: Predicted region mask (already thresholded, e.g. via
+            `neurovision.inference.postprocess.postprocess_logits`), shape
+            `(num_regions, D, H, W)`, values in `{0, 1}`.
+        region_names: Region channel names, in channel order. Defaults to
+            `neurovision.data.transforms.REGION_NAMES`.
+
+    Returns:
+        One flat dict with, per region `R` in `region_names`:
+        `amb_dis_mean_R`, `amb_dis_max_R`, `amb_dis_mean_fg_R`,
+        `amb_hcnn_mean_fg_R`, `amb_hswin_mean_fg_R` -- plus
+        `amb_dis_mean_fg_mean`, the NaN-skipping mean of `amb_dis_mean_fg_R`
+        across regions. `*_fg_*` entries are NaN when that region's
+        predicted foreground is empty: an empty prediction and a
+        confidently certain prediction are different states and must not
+        collapse to the same number (same convention `scripts/evaluate.py`
+        uses for its `mi_mean_fg_*` columns).
+    """
+    row: dict[str, float] = {}
+    fg_means: list[float] = []
+    for i, region in enumerate(region_names):
+        dis = disagreement[i]
+        hcnn = entropy_cnn[i]
+        hswin = entropy_swin[i]
+        fg_mask = regions[i] > 0.5
+
+        row[f"amb_dis_mean_{region}"] = dis.mean().item()
+        row[f"amb_dis_max_{region}"] = dis.max().item()
+
+        if fg_mask.any():
+            dis_fg_mean = dis[fg_mask].mean().item()
+            row[f"amb_dis_mean_fg_{region}"] = dis_fg_mean
+            row[f"amb_hcnn_mean_fg_{region}"] = hcnn[fg_mask].mean().item()
+            row[f"amb_hswin_mean_fg_{region}"] = hswin[fg_mask].mean().item()
+            fg_means.append(dis_fg_mean)
+        else:
+            # NaN, not 0.0 -- an empty prediction is not the same state as a
+            # perfectly-agreeing one, and must not collapse to the same
+            # number. Same convention scripts/evaluate.py uses.
+            row[f"amb_dis_mean_fg_{region}"] = float("nan")
+            row[f"amb_hcnn_mean_fg_{region}"] = float("nan")
+            row[f"amb_hswin_mean_fg_{region}"] = float("nan")
+
+    row["amb_dis_mean_fg_mean"] = float(np.mean(fg_means)) if fg_means else float("nan")
+    return row
+
+
+def _log_and_print_summary(
+    manifest_df: pd.DataFrame, summary_df: pd.DataFrame, split: str, n_cases: int
+) -> None:
+    """Logs and prints a compact end-of-run summary.
+
+    Args:
+        manifest_df: The manifest DataFrame `run_extraction` is about to
+            return / has just written.
+        summary_df: The `ambiguity_summary.csv` DataFrame -- `n_windows`
+            lives there, not in the manifest (see this module's
+            `summarize_case_ambiguity` / `run_extraction` docstrings).
+        split: The split name ambiguity maps were extracted from.
+        n_cases: Number of cases processed.
+    """
+    lines = [
+        "=" * 70,
+        f"Ambiguity extraction summary -- split={split!r}, {n_cases} case(s)",
+        "=" * 70,
+    ]
+    if manifest_df.empty:
+        lines.append("No cases were processed.")
+    else:
+        level = int(manifest_df["level"].iloc[0])
+        n_saved = int(manifest_df["maps_saved"].sum())
+        mean_windows = summary_df["n_windows"].mean()
+        lines.append(f"  level: {level}")
+        lines.append(f"  cases with saved voxel maps: {n_saved}/{n_cases}")
+        lines.append(f"  mean sliding-window positions per case: {mean_windows:.1f}")
+
+    # print only, not logger.info as well -- setup_logging's StreamHandler
+    # already targets stdout, so doing both would print this block twice.
+    # Matches scripts/evaluate.py's / scripts/extract_gates.py's summary.
+    print("\n".join(lines))
+
+
+def run_extraction(cfg: DictConfig) -> pd.DataFrame:
+    """Extracts fusion-ambiguity maps for a split and writes them to disk.
+
+    For each selected case: run whole-volume sliding-window inference twice
+    -- once through the plain model to get the deterministic segmentation
+    logits (used only to build the predicted-foreground mask, exactly like
+    `scripts/evaluate.py`), and once through `_AmbiguityAtLevel` to get one
+    fusion level's ambiguity map, upsampled to full resolution and stitched
+    the same way. Both passes are deterministic (`set_eval=True`) and use
+    the same weights, so this costs roughly double the inference time of a
+    plain evaluation run in exchange for `_AmbiguityAtLevel`'s single-tensor
+    contract staying exactly as simple as the spec: no packed/concatenated
+    output to unpack downstream.
+
+    Args:
+        cfg: The full composed Hydra config.
+
+    Returns:
+        The summary DataFrame (also written to
+        `<out_dir>/ambiguity_summary.csv`), indexed by `case_id`.
+
+    Raises:
+        ValueError: See `select_cases`, `_validate_labeled_cases`, and
+            `_AmbiguityAtLevel.forward`.
+        FileNotFoundError: See `resolve_ambiguity_checkpoint`.
+        TypeError: See `_check_forward_with_ambiguity`.
+    """
+    device = get_device(cfg)
+    amb_cfg = cfg.explainability.ambiguity
+    prep_dir = Path(cfg.data.preprocessing.out_dir)
+
+    case_ids = select_cases(cfg)
+    _validate_labeled_cases(case_ids, prep_dir)
+
+    checkpoint_path = resolve_ambiguity_checkpoint(cfg)
+    model = load_ambiguity_model(cfg, checkpoint_path, device)
+    # Checked once, before the loop and before any output directory exists --
+    # evaluating a unet3d/swinunetr checkpoint here is a user error worth
+    # catching in the first second, not on the first forward pass.
+    _check_forward_with_ambiguity(model, cfg)
+
+    level = int(amb_cfg.level)
+    wrapped_model = _AmbiguityAtLevel(model, level).to(device)
+    wrapped_model.eval()
+
+    out_dir = ensure_dir(amb_cfg.out_dir)
+    save_maps = bool(amb_cfg.save_maps)
+    save_image = bool(amb_cfg.save_image)
+
+    loader = build_ambiguity_dataloader(cfg, case_ids)
+    num_regions = len(REGION_NAMES)
+
+    summary_rows: dict[str, dict[str, float]] = {}
+    manifest_rows: dict[str, dict[str, Any]] = {}
+
+    summary_csv_path = out_dir / "ambiguity_summary.csv"
+    manifest_csv_path = out_dir / "ambiguity_manifest.csv"
+
+    model.eval()
+    with torch.no_grad():
+        progress = tqdm(zip(case_ids, loader), total=len(case_ids), desc="Extracting ambiguity")
+        for case_id, batch in progress:
+            meta = read_json(prep_dir / case_id / "meta.json")
+            image = batch["image"]  # (1, 4, D, H, W)
+            spatial_shape = tuple(image.shape[2:])
+
+            # Deterministic segmentation pass -- used only to build the
+            # predicted-foreground mask, never saved as "the" prediction of
+            # this script (scripts/evaluate.py already owns that artifact).
+            seg_logits = sliding_window_predict(model, image, cfg, device)
+            regions = postprocess_logits(seg_logits, cfg)[0]  # (num_regions, D, H, W)
+
+            # Ambiguity pass, through the per-level wrapper.
+            ambiguity_full = sliding_window_predict(
+                wrapped_model, image, cfg, device, set_eval=True
+            )
+            ambiguity = ambiguity_full[0]  # (3 * num_regions, D, H, W)
+            disagreement = ambiguity[0:num_regions]
+            entropy_cnn = ambiguity[num_regions : 2 * num_regions]
+            entropy_swin = ambiguity[2 * num_regions : 3 * num_regions]
+
+            row = summarize_case_ambiguity(
+                disagreement.cpu(), entropy_cnn.cpu(), entropy_swin.cpu(), regions.cpu()
+            )
+            row["level"] = float(level)
+            row["n_windows"] = float(_count_sliding_windows(spatial_shape, cfg))
+            summary_rows[case_id] = row
+
+            if save_maps:
+                save_arrays: dict[str, np.ndarray] = {
+                    "disagreement": disagreement.cpu().numpy().astype(np.float16),
+                    "entropy_cnn": entropy_cnn.cpu().numpy().astype(np.float16),
+                    "entropy_swin": entropy_swin.cpu().numpy().astype(np.float16),
+                    "logits": seg_logits[0].cpu().numpy().astype(np.float16),
+                }
+                if save_image:
+                    save_arrays["image"] = image[0].cpu().numpy().astype(np.float16)
+                np.savez_compressed(out_dir / f"{case_id}.npz", **save_arrays)
+
+            manifest_rows[case_id] = {
+                "shape_d": spatial_shape[0],
+                "shape_h": spatial_shape[1],
+                "shape_w": spatial_shape[2],
+                "level": level,
+                "has_label": bool(meta["has_label"]),
+                "maps_saved": save_maps,
+            }
+
+            # Rewritten every iteration, not just at the end: a full-split
+            # sliding-window run can take minutes, and a killed run should
+            # keep every already-processed case instead of losing all of
+            # them. Same reasoning as scripts/evaluate.py's per-case CSVs.
+            pd.DataFrame.from_dict(summary_rows, orient="index").rename_axis("case_id").to_csv(
+                summary_csv_path
+            )
+            pd.DataFrame.from_dict(manifest_rows, orient="index").rename_axis("case_id").to_csv(
+                manifest_csv_path
+            )
+
+    summary_df = pd.DataFrame.from_dict(summary_rows, orient="index").rename_axis("case_id")
+    manifest_df = pd.DataFrame.from_dict(manifest_rows, orient="index").rename_axis("case_id")
+
+    config_path = out_dir / "ambiguity_config.yaml"
+    config_path.write_text(OmegaConf.to_yaml(cfg, resolve=True), encoding="utf-8")
+
+    _log_and_print_summary(manifest_df, summary_df, amb_cfg.split, len(case_ids))
+
+    return summary_df
+
+
+@hydra.main(version_base="1.3", config_path=_CONFIG_DIR, config_name="config")
+def main(cfg: DictConfig) -> None:
+    """Extracts fusion-ambiguity maps over a split, per the composed config.
+
+    Args:
+        cfg: The config Hydra composed from configs/ plus any CLI overrides.
+    """
+    setup_logging(level="INFO")
+    set_seed(cfg.seed)
+    run_extraction(cfg)
+
+
+if __name__ == "__main__":
+    main()
