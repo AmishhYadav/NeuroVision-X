@@ -40,7 +40,13 @@
 #   train       one training run                                      MANUAL
 #   evaluate    score a checkpoint on the frozen test split           MANUAL
 #   pull        bring Kaggle results back into outputs/               LOCAL
+#   atlas       download SRI24 and run the Phase 0 alignment gate     LOCAL
+#   pipeline    localisation -> burden -> report, for one segmentation LOCAL
+#   phase5      report agreement + population anatomy                 LOCAL
 #   figures     regenerate every paper figure and table               LOCAL
+#
+# The last three are the interpretable pipeline. They consume saved
+# predictions, run entirely on CPU, and cost zero GPU hours.
 #
 set -euo pipefail
 
@@ -70,6 +76,15 @@ REPO_URL="${REPO_URL:-https://github.com/AmishhYadav/NeuroVision-X.git}"
 #   EXPERIMENT=baseline_swinunetr ./scripts/reproduce.sh train
 EXPERIMENT="${EXPERIMENT:-baseline_unet3d}"
 SPLIT="${SPLIT:-test}"
+
+# The interpretable pipeline. PIPELINE_SOURCE is "label" (ground truth) or
+# "prediction"; with "prediction" you must also give PIPELINE_EVAL_DIR. The
+# burden and localisation runs for one segmentation MUST agree on both, or
+# scripts/report.py refuses to join them -- see its module docstring.
+ATLAS_DIR="${ATLAS_DIR:-data/atlas}"
+PIPELINE_SOURCE="${PIPELINE_SOURCE:-label}"
+PIPELINE_EVAL_DIR="${PIPELINE_EVAL_DIR:-}"
+PIPELINE_TAG="${PIPELINE_TAG:-gt}"
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 step_banner() { printf '\n\033[1m=== %s ===\033[0m\n' "$*"; }
@@ -363,7 +378,121 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 10. figures — every paper figure and table, from files, on CPU
+# 10. atlas — SRI24 + the Phase 0 alignment gate
+# ---------------------------------------------------------------------------
+# SRI24 is CC-BY-SA and is downloaded, never committed. The gate is not
+# decoration: the atlas is anterior-posterior mirrored relative to BraTS voxel
+# indexing, and brain-mask Dice CANNOT see a left-right flip -- it scores
+# HIGHER on a mirrored atlas. Laterality is the check that can, and it must
+# pass before any localisation number means anything.
+step_atlas() {
+  step_banner "atlas (LOCAL, CPU)"
+  "$PY" scripts/fetch_atlas.py anatomy.dir="$ATLAS_DIR"
+  "$PY" scripts/validate_atlas.py anatomy.dir="$ATLAS_DIR"
+  echo
+  echo "The lobe-distribution check is ADVISORY and never gates: its natural"
+  echo "summary statistic prefers the WRONG orientation (rank correlation"
+  echo "+0.975 mirrored vs +0.872 correct). Read the brain-mask Dice and the"
+  echo "laterality pair count; those are the gate."
+}
+
+# ---------------------------------------------------------------------------
+# 11. pipeline — localisation, burden and report for ONE segmentation
+# ---------------------------------------------------------------------------
+# Phases 1, 2, 3a, 3b and 4. Everything here reads saved arrays and writes
+# CSVs; no model runs. Set PIPELINE_SOURCE/PIPELINE_EVAL_DIR/PIPELINE_TAG to
+# choose which segmentation is profiled, and run it once per segmentation you
+# want to compare in phase5.
+step_pipeline() {
+  step_banner "pipeline (LOCAL, CPU) — source=$PIPELINE_SOURCE tag=$PIPELINE_TAG"
+  require_file "$ATLAS_DIR" "Atlas missing. Run: ./scripts/reproduce.sh atlas"
+
+  # Under `set -u`, "${arr[@]}" on an EMPTY array is an unbound-variable error
+  # in bash 3.2 -- which is what macOS ships. The `${arr[@]+"${arr[@]}"}` form
+  # expands to nothing when the array is empty and is safe on 3.2 and on 5.
+  local extra=()
+  if [ "$PIPELINE_SOURCE" = "prediction" ]; then
+    [ -n "$PIPELINE_EVAL_DIR" ] || die \
+      "PIPELINE_SOURCE=prediction needs PIPELINE_EVAL_DIR=<dir with predictions/>"
+    require_file "$PIPELINE_EVAL_DIR/predictions" "No predictions/ in $PIPELINE_EVAL_DIR"
+    extra=("analysis.localize.eval_dir=$PIPELINE_EVAL_DIR")
+  fi
+
+  "$PY" scripts/localize.py \
+      analysis.localize.source="$PIPELINE_SOURCE" \
+      analysis.localize.split="$SPLIT" \
+      ${extra[@]+"${extra[@]}"} \
+      anatomy.dir="$ATLAS_DIR" \
+      output_dir="outputs/localize_$PIPELINE_TAG"
+
+  local burden_extra=()
+  if [ "$PIPELINE_SOURCE" = "prediction" ]; then
+    burden_extra=("analysis.burden.eval_dir=$PIPELINE_EVAL_DIR")
+  fi
+  "$PY" scripts/burden.py \
+      analysis.burden.source="$PIPELINE_SOURCE" \
+      analysis.burden.split="$SPLIT" \
+      ${burden_extra[@]+"${burden_extra[@]}"} \
+      output_dir="outputs/burden_$PIPELINE_TAG"
+
+  "$PY" scripts/report.py \
+      analysis.report.burden_dir="outputs/burden_$PIPELINE_TAG" \
+      analysis.report.localize_dir="outputs/localize_$PIPELINE_TAG" \
+      output_dir="outputs/report_$PIPELINE_TAG"
+
+  echo
+  echo "Wrote outputs/{localize,burden,report}_$PIPELINE_TAG."
+  echo "report.py refuses a burden_dir and localize_dir that disagree on source,"
+  echo "split or resolved source directory: those directories differ only by"
+  echo "suffix, the join on case_id succeeds either way, and mixing them yields"
+  echo "a ground-truth burden profile beside a prediction-derived structure list"
+  echo "with nothing failing."
+}
+
+# ---------------------------------------------------------------------------
+# 12. phase5 — report agreement and population anatomy
+# ---------------------------------------------------------------------------
+# Needs `pipeline` to have been run for ground truth AND for every model being
+# compared. Patch size is a controlled variable: the three 64^3 runs may share
+# a Holm family, the superseded 96^3 run may not (it differs in epochs too).
+step_phase5() {
+  step_banner "phase5 (LOCAL, CPU)"
+  require_file "outputs/report_gt/reports" \
+      "No ground-truth reports. Run: PIPELINE_TAG=gt ./scripts/reproduce.sh pipeline"
+
+  local pairs=()
+  for tag in neurovision baseline capacity_control; do
+    if [ -d "outputs/report_$tag/reports" ]; then
+      pairs+=("+analysis.report_agreement.pred_dirs.$tag=outputs/report_$tag/reports")
+    else
+      echo "  [skip] outputs/report_$tag/reports absent — not scored"
+    fi
+  done
+  [ "${#pairs[@]}" -gt 0 ] || die "No model report directories found; run pipeline per model first."
+
+  "$PY" scripts/report_agreement.py \
+      analysis.report_agreement.gt_dir=outputs/report_gt/reports \
+      ${pairs[@]+"${pairs[@]}"} \
+      output_dir=outputs/report_agreement
+
+  local pop=()
+  for split_tag in gt gt_train gt_val; do
+    if [ -d "outputs/localize_$split_tag" ]; then pop+=("outputs/localize_$split_tag"); fi
+  done
+  [ "${#pop[@]}" -gt 0 ] || die "No outputs/localize_gt* directories to build a cohort from."
+  "$PY" scripts/population_stats.py \
+      "+analysis.population.localize_dirs=[$(IFS=,; echo "${pop[*]}")]" \
+      output_dir=outputs/population_gt
+
+  echo
+  echo "READ THE DEGENERATE-FIELD WARNING. Measured over all 1251 cases,"
+  echo "frac_near_eloquent is 1.0: every glioma in this dataset is within 10 mm"
+  echo "of a Sawaya-listed structure. That is saturation, not agreement, and it"
+  echo "must never be reported as a 100% success rate."
+}
+
+# ---------------------------------------------------------------------------
+# 13. figures — every paper figure and table, from files, on CPU
 # ---------------------------------------------------------------------------
 # The notebook recomputes NO metric. It loads what evaluate.py wrote, formats,
 # and saves. Every artifact it cannot produce is recorded with a reason and
@@ -419,10 +548,14 @@ status() {
   mark "$SPLITS"        splits
   mark "$UPLOAD_DIR"    package
   mark "outputs/eval_${SPLIT}/summary.csv" evaluate
+  mark "$ATLAS_DIR"     atlas
+  mark "outputs/report_gt/reports" pipeline
+  mark "outputs/report_agreement/agreement_summary.csv" phase5
   mark "outputs/paper/tables" figures
   echo
   echo "Run a step:  ./scripts/reproduce.sh <step>"
-  echo "Steps:       env fetch preprocess splits verify package upload train evaluate pull figures"
+  echo "Steps:       env fetch preprocess splits verify package upload train evaluate pull"
+  echo "             atlas pipeline phase5 figures"
   echo "             all   (every LOCAL step up to and including package)"
   echo "Full detail: docs/reproducibility.md"
 }
@@ -444,6 +577,9 @@ main() {
       train)      step_train ;;
       evaluate)   step_evaluate ;;
       pull)       step_pull ;;
+      atlas)      step_atlas ;;
+      pipeline)   step_pipeline ;;
+      phase5)     step_phase5 ;;
       figures)    step_figures ;;
       all)
         step_env; step_fetch; step_preprocess; step_splits; step_verify; step_package

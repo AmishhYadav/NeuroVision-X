@@ -23,7 +23,8 @@ run) on 2026-08-06. Everything marked *estimate* is arithmetic, and says so.
 | `baseline_unet3d`, `neurovision`, `capacity_control_unet3d` training runs | **Re-runnable, not bit-exact.** See §4 and §8 |
 | Test metrics for all three runs | **Reproducible from the checkpoint.** Inference is deterministic |
 | Calibration / temperature scaling, MC-dropout risk-coverage, boundary-stratified error, fusion gate maps, explainability | **Produced.** `scripts/calibrate.py`, `scripts/evaluate.py` (`mc_dropout`, `boundary_bands`), `scripts/extract_gates.py`, `scripts/explain.py` — all CPU |
-| Anatomical localisation, burden profile, per-case report | **Produced.** `scripts/validate_atlas.py`, `scripts/localize.py`, `scripts/burden.py`, `reporting/report.py` — all CPU |
+| Anatomical localisation, involvement layer, burden profile, per-case report | **Produced.** `scripts/validate_atlas.py`, `scripts/localize.py` (Phases 1 and 3b), `scripts/burden.py`, `scripts/report.py` — all CPU. Five report sets exist over the test split: ground truth plus `neurovision`, `baseline_unet3d`, `capacity_control_unet3d` and the superseded 96³ run |
+| Report agreement and population anatomy (Phase 5) | **Produced.** `scripts/report_agreement.py` (GT-derived vs prediction-derived reports, paired statistics) and `scripts/population_stats.py` (all 1,251 cases) — all CPU. Results in `docs/experiments.md` notes 22–25 |
 | `baseline_swinunetr`, `ablation_content_only_gate`, the 6-row ablation grid | **Not run.** Cut or unstarted for GPU budget — see `docs/experiments.md` § Planned |
 
 Four training runs of record now exist: the superseded 200-epoch/96³ U-Net,
@@ -270,11 +271,18 @@ broken P100 — the only honest check is executing a kernel, which
 | Step | Wall time | How measured |
 |---|---|---|
 | Preprocess 1251 cases, `num_workers=8` | **~5 min** | Span of `image.npy` mtimes: 17:14:18 → 17:19:15, 2026-08-01 |
-| `pytest` (1224 tests) | **20.1 s** | Live run, 2026-08-17 |
+| `pytest` (1373 tests) | **~25 s** | Live run, 2026-08-19 |
+| `npm test` in `app/frontend` (76 vitest) | **~0.12 s** | Live run, 2026-08-19; plain Node, no jsdom |
+| `npm run test:e2e` (46 checks, headless Chrome) | **~9 min** | Live run, 2026-08-19; needs the backend and dev server up |
 | `python scripts/smoke_test.py` | **3.7 s** | Live run, 2026-08-06 |
 | Package for Kaggle | minutes | Hardlinks, so it does not copy 34 GB |
 | Upload 11.3 GB zipped | ~1 h | Upload log; bandwidth-bound |
 | Paper figures + tables | CPU-only, minutes | `notebooks/09_paper_figures.ipynb`; `figures.py` never imports torch |
+| `scripts/localize.py`, 189 cases | **47.6 s** | Live run, 2026-08-19, ground-truth labels, involvement on. Atlas load dominates the fixed cost |
+| `scripts/burden.py`, 189 cases | ~3 min | Observed span of a full test-split run, 2026-08-18 |
+| `scripts/report.py`, 189 cases | **0.93 s** | Live run, 2026-08-19. It is a CSV join: no atlas, no checkpoint, no volume |
+| `scripts/report_agreement.py`, 3 models + 3 paired comparisons at `n_boot=10000` | **1.41 s** | Live run, 2026-08-19 |
+| `scripts/population_stats.py`, all 1,251 cases + 2 figures | **1.24 s** | Live run, 2026-08-19 |
 
 `pytest` from the repo root works with no `PYTHONPATH` (`pythonpath = ["src"]`).
 Note `pyproject.toml` already sets `addopts = "-q"`, so an extra `-q` stacks to
@@ -455,8 +463,15 @@ git clone https://github.com/AmishhYadav/NeuroVision-X.git
 cd NeuroVision-X
 uv venv --python 3.11 .venv && .venv/bin/pip install -r requirements.txt -e .
 
-./scripts/reproduce.sh verify     # 1224 tests ~20 s, smoke test ~4 s, ruff
+./scripts/reproduce.sh verify     # 1373 tests ~25 s, smoke test ~4 s, ruff
 ./scripts/reproduce.sh            # what has and has not been produced here
+
+# The interpretable pipeline, all CPU. `pipeline` runs once per segmentation.
+./scripts/reproduce.sh atlas      # SRI24 download + the Phase 0 alignment gate
+PIPELINE_TAG=gt ./scripts/reproduce.sh pipeline
+PIPELINE_SOURCE=prediction PIPELINE_TAG=neurovision \
+  PIPELINE_EVAL_DIR=outputs/neurovision/eval_test ./scripts/reproduce.sh pipeline
+./scripts/reproduce.sh phase5     # report agreement + population anatomy
 ```
 
 `scripts/smoke_test.py` runs the real pipeline — real `Dataset`, real MONAI

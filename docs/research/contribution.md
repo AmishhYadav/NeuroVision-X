@@ -102,6 +102,7 @@ measurements) and 19–21 (the capacity control).
 | **P2 — ambiguity conditioning is necessary** | **NOT RUN** | `configs/experiment/ablation_content_only_gate.yaml` exists, is a one-key diff, and is parameter-matched to 0.018%. It needs ~23 GPU-h that the budget no longer has. This is the load-bearing experiment and its absence is the single largest hole in the contribution |
 | **P3 — the gain is where the claim says it is** | **FAILED as stated** | Boundary-stratified error is within noise against the matched baseline. The improvement is a Dice improvement concentrated in ET, not a demonstrated near-boundary effect |
 | **P4 — gate as a cheap error predictor** | Not measured | Bonus result, never load-bearing |
+| **P5 — the gain reaches the report** *(added post hoc, 2026-08-19)* | **FAILED** | Not pre-registered, and it should have been. 1 of 25 report-agreement metrics conclusive against the matched baseline, 0 of 25 for the capacity control. See the entry below and `docs/experiments.md` note 23 |
 
 Two further results that the pre-registration did not anticipate and that any
 rewrite of this document must account for:
@@ -117,11 +118,33 @@ rewrite of this document must account for:
   **not** the ambiguity conditioning, which is precisely what P2 exists to
   separate and which remains unmeasured.
 
+- **The accuracy gain does not reach the report.** Added 2026-08-19, from the
+  Phase 5 experiment (`docs/experiments.md` note 23). Over 189 paired cases and
+  25 report-agreement metrics, Holm-corrected and with patch size controlled at
+  64³ across all three models, `neurovision` vs `baseline_unet3d` produces
+  **exactly one** conclusive improvement (`relerr_vol_TC`) and
+  `capacity_control_unet3d` vs `baseline_unet3d` produces **none**.
+  Structure-list Jaccard is 0.9074 / 0.9122 / 0.9108 and 16 of the 25 metrics
+  share a median across all three models; epicentre-structure match is
+  nominally better for the *baseline*.
+
+  This was not pre-registered as a prediction, and it should have been: it is
+  the natural downstream test of an accuracy claim, and it comes back negative.
+  The mechanism is mechanical rather than surprising — a structured report is
+  dominated by *which structures the tumour overlaps*, and a few voxels at a
+  margin rarely change whether a structure is involved at all. The honest
+  reading is that the interpretable layer is **stable** with respect to
+  segmentation quality across this range, which is a deployment property and
+  not an accuracy one. Nothing in this document may be rewritten to claim that
+  a better model yields a better report.
+
 **What the paper can honestly say today:** a dual-encoder model with gated
 cross-attention fusion beats both a matched-schedule U-Net and a
 parameter-matched wide U-Net on ET and TC Dice, with the mechanism argued from
 design and pre-registration rather than from an ablation. Any sentence claiming
-the *disagreement signal* is what produces the gain requires P2 first.
+the *disagreement signal* is what produces the gain requires P2 first. And the
+gain is a segmentation-metric gain only: it does not propagate to the
+structured report, measured.
 
 ## What this contribution is not
 

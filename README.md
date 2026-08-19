@@ -229,7 +229,18 @@ python scripts/population_stats.py  # cohort anatomy + figures (Phase 5)
 run and prints an audit of what it wrote and what it skipped and why.
 
 `scripts/reproduce.sh` with no arguments reports which stages have already
-produced output on this machine.
+produced output on this machine. The interpretable pipeline has three steps
+there — `atlas`, `pipeline` and `phase5` — and `pipeline` is run once per
+segmentation you want to compare:
+
+```bash
+./scripts/reproduce.sh atlas                                   # SRI24 + Phase 0 gate
+PIPELINE_TAG=gt ./scripts/reproduce.sh pipeline                # ground truth
+PIPELINE_SOURCE=prediction PIPELINE_TAG=neurovision \
+  PIPELINE_EVAL_DIR=outputs/neurovision/eval_test \
+  ./scripts/reproduce.sh pipeline                              # one model
+./scripts/reproduce.sh phase5                                  # agreement + population
+```
 
 ---
 

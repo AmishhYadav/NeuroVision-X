@@ -289,9 +289,10 @@ sessions by resume is still ONE row — sum the GPU hours.
     labelling a column; the directory name is not evidence.
 
     Caveat: this is a *descriptive* profile — no grade, no stage, no prognosis.
-    Ependymal/cortical/deep-WM involvement and epicentre naming are Phase 3b and
-    need the atlas, so they are absent here. Midline shift is declined outright,
-    not pending; see the plan's Phase 3 note.
+    Ventricular/deep-white-matter overlap, the tissue fractions and epicentre
+    naming were Phase 3b and are absent from THIS note's tables; they landed
+    2026-08-19 and their numbers are in note 25. Midline shift is declined
+    outright, not pending; see the plan's Phase 3 note.
 
 
 19. **CAPACITY CONTROL: the architectural claim SURVIVES. Capacity explains
