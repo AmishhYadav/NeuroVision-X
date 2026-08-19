@@ -602,6 +602,76 @@ sessions by resume is still ONE row — sum the GPU hours.
     the paper must state it plainly rather than leave a reviewer to compute
     it.
 
+29. **TEMPERATURE SCALING DOES NOT TRANSFER UNDER DISTRIBUTION SHIFT, AND ON
+    ET IT MAKES CALIBRATION WORSE.** `scripts/calibrate.py`, `mask=predicted`
+    (the primary, label-free reporting mask). The temperature is fit on the
+    BraTS 2021 **val** split in every column — the same fit, applied to two
+    different apply-splits: the in-domain BraTS test split, and the external
+    BraTS-Africa cohort. This required `calibration.fit_prep_dir`, added
+    because the script previously resolved fit-split and apply-split labels
+    from one preprocessed root and could not express a cross-cohort fit at
+    all. Fitted temperatures, `baseline_unet3d`: ET 1.9155, TC 2.0250, WT
+    1.9272; `neurovision`: ET 2.0531, TC 1.9864, WT 1.6265. Both converged.
+    These sit in the normal 1.1-2.0 band for segmentation nets — unlike the
+    3.08-4.75 range produced by the circular `union_foreground_mask`, whose
+    magnitude was itself the tell that something was wrong.
+
+    **ECE, mask=predicted:**
+
+    | model | region | in-domain uncal | in-domain scaled | SSA uncal | SSA scaled |
+    |---|---|---|---|---|---|
+    | `baseline_unet3d` | ET | 0.0576 | 0.0218 | 0.0226 | **0.0890** |
+    | `baseline_unet3d` | TC | 0.0316 | 0.0218 | 0.0900 | 0.0263 |
+    | `baseline_unet3d` | WT | 0.0293 | 0.0090 | 0.0538 | 0.0137 |
+    | `baseline_unet3d` | mean | 0.0395 | 0.0175 | 0.0555 | 0.0430 |
+    | `neurovision` | ET | 0.0709 | 0.0121 | 0.0247 | **0.0685** |
+    | `neurovision` | TC | 0.0327 | 0.0161 | 0.1021 | 0.0416 |
+    | `neurovision` | WT | 0.0302 | 0.0122 | 0.0547 | 0.0189 |
+    | `neurovision` | mean | 0.0446 | 0.0135 | 0.0605 | 0.0430 |
+
+    **Three findings.**
+
+    1. **In-domain, temperature scaling works: 2.3x better for the baseline
+       (0.0395 -> 0.0175), 3.3x for `neurovision` (0.0446 -> 0.0135). Out of
+       distribution it barely works: 1.3x and 1.4x, both landing on an
+       identical 0.0430.**
+
+    2. **On ET it is actively HARMFUL out of distribution — 0.0226 -> 0.0890
+       for the baseline, a 4x degradation, and 0.0247 -> 0.0685 for
+       `neurovision`.** The mechanism is coherent and worth stating: in-domain
+       the model is overconfident on ET (0.0576), so `T ~ 1.9` helps; on the
+       external cohort ET is ALREADY well calibrated before scaling (0.0226),
+       because the model is less confident on unfamiliar data, so the same `T`
+       pushes it into UNDER-confidence and ECE worsens. A temperature is one
+       scalar fit to one distribution; nothing about it is guaranteed to hold
+       on another.
+
+    3. **`neurovision` is WORSE calibrated than the baseline before scaling,
+       in both settings** — 0.0446 vs 0.0395 in-domain, 0.0605 vs 0.0555 on
+       SSA — and after scaling both models land on exactly 0.0430 out of
+       distribution. There is no calibration advantage for the proposed
+       architecture anywhere in this table. This is the third independent
+       measurement to reach that conclusion.
+
+    **Consequence for the paper, and it cuts both ways.** The standing
+    objection to any calibration claim in this project was "then
+    temperature-scale the baseline too", and the recorded bar was the
+    baseline's temperature-scaled in-domain ECE of 0.0158-0.0175. That
+    objection is now answerable, but NOT in `neurovision`'s favour: temperature
+    scaling is an **in-domain** fix that degrades under exactly the shift
+    where calibration matters clinically, and it degrades worst on ET, the
+    region a calibration claim would lean on. That is a reportable result
+    about the METHOD, not about this architecture. Do not write it as evidence
+    for `neurovision`.
+
+    **Caveat.** Under the conservative `brain` mask, SSA ECE is 0.0064
+    uncalibrated and 0.0055 scaled — both tiny, and the difference
+    uninformative. That is the dilution effect already recorded: hundreds of
+    millions of trivially-easy background voxels that were already calibrated
+    swamp the statistic. `predicted` is the primary mask and `brain` the
+    conservative check, exactly as recorded previously; the finding above
+    rests on `predicted`.
+
 ---
 
 ## Planned
