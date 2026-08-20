@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import logging
 import math
+from collections.abc import Callable
 from typing import Any
 
 import torch
@@ -799,6 +800,20 @@ class AdaptiveGatedFusion(FusionBlock):
 
         self.layer_scale = nn.Parameter(torch.full((1, cnn_channels, 1, 1, 1), layer_scale_init))
 
+        # Inference-time intervention hook for `scripts/ambiguity_intervention.py`
+        # (see that module's top-of-file docstring for why it exists and, just as
+        # importantly, why it is NOT a substitute for the `ablation_content_only_gate`
+        # retraining ablation). `None` is a load-bearing default, not just "unset": every
+        # existing forward path (`forward`, `forward_with_gates`, `forward_with_branch_logits`,
+        # `forward_with_ambiguity`) must behave EXACTLY as before this attribute existed when
+        # it is left at `None` -- pinned by a bitwise-identity test in
+        # tests/test_adaptive_fusion.py. When set, `_fuse` applies it to the ambiguity tensor
+        # ONLY on the path into `self.gate_generator`; the branch logits `(l_c, l_s)` this
+        # block returns for branch-supervision are always computed from the UN-transformed
+        # ambiguity pass and are never touched by this hook (the intervention studies the
+        # gate's input, not the probes that produced it).
+        self.ambiguity_transform: Callable[[Tensor], Tensor] | None = None
+
     def _fuse(
         self, cnn_feat: Tensor, swin_feat: Tensor
     ) -> tuple[Tensor, Tensor, tuple[Tensor, Tensor] | None, Tensor | None]:
@@ -825,12 +840,42 @@ class AdaptiveGatedFusion(FusionBlock):
             itself (shape `(B, 3 * num_regions, D, H, W)`) under the same
             condition, else `None` -- already computed to build `gate` in
             that branch, simply carried out here instead of being dropped.
+            `ambiguity` is always the UN-transformed signal, even when
+            `self.ambiguity_transform` is set -- see that attribute's
+            docstring: the hook only intervenes on the copy fed to
+            `self.gate_generator`, never on the value reported back to a
+            caller (e.g. `forward_with_ambiguity`).
+
+        Raises:
+            ValueError: If `self.ambiguity_transform` is set and returns a
+                tensor whose shape or dtype does not match the ambiguity
+                tensor it was given. A silently reshaped or re-typed gate
+                input would produce a plausible-looking but wrong gate map
+                with nothing else failing.
         """
         swin_proj = self.swin_proj_norm(self.swin_proj_conv(swin_feat))
 
         if self.ambiguity is not None:
             ambiguity, l_c, l_s = self.ambiguity(cnn_feat, swin_proj)
-            gate = self.gate_generator(cnn_feat, swin_proj, ambiguity)
+
+            # The intervention hook (see self.ambiguity_transform's docstring in __init__)
+            # only ever touches the copy that reaches the gate. `ambiguity` itself -- returned
+            # below for forward_with_ambiguity, and l_c/l_s used for branch supervision --
+            # stays the real, un-transformed signal.
+            gate_ambiguity = ambiguity
+            if self.ambiguity_transform is not None:
+                gate_ambiguity = self.ambiguity_transform(ambiguity)
+                shape_mismatch = gate_ambiguity.shape != ambiguity.shape
+                dtype_mismatch = gate_ambiguity.dtype != ambiguity.dtype
+                if shape_mismatch or dtype_mismatch:
+                    raise ValueError(
+                        "AdaptiveGatedFusion.ambiguity_transform must return a tensor of the "
+                        f"same shape and dtype it was given. Got shape "
+                        f"{tuple(gate_ambiguity.shape)} dtype {gate_ambiguity.dtype}, expected "
+                        f"shape {tuple(ambiguity.shape)} dtype {ambiguity.dtype}."
+                    )
+
+            gate = self.gate_generator(cnn_feat, swin_proj, gate_ambiguity)
             branch_logits: tuple[Tensor, Tensor] | None = (l_c, l_s)
         else:
             gate = self.gate_generator(cnn_feat, swin_proj)
@@ -951,6 +996,97 @@ class AdaptiveGatedFusion(FusionBlock):
         else:
             fused, _gate, _branch_logits, ambiguity = self._fuse(cnn_feat, swin_feat)
         return fused, ambiguity
+
+
+# -----------------------------------------------------------------------------
+# ambiguity intervention transforms
+# -----------------------------------------------------------------------------
+#
+# Named transforms for `AdaptiveGatedFusion.ambiguity_transform`, used by
+# `scripts/ambiguity_intervention.py` to probe whether a TRAINED gate actually
+# uses its ambiguity input at inference, or would behave identically without
+# it. Each tests a distinct, named hypothesis -- see each function's own
+# docstring. All three preserve shape and dtype exactly, which `_fuse`
+# enforces at the call site.
+
+
+def zero_ambiguity(x: Tensor) -> Tensor:
+    """Replaces the ambiguity tensor with zeros.
+
+    Hypothesis tested: "what if the gate had no ambiguity signal at all" --
+    the strongest possible intervention, removing both the spatial pattern
+    and the overall magnitude of the disagreement/entropy signal the gate
+    was trained to condition on.
+
+    Args:
+        x: Ambiguity tensor, shape `(B, 3 * num_regions, D, H, W)`.
+
+    Returns:
+        A zero tensor of the same shape, dtype and device as `x`.
+    """
+    return torch.zeros_like(x)
+
+
+def mean_ambiguity(x: Tensor) -> Tensor:
+    """Replaces every voxel with that channel's per-sample spatial mean.
+
+    Hypothesis tested: "what if the gate knew only the case-level AVERAGE
+    ambiguity, not WHERE it was" -- unlike `zero_ambiguity`, this keeps each
+    channel's overall magnitude intact (so a case with generally high
+    inter-branch disagreement still presents that to the gate as a
+    spatially-flat elevated value) while destroying every bit of spatial
+    information the gate could act on voxel-by-voxel. A gate map that barely
+    moves under this intervention is not using WHERE the branches disagree,
+    only roughly HOW MUCH they do overall.
+
+    Args:
+        x: Ambiguity tensor, shape `(B, C, D, H, W)`.
+
+    Returns:
+        A tensor of the same shape, dtype and device as `x`: each `(b, c)`
+        slice is replaced by its own scalar spatial mean, broadcast back
+        over `(D, H, W)`.
+    """
+    mean = x.mean(dim=(2, 3, 4), keepdim=True)
+    return mean.expand_as(x).contiguous()
+
+
+def shuffle_ambiguity(x: Tensor, generator: torch.Generator) -> Tensor:
+    """Randomly permutes each channel's spatial positions, independently per channel.
+
+    Hypothesis tested: the same one `mean_ambiguity` tests, from the other
+    direction. Each `(b, c)` slice's multiset of values -- and therefore its
+    mean, its histogram, everything about its MARGINAL distribution -- is
+    left exactly as it was; only the correspondence between a value and the
+    voxel it was measured at is destroyed. If the gate is genuinely reading
+    "where do the branches disagree", shuffling should visibly disrupt it in
+    a way `mean_ambiguity` (which removes spatial information a different
+    way, by collapsing to a point) might not.
+
+    Args:
+        x: Ambiguity tensor, shape `(B, C, D, H, W)`.
+        generator: An explicit `torch.Generator` driving the permutation.
+            Required -- CLAUDE.md: randomness only through an explicitly
+            seeded generator, never the global RNG.
+
+    Returns:
+        A tensor of the same shape, dtype and device as `x`, with each
+        `(b, c)` slice's `D * H * W` values independently permuted in space.
+    """
+    B, C, D, H, W = x.shape
+    n = D * H * W
+    flat = x.reshape(B, C, n)
+    out = torch.empty_like(flat)
+    for b in range(B):
+        for c in range(C):
+            # torch.randperm always returns a CPU tensor unless a device is given
+            # explicitly; generator is conventionally a CPU generator in this project
+            # (neurovision.utils.seed.set_seed, scripts/calibrate.py, scripts/explain.py all
+            # build one with no device= override), so the permutation indices are moved to
+            # x's own device before being used to index it.
+            perm = torch.randperm(n, generator=generator).to(flat.device)
+            out[b, c] = flat[b, c, perm]
+    return out.reshape(B, C, D, H, W)
 
 
 class ConcatFusion(FusionBlock):

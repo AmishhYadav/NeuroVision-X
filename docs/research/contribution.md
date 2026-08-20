@@ -56,6 +56,8 @@ about — "the two inductive biases do not agree here."
 
 ## Testable predictions
 
+[Outcomes recorded below, in `## Measured outcomes`.]
+
 The contribution is only real if these hold. Each is measured on the held-out test
 split, not on validation.
 
@@ -98,11 +100,59 @@ measurements) and 19–21 (the capacity control).
 
 | Prediction | State | Outcome |
 |---|---|---|
-| **P1 — mechanism fires** | Producer built, not yet reported | `scripts/extract_gates.py` writes gate maps per case and `metrics/boundary.py` supplies the distance bands; `notebooks/09_paper_figures.ipynb` §10 renders gate-vs-boundary with a CI. The correlation has not been written into the experiment log, so P1 is **undecided**, not passed |
+| **P1 — mechanism fires** | **MEASURED — fires, but not as predicted** | Measured 2026-08-20 over the full 189-case test split (`scripts/gate_boundary_profile.py`; `docs/experiments.md` note 32). The gate is strongly and monotonically organised by anatomy, with opposite polarity at adjacent fusion scales — but P1 as literally written (the gate peaking at the tumour margin) is **refuted**; what passed is the weaker claim that the gate carries a real, non-decorative spatial signal. See the subsection below |
 | **P2 — ambiguity conditioning is necessary** | **NOT RUN** | `configs/experiment/ablation_content_only_gate.yaml` exists, is a one-key diff, and is parameter-matched to 0.018%. It needs ~23 GPU-h that the budget no longer has. This is the load-bearing experiment and its absence is the single largest hole in the contribution |
 | **P3 — the gain is where the claim says it is** | **FAILED as stated** | Boundary-stratified error is within noise against the matched baseline. The improvement is a Dice improvement concentrated in ET, not a demonstrated near-boundary effect |
 | **P4 — gate as a cheap error predictor** | Not measured | Bonus result, never load-bearing |
 | **P5 — the gain reaches the report** *(added post hoc, 2026-08-19)* | **FAILED** | Not pre-registered, and it should have been. 1 of 25 report-agreement metrics conclusive against the matched baseline, 0 of 25 for the capacity control. See the entry below and `docs/experiments.md` note 23 |
+
+### The gate mechanism, measured (2026-08-20)
+
+- **The gate mechanism is measured, and it does not match the prediction.**
+  From `docs/experiments.md` note 32 (`scripts/gate_boundary_profile.py`, gate
+  maps from `scripts/extract_gates.py`, full 189-case test split). The gate is
+  the transformer weight — the fusion merge is `cnn + layer_scale * gate *
+  attn` — and binned by signed distance to the ground-truth whole-tumour
+  surface it is strongly and monotonically organised by anatomy, with
+  **adjacent scales at opposite polarity**: fusion level 1 (stride 4) runs
+  from 0.9814 deep inside the tumour to 0.3252 in surrounding tissue; level 2
+  (stride 8) runs the other way, 0.0089 inside to 0.7992 outside; level 3
+  weakly follows level 2; level 0 (stride 2) is essentially flat at ~0.87.
+  Paired per-case contrasts (inner margin `[-2, 0)` mm minus elsewhere,
+  percentile bootstrap over case indices, 10,000 replicates, n=189) are
+  conclusive at every level except one: level 1 vs healthy tissue **+0.4316
+  [0.4144, 0.4491]**, level 2 vs healthy tissue **-0.7307 [-0.7456, -0.7154]**.
+  The only inconclusive contrast in the whole table is level 0 vs healthy
+  tissue, -0.0018 [-0.0148, 0.0118].
+
+  **P1 as literally written is refuted.** It predicted the gate would open
+  toward *ambiguous zones* — the tumour margin specifically. It does not: at
+  every level the margin is an intermediate point on a monotone
+  tumour-to-healthy ramp, never a peak, and at level 1 the inner margin is
+  significantly LOWER than the tumour interior (-0.2361 [-0.2526, -0.2188]).
+  This document is not being rewritten to say "the gate opens at the
+  boundary" — it does not.
+
+  **What did pass is the weaker, more important claim underneath P1:** the
+  gate is not decoration. It carries a 0.65-wide monotone spatial signal on a
+  [0, 1] scale, with a scale-dependent structure — mid-scale context admitted
+  inside the lesion, coarse-scale context admitted outside it, and fine-scale
+  context admitted everywhere.
+
+  **On SSA (n=60) the same structure is present but measurably weaker**:
+  level 1 spans 0.9744 to 0.3534, and level 2's tumour-interior value rises
+  from 0.0089 in-distribution to 0.0551. This is a single descriptive cohort
+  comparison with no per-case test behind it, so it is reported here as an
+  observation, not a claim.
+
+  **Caveats that must travel with the number.** (i) The crop is one 64³
+  tumour-centred patch per case, so "healthy tissue" means peritumoral tissue
+  inside that crop, not distant brain. (ii) 172 of 189 cases contribute to the
+  interior contrast — 17 tumours have no voxel deeper than 10 mm inside their
+  own surface. (iii) The gate is conditioned on the inter-branch ambiguity
+  signal, so this shows the gate is organised, **not** that the ambiguity
+  conditioning is what organises it — that remains P2, still unrun as a
+  training ablation.
 
 Two further results that the pre-registration did not anticipate and that any
 rewrite of this document must account for:
@@ -140,11 +190,17 @@ rewrite of this document must account for:
 
 **What the paper can honestly say today:** a dual-encoder model with gated
 cross-attention fusion beats both a matched-schedule U-Net and a
-parameter-matched wide U-Net on ET and TC Dice, with the mechanism argued from
-design and pre-registration rather than from an ablation. Any sentence claiming
-the *disagreement signal* is what produces the gain requires P2 first. And the
-gain is a segmentation-metric gain only: it does not propagate to the
-structured report, measured.
+parameter-matched wide U-Net on ET and TC Dice. The fusion gate's *existence
+and spatial organisation* are now measured, not merely argued from design: it
+is strongly and monotonically organised by anatomy, with a scale-dependent,
+opposite-polarity structure across fusion levels (`docs/experiments.md` note
+32). What is still argued from design and pre-registration rather than from an
+ablation is the gate's *causal dependence on the ambiguity conditioning* —
+whether that specific input, rather than the gate's mere existence and
+per-voxel resolution, is what produces this organisation. Any sentence
+claiming the *disagreement signal* is what produces the Dice gain requires P2
+first. And the gain is a segmentation-metric gain only: it does not propagate
+to the structured report, measured.
 
 ## What this contribution is not
 

@@ -19,6 +19,9 @@ from neurovision.models.fusion.adaptive_fusion import (
     GateGenerator,
     _window_partition,
     _window_reverse,
+    mean_ambiguity,
+    shuffle_ambiguity,
+    zero_ambiguity,
 )
 from neurovision.models.fusion.registry import available_fusions, build_fusion
 
@@ -914,3 +917,211 @@ def test_forward_with_ambiguity_fused_output_matches_plain_forward_exactly() -> 
 
     assert isinstance(expected, torch.Tensor)
     torch.testing.assert_close(fused, expected)
+
+
+# ---------------------------------------------------------------------------
+# ambiguity_transform intervention hook (scripts/ambiguity_intervention.py)
+# ---------------------------------------------------------------------------
+
+
+def test_ambiguity_transform_default_is_none() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    assert block.ambiguity_transform is None
+
+
+def test_ambiguity_transform_unset_is_a_bitwise_noop() -> None:
+    # A model with ambiguity_transform left at its default None must produce IDENTICAL
+    # output to one where the attribute was never touched at all -- since None is what it
+    # already defaults to, this also pins that assigning None explicitly changes nothing.
+    torch.manual_seed(0)
+    block_untouched = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block_untouched.eval()
+
+    torch.manual_seed(0)
+    block_explicit_none = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block_explicit_none.ambiguity_transform = None
+    block_explicit_none.eval()
+
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    with torch.no_grad():
+        out_untouched = block_untouched(cnn_feat, swin_feat)
+        out_explicit_none = block_explicit_none(cnn_feat, swin_feat)
+
+    torch.testing.assert_close(out_untouched, out_explicit_none)
+
+
+def test_ambiguity_transform_unset_matches_pre_hook_behaviour() -> None:
+    # Fixed-seed expected tensor computed in this test (no committed fixture file), from the
+    # SAME merge formula _fuse has always used: this is what pins that adding the hook did
+    # not change the un-intervened path's numerics.
+    torch.manual_seed(123)
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block.eval()
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    with torch.no_grad():
+        out = block(cnn_feat, swin_feat)
+        # Recompute the same quantity by hand, calling the sub-modules directly rather than
+        # through _fuse, so this does not just re-run the code under test against itself.
+        swin_proj = block.swin_proj_norm(block.swin_proj_conv(swin_feat))
+        ambiguity, _l_c, _l_s = block.ambiguity(cnn_feat, swin_proj)
+        gate = block.gate_generator(cnn_feat, swin_proj, ambiguity)
+        attn_out = block.cross_attn(cnn_feat, swin_proj)
+        expected = cnn_feat + block.layer_scale * gate * attn_out
+
+    torch.testing.assert_close(out, expected)
+
+
+def test_ambiguity_transform_wrong_shape_raises_naming_both_shapes() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block.ambiguity_transform = lambda x: x[:, :1]  # wrong channel count
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 4, 4, 4)
+
+    with pytest.raises(ValueError, match=r"\(1, 1, 4, 4, 4\).*\(1, 9, 4, 4, 4\)"):
+        block(cnn_feat, swin_feat)
+
+
+def test_ambiguity_transform_wrong_dtype_raises() -> None:
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block.ambiguity_transform = lambda x: x.double()
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 4, 4, 4)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 4, 4, 4)
+
+    with pytest.raises(ValueError, match="dtype"):
+        block(cnn_feat, swin_feat)
+
+
+def test_ambiguity_transform_reaches_gate_but_not_branch_logits() -> None:
+    # forward_with_branch_logits must return IDENTICAL branch logits whether or not a
+    # transform is set -- the hook is about the gate's input, never the probes -- while the
+    # transform demonstrably DOES change the gate (proven separately below via the gate
+    # divergence itself, e.g. test_zero_ambiguity_changes_gate_output).
+    torch.manual_seed(0)
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block.eval()
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    with torch.no_grad():
+        _fused_off, branch_logits_off = block.forward_with_branch_logits(cnn_feat, swin_feat)
+
+        block.ambiguity_transform = zero_ambiguity
+        _fused_on, branch_logits_on = block.forward_with_branch_logits(cnn_feat, swin_feat)
+
+    assert branch_logits_off is not None
+    assert branch_logits_on is not None
+    l_c_off, l_s_off = branch_logits_off
+    l_c_on, l_s_on = branch_logits_on
+    torch.testing.assert_close(l_c_off, l_c_on)
+    torch.testing.assert_close(l_s_off, l_s_on)
+
+
+def test_zero_ambiguity_changes_gate_output() -> None:
+    torch.manual_seed(0)
+    block = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    block.eval()
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8)
+
+    with torch.no_grad():
+        _fused, gate_baseline = block(cnn_feat, swin_feat, return_gate=True)
+        block.ambiguity_transform = zero_ambiguity
+        _fused, gate_zeroed = block(cnn_feat, swin_feat, return_gate=True)
+
+    assert not torch.allclose(gate_baseline, gate_zeroed)
+
+
+def test_ambiguity_transform_works_under_gradient_checkpointing() -> None:
+    # The production config enables use_checkpoint on some fusion blocks, so the hook must
+    # work identically whether or not _fuse runs under torch.utils.checkpoint. Uses
+    # mean_ambiguity, not zero_ambiguity: zeroing legitimately severs the gradient path back
+    # into BranchAmbiguity's probe convs (torch.zeros_like has no grad_fn tying it to its
+    # input), so a full "every parameter has a grad" check would fail for a reason that has
+    # nothing to do with checkpointing. mean_ambiguity keeps the path differentiable while
+    # still being a real (non-identity) transform.
+    torch.manual_seed(0)
+    block_plain = AdaptiveGatedFusion(
+        CNN_CHANNELS, SWIN_CHANNELS, num_heads=4, window_size=4, use_ambiguity=True
+    )
+    torch.manual_seed(0)
+    block_checkpointed = AdaptiveGatedFusion(
+        CNN_CHANNELS,
+        SWIN_CHANNELS,
+        num_heads=4,
+        window_size=4,
+        use_ambiguity=True,
+        use_checkpoint=True,
+    )
+    block_plain.ambiguity_transform = mean_ambiguity
+    block_checkpointed.ambiguity_transform = mean_ambiguity
+    block_plain.train()
+    block_checkpointed.train()
+
+    cnn_feat = torch.randn(1, CNN_CHANNELS, 8, 8, 8, requires_grad=True)
+    swin_feat = torch.randn(1, SWIN_CHANNELS, 8, 8, 8, requires_grad=True)
+
+    out_plain = block_plain(cnn_feat, swin_feat)
+    out_checkpointed = block_checkpointed(cnn_feat, swin_feat)
+
+    torch.testing.assert_close(out_plain, out_checkpointed)
+
+    out_checkpointed.sum().backward()
+    for name, param in block_checkpointed.named_parameters():
+        assert param.grad is not None, f"{name} has no grad under checkpointing with the hook set"
+
+
+def test_mean_ambiguity_preserves_channel_mean_and_kills_spatial_variance() -> None:
+    torch.manual_seed(0)
+    x = torch.randn(2, 9, 4, 4, 4)
+    out = mean_ambiguity(x)
+
+    assert out.shape == x.shape
+    assert out.dtype == x.dtype
+    torch.testing.assert_close(out.mean(dim=(2, 3, 4)), x.mean(dim=(2, 3, 4)))
+    # Every voxel within one (b, c) slice is now identical -- spatial variance is exactly 0.
+    assert torch.allclose(out.var(dim=(2, 3, 4)), torch.zeros(2, 9), atol=1e-6)
+
+
+def test_shuffle_ambiguity_preserves_per_channel_value_multiset() -> None:
+    x = torch.randn(2, 9, 4, 4, 4)
+    generator = torch.Generator().manual_seed(0)
+    out = shuffle_ambiguity(x, generator)
+
+    assert out.shape == x.shape
+    assert out.dtype == x.dtype
+    for b in range(2):
+        for c in range(9):
+            sorted_in = torch.sort(x[b, c].reshape(-1)).values
+            sorted_out = torch.sort(out[b, c].reshape(-1)).values
+            torch.testing.assert_close(sorted_out, sorted_in)
+    # A real (non-identity) shuffle happened somewhere -- otherwise this "shuffle" would
+    # trivially satisfy the multiset check above by doing nothing.
+    assert not torch.equal(out, x)
+
+
+def test_zero_ambiguity_is_zeros_same_shape_and_dtype() -> None:
+    x = torch.randn(2, 9, 4, 4, 4)
+    out = zero_ambiguity(x)
+    assert out.shape == x.shape
+    assert out.dtype == x.dtype
+    assert torch.count_nonzero(out).item() == 0

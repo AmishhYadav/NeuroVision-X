@@ -116,44 +116,153 @@ class _AmbiguityAtLevel(nn.Module):
     map per fusion block, at that block's own stride -- so a single level is
     selected here and trilinearly upsampled back to the input's spatial
     resolution, giving the inferer the one input-shaped output it requires.
+
+    When `include_gates` and/or `include_auxiliary` are True, this wrapper's
+    single output is instead the channel-wise concatenation, in this FIXED
+    order: the chosen ambiguity level (`3 * num_regions` channels), then --
+    if `include_gates` -- one gate channel per fusion block
+    (`len(model.fusion_blocks)` channels, e.g. 4 at the production config),
+    then -- if `include_auxiliary` -- the confidence head's full-resolution
+    logits (`num_regions` channels) and the boundary head's full-resolution
+    logits (`num_regions` channels). Every one of these reads the SAME
+    encoder/fusion/decoder pass this wrapper runs (see `forward`'s inlined
+    encode/fuse/decode below, mirroring `NeuroVisionX.forward_with_ambiguity`
+    / `forward_with_gates`'s own bodies), so turning either flag on costs a
+    handful of extra lightweight per-block/per-head computations inside a
+    sliding-window pass that is already running over the whole split -- not
+    a second (or third) whole-split extraction script, which would cost
+    hours of CPU on its own.
+
+    `channel_groups` records the exact `(name, size)` layout of that
+    concatenation, in order, computed ONCE at construction time -- so
+    `run_extraction`'s slicing can read offsets from this attribute instead
+    of recomputing them independently, which is what keeps the two from
+    ever disagreeing (see CLAUDE.md's "any glob/offset computed twice can
+    silently drift" family of lessons).
     """
 
-    def __init__(self, model: NeuroVisionX, level: int) -> None:
-        """Wraps `model` to expose one ambiguity level as its whole output.
+    def __init__(
+        self,
+        model: NeuroVisionX,
+        level: int,
+        include_auxiliary: bool = False,
+        include_gates: bool = False,
+        num_regions: int = len(REGION_NAMES),
+    ) -> None:
+        """Wraps `model` to expose one ambiguity level (plus, optionally, the fusion gates
+        and/or the auxiliary heads) as its whole output.
 
         Args:
             model: A `NeuroVisionX` instance (or anything exposing
-                `forward_with_ambiguity` with the same contract).
+                `forward_with_ambiguity` with the same contract). When
+                `include_gates` or `include_auxiliary` is True, `model` must
+                additionally expose the same attribute surface as
+                `NeuroVisionX` (`cnn_encoder`, `use_swin`, `swin_encoder`,
+                `fusion_blocks`, `decoder`, `heads`) -- checked below.
             level: Which entry of the fine-to-coarse ambiguity pyramid to
                 return. Validated lazily, on the first `forward` call (see
-                that method), since the pyramid's length and which entries
-                are real ambiguity tensors vs. `None` are properties of the
-                model that are cheapest to check against the model's own
-                return value rather than duplicated here.
+                `_select_level`), since the pyramid's length and which
+                entries are real ambiguity tensors vs. `None` are properties
+                of the model that are cheapest to check against the model's
+                own return value rather than duplicated here.
+            include_auxiliary: If True, also emit the confidence and
+                boundary heads' logits (see the class docstring). Requires
+                `model.heads.confidence` and `model.heads.boundary` to both
+                be real heads (not `None`) -- checked immediately, so a
+                misconfigured run fails before any output directory exists
+                rather than after several minutes of sliding-window
+                inference.
+            include_gates: If True, also emit one channel per fusion block's
+                gate map (see the class docstring). Requires
+                `model.fusion_blocks` to be non-empty -- checked
+                immediately, same reasoning as `include_auxiliary` above.
+                Whether each individual block actually HAS a real gate to
+                give (as opposed to a `ConcatFusion`/`AddFusion` block, which
+                reports `None`) can only be observed by running the block, so
+                that check happens per call inside `forward` instead -- see
+                its comment there.
+            num_regions: Number of region channels (ET/TC/WT -> 3). Used
+                only to size `channel_groups` -- the ambiguity map's own
+                channel count is still read from the model at `forward`
+                time, never assumed from this value.
+
+        Raises:
+            ValueError: If `include_auxiliary` is True and `model` has no
+                `heads` attribute, or `model.heads.confidence` is `None`, or
+                `model.heads.boundary` is `None`. Also if `include_gates` is
+                True and `model.fusion_blocks` is empty (or `model` has no
+                such attribute at all). Each case is checked independently
+                so the message names exactly what is missing.
         """
         super().__init__()
         self.model = model
         self.level = level
+        self.include_auxiliary = include_auxiliary
+        self.include_gates = include_gates
+        self.num_regions = num_regions
 
-    def forward(self, x: Tensor) -> Tensor:
-        """Runs `model.forward_with_ambiguity` and returns one upsampled level.
+        groups: list[tuple[str, int]] = [("ambiguity", 3 * num_regions)]
+
+        if include_gates:
+            fusion_blocks = getattr(model, "fusion_blocks", None)
+            num_fusion_levels = len(fusion_blocks) if fusion_blocks is not None else 0
+            if num_fusion_levels == 0:
+                raise ValueError(
+                    "explainability.ambiguity.include_gates is True but the loaded model has "
+                    "no fusion blocks (model.fusion_blocks is empty, or the model has no such "
+                    "attribute at all -- likely the cnn-only ablation, or a non-neurovision "
+                    "checkpoint). Set explainability.ambiguity.include_gates: false, or point "
+                    "this run at a checkpoint with a Swin branch and fusion blocks."
+                )
+            groups.append(("gate", num_fusion_levels))
+
+        if include_auxiliary:
+            heads = getattr(model, "heads", None)
+
+            if heads is None or getattr(heads, "confidence", None) is None:
+                raise ValueError(
+                    "explainability.ambiguity.include_auxiliary is True but the loaded "
+                    "model has no confidence head (model.heads.confidence is None, or the "
+                    "model has no 'heads' attribute at all). Set "
+                    "explainability.ambiguity.include_auxiliary: false, or point this run "
+                    "at a checkpoint whose model.head.confidence.enabled was True at "
+                    "training time."
+                )
+            groups.append(("confidence", num_regions))
+
+            if getattr(heads, "boundary", None) is None:
+                raise ValueError(
+                    "explainability.ambiguity.include_auxiliary is True but the loaded "
+                    "model has no boundary head (model.heads.boundary is None). Set "
+                    "explainability.ambiguity.include_auxiliary: false, or point this run "
+                    "at a checkpoint whose model.head.boundary.enabled was True at "
+                    "training time."
+                )
+            groups.append(("boundary", num_regions))
+
+        # Public and fixed at construction so run_extraction's slicing can never disagree
+        # with what forward() actually concatenates -- see the class docstring.
+        self.channel_groups: tuple[tuple[str, int], ...] = tuple(groups)
+
+    def _select_level(
+        self, ambiguity_maps: list[Tensor | None], target_shape: tuple[int, ...]
+    ) -> Tensor:
+        """Picks `self.level` out of a fine-to-coarse ambiguity pyramid and upsamples it.
 
         Args:
-            x: Input MRI volume/patch, shape `(B, in_channels, D, H, W)`.
+            ambiguity_maps: `NeuroVisionX.forward_with_ambiguity`'s second return value (or
+                the equivalent collected inline in `forward`'s combined-pass branch).
+            target_shape: `(D, H, W)` to upsample to if the chosen level is coarser.
 
         Returns:
-            The chosen level's ambiguity map, upsampled (if needed) to `x`'s
-            spatial shape: `(B, 3 * num_regions, D, H, W)`.
+            The chosen level's ambiguity map, shape `(B, 3 * num_regions, *target_shape)`.
 
         Raises:
-            ValueError: If `self.level` is out of range for the model's
-                ambiguity pyramid, or if that level's entry is `None` (the
-                fusion block there has no ambiguity signal to give). Names
-                the level and how many maps exist in either case -- never
-                silently falls back to a different level.
+            ValueError: If `self.level` is out of range, or that level's entry is `None`
+                (the fusion block there has no ambiguity signal to give). Names the level and
+                how many maps exist in either case -- never silently falls back to a
+                different level.
         """
-        _logits, ambiguity_maps = self.model.forward_with_ambiguity(x)
-
         if not (0 <= self.level < len(ambiguity_maps)):
             raise ValueError(
                 f"_AmbiguityAtLevel: level={self.level} is out of range for a model whose "
@@ -170,12 +279,138 @@ class _AmbiguityAtLevel(nn.Module):
                 "map(s) total; choose a level whose entry is a real tensor."
             )
 
-        target_shape = tuple(x.shape[2:])
         if tuple(ambiguity.shape[2:]) != target_shape:
             ambiguity = F.interpolate(
                 ambiguity, size=target_shape, mode="trilinear", align_corners=False
             )
         return ambiguity
+
+    def forward(self, x: Tensor) -> Tensor:
+        """Returns the chosen ambiguity level, optionally concatenated with the fusion
+        gates and/or the auxiliary heads' logits.
+
+        Args:
+            x: Input MRI volume/patch, shape `(B, in_channels, D, H, W)`.
+
+        Returns:
+            `(B, total_channels, D, H, W)`, `total_channels` the sum of `self.channel_groups`'
+            sizes -- `3 * num_regions` when both flags are False, up to
+            `3 * num_regions + len(fusion_blocks) + 2 * num_regions` when both are True.
+
+        Raises:
+            ValueError: See `_select_level`. Also raised (naming
+                `explainability.ambiguity.include_gates`) if `include_gates` is True and a
+                fusion block reports `None` for its gate at call time, or a gate map has more
+                than the single channel this wrapper's fixed layout assumes.
+        """
+        target_shape = tuple(x.shape[2:])
+
+        if not self.include_gates and not self.include_auxiliary:
+            _logits, ambiguity_maps = self.model.forward_with_ambiguity(x)
+            return self._select_level(ambiguity_maps, target_shape)
+
+        # include_gates and/or include_auxiliary: __init__ already confirmed the model has
+        # the attribute surface (and, for include_gates, the non-empty fusion_blocks; for
+        # include_auxiliary, both auxiliary heads) this needs. Walk the encode -> fuse ->
+        # decode pyramid ONCE here (mirroring NeuroVisionX.forward_with_ambiguity /
+        # forward_with_gates's own bodies) so every requested group reads from the SAME
+        # cnn/swin/decode pass rather than a separate full sliding-window pass per group.
+        cnn_pyramid = self.model.cnn_encoder(x)
+        if self.model.use_swin:
+            swin_pyramid = self.model.swin_encoder(x)
+            skips = [cnn_pyramid[0]]
+            ambiguity_maps: list[Tensor | None] = []
+            gate_maps: list[Tensor | None] = []
+            for i, block in enumerate(self.model.fusion_blocks):
+                if self.include_gates and hasattr(block, "_fuse"):
+                    # One call, four outputs. `_fuse` is the single place that
+                    # computes fused/gate/branch_logits/ambiguity together; both
+                    # `forward(return_gate=True)` and `forward_with_ambiguity`
+                    # are thin wrappers that each call it and discard what they
+                    # do not return. Going through the two public wrappers
+                    # instead would run this block's windowed cross-attention
+                    # TWICE per sliding-window position -- measurable on a
+                    # whole-split CPU extraction, which is the only thing this
+                    # wrapper is ever used for. Reaching for the private name
+                    # is deliberate and is guarded by hasattr, because
+                    # ConcatFusion/AddFusion have no `_fuse` (and no gate
+                    # either, so the branch below raises for them anyway).
+                    fused, gate, _branch_logits, ambiguity = block._fuse(
+                        cnn_pyramid[i + 1], swin_pyramid[i]
+                    )
+                    gate_maps.append(gate)
+                elif self.include_gates:
+                    fused, gate = block(cnn_pyramid[i + 1], swin_pyramid[i], return_gate=True)
+                    gate_maps.append(gate)
+                    _fused2, ambiguity = block.forward_with_ambiguity(
+                        cnn_pyramid[i + 1], swin_pyramid[i]
+                    )
+                else:
+                    fused, ambiguity = block.forward_with_ambiguity(
+                        cnn_pyramid[i + 1], swin_pyramid[i]
+                    )
+                skips.append(fused)
+                ambiguity_maps.append(ambiguity)
+        else:
+            skips = cnn_pyramid
+            ambiguity_maps = []
+            gate_maps = []
+
+        # Gate validation runs BEFORE selecting the ambiguity level: a fusion variant with
+        # no gate concept (ConcatFusion/AddFusion) also has no ambiguity concept, and
+        # _select_level's error names the wrong thing (a missing ambiguity map, not a
+        # missing gate) if it runs first -- checking include_gates's own precondition first
+        # keeps the raised message pointing at the flag that is actually misconfigured.
+        gate_group: Tensor | None = None
+        if self.include_gates:
+            upsampled_gates: list[Tensor] = []
+            for i, gate in enumerate(gate_maps):
+                if gate is None:
+                    raise ValueError(
+                        f"explainability.ambiguity.include_gates is True but fusion block "
+                        f"{i} reports no gate map (return_gate=True gave None -- this fusion "
+                        "variant, e.g. ConcatFusion or AddFusion, has no gating concept to "
+                        "report). Set explainability.ambiguity.include_gates: false, or point "
+                        "this run at a checkpoint built with model.fusion.name: "
+                        "adaptive_gated at every fused level."
+                    )
+                if gate.shape[1] != 1:
+                    raise ValueError(
+                        f"explainability.ambiguity.include_gates is True but fusion block "
+                        f"{i}'s gate map has {gate.shape[1]} channels, not the single "
+                        "(scalar-gate) channel this wrapper's fixed channel layout assumes. "
+                        "Set model.fusion.gate_channels: 'scalar' for this checkpoint, or set "
+                        "explainability.ambiguity.include_gates: false."
+                    )
+                if tuple(gate.shape[2:]) != target_shape:
+                    gate = F.interpolate(
+                        gate, size=target_shape, mode="trilinear", align_corners=False
+                    )
+                upsampled_gates.append(gate)
+            gate_group = torch.cat(upsampled_gates, dim=1)
+
+        ambiguity = self._select_level(ambiguity_maps, target_shape)
+        parts: list[Tensor] = [ambiguity]
+
+        if gate_group is not None:
+            parts.append(gate_group)
+
+        if self.include_auxiliary:
+            feats = self.model.decoder(skips)
+            confidence_logits = self.model.heads.confidence(feats[0])
+            boundary_logits = self.model.heads.boundary(feats[0])
+            if tuple(confidence_logits.shape[2:]) != target_shape:
+                confidence_logits = F.interpolate(
+                    confidence_logits, size=target_shape, mode="trilinear", align_corners=False
+                )
+            if tuple(boundary_logits.shape[2:]) != target_shape:
+                boundary_logits = F.interpolate(
+                    boundary_logits, size=target_shape, mode="trilinear", align_corners=False
+                )
+            parts.append(confidence_logits)
+            parts.append(boundary_logits)
+
+        return torch.cat(parts, dim=1)
 
 
 def select_cases(cfg: DictConfig) -> list[str]:
@@ -478,14 +713,45 @@ def _count_sliding_windows(spatial_shape: tuple[int, int, int], cfg: Any) -> int
     return len(slices)
 
 
+def _split_channel_groups(
+    tensor: Tensor, channel_groups: Sequence[tuple[str, int]]
+) -> dict[str, Tensor]:
+    """Slices a wrapper's channel-concatenated output back into named groups.
+
+    Args:
+        tensor: Shape `(total_channels, D, H, W)` -- the wrapper's per-case
+            output with the batch dimension already removed.
+        channel_groups: `_AmbiguityAtLevel.channel_groups` -- `(name, size)`
+            pairs, in the SAME order the wrapper concatenated them in.
+            Slicing from this attribute (rather than recomputing offsets
+            independently here) is what keeps the two from ever disagreeing
+            -- see `_AmbiguityAtLevel`'s class docstring.
+
+    Returns:
+        A dict from group name to that group's channel slice, e.g.
+        `{"ambiguity": ..., "confidence": ..., "boundary": ...}` when
+        `include_auxiliary` was True, or just `{"ambiguity": ...}` when it
+        was False.
+    """
+    groups: dict[str, Tensor] = {}
+    offset = 0
+    for name, size in channel_groups:
+        groups[name] = tensor[offset : offset + size]
+        offset += size
+    return groups
+
+
 def summarize_case_ambiguity(
     disagreement: Tensor,
     entropy_cnn: Tensor,
     entropy_swin: Tensor,
     regions: Tensor,
     region_names: Sequence[str] = REGION_NAMES,
+    confidence_logits: Tensor | None = None,
+    gate: Tensor | None = None,
 ) -> dict[str, float]:
-    """Reduces one case's per-voxel ambiguity maps to per-case scalar columns.
+    """Reduces one case's per-voxel ambiguity (and, optionally, confidence and gate) maps to
+    per-case scalar columns.
 
     Uses the PREDICTED-foreground mask (`regions > 0.5`) to define each
     region's foreground -- matching `scripts/evaluate.py`'s
@@ -505,6 +771,33 @@ def summarize_case_ambiguity(
             `(num_regions, D, H, W)`, values in `{0, 1}`.
         region_names: Region channel names, in channel order. Defaults to
             `neurovision.data.transforms.REGION_NAMES`.
+        confidence_logits: Optional confidence-head raw logits, shape
+            `(num_regions, D, H, W)`. `None` (the default, and the only
+            value ever passed when `explainability.ambiguity.
+            include_auxiliary` is False) omits every `conf_*` column
+            entirely, keeping the returned column set byte-for-byte
+            identical to a run with no confidence head. The summarised
+            quantity is `1 - sigmoid(confidence_logits)`, i.e. the head's
+            PREDICTED ERROR PROBABILITY rather than its predicted
+            correctness -- deliberately, so that HIGHER always means WORSE
+            here, matching every other score column this function returns
+            (`amb_dis_*` is also higher-is-worse). Contrast with
+            `neurovision.models.neurovision.NeuroVisionX.
+            forward_with_auxiliary`, whose documented convention for
+            `sigmoid(confidence_logits)` itself is the OPPOSITE polarity
+            (probability of being correct) -- getting this flipped would
+            silently invert every failure-detection reading built on this
+            column.
+        gate: Optional fusion-gate maps, shape `(num_fusion_levels, D, H,
+            W)`, one channel per fusion block, fine to coarse. `None` (the
+            default, and the only value ever passed when `explainability.
+            ambiguity.include_gates` is False) omits every `gate_*` column
+            entirely. The foreground mask used for `gate_mean_fg_L` is the
+            predicted WHOLE-TUMOR mask (`regions[region_names.index("WT")] >
+            0.5`) for every level -- a gate map is a property of a spatial
+            LOCATION relative to the tumor as a whole, not of any one
+            ET/TC/WT region, so there is no natural per-region split to
+            report it against the way `amb_dis_*` / `conf_*` do.
 
     Returns:
         One flat dict with, per region `R` in `region_names`:
@@ -515,10 +808,27 @@ def summarize_case_ambiguity(
         predicted foreground is empty: an empty prediction and a
         confidently certain prediction are different states and must not
         collapse to the same number (same convention `scripts/evaluate.py`
-        uses for its `mi_mean_fg_*` columns).
+        uses for its `mi_mean_fg_*` columns). When `confidence_logits` is
+        given, ALSO includes `conf_mean_R` and `conf_mean_fg_R` per region
+        (same NaN-on-empty-foreground convention) and `conf_mean_fg_mean`
+        (the NaN-skipping mean of `conf_mean_fg_R` across regions). When
+        `gate` is given, ALSO includes `gate_mean_L` and `gate_mean_fg_L`
+        (NaN when the whole-tumor prediction is empty) for each fusion level
+        `L` in `range(gate.shape[0])`. Deliberately NO cross-level aggregate
+        column for the gate: measured on the real model, level 1's mean gate
+        runs 0.98 deep inside the tumor down to 0.33 in surrounding tissue,
+        while level 2 runs the OPPOSITE direction -- the levels have
+        opposite polarity, so averaging them together would cancel a real
+        effect into noise rather than summarize it.
     """
     row: dict[str, float] = {}
     fg_means: list[float] = []
+    conf_fg_means: list[float] = []
+
+    # 1 - sigmoid(...): predicted ERROR probability, not predicted correctness -- see the
+    # confidence_logits arg docstring above for why the polarity is flipped here.
+    error_prob = 1.0 - torch.sigmoid(confidence_logits) if confidence_logits is not None else None
+
     for i, region in enumerate(region_names):
         dis = disagreement[i]
         hcnn = entropy_cnn[i]
@@ -542,7 +852,31 @@ def summarize_case_ambiguity(
             row[f"amb_hcnn_mean_fg_{region}"] = float("nan")
             row[f"amb_hswin_mean_fg_{region}"] = float("nan")
 
+        if error_prob is not None:
+            err = error_prob[i]
+            row[f"conf_mean_{region}"] = err.mean().item()
+            if fg_mask.any():
+                conf_fg_mean = err[fg_mask].mean().item()
+                row[f"conf_mean_fg_{region}"] = conf_fg_mean
+                conf_fg_means.append(conf_fg_mean)
+            else:
+                row[f"conf_mean_fg_{region}"] = float("nan")
+
     row["amb_dis_mean_fg_mean"] = float(np.mean(fg_means)) if fg_means else float("nan")
+    if error_prob is not None:
+        row["conf_mean_fg_mean"] = float(np.mean(conf_fg_means)) if conf_fg_means else float("nan")
+
+    if gate is not None:
+        # The whole-tumor mask, not a per-region one -- see the gate arg docstring above.
+        wt_index = list(region_names).index("WT")
+        fg_mask_wt = regions[wt_index] > 0.5
+        for level_idx in range(gate.shape[0]):
+            g = gate[level_idx]
+            row[f"gate_mean_{level_idx}"] = g.mean().item()
+            row[f"gate_mean_fg_{level_idx}"] = (
+                g[fg_mask_wt].mean().item() if fg_mask_wt.any() else float("nan")
+            )
+
     return row
 
 
@@ -602,6 +936,20 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
     `_validate_logits_dir` for the up-front check and the per-case spatial
     shape assertion below).
 
+    When `explainability.ambiguity.include_auxiliary` is True, the confidence and boundary
+    heads' full-resolution logits are ALSO extracted, from the SAME sliding-window pass as
+    the ambiguity map (see `_AmbiguityAtLevel`) -- `ambiguity_summary.csv` gains `conf_*`
+    columns (predicted error probability, higher-is-worse -- see `summarize_case_ambiguity`)
+    and each case's `.npz` gains `confidence` / `boundary` arrays. Requires the loaded model
+    to have both auxiliary heads; raises immediately (before `out_dir` is created) otherwise.
+
+    When `explainability.ambiguity.include_gates` is True, the fusion gate maps are ALSO
+    extracted, from the SAME pass -- `ambiguity_summary.csv` gains `gate_mean_L` /
+    `gate_mean_fg_L` columns per fusion level and each case's `.npz` gains a `gate` array.
+    Requires the loaded model to have at least one fusion block (a Swin branch); raises
+    immediately (before `out_dir` is created) if it does not, or per case if any fusion
+    block reports no gate map at all (a non-`adaptive_gated` fusion variant).
+
     Args:
         cfg: The full composed Hydra config.
 
@@ -643,7 +991,22 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
     _check_forward_with_ambiguity(model, cfg)
 
     level = int(amb_cfg.level)
-    wrapped_model = _AmbiguityAtLevel(model, level).to(device)
+    num_regions = len(REGION_NAMES)
+    # .get() with a False default, not amb_cfg.include_auxiliary / .include_gates: a config
+    # composed before these keys existed must still build (same pattern as every other
+    # .get()-guarded key in this project) -- the shipped configs/explainability/default.yaml
+    # sets both True.
+    include_auxiliary = bool(amb_cfg.get("include_auxiliary", False))
+    include_gates = bool(amb_cfg.get("include_gates", False))
+    # Raises here (before out_dir is created) if include_auxiliary/include_gates is True and
+    # the model is missing what it needs -- see _AmbiguityAtLevel.__init__.
+    wrapped_model = _AmbiguityAtLevel(
+        model,
+        level,
+        include_auxiliary=include_auxiliary,
+        include_gates=include_gates,
+        num_regions=num_regions,
+    ).to(device)
     wrapped_model.eval()
 
     out_dir = ensure_dir(amb_cfg.out_dir)
@@ -651,7 +1014,6 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
     save_image = bool(amb_cfg.save_image)
 
     loader = build_ambiguity_dataloader(cfg, case_ids)
-    num_regions = len(REGION_NAMES)
 
     summary_rows: dict[str, dict[str, float]] = {}
     manifest_rows: dict[str, dict[str, Any]] = {}
@@ -679,11 +1041,19 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
                 seg_logits = sliding_window_predict(model, image, cfg, device)
             regions = postprocess_logits(seg_logits, cfg)[0]  # (num_regions, D, H, W)
 
-            # Ambiguity pass, through the per-level wrapper.
-            ambiguity_full = sliding_window_predict(
-                wrapped_model, image, cfg, device, set_eval=True
-            )
-            ambiguity = ambiguity_full[0]  # (3 * num_regions, D, H, W)
+            # Ambiguity pass, through the per-level wrapper -- also carries the fusion gates
+            # and/or the confidence / boundary heads' logits, channel-concatenated, when
+            # include_gates / include_auxiliary are True.
+            combined_full = sliding_window_predict(wrapped_model, image, cfg, device, set_eval=True)
+            combined = combined_full[0]  # (total_channels, D, H, W)
+
+            # Sliced from wrapped_model's OWN recorded layout, never recomputed offsets --
+            # see _AmbiguityAtLevel's class docstring for why that is load-bearing.
+            groups = _split_channel_groups(combined, wrapped_model.channel_groups)
+            ambiguity = groups["ambiguity"]  # (3 * num_regions, D, H, W)
+            gate = groups.get("gate")  # (num_fusion_levels, D, H, W) or absent
+            confidence_logits = groups.get("confidence")  # (num_regions, D, H, W) or absent
+            boundary_logits = groups.get("boundary")  # (num_regions, D, H, W) or absent
 
             if logits_dir is not None:
                 loaded_shape = tuple(seg_logits.shape[2:])
@@ -704,7 +1074,14 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
             entropy_swin = ambiguity[2 * num_regions : 3 * num_regions]
 
             row = summarize_case_ambiguity(
-                disagreement.cpu(), entropy_cnn.cpu(), entropy_swin.cpu(), regions.cpu()
+                disagreement.cpu(),
+                entropy_cnn.cpu(),
+                entropy_swin.cpu(),
+                regions.cpu(),
+                confidence_logits=(
+                    confidence_logits.cpu() if confidence_logits is not None else None
+                ),
+                gate=gate.cpu() if gate is not None else None,
             )
             row["level"] = float(level)
             row["n_windows"] = float(_count_sliding_windows(spatial_shape, cfg))
@@ -717,6 +1094,15 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
                     "entropy_swin": entropy_swin.cpu().numpy().astype(np.float16),
                     "logits": seg_logits[0].cpu().numpy().astype(np.float16),
                 }
+                if gate is not None:
+                    save_arrays["gate"] = gate.cpu().numpy().astype(np.float16)
+                if confidence_logits is not None:
+                    save_arrays["confidence"] = confidence_logits.cpu().numpy().astype(np.float16)
+                if boundary_logits is not None:
+                    # Saved for a figure only -- the boundary head predicts a morphological
+                    # shell, not correctness, so it gets no per-case summary scalar (see
+                    # summarize_case_ambiguity's docstring and this script's config comment).
+                    save_arrays["boundary"] = boundary_logits.cpu().numpy().astype(np.float16)
                 if save_image:
                     save_arrays["image"] = image[0].cpu().numpy().astype(np.float16)
                 np.savez_compressed(out_dir / f"{case_id}.npz", **save_arrays)
@@ -728,6 +1114,8 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
                 "level": level,
                 "has_label": bool(meta["has_label"]),
                 "maps_saved": save_maps,
+                "include_auxiliary": include_auxiliary,
+                "include_gates": include_gates,
                 # Provenance of the segmentation logits used for the
                 # predicted-foreground mask and (if save_maps) the saved
                 # "logits" array -- a reader must be able to tell from the

@@ -1065,3 +1065,57 @@ def test_builder_branch_disabled_by_default_does_not_supervise() -> None:
     model = build_neurovision(cfg)
 
     assert model.supervise_branch_logits is False
+
+
+# ---------------------------------------------------------------------------
+# 7. forward_with_auxiliary
+# ---------------------------------------------------------------------------
+
+
+def test_forward_with_auxiliary_shapes_both_heads_enabled() -> None:
+    model = _build_model_with_heads(deep_supervision_levels=3, confidence=True, boundary=True)
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        logits, confidence_logits, boundary_logits = model.forward_with_auxiliary(x)
+
+    assert isinstance(logits, Tensor)
+    assert logits.shape == (1, 3, 32, 32, 32)
+    assert confidence_logits is not None
+    assert confidence_logits.shape == (1, 3, 32, 32, 32)
+    assert boundary_logits is not None
+    assert boundary_logits.shape == (1, 3, 32, 32, 32)
+
+
+def test_forward_with_auxiliary_returns_none_for_disabled_heads() -> None:
+    model = _build_model_with_heads(deep_supervision_levels=3, confidence=False, boundary=False)
+    model.eval()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    with torch.no_grad():
+        logits, confidence_logits, boundary_logits = model.forward_with_auxiliary(x)
+
+    assert isinstance(logits, Tensor)
+    assert confidence_logits is None
+    assert boundary_logits is None
+
+
+def test_forward_with_auxiliary_segmentation_output_is_plain_tensor_in_train_mode() -> None:
+    # This is the case that would silently break if forward_with_auxiliary were routed
+    # through forward: with both auxiliary heads enabled and the model in train() mode,
+    # forward() itself would return a MultiTaskOutput -- forward_with_auxiliary must still
+    # hand back a plain Tensor for the segmentation logits regardless of self.training,
+    # exactly like forward_with_gates / forward_with_ambiguity already do.
+    model = _build_model_with_heads(deep_supervision_levels=3, confidence=True, boundary=True)
+    model.train()
+    x = torch.randn(1, 4, 32, 32, 32)
+
+    logits, confidence_logits, boundary_logits = model.forward_with_auxiliary(x)
+
+    assert isinstance(logits, Tensor)
+    assert not isinstance(logits, list)
+    assert not isinstance(logits, MultiTaskOutput)
+    assert logits.shape == (1, 3, 32, 32, 32)
+    assert confidence_logits is not None
+    assert boundary_logits is not None

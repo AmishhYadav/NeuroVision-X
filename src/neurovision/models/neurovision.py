@@ -483,6 +483,47 @@ class NeuroVisionX(nn.Module):
         logits = self.heads.seg_heads[0](feats[0])
         return logits, ambiguity_maps
 
+    def forward_with_auxiliary(self, x: Tensor) -> tuple[Tensor, Tensor | None, Tensor | None]:
+        """Runs the network and also returns the confidence and boundary heads' raw logits.
+
+        Modelled directly on `forward_with_gates` / `forward_with_ambiguity` -- same shape of
+        method, same reason it exists: an inference-time read-out of a signal `forward` only
+        ever exposes (via `MultiTaskOutput`) in training mode. This is the explainability /
+        inference path, not a training path -- it always returns a single full-resolution
+        segmentation logits tensor, regardless of `self.training`, which is what makes it
+        usable under sliding-window inference the same way `forward_with_gates` and
+        `forward_with_ambiguity` are.
+
+        `sigmoid(confidence_logits)` is P(the segmentation head's prediction is correct at
+        that voxel, for that region) -- see `neurovision.losses.multitask.MultiTaskLoss.
+        forward`'s confidence-term comment for exactly how that target is built at training
+        time and why the polarity is "probability of being CORRECT", not "probability of
+        being wrong": a sign error here would invert a failure-detection result with nothing
+        failing.
+
+        Args:
+            x: Input MRI volume, shape `(B, in_channels, D, H, W)`.
+
+        Returns:
+            A tuple `(logits, confidence_logits, boundary_logits)`:
+
+            - `logits`: full-resolution segmentation logits, shape `(B, out_channels, D, H,
+              W)`.
+            - `confidence_logits`: full-resolution raw logits (no sigmoid -- apply your own,
+              same convention as every other head in this project), shape `(B, out_channels,
+              D, H, W)`, or `None` if the confidence head is disabled
+              (`self.heads.confidence is None`).
+            - `boundary_logits`: full-resolution raw logits, same shape convention, or `None`
+              if the boundary head is disabled (`self.heads.boundary is None`).
+        """
+        feats, _branch_logits = self._encode_decode(x)
+        logits = self.heads.seg_heads[0](feats[0])
+        confidence_logits = (
+            self.heads.confidence(feats[0]) if self.heads.confidence is not None else None
+        )
+        boundary_logits = self.heads.boundary(feats[0]) if self.heads.boundary is not None else None
+        return logits, confidence_logits, boundary_logits
+
 
 @register_model("neurovision")
 def build_neurovision(cfg: Any) -> nn.Module:

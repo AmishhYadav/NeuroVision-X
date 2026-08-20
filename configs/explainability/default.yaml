@@ -213,3 +213,32 @@ ambiguity:
                      # Set to an existing eval run's logits/ directory to reuse
                      # them and halve the runtime -- only valid when that run
                      # used the SAME checkpoint, roi_size and overlap.
+  # Also emit the confidence and boundary heads' full-resolution logits, from
+  # the SAME sliding-window pass this script already runs to get the
+  # ambiguity map -- both auxiliary heads read the SAME decoder features the
+  # ambiguity extraction already computes (see _AmbiguityAtLevel in
+  # scripts/extract_ambiguity.py), so this costs one extra lightweight
+  # head-only projection per window inside a pass already running over the
+  # whole split, not a second whole-split extraction script that would cost
+  # hours of CPU on its own. Requires the loaded checkpoint to have BOTH
+  # auxiliary heads enabled at training time (model.head.confidence.enabled
+  # and model.head.boundary.enabled) -- raises immediately, naming this key,
+  # if either is missing. Set to false for a checkpoint trained without them.
+  include_auxiliary: true
+  # Also emit the fusion gate maps (one channel per fusion block), from the
+  # SAME pass -- the gate is a strongly, monotonically spatially organised
+  # signal (measured: fusion level 1's mean gate runs 0.98 deep inside the
+  # tumor down to 0.33 in surrounding tissue, and level 2 runs the OPPOSITE
+  # direction), so it is a first-class per-voxel signal worth extracting over
+  # the whole split, not decoration. Today the only whole-volume producer for
+  # it would be a THIRD sliding-window pass over every case
+  # (scripts/extract_gates.py is patch-based, one tumor-centred crop per
+  # case, not a whole-volume artifact); folding it in here costs a few extra
+  # lightweight per-block computations, not another full pass. Requires the
+  # loaded checkpoint to have at least one fusion block built with a real
+  # gate (model.fusion.name: adaptive_gated at every fused level) -- raises
+  # immediately, naming this key, if there are no fusion blocks at all (e.g.
+  # the cnn-only ablation), and raises per case if any individual block
+  # reports no gate (a non-adaptive_gated variant). Set to false for a
+  # checkpoint without a real gate to report.
+  include_gates: true
