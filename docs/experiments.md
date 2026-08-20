@@ -752,6 +752,109 @@ sessions by resume is still ONE row — sum the GPU hours.
     are the descriptive checks Test A is specified to be, and no threshold was
     adjusted after seeing them.
 
+32. **P1 IS ANSWERED, AND THE ANSWER IS YES -- BUT NOT IN THE DIRECTION P1
+    PREDICTED. The fusion gate is strongly, monotonically and conclusively
+    organised by anatomy, and adjacent scales have OPPOSITE polarity.**
+    Measured 2026-08-20 over the **full 189-case test split**
+    (`scripts/gate_boundary_profile.py`, gate maps from
+    `scripts/extract_gates.py` on `neurovision` best.pt, one 64^3
+    tumour-centred patch per case). The gate is the transformer weight: the
+    merge is `cnn + layer_scale * gate * attn`, so gate near 1 means "admit
+    Swin context here", gate near 0 means "this voxel is the CNN branch
+    alone". Bands are signed distance in mm to the GROUND-TRUTH whole-tumour
+    surface; negative is inside the tumour.
+
+    | level | <-10 | -10..-5 | -5..-2 | -2..0 | 0..2 | 2..5 | 5..10 | >10 |
+    |---|---|---|---|---|---|---|---|---|
+    | 0 (stride 2)  | 0.8778 | 0.8858 | 0.8546 | 0.8603 | 0.8857 | 0.8971 | 0.8799 | 0.8621 |
+    | 1 (stride 4)  | **0.9814** | 0.9645 | 0.8798 | 0.7568 | 0.6479 | 0.4652 | 0.3178 | **0.3252** |
+    | 2 (stride 8)  | **0.0089** | 0.0148 | 0.0346 | 0.0685 | 0.1033 | 0.1980 | 0.4699 | **0.7992** |
+    | 3 (stride 16) | 0.0023 | 0.0061 | 0.0134 | 0.0185 | 0.0217 | 0.0284 | 0.0447 | 0.1160 |
+
+    Paired per-case contrasts, inner margin `[-2, 0)` mm minus elsewhere,
+    percentile bootstrap over case indices, 10,000 replicates:
+
+    | level | vs tumour interior | vs healthy tissue |
+    |---|---|---|
+    | 0 | -0.0237 [-0.0425, -0.0040] | -0.0018 [-0.0148, 0.0118] (inconclusive) |
+    | 1 | **-0.2361 [-0.2526, -0.2188]** | **+0.4316 [0.4144, 0.4491]** |
+    | 2 | +0.0550 [0.0411, 0.0698] | **-0.7307 [-0.7456, -0.7154]** |
+    | 3 | +0.0152 [0.0118, 0.0188] | -0.0975 [-0.1064, -0.0892] |
+
+    **What this settles.** `docs/research/contribution.md` recorded P1
+    ("the mechanism fires") as **undecided** -- the producer and the reducer
+    both existed and no number had ever been written down. The gate is not
+    decoration: at stride 4 it runs from 0.98 deep inside the tumour to 0.33
+    in surrounding tissue, a spread of 0.65 on a [0, 1] scale, monotone
+    across all eight bands, with a CI 25 standard errors from zero.
+
+    **What this refutes.** P1 as written predicted the gate would open toward
+    *ambiguous zones* -- the tumour MARGIN specifically. It does not. At every
+    level the margin is an intermediate value on a monotone tumour-to-healthy
+    ramp, not a peak. The inner margin is significantly LOWER than the tumour
+    interior at level 1 and only marginally different at level 0. Do not write
+    "the gate opens at the boundary".
+
+    **What it appears to be instead: a scale-dependent tissue decomposition,
+    with opposite polarity at adjacent scales.** Level 1 admits transformer
+    context INSIDE the lesion and shuts it off outside; level 2 does exactly
+    the reverse, and level 3 weakly follows level 2. Level 0 (stride 2, the
+    finest fused level) is essentially flat at ~0.87 -- fine-scale context is
+    admitted everywhere. A reading consistent with the design: mid-scale
+    global context is what distinguishes lesion tissue, coarse-scale context
+    is what establishes normal brain, and fine-scale context is useful
+    everywhere. This is a mechanistic finding the project did not predict and
+    could not have got from a single-encoder model.
+
+    **Caveats to keep with the number.** (i) The crop is one 64^3
+    tumour-centred patch per case, so "healthy tissue" means peritumoral
+    tissue inside that crop, not distant brain. (ii) 172 of 189 cases
+    contribute to the interior contrast; 17 tumours have no voxel deeper than
+    10 mm inside the surface. (iii) The gate is CONDITIONED on the inter-branch
+    ambiguity signal, so this says the gate is organised, not yet that the
+    ambiguity conditioning is what organises it -- that is P2, and
+    `scripts/ambiguity_intervention.py` tests an inference-time version of it.
+
+33. **FORENSICS: `remove_small_components` does NOT filter the region channels
+    independently, and the pinned scikit-image `min_size` is already
+    inclusive.** Both measured 2026-08-20, both were documented the other way.
+
+    **Channel merging.** `neurovision.inference.postprocess.remove_small_components`
+    calls MONAI's `remove_small_objects` once on the whole `(3, D, H, W)`
+    tensor. MONAI's `independent_channels=True` default only decides whether
+    the channels are first collapsed to one foreground mask; on that path a
+    binary input is cast to `bool` and handed to
+    `skimage.morphology.remove_small_objects`, which labels a boolean array
+    with `scipy.ndimage.label` **over every axis it has**. The channel axis is
+    an adjacency axis. Verified directly: a 27-voxel blob at `min_size=50` is
+    removed when it sits in one channel and KEPT (81 voxels) when the same
+    blob sits in all three -- which is the common case, since ET, TC and WT
+    are nested.
+
+    **Measured impact: negligible, and the "fix" is nominally worse.**
+    Replaying `neurovision`'s saved test logits over 10 cases both ways:
+    Dice moves by at most 3e-5 in any region (ET -0.00002, TC +0.00003,
+    WT -0.00000), and HD95 gets WORSE under true per-channel filtering
+    (ET +0.076 mm, TC +0.189 mm) because the extra removals sometimes delete
+    a small component nearer the tumour than the ones that survive.
+    Per-case voxel differences ranged 0-170 voxels out of 26k-363k.
+
+    **Decision: document, do not change.** Changing the post-processing chain
+    would invalidate comparability with `capacity_control_unet3d`, whose
+    logits can no longer be regenerated (its checkpoint went to `/tmp/` and is
+    gone), for an effect two orders of magnitude below the smallest difference
+    this project reports. The docstring now records the real behaviour.
+
+    **`min_size` is inclusive, not strict.** CLAUDE.md recorded the
+    scikit-image `min_size` -> `max_size` migration as "dormant because deps
+    are pinned". It is not dormant: at the pinned `scikit-image==0.26.0` the
+    deprecation shim already applies the new semantics even when called with
+    the old positional argument. A component of exactly 50 voxels is REMOVED
+    today. Verified directly. This does not change any published number --
+    every number this project has ever reported was produced under these
+    semantics -- but the note was wrong and would have mispredicted the effect
+    of a future dependency bump.
+
 ---
 
 ## Planned

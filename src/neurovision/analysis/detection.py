@@ -248,7 +248,8 @@ def partial_spearman_ci(
     generator: np.random.Generator,
     n_boot: int = 10000,
     ci: float = 0.95,
-) -> BootstrapResult:
+    return_replicates: bool = False,
+) -> BootstrapResult | tuple[BootstrapResult, np.ndarray]:
     """Bootstraps a confidence interval on the partial Spearman correlation.
 
     Resamples CASE INDICES with replacement and recomputes
@@ -265,6 +266,14 @@ def partial_spearman_ci(
             default and no use of the global RNG.
         n_boot: Number of bootstrap replicates.
         ci: Confidence level, e.g. `0.95` for a 95% interval.
+        return_replicates: When `True`, also return the raw, un-filtered
+            array of `n_boot` bootstrap replicates (may contain NaN for
+            degenerate resamples). Added for
+            `scripts/detection_stats.py`'s Gate 1 driver, which needs the
+            replicate distribution itself to compute a two-sided bootstrap
+            p-value against a null of zero -- something a CI alone cannot
+            give. Purely additive: default `False` preserves the exact
+            prior return type and value for every existing caller.
 
     Returns:
         A `BootstrapResult` (imported from
@@ -273,7 +282,10 @@ def partial_spearman_ci(
         the un-resampled, pairwise-complete data. Replicates where the
         partial correlation is undefined (e.g. a degenerate resample makes
         one variable constant) are dropped before the interval and
-        standard error are computed.
+        standard error are computed. When `return_replicates=True`, returns
+        `(result, replicates)` instead, where `replicates` is the raw
+        length-`n_boot` array used to build that `BootstrapResult` (NaN
+        entries included -- the caller decides how to treat them).
 
     Raises:
         ValueError: Fewer than 4 cases survive pairwise-complete NaN
@@ -320,7 +332,7 @@ def partial_spearman_ci(
     upper_pct = 100.0 - lower_pct
     lo, hi = (float(v) for v in np.percentile(valid, [lower_pct, upper_pct]))
 
-    return BootstrapResult(
+    result = BootstrapResult(
         point=point,
         lo=lo,
         hi=hi,
@@ -331,6 +343,9 @@ def partial_spearman_ci(
         se=se,
         contains_zero=(lo <= 0.0 <= hi),
     )
+    if return_replicates:
+        return result, boot
+    return result
 
 
 def auroc(score: ArrayLike, positive: ArrayLike) -> float:

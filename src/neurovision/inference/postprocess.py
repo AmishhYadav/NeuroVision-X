@@ -17,10 +17,12 @@ restored explicitly afterward when something has broken it.
 
 Pipeline order (`postprocess_logits`), fixed and documented step by step:
 threshold -> optional keep-largest-component -> small-component removal ->
-optional ET-volume floor -> re-nesting. The component filters run per
-channel independently, which is exactly what breaks nesting (a blob can
-survive in ET while the corresponding TC blob is dropped), so nesting is
-always restored LAST.
+optional ET-volume floor -> re-nesting. The component filters can drop a
+blob from one region channel while the corresponding blob survives in
+another, which is exactly what breaks nesting, so nesting is always
+restored LAST. (`keep_largest_component` really does treat the channels
+independently; `remove_small_components` does not -- see its own docstring,
+which records the measured behaviour.)
 """
 
 from __future__ import annotations
@@ -117,12 +119,40 @@ def _filter_case(case_regions: Tensor, min_size: int, connectivity: int) -> Tens
 
 
 def remove_small_components(regions: Tensor, min_size: int, connectivity: int = 1) -> Tensor:
-    """Drops small connected components from each region channel independently.
+    """Drops small connected components from a case's three region channels.
 
     Thin wrapper over MONAI's `remove_small_objects` (itself
-    `skimage.morphology.remove_small_objects`), run per channel independently
-    so a speckle false positive in one region does not require a matching
-    speckle in another to be removed.
+    `skimage.morphology.remove_small_objects`), called ONCE on the whole
+    `(3, D, H, W)` tensor.
+
+    **The channels are NOT filtered independently, despite MONAI's
+    `independent_channels=True` default. Measured 2026-08-20, not assumed.**
+    That flag only decides whether MONAI first collapses the channels to a
+    single foreground mask; on the `independent_channels=True` path it casts a
+    binary input to `bool` and hands the 4-D array straight to
+    `skimage.morphology.remove_small_objects`, which labels a boolean array
+    with `scipy.ndimage.label` over EVERY axis it has. The channel axis is
+    therefore an adjacency axis: a blob at the same location in ET, TC and WT
+    is one component of three times the per-channel size. Verified with a
+    27-voxel blob at `min_size=50` -- removed when it sits in one channel,
+    kept (81 voxels) when it sits in all three.
+
+    This is left as-is deliberately. Replaying `neurovision`'s saved test
+    logits both ways over 10 cases moves Dice by at most 3e-5 in any region
+    and makes HD95 nominally WORSE per channel (ET +0.076 mm, TC +0.189 mm),
+    because the extra removals occasionally delete a small component nearer
+    the tumour than the surviving ones. Changing it would also break
+    comparability with `capacity_control_unet3d`, whose logits can no longer
+    be regenerated. The behaviour is documented rather than changed; anyone
+    who does want per-channel filtering must loop over the channel axis and
+    re-score every model in the comparison family.
+
+    Note also that `min_size` is **inclusive** at the pinned
+    `scikit-image==0.26.0`: a component of exactly `min_size` voxels is
+    removed, not kept. The deprecation shim already applies the new
+    `max_size` semantics even when called with the old positional argument,
+    so the migration this project recorded as "dormant" has in fact already
+    happened.
 
     `connectivity` controls what counts as "connected" between two voxels in
     3D: `1` means only face-adjacent neighbours count (6-neighbourhood --
@@ -131,11 +161,13 @@ def remove_small_components(regions: Tensor, min_size: int, connectivity: int = 
     more voxels into the same component, so fewer, larger components get
     removed at a given `min_size`.
 
-    IMPORTANT: filtering channels independently BREAKS the ET subset-of TC
-    subset-of WT nesting invariant -- a blob can be dropped from the TC
-    channel while an overlapping blob survives in ET (or vice versa). This
-    function does not repair that itself; every caller must run
-    `enforce_nesting` afterward. `postprocess_logits` does this.
+    IMPORTANT: this filter can still BREAK the ET subset-of TC subset-of WT
+    nesting invariant. Two blobs at the same location are one component
+    across the channel axis, but two blobs at DIFFERENT locations are not,
+    so a blob can be dropped from the TC channel while an overlapping blob
+    survives in ET (or vice versa). This function does not repair that
+    itself; every caller must run `enforce_nesting` afterward.
+    `postprocess_logits` does this.
 
     Args:
         regions: Binary float tensor, channel order `(ET, TC, WT)`, shape

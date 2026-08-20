@@ -170,3 +170,135 @@ population:
 
   top_n_structures: 20
   figures: true
+
+detection:
+  # Gate 1 of docs/research/execution_plan.md -- does per-voxel inter-branch
+  # disagreement carry failure-detection signal that single-pass predictive
+  # entropy does not already have? Registered in
+  # docs/research/preregistration_ambiguity.md BEFORE any of this ran; read
+  # that file before changing a threshold here. Runs no model and needs no
+  # GPU -- every input is a cache scripts/extract_ambiguity.py and
+  # scripts/evaluate.py already wrote.
+  cohorts:
+    # Each cohort names its own ambiguity shards (scripts/extract_ambiguity.py
+    # is typically run in several chunked sessions -- see ambiguity_dirs
+    # below), the matching scripts/evaluate.py output (for per_case_metrics.csv
+    # and the saved logits/ the entropy baseline is computed from), and the
+    # preprocessed tree (for ground-truth labels and spacing). SSA and PED are
+    # the two EXTERNAL cohorts the pre-registered pass condition is scored
+    # against -- see the "cohorts" list in the preregistration's Data section.
+    - name: brats_test
+      # Disjoint shard directories of the same cohort -- load_cohort raises if
+      # a case_id appears in more than one, because an overlapping re-run
+      # would double-count that case in every pooled statistic.
+      ambiguity_dirs: [outputs/ambiguity_test_s0, outputs/ambiguity_test_s1]
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+    - name: ssa
+      ambiguity_dirs: [outputs/ambiguity_ssa_s0, outputs/ambiguity_ssa_s1]
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+    - name: ped
+      ambiguity_dirs: [outputs/ambiguity_ped_s0, outputs/ambiguity_ped_s1]
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+
+  out_dir: ${output_dir}/detection
+
+  case:
+    # Primary endpoint A. score/control are per-case scalars already written
+    # by scripts/extract_ambiguity.py (amb_dis_mean_fg_mean, the predicted-
+    # foreground-masked mean disagreement) and this script's own entropy_table
+    # (ent_mean_fg_mean, the SAME masking convention -- computed from the
+    # already-saved logits/, no extra model pass). metric is per-case Dice
+    # from per_case_metrics.csv. Whatever these column names are, they must
+    # exist in all three input tables after the join.
+    score_column: amb_dis_mean_fg_mean
+    control_column: ent_mean_fg_mean
+    metric_column: dice_mean
+
+  voxel:
+    enabled: true
+    # Label-free sampling mask (see neurovision.utils.io / CLAUDE.md's
+    # "calibration reporting mask must never be defined using the ground-truth
+    # label" entry -- that mistake manufactured 41-57% of a reported ECE and
+    # passed 984 tests). "predicted_dilated": every voxel within dilation_mm
+    # of the model's OWN predicted whole-tumour mask, computed from the
+    # prediction alone. "all": every voxel in the volume (much larger, much
+    # more background-dominated sample).
+    mask: predicted_dilated # "predicted_dilated" | "all"
+    dilation_mm: 10.0
+    # Caps memory: only the SAMPLED voxels are ever held in memory, never a
+    # whole cohort of full-resolution maps (see voxel_level_table's
+    # docstring for the measured "tens of MB" figure at these defaults).
+    max_voxels_per_case: 20000
+    max_cases: null # null = every case with a saved ambiguity npz
+
+  bootstrap:
+    n_boot: 10000
+    ci: 0.95
+
+  # Family-wise significance level for the pre-registered 6-test family
+  # (2 endpoints x 3 cohorts), Holm-corrected once, fixed before any p-value
+  # is examined. See build_family_table in scripts/detection_stats.py.
+  alpha: 0.05
+
+  seed: ${seed}
+
+replay:
+  # scripts/replay_logits.py -- re-scores a checkpoint's SAVED fp16 logits
+  # (<eval_dir>/logits/) at a different threshold or post-processing chain,
+  # with no model and no GPU. Same null-forces-an-explicit-CLI-override
+  # convention as burden.eval_dir / localize.eval_dir above, rather than
+  # baking one experiment's path into a committed config file:
+  #   python scripts/replay_logits.py +analysis.replay.eval_dir=outputs/neurovision/eval_test
+  eval_dir: null
+
+  # Root of the preprocessed tree (holds <case>/label.npy and <case>/meta.json
+  # for ground truth and spacing). Same default as burden.preprocessed_dir /
+  # localize.preprocessed_dir above.
+  prep_dir: ${data.preprocessing.out_dir}
+
+  # Parent of this run's output directory. scripts/replay_logits.py appends
+  # eval_dir's own basename (e.g. "eval_test" or
+  # "eval_test_baseline_unet3d") in Python, not via OmegaConf interpolation --
+  # no "basename of another config value" resolver is registered anywhere in
+  # this project, and adding one is out of scope for a single driver script.
+  # Appending the basename keeps two replays of different eval directories
+  # from overwriting each other's threshold_sweep.csv / postprocess_ablation.csv
+  # under one shared folder.
+  out_dir: ${output_dir}/replay
+
+  # null = every case with saved logits under <eval_dir>/logits/.
+  case_ids: null
+
+  threshold_sweep:
+    enabled: true
+    # Symmetric around the project default (0.5), which MUST stay in this
+    # list -- best_threshold.json measures every other threshold's delta
+    # against it and raises if it is absent.
+    thresholds: [0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7]
+
+  postprocess_ablation:
+    enabled: true
+    # variant name -> partial override, merged over the project default
+    # post-processing chain (configs/inference/default.yaml's postprocess
+    # block, minus threshold). Keys are exactly the five
+    # replay._resolve_postprocess_cfg reads: enforce_nesting,
+    # min_component_size, connectivity, keep_largest_only, et_min_volume --
+    # verified against that function and against the block above before
+    # naming these, so nothing here is a key that gets silently ignored.
+    variants:
+      default: {}
+      no_small_component_removal: {min_component_size: 0}
+      no_nesting: {enforce_nesting: false}
+      keep_largest_only: {keep_largest_only: true}
+      raw: {min_component_size: 0, enforce_nesting: false, keep_largest_only: false}
+
+  baseline_comparison:
+    enabled: false
+    # A second eval dir to compare the replayed per-case table (at project
+    # default threshold/post-processing) against, so a threshold or
+    # post-processing choice made here can be shown to hold -- or not --
+    # against a baseline scored the exact same way.
+    eval_dir: null
