@@ -257,6 +257,63 @@ def _validate_labeled_cases(case_ids: Sequence[str], prep_dir: Path) -> None:
         )
 
 
+def _validate_logits_dir(logits_dir: Path, case_ids: Sequence[str]) -> None:
+    """Checks a reused logits directory exists and covers every selected case.
+
+    Called once, before the extraction loop starts, so a misconfigured
+    `explainability.ambiguity.logits_dir` fails immediately instead of after
+    several minutes of sliding-window inference on the ambiguity pass alone.
+
+    Args:
+        logits_dir: The directory `run_extraction` will read
+            `<case_id>.npy` files from instead of running a second
+            sliding-window pass through the plain model.
+        case_ids: Cases selected by `select_cases`, in processing order.
+
+    Raises:
+        FileNotFoundError: If `logits_dir` does not exist, or if any
+            selected case has no `<case_id>.npy` inside it. The second case
+            names how many cases are missing and lists the first few --
+            silently skipping them would shrink the sample the pre-registered
+            statistics are computed over.
+    """
+    if not logits_dir.is_dir():
+        raise FileNotFoundError(
+            f"explainability.ambiguity.logits_dir does not exist: {logits_dir.resolve()}."
+        )
+
+    missing = [case_id for case_id in case_ids if not (logits_dir / f"{case_id}.npy").is_file()]
+    if missing:
+        preview = missing[:5]
+        suffix = ", ..." if len(missing) > len(preview) else ""
+        raise FileNotFoundError(
+            f"{len(missing)} of {len(case_ids)} selected case(s) have no "
+            f"<case_id>.npy in explainability.ambiguity.logits_dir={logits_dir.resolve()}: "
+            f"{preview}{suffix}. Refusing to silently skip cases -- a shortened split would "
+            "change the sample the pre-registered statistics are computed over. Point "
+            "logits_dir at a logits/ directory produced by evaluating this SAME checkpoint, "
+            "at this SAME split, with this SAME inference.sliding_window config."
+        )
+
+
+def _load_case_logits(logits_dir: Path, case_id: str) -> Tensor:
+    """Loads one case's precomputed deterministic segmentation logits.
+
+    Args:
+        logits_dir: Directory holding one `<case_id>.npy` per case, as
+            written by `scripts/evaluate.py`'s `save_logits` option --
+            float16, shape `(out_channels, D, H, W)`.
+        case_id: The case to load.
+
+    Returns:
+        The logits as a float32 tensor, shape `(out_channels, D, H, W)`
+        (no batch dimension -- the caller adds one to match
+        `sliding_window_predict`'s `(B, out_channels, D, H, W)` contract).
+    """
+    array = np.load(logits_dir / f"{case_id}.npy").astype(np.float32)
+    return torch.from_numpy(array)
+
+
 def resolve_ambiguity_checkpoint(cfg: DictConfig) -> Path:
     """Decides which checkpoint file to load for ambiguity extraction.
 
@@ -527,16 +584,23 @@ def _log_and_print_summary(
 def run_extraction(cfg: DictConfig) -> pd.DataFrame:
     """Extracts fusion-ambiguity maps for a split and writes them to disk.
 
-    For each selected case: run whole-volume sliding-window inference twice
-    -- once through the plain model to get the deterministic segmentation
-    logits (used only to build the predicted-foreground mask, exactly like
-    `scripts/evaluate.py`), and once through `_AmbiguityAtLevel` to get one
-    fusion level's ambiguity map, upsampled to full resolution and stitched
-    the same way. Both passes are deterministic (`set_eval=True`) and use
-    the same weights, so this costs roughly double the inference time of a
-    plain evaluation run in exchange for `_AmbiguityAtLevel`'s single-tensor
-    contract staying exactly as simple as the spec: no packed/concatenated
-    output to unpack downstream.
+    For each selected case: get the deterministic segmentation logits --
+    used only to build the predicted-foreground mask, exactly like
+    `scripts/evaluate.py` -- and run whole-volume sliding-window inference
+    through `_AmbiguityAtLevel` to get one fusion level's ambiguity map,
+    upsampled to full resolution and stitched. By default the logits come
+    from a second sliding-window pass through the plain model, deterministic
+    (`set_eval=True`) and using the same weights as the ambiguity pass, which
+    costs roughly double the inference time of a plain evaluation run in
+    exchange for `_AmbiguityAtLevel`'s single-tensor contract staying exactly
+    as simple as the spec: no packed/concatenated output to unpack
+    downstream. When `explainability.ambiguity.logits_dir` is set, that
+    second pass is skipped entirely and the logits are instead loaded from
+    `<logits_dir>/<case_id>.npy` -- valid only when that directory was
+    produced by evaluating this SAME checkpoint at this SAME
+    `inference.sliding_window` settings, which is checked per case (see
+    `_validate_logits_dir` for the up-front check and the per-case spatial
+    shape assertion below).
 
     Args:
         cfg: The full composed Hydra config.
@@ -547,8 +611,11 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
 
     Raises:
         ValueError: See `select_cases`, `_validate_labeled_cases`, and
-            `_AmbiguityAtLevel.forward`.
-        FileNotFoundError: See `resolve_ambiguity_checkpoint`.
+            `_AmbiguityAtLevel.forward`. Also raised per case when
+            `logits_dir` is set and a loaded case's spatial shape disagrees
+            with that case's ambiguity map.
+        FileNotFoundError: See `resolve_ambiguity_checkpoint` and
+            `_validate_logits_dir`.
         TypeError: See `_check_forward_with_ambiguity`.
     """
     device = get_device(cfg)
@@ -557,6 +624,16 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
 
     case_ids = select_cases(cfg)
     _validate_labeled_cases(case_ids, prep_dir)
+
+    logits_dir_cfg = amb_cfg.logits_dir
+    logits_dir = Path(logits_dir_cfg) if logits_dir_cfg is not None else None
+    if logits_dir is not None:
+        _validate_logits_dir(logits_dir, case_ids)
+        logger.info(
+            "Reusing deterministic segmentation logits from %s instead of running a second "
+            "sliding-window pass through the plain model.",
+            logits_dir.resolve(),
+        )
 
     checkpoint_path = resolve_ambiguity_checkpoint(cfg)
     model = load_ambiguity_model(cfg, checkpoint_path, device)
@@ -590,10 +667,16 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
             image = batch["image"]  # (1, 4, D, H, W)
             spatial_shape = tuple(image.shape[2:])
 
-            # Deterministic segmentation pass -- used only to build the
+            # Deterministic segmentation logits -- used only to build the
             # predicted-foreground mask, never saved as "the" prediction of
             # this script (scripts/evaluate.py already owns that artifact).
-            seg_logits = sliding_window_predict(model, image, cfg, device)
+            # Either loaded from a prior evaluation run's saved logits, or
+            # (the default) a second sliding-window pass through the plain
+            # model.
+            if logits_dir is not None:
+                seg_logits = _load_case_logits(logits_dir, case_id).unsqueeze(0)
+            else:
+                seg_logits = sliding_window_predict(model, image, cfg, device)
             regions = postprocess_logits(seg_logits, cfg)[0]  # (num_regions, D, H, W)
 
             # Ambiguity pass, through the per-level wrapper.
@@ -601,6 +684,21 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
                 wrapped_model, image, cfg, device, set_eval=True
             )
             ambiguity = ambiguity_full[0]  # (3 * num_regions, D, H, W)
+
+            if logits_dir is not None:
+                loaded_shape = tuple(seg_logits.shape[2:])
+                ambiguity_shape = tuple(ambiguity.shape[1:])
+                if loaded_shape != ambiguity_shape:
+                    raise ValueError(
+                        f"Loaded logits for case {case_id!r} from {logits_dir.resolve()} have "
+                        f"spatial shape {loaded_shape}, which does not match this case's "
+                        f"ambiguity map spatial shape {ambiguity_shape}. This means logits_dir "
+                        "was produced from a different preprocessing run or cohort than the "
+                        "one being extracted here -- the arrays would still load and mask "
+                        "'successfully' against the wrong geometry, so this is checked "
+                        "explicitly rather than left to produce a silently misaligned result."
+                    )
+
             disagreement = ambiguity[0:num_regions]
             entropy_cnn = ambiguity[num_regions : 2 * num_regions]
             entropy_swin = ambiguity[2 * num_regions : 3 * num_regions]
@@ -630,6 +728,12 @@ def run_extraction(cfg: DictConfig) -> pd.DataFrame:
                 "level": level,
                 "has_label": bool(meta["has_label"]),
                 "maps_saved": save_maps,
+                # Provenance of the segmentation logits used for the
+                # predicted-foreground mask and (if save_maps) the saved
+                # "logits" array -- a reader must be able to tell from the
+                # artifact alone whether that came from a second model pass
+                # or a reused prior evaluation run.
+                "logits_source": str(logits_dir.resolve()) if logits_dir is not None else "model",
             }
 
             # Rewritten every iteration, not just at the end: a full-split

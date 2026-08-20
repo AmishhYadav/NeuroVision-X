@@ -209,3 +209,7 @@ ambiguity:
   # Also save the 4-modality image inside each case's .npz. Only checked
   # when save_maps is true.
   save_image: false
+  logits_dir: null   # null -> run a second sliding-window pass to get logits.
+                     # Set to an existing eval run's logits/ directory to reuse
+                     # them and halve the runtime -- only valid when that run
+                     # used the SAME checkpoint, roi_size and overlap.

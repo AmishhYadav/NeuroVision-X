@@ -254,7 +254,12 @@ def _write_synthetic_case(prep_dir: Path, case_id: str, seed: int) -> None:
 
 
 def _compose_cfg(
-    tmp_path: Path, prep_dir: Path, splits_path: Path, checkpoint_dir: Path, out_dir: Path
+    tmp_path: Path,
+    prep_dir: Path,
+    splits_path: Path,
+    checkpoint_dir: Path,
+    out_dir: Path,
+    logits_dir: Path | None = None,
 ):
     """Composes the REAL Hydra config, tiny-sized -- mirrors scripts/smoke_test.py."""
     overrides = [
@@ -275,9 +280,19 @@ def _compose_cfg(
         "device=cpu",
         "seed=42",
     ]
+    if logits_dir is not None:
+        overrides.append(f"explainability.ambiguity.logits_dir={logits_dir}")
     with hydra.initialize_config_dir(version_base="1.3", config_dir=_CONFIG_DIR):
         cfg = hydra.compose(config_name="config", overrides=overrides)
     return cfg
+
+
+def _write_case_logits(logits_dir: Path, case_id: str, seed: int) -> None:
+    """Writes one case's precomputed logits, matching evaluate.py's save_logits shape."""
+    logits_dir.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(seed)
+    logits = rng.standard_normal((NUM_REGIONS, *VOLUME_SHAPE)).astype(np.float16)
+    np.save(logits_dir / f"{case_id}.npy", logits)
 
 
 def _save_stub_checkpoint(checkpoint_dir: Path, model: nn.Module) -> None:
@@ -332,6 +347,9 @@ def test_run_extraction_writes_summary_and_manifest_indexed_by_case_id(
     assert (manifest_df["level"] == 0).all()
     assert (manifest_df["maps_saved"]).all()
     assert (summary_on_disk["n_windows"] > 0).all()
+    # No logits_dir override was passed -- the plain-model pass ran, so
+    # provenance is recorded as "model", not a directory.
+    assert (manifest_df["logits_source"] == "model").all()
 
     for case_id in case_ids:
         assert (out_dir / f"{case_id}.npz").is_file()
@@ -371,3 +389,127 @@ def test_run_extraction_raises_for_model_with_no_forward_with_ambiguity(
         run_extraction(cfg)
 
     assert not out_dir.exists()
+
+
+# ---------------------------------------------------------------------------
+# 6. explainability.ambiguity.logits_dir -- reusing precomputed eval logits
+# ---------------------------------------------------------------------------
+
+
+def test_run_extraction_reuses_logits_dir_and_produces_same_columns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000", "case_001"]
+    for i, case_id in enumerate(case_ids):
+        _write_synthetic_case(prep_dir, case_id, seed=i)
+    write_yaml({"train": [], "val": [], "test": case_ids}, splits_path)
+
+    logits_dir = tmp_path / "precomputed_logits"
+    for i, case_id in enumerate(case_ids):
+        _write_case_logits(logits_dir, case_id, seed=100 + i)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    _save_stub_checkpoint(checkpoint_dir, _StubAmbiguityModel())
+    monkeypatch.setattr(extract_ambiguity_script, "build_model", lambda cfg: _StubAmbiguityModel())
+
+    out_dir = tmp_path / "ambiguity_out"
+    cfg = _compose_cfg(
+        tmp_path, prep_dir, splits_path, checkpoint_dir, out_dir, logits_dir=logits_dir
+    )
+
+    summary_df = run_extraction(cfg)
+
+    assert len(summary_df) == len(case_ids)
+    assert set(summary_df.columns) == _expected_columns() | {"level", "n_windows"}
+
+    manifest_df = pd.read_csv(out_dir / "ambiguity_manifest.csv", index_col="case_id")
+    assert (manifest_df["logits_source"] == str(logits_dir.resolve())).all()
+
+    for case_id in case_ids:
+        with np.load(out_dir / f"{case_id}.npz") as data:
+            assert data["logits"].shape == (NUM_REGIONS, *VOLUME_SHAPE)
+
+
+def test_run_extraction_raises_when_logits_dir_does_not_exist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    _write_synthetic_case(prep_dir, "case_000", seed=0)
+    write_yaml({"train": [], "val": [], "test": ["case_000"]}, splits_path)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    _save_stub_checkpoint(checkpoint_dir, _StubAmbiguityModel())
+    monkeypatch.setattr(extract_ambiguity_script, "build_model", lambda cfg: _StubAmbiguityModel())
+
+    out_dir = tmp_path / "ambiguity_out"
+    missing_logits_dir = tmp_path / "does_not_exist"
+    cfg = _compose_cfg(
+        tmp_path, prep_dir, splits_path, checkpoint_dir, out_dir, logits_dir=missing_logits_dir
+    )
+
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        run_extraction(cfg)
+
+    assert not out_dir.exists()
+
+
+def test_run_extraction_raises_when_logits_dir_missing_a_selected_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000", "case_001"]
+    for i, case_id in enumerate(case_ids):
+        _write_synthetic_case(prep_dir, case_id, seed=i)
+    write_yaml({"train": [], "val": [], "test": case_ids}, splits_path)
+
+    logits_dir = tmp_path / "precomputed_logits"
+    # Only write logits for the FIRST case -- case_001 is missing.
+    _write_case_logits(logits_dir, "case_000", seed=100)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    _save_stub_checkpoint(checkpoint_dir, _StubAmbiguityModel())
+    monkeypatch.setattr(extract_ambiguity_script, "build_model", lambda cfg: _StubAmbiguityModel())
+
+    out_dir = tmp_path / "ambiguity_out"
+    cfg = _compose_cfg(
+        tmp_path, prep_dir, splits_path, checkpoint_dir, out_dir, logits_dir=logits_dir
+    )
+
+    with pytest.raises(FileNotFoundError, match="1 of 2"):
+        run_extraction(cfg)
+
+    assert not out_dir.exists()
+
+
+def test_run_extraction_raises_on_logits_shape_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    _write_synthetic_case(prep_dir, "case_000", seed=0)
+    write_yaml({"train": [], "val": [], "test": ["case_000"]}, splits_path)
+
+    # Deliberately the wrong spatial shape: VOLUME_SHAPE is (16, 16, 16),
+    # this logits array is (NUM_REGIONS, 4, 4, 4) -- as if produced by a
+    # different preprocessing run or cohort.
+    logits_dir = tmp_path / "precomputed_logits"
+    logits_dir.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(0)
+    wrong_shape_logits = rng.standard_normal((NUM_REGIONS, 4, 4, 4)).astype(np.float16)
+    np.save(logits_dir / "case_000.npy", wrong_shape_logits)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    _save_stub_checkpoint(checkpoint_dir, _StubAmbiguityModel())
+    monkeypatch.setattr(extract_ambiguity_script, "build_model", lambda cfg: _StubAmbiguityModel())
+
+    out_dir = tmp_path / "ambiguity_out"
+    cfg = _compose_cfg(
+        tmp_path, prep_dir, splits_path, checkpoint_dir, out_dir, logits_dir=logits_dir
+    )
+
+    with pytest.raises(ValueError, match="case_000"):
+        run_extraction(cfg)
