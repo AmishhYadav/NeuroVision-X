@@ -713,6 +713,45 @@ sessions by resume is still ONE row — sum the GPU hours.
     off-distribution *and gives no signal that it has* is exactly what a
     per-case trust score exists for. That hypothesis remains untested.
 
+31. **GATE 1, TEST A -- THE AMBIGUITY MAP IS NOT FLAT, AND IT IS NOT A
+    RE-ENCODING OF ENTROPY.** Measured 2026-08-20 on the 10-case probe
+    extraction (`outputs/ambiguity_probe10`, `neurovision` best.pt, level 0,
+    whole-volume sliding window, logits reused from
+    `outputs/neurovision/eval_test/logits`).
+
+    **Not flat.** Mean in-predicted-foreground disagreement varies roughly 2x
+    across cases: `amb_dis_mean_fg_mean` spans **0.1405 to 0.2632** over ten
+    in-distribution cases, with per-case maxima of 0.48-0.85. The mechanical
+    worry stated in advance in `docs/research/preregistration_ambiguity.md` --
+    that the branch-supervision term (weight 0.1), which trains both probes
+    toward the same label, may have driven the branches to agree everywhere --
+    did not happen.
+
+    **The two branch probes are not equally confident, and the asymmetry is
+    systematic.** `amb_hswin_mean_fg` (0.58-0.94) is higher than
+    `amb_hcnn_mean_fg` (0.31-0.67) in **every region of every one of the ten
+    cases**. The Swin probe is markedly less certain than the CNN probe at the
+    same voxels. This is consistent with the parameter split -- the Swin branch
+    is only 2.0M parameters against the CNN branch's 18.9M -- and it means
+    disagreement is driven mostly by the transformer branch being unsure rather
+    than by the two branches confidently contradicting each other. Worth saying
+    in the paper; it changes how the signal should be described.
+
+    **Redundancy diagnostic (NOT a pre-registered endpoint).** Voxel-wise
+    Spearman between mean disagreement and mean single-pass predictive entropy,
+    sampled at 20,000 voxels per case inside a label-free 10 mm band around the
+    predicted whole tumour, on 5 probe cases: **0.080, 0.168, 0.266, 0.276,
+    0.345**. Disagreement and entropy are largely independent quantities, not
+    two views of one. That does not by itself say disagreement predicts ERROR
+    -- which is what Gate 1's endpoints measure -- but it rules out the
+    specific H0 branch ("a redundant re-encoding of predictive entropy") that
+    would have killed the pivot outright.
+
+    **No endpoint was computed here, deliberately.** The pre-registration fixes
+    the primary endpoints and forbids re-running the family on a subset. These
+    are the descriptive checks Test A is specified to be, and no threshold was
+    adjusted after seeing them.
+
 ---
 
 ## Planned
