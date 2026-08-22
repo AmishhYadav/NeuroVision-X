@@ -101,9 +101,9 @@ measurements) and 19–21 (the capacity control).
 | Prediction | State | Outcome |
 |---|---|---|
 | **P1 — mechanism fires** | **MEASURED — fires, but not as predicted** | Measured 2026-08-20 over the full 189-case test split (`scripts/gate_boundary_profile.py`; `docs/experiments.md` note 32). The gate is strongly and monotonically organised by anatomy, with opposite polarity at adjacent fusion scales — but P1 as literally written (the gate peaking at the tumour margin) is **refuted**; what passed is the weaker claim that the gate carries a real, non-decorative spatial signal. See the subsection below |
-| **P2 — ambiguity conditioning is necessary** | **NOT RUN** | `configs/experiment/ablation_content_only_gate.yaml` exists, is a one-key diff, and is parameter-matched to 0.018%. It needs ~23 GPU-h that the budget no longer has. This is the load-bearing experiment and its absence is the single largest hole in the contribution |
+| **P2 — ambiguity conditioning is necessary** | **RUNNING since 2026-08-22** | The Kaggle weekly ration reset to 30 h and `ablation_content_only_gate` was launched as a 3-session chain (kernel `neurovision-p2ablation-s1`, ~22–23 GPU-h expected, `GIT_REF=7caacfa` — the same tree `neurovision` trained on, so the arms differ by the one key and not by the training code). Parameter-matched to 0.018% (6,360 of 34,911,341), verified from the pinned tree before launch. Until it lands this row is still an assertion, not a result, and the paper must say so |
 | **P3 — the gain is where the claim says it is** | **FAILED as stated** | Boundary-stratified error is within noise against the matched baseline. The improvement is a Dice improvement concentrated in ET, not a demonstrated near-boundary effect |
-| **P4 — gate as a cheap error predictor** | Not measured | Bonus result, never load-bearing |
+| **P4 — gate as a cheap error predictor** | **MEASURED, exploratory** | `docs/experiments.md` note 34, 2026-08-20. A label-free gate read-out predicts per-case Dice after partialling out predictive entropy and two volume confounds. On PED — where the model is catastrophically worse and the free entropy baseline carries **no** usable signal (partial ρ 0.136, CI containing zero) — `gate1_fg` reaches +0.584 [0.380, 0.725], p_holm 0.013. On SSA no gate feature survives Holm. Not pre-registered, one patch per case, one external cohort out of two. Bonus result, still never load-bearing |
 | **P5 — the gain reaches the report** *(added post hoc, 2026-08-19)* | **FAILED** | Not pre-registered, and it should have been. 1 of 25 report-agreement metrics conclusive against the matched baseline, 0 of 25 for the capacity control. See the entry below and `docs/experiments.md` note 23 |
 
 ### The gate mechanism, measured (2026-08-20)
@@ -151,8 +151,13 @@ measurements) and 19–21 (the capacity control).
   interior contrast — 17 tumours have no voxel deeper than 10 mm inside their
   own surface. (iii) The gate is conditioned on the inter-branch ambiguity
   signal, so this shows the gate is organised, **not** that the ambiguity
-  conditioning is what organises it — that remains P2, still unrun as a
-  training ablation.
+  conditioning is what organises it — that remains P2, which as of 2026-08-22 is
+  finally running as a training ablation rather than being argued from design.
+  `scripts/ambiguity_intervention.py` tests an inference-time version of the same
+  question in the meantime, and an inference-time intervention on a trained gate is
+  **not** a substitute for retraining without the signal — a gate that has already
+  learned to use disagreement will degrade when it is removed at test time whether or
+  not the model could have learned an equally good gate without it.
 
 Two further results that the pre-registration did not anticipate and that any
 rewrite of this document must account for:
