@@ -855,6 +855,66 @@ sessions by resume is still ONE row — sum the GPU hours.
     semantics -- but the note was wrong and would have mispredicted the effect
     of a future dependency bump.
 
+34. **EXPLORATORY: A LABEL-FREE READ-OUT OF THE FUSION GATE PREDICTS A CASE'S
+    OWN DICE ON PED -- THE ONE COHORT WHERE THE FREE ENTROPY BASELINE
+    COLLAPSES.** Measured 2026-08-20 by `scripts/gate_failure_detection.py`
+    over all three cohorts (`outputs/gate_detection/`), from the gate maps
+    `scripts/extract_gates.py` wrote in `center_on: prediction` mode. **Not
+    pre-registered.** The pre-registered Gate 1 test
+    (`docs/research/preregistration_ambiguity.md`) is about the whole-volume
+    inter-branch DISAGREEMENT map and is a different quantity; read everything
+    here as a hypothesis for that run to confirm or refute.
+
+    Every feature is computed from the model's own output and never from the
+    label, and the crop is centred on the PREDICTION, so the label leaks into
+    neither the features nor the case selection. Partial Spearman against
+    `dice_mean`, rank-residualised on three controls: predictive entropy in the
+    predicted foreground, log predicted tumour volume, and mean predicted WT
+    probability. Holm is applied across the **whole 51-row table**, entropy
+    baseline rows included.
+
+    | cohort | n | entropy baseline | best gate feature | p_holm |
+    |---|---|---|---|---|
+    | brats_test | 187 | **-0.3479** [-0.4804, -0.1995] | `gate2_bg` **-0.4611** [-0.5734, -0.3226] | 0.0128 |
+    | ssa | 58 | **-0.6479** [-0.7865, -0.4167] | `gate1_fg` +0.3828 [0.0542, 0.5995] | 0.528 (n.s.) |
+    | ped | 95 | 0.1357 [-0.0589, 0.3641] (**CI contains zero**) | `gate1_fg` **+0.5837** [0.3800, 0.7245] | 0.0128 |
+
+    **The pattern is the interesting part, and it is not "the gate is a better
+    detector".** In-distribution, entropy already works and seven gate features
+    add signal on top of it (`gate2_mean` -0.4544, `gate2_fg` -0.3867,
+    `gate0_agree` +0.3128, `gate1_fg` +0.2727, `gate3_mean` -0.2893,
+    `gate3_bg` -0.2818, plus `gate2_bg` above). On SSA, entropy is the single
+    strongest predictor anywhere in the table and **no gate feature survives
+    Holm at all**. On PED -- the cohort where the model is measurably,
+    catastrophically worse (note 30, `dice_TC` -0.0595, p_holm 0.0002) --
+    entropy carries **no usable signal**, its CI straddling zero, while
+    `gate1_fg` reaches +0.5837 with a CI 0.38 clear of zero, and `gate2_fg`
+    reaches -0.4894 (p_holm 0.0128).
+
+    So on one of the two external cohorts, the free baseline that any
+    single-encoder model can compute stops working exactly where it is most
+    needed, and a dual-encoder-only quantity keeps working. That is the shape
+    of result the pivot requires. **It is one cohort out of two, from an
+    exploratory family, on a patch rather than a volume -- it is not the
+    result.**
+
+    **Direction, which must be stated or the sign inverts the story.**
+    `gate1_fg` is POSITIVE against Dice: more mid-scale transformer context
+    admitted inside the predicted foreground goes with a BETTER case. Read with
+    note 32 -- level 1's gate runs 0.98 deep inside the tumour down to 0.33 in
+    surrounding tissue -- the reading is that on PED cases the model segments
+    badly, the mid-scale context mechanism did not engage over the lesion. That
+    is a post-hoc mechanistic story, not a tested one.
+
+    **Caveats to carry.** (i) One 64^3 tumour-centred patch per case, so this
+    says nothing about gate behaviour in distant healthy tissue. (ii) The
+    feature set was chosen by the analyst even though Holm covers the family.
+    (iii) n = 187 / 58 / 95 after dropping cases with a non-finite feature or
+    target; at n=58 and n=95 the CIs are wide, and no claim rests on a point
+    estimate. (iv) Nothing here substitutes for the pre-registered endpoint,
+    which is scored on mean disagreement over the whole volume and had not been
+    computed when this note was written.
+
 ---
 
 ## Planned
