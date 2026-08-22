@@ -191,15 +191,24 @@ detection:
       # Disjoint shard directories of the same cohort -- load_cohort raises if
       # a case_id appears in more than one, because an overlapping re-run
       # would double-count that case in every pooled statistic.
-      ambiguity_dirs: [outputs/ambiguity_test_s0, outputs/ambiguity_test_s1]
+      # s0/s1 are the original two 2026-08-20 chunks (65 cases); w0-w3 are the
+      # 2026-08-22 parallel workers that finished the remaining 124. Shards are
+      # disjoint by construction (the worker case lists were built by
+      # partitioning the split minus what s0/s1 already held) and load_cohort
+      # raises if that is ever violated.
+      ambiguity_dirs: [outputs/ambiguity_test_s0, outputs/ambiguity_test_s1,
+                       outputs/ambiguity_test_w0, outputs/ambiguity_test_w1,
+                       outputs/ambiguity_test_w2, outputs/ambiguity_test_w3]
       eval_dir: outputs/neurovision/eval_test
       prep_dir: data/preprocessed/brats
     - name: ssa
-      ambiguity_dirs: [outputs/ambiguity_ssa_s0, outputs/ambiguity_ssa_s1]
+      ambiguity_dirs: [outputs/ambiguity_ssa_w0, outputs/ambiguity_ssa_w1,
+                       outputs/ambiguity_ssa_w2, outputs/ambiguity_ssa_w3]
       eval_dir: outputs/eval_ssa_neurovision
       prep_dir: data/preprocessed/brats_ssa
     - name: ped
-      ambiguity_dirs: [outputs/ambiguity_ped_s0, outputs/ambiguity_ped_s1]
+      ambiguity_dirs: [outputs/ambiguity_ped_w0, outputs/ambiguity_ped_w1,
+                       outputs/ambiguity_ped_w2, outputs/ambiguity_ped_w3]
       eval_dir: outputs/eval_ped_neurovision
       prep_dir: data/preprocessed/brats_ped
 

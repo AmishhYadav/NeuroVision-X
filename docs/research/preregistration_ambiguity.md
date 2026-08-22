@@ -127,6 +127,47 @@ above is stated as a bound the CI must clear — not as a point estimate to beat
 
 ---
 
+## Addendum — where each analysis parameter was fixed, and when
+
+**Written 2026-08-22, while the extraction was still running and before any
+endpoint had been computed.** `outputs/detection/` did not exist at the time of
+writing; the driver has never been run. That ordering is the point of this
+section, and `git log` is the evidence for it.
+
+The body above fixes the *endpoints, thresholds and multiplicity*. It does not
+name several operational choices that could each move a number, so this section
+records where each one was actually fixed. None of them is being chosen now.
+
+| Parameter | Value | Fixed by | When |
+|---|---|---|---|
+| Fusion level the ambiguity map is read from | **0** (finest fused, stride 2) | `configs/explainability/default.yaml`, `explainability.ambiguity.level`, and the 65 cases already extracted at that level | 2026-08-20 |
+| Case-level score | `amb_dis_mean_fg_mean` | `configs/analysis/default.yaml`, `analysis.detection.case.score_column` | 2026-08-20 (`05287fc`) |
+| Case-level control | `ent_mean_fg_mean` | same block, `control_column` | 2026-08-20 (`05287fc`) |
+| Case-level outcome | `dice_mean` | same block, `metric_column` | 2026-08-20 (`05287fc`) |
+| Voxel sampling mask | `predicted_dilated`, 10.0 mm | same block, `voxel.mask` / `voxel.dilation_mm` | 2026-08-20 (`05287fc`) |
+| Voxels sampled per case | 20,000 | same block, `voxel.max_voxels_per_case` | 2026-08-20 (`05287fc`) |
+| Bootstrap | 10,000 replicates, 95% | same block, `bootstrap` | 2026-08-20 (`05287fc`) |
+
+**The one thing edited today, stated plainly so it cannot be mistaken for
+tuning:** `analysis.detection.cohorts[*].ambiguity_dirs` gained four shard
+directories per cohort (`_w0` … `_w3`). That list is a set of **file paths**,
+not an analysis parameter — it names *which cases are available*, and the
+answer it changes is "all of them" rather than "the 65 in-distribution ones
+that happened to be extracted first". The external cohorts had **no** extracted
+ambiguity at all before today, so the pre-registered pass condition — which is
+scored only on SSA or PED — was not computable in any form. No threshold, mask,
+column, level or bootstrap setting was touched.
+
+**Masking convention, for the record.** Both the disagreement scalar and the
+entropy comparator use the **predicted-foreground** mask, and neither can see
+the ground-truth label: `summarize_case_ambiguity` takes no label argument at
+all, and the voxel sampler builds its mask from the prediction alone. This is
+deliberate and is the direct consequence of this project's own
+`union_foreground_mask` failure, where a label-derived reporting mask
+manufactured 41–57% of a reported ECE behind 984 passing tests.
+
+---
+
 ## Result
 
 *To be filled in after the test runs. Do not edit anything above this line.*
