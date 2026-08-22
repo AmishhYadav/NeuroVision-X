@@ -171,6 +171,47 @@ def test_load_cohort_concatenates_disjoint_shards(tmp_path: Path) -> None:
     assert npz_paths["CASE_C"] == shard1 / "CASE_C.npz"
 
 
+def test_load_cohort_expands_a_glob_and_skips_empty_chunk_dirs(tmp_path: Path) -> None:
+    """A glob entry picks up chunk dirs written later, and ignores debris.
+
+    The serial extraction driver writes one directory per chunk, so the
+    cohort's shard count is not known when configs/analysis/default.yaml is
+    written. An aborted launch also leaves behind an empty directory that
+    matches the same pattern; that is not a shard and must not raise.
+    """
+    (tmp_path / "amb_p00").mkdir()
+    (tmp_path / "amb_p01").mkdir()
+    _write_ambiguity_summary(tmp_path / "amb_p00", ["CASE_A"])
+    _write_ambiguity_summary(tmp_path / "amb_p01", ["CASE_B"])
+    (tmp_path / "amb_p02").mkdir()  # aborted launch: no ambiguity_summary.csv
+
+    summary, npz_paths = load_cohort({"ambiguity_dirs": [str(tmp_path / "amb_*")]})
+
+    assert sorted(summary.index) == ["CASE_A", "CASE_B"]
+    assert npz_paths["CASE_B"] == tmp_path / "amb_p01" / "CASE_B.npz"
+
+
+def test_load_cohort_still_raises_on_duplicates_found_through_a_glob(tmp_path: Path) -> None:
+    """Globbing must not weaken the disjointness guarantee."""
+    _write_ambiguity_summary(tmp_path / "amb_p00", ["CASE_A", "CASE_B"])
+    _write_ambiguity_summary(tmp_path / "amb_p01", ["CASE_B"])
+
+    with pytest.raises(ValueError, match="CASE_B"):
+        load_cohort({"ambiguity_dirs": [str(tmp_path / "amb_*")]})
+
+
+def test_load_cohort_raises_when_a_glob_matches_nothing(tmp_path: Path) -> None:
+    """Silently dropping a cohort slice would shrink a pre-registered sample."""
+    with pytest.raises(ValueError, match="matched no directory"):
+        load_cohort({"ambiguity_dirs": [str(tmp_path / "amb_*")]})
+
+
+def test_load_cohort_literal_missing_dir_still_raises_file_not_found(tmp_path: Path) -> None:
+    """A LITERAL path is never filtered -- naming a bad directory is a user error."""
+    with pytest.raises(FileNotFoundError):
+        load_cohort({"ambiguity_dirs": [str(tmp_path / "not_a_shard")]})
+
+
 # ---------------------------------------------------------------------------
 # 2. entropy_table reuses its cache
 # ---------------------------------------------------------------------------

@@ -64,6 +64,7 @@ Example usage:
 
 from __future__ import annotations
 
+import glob
 import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -123,6 +124,57 @@ _VOXEL_GROUPS: tuple[str, ...] = (*REGION_NAMES, "ANY")
 # ---------------------------------------------------------------------------
 
 
+def _expand_shard_dirs(entries: Sequence[Any]) -> list[Path]:
+    """Resolves `ambiguity_dirs` entries, expanding any that hold a glob.
+
+    A cohort is extracted in chunks -- `scripts/extract_ambiguity_serial.py`
+    writes one directory per process so that a killed run loses only the
+    chunk in flight -- so the number of shard directories is not known when
+    this config is written. A glob entry keeps the config stable across
+    however many chunks a cohort ends up needing.
+
+    Expansion deliberately keeps only directories that actually hold an
+    `ambiguity_summary.csv`: an aborted launch can leave an empty directory
+    matching the pattern, and that is not a shard, it is debris. A LITERAL
+    entry is never filtered this way -- naming a specific directory that
+    turns out to have no summary is a user error, and `load_cohort` must
+    still raise on it rather than silently dropping a cohort slice.
+
+    Args:
+        entries: Raw `ambiguity_dirs` values, each a path or a glob pattern.
+
+    Returns:
+        Shard directories in a stable order: patterns expand in sorted
+        order, and entries keep their configured order.
+
+    Raises:
+        ValueError: If `entries` is empty, or a glob pattern matches no
+            directory containing an `ambiguity_summary.csv`.
+    """
+    raw = [str(entry) for entry in entries]
+    if not raw:
+        raise ValueError("load_cohort: cohort_cfg.ambiguity_dirs is empty.")
+
+    resolved: list[Path] = []
+    for entry in raw:
+        if not any(char in entry for char in "*?["):
+            resolved.append(Path(entry))
+            continue
+        matched = sorted(
+            path
+            for path in (Path(hit) for hit in glob.glob(entry))
+            if path.is_dir() and (path / "ambiguity_summary.csv").is_file()
+        )
+        if not matched:
+            raise ValueError(
+                f"load_cohort: the pattern {entry!r} matched no directory holding an "
+                "ambiguity_summary.csv. Either the cohort has not been extracted yet "
+                "(run scripts/extract_ambiguity_serial.py), or the pattern is wrong."
+            )
+        resolved.extend(matched)
+    return resolved
+
+
 def load_cohort(cohort_cfg: Mapping[str, Any]) -> tuple[pd.DataFrame, dict[str, Path]]:
     """Concatenates a cohort's ambiguity-extraction shards into one table and one npz map.
 
@@ -131,7 +183,10 @@ def load_cohort(cohort_cfg: Mapping[str, Any]) -> tuple[pd.DataFrame, dict[str, 
             `DictConfig` or plain mapping), exposing `ambiguity_dirs` --
             one or more shard directories, each written by one
             `scripts/extract_ambiguity.py` run over a disjoint slice of the
-            same cohort.
+            same cohort. An entry containing a glob character is expanded
+            (see `_expand_shard_dirs`), which is what lets the resumable
+            serial driver keep adding chunk directories without anyone
+            having to edit this config between runs.
 
     Returns:
         `(summary, npz_paths)`. `summary` is every shard's
@@ -146,9 +201,7 @@ def load_cohort(cohort_cfg: Mapping[str, Any]) -> tuple[pd.DataFrame, dict[str, 
         FileNotFoundError: If a shard directory has no
             `ambiguity_summary.csv`.
     """
-    shard_dirs = [Path(str(d)) for d in cohort_cfg["ambiguity_dirs"]]
-    if not shard_dirs:
-        raise ValueError("load_cohort: cohort_cfg.ambiguity_dirs is empty.")
+    shard_dirs = _expand_shard_dirs(cohort_cfg["ambiguity_dirs"])
 
     case_to_shards: dict[str, list[Path]] = {}
     frames: list[pd.DataFrame] = []
