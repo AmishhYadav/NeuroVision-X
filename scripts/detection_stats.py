@@ -1007,11 +1007,21 @@ def run_detection(cfg: DictConfig) -> Path:
 
     for cohort_cfg in detection_cfg.cohorts:
         name = str(cohort_cfg.name)
-        ambiguity_dirs = [Path(str(d)) for d in cohort_cfg.ambiguity_dirs]
+        # Expanded through the SAME helper load_cohort uses, so the readiness
+        # check and the loader cannot disagree about what a glob entry means.
+        # A pattern that matches no extracted shard raises there; here that is
+        # exactly the "not ready yet" condition, so it is caught and reported
+        # as one rather than aborting the cohorts that ARE ready.
+        try:
+            ambiguity_dirs = _expand_shard_dirs(cohort_cfg.ambiguity_dirs)
+            missing_ambiguity: list[Path] = []
+        except ValueError:
+            ambiguity_dirs = []
+            missing_ambiguity = [Path(str(d)) for d in cohort_cfg.ambiguity_dirs]
         eval_dir = Path(str(cohort_cfg.eval_dir))
         prep_dir = Path(str(cohort_cfg.prep_dir))
 
-        missing_ambiguity = [d for d in ambiguity_dirs if not d.is_dir()]
+        missing_ambiguity += [d for d in ambiguity_dirs if not d.is_dir()]
         per_case_metrics_path = eval_dir / "per_case_metrics.csv"
         if missing_ambiguity or not per_case_metrics_path.is_file():
             # Cohorts finish extracting at different times -- a partial run
