@@ -356,6 +356,21 @@ def test_metric_direction_override_wins() -> None:
     assert metric_direction("dice_ET", overrides={"dice_ET": False}) is False
 
 
+@pytest.mark.parametrize(
+    ("prefix", "higher_is_better"),
+    [
+        ("lwdice", True),
+        ("lwnsd", True),
+        ("lwf1", True),
+        ("lwtp", True),
+        ("lwfp", False),
+        ("lwfn", False),
+    ],
+)
+def test_metric_direction_knows_lesionwise_family(prefix: str, higher_is_better: bool) -> None:
+    assert metric_direction(f"{prefix}_ET") is higher_is_better
+
+
 # ---------------------------------------------------------------------------
 # 11. compare_models
 # ---------------------------------------------------------------------------

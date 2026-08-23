@@ -108,3 +108,69 @@ risk_coverage:
   score_column: dice_mean
   score_higher_is_better: true
   coverage_points: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
+
+# Conformal risk control (scripts/conformal.py). Pre-registered in
+# docs/research/preregistration_conformal.md -- read that file before
+# changing anything below it changes the meaning of, it is the contract this
+# driver implements.
+conformal:
+  # eval_dir the conformal threshold is FIT on. MUST be a val-split eval_dir
+  # -- null on purpose, same reasoning as calibration.fit_dir/apply_dir
+  # above: there is no sane default that would not risk fitting and applying
+  # on the same split.
+  calib_dir: null
+  # Preprocessed root holding calib_dir's ground-truth labels.
+  calib_prep_dir: ${data.preprocessing.out_dir}
+
+  # eval_dir(s) the frozen threshold is REPORTED on. MUST NOT include
+  # calib_dir -- scripts/conformal.py raises (resolve_dirs) if any entry
+  # here resolves to the same path as calib_dir. Fitting the threshold on a
+  # split and then reporting its realised risk on THAT SAME split fits and
+  # reports on the same noise, which invalidates the risk-control guarantee.
+  apply_dirs: []
+  # Preprocessed root(s) for each entry of apply_dirs, in the SAME ORDER --
+  # a length mismatch raises. Left empty (the common case) to default every
+  # apply_dir to calib_prep_dir. Must be set explicitly for an EXTERNAL
+  # cohort, whose labels live under a different preprocessed tree (e.g.
+  # data/preprocessed/brats_ssa, data/preprocessed/brats_ped) than the
+  # in-domain val/test split the threshold was fit on.
+  apply_prep_dirs: []
+
+  out_dir: ${output_dir}/conformal
+
+  # alpha, the target bound on the mask's expected miss rate. FIXED BY THE
+  # PRE-REGISTRATION -- changing this list changes what result is being
+  # reported and invalidates the pre-registered comparison.
+  alphas: [0.05, 0.10, 0.20]
+
+  # Regions to calibrate and report. FIXED BY THE PRE-REGISTRATION, same
+  # reasoning as alphas above. ET is DELIBERATELY EXCLUDED from the default:
+  # 2.6% of BraTS cases have no enhancing tumour at all, so the miss-rate
+  # loss (a fraction of ground truth) is undefined (0/0) for them -- ET is
+  # registered as a SECONDARY endpoint only, not part of the primary result.
+  regions: [WT, TC]
+
+  # Guard 3 (replay self-consistency): before trusting any eval_dir's saved
+  # logits, verify they reproduce that eval_dir's own committed
+  # per_case_metrics.csv at the project's default threshold and
+  # post-processing. true by default; disable only for a synthetic/ad-hoc
+  # eval_dir with no committed metrics table to compare against.
+  check_consistency: true
+  # Mean absolute Dice delta (ET/TC/WT) at or above which the consistency
+  # check raises rather than merely logging. Real replays on this project's
+  # logits have measured deltas of 1e-17 -- this default is generous enough
+  # to absorb float32/float64 summation-order noise while still catching a
+  # genuine configuration mismatch.
+  consistency_tol: 1.0e-6
+
+  # Worked example -- fit on the val split, report on the test split:
+  #   python scripts/conformal.py \
+  #     conformal.calib_dir=outputs/neurovision/eval_val \
+  #     'conformal.apply_dirs=[outputs/neurovision/eval_test]'
+  #
+  # With an external cohort added alongside test (its own preprocessed root
+  # named in the same order as apply_dirs):
+  #   python scripts/conformal.py \
+  #     conformal.calib_dir=outputs/neurovision/eval_val \
+  #     'conformal.apply_dirs=[outputs/neurovision/eval_test,outputs/neurovision/eval_ssa]' \
+  #     'conformal.apply_prep_dirs=[${data.preprocessing.out_dir},data/preprocessed/brats_ssa]'

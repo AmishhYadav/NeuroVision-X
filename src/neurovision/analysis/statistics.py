@@ -119,6 +119,22 @@ KNOWN_METRIC_DIRECTIONS: dict[str, bool] = {
     "recall": True,
     "abserr": False,
     "relerr": False,
+    # Lesion-wise metrics (neurovision.metrics.lesionwise) -- the official
+    # BraTS metric family since 2023. Each connected-component lesion is
+    # scored as its own detection problem instead of pooling every voxel into
+    # one big overlap ratio (see that module's docstring for why). lwdice and
+    # lwnsd fold tp/fp/fn into a detection-penalised Dice/NSD; lwf1 is the
+    # tp/fp/fn detection F1; lwtp is a count of correctly matched lesions, so
+    # more is better, same direction as the other three. lwfp and lwfn are
+    # COUNTS OF SPURIOUS AND MISSED LESIONS PER CASE -- unlike every other
+    # entry in this table they are error counts, not scores, so they invert:
+    # fewer false-positive or false-negative lesions is better.
+    "lwdice": True,
+    "lwnsd": True,
+    "lwf1": True,
+    "lwtp": True,
+    "lwfp": False,
+    "lwfn": False,
 }
 
 
