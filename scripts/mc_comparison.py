@@ -108,17 +108,18 @@ def score_cohort(cohort_cfg: Any, voxel_cfg: Any) -> pd.DataFrame:
         if mc_map is None:
             n_missing_mc += 1
             continue
-        if mc_map.size != np.prod(
-            [int(summary.loc[case_id, c]) for c in ("shape_d", "shape_h", "shape_w")]
-        ):
-            # The MC pass and the ambiguity pass must have run on the same
-            # geometry. A shape disagreement means two different preprocessing
-            # runs, and sampling one at the other's indices would silently
-            # scramble the correspondence.
+        # The MC pass and the ambiguity pass must have run on the same geometry.
+        # A shape disagreement means two different preprocessing runs, and
+        # sampling one at the other's flat indices would silently scramble the
+        # correspondence -- every number downstream would still look sane. The
+        # label is the shared reference both passes were built against, and
+        # mmap_mode reads only its header.
+        label_shape = np.load(prep_dir / case_id / "label.npy", mmap_mode="r").shape
+        if mc_map.shape != tuple(label_shape):
             raise ValueError(
-                f"mc_comparison: cohort {cohort_cfg.name!r} case {case_id!r}: MC map has "
-                f"{mc_map.size} voxels but the ambiguity map's manifest says "
-                f"{[int(summary.loc[case_id, c]) for c in ('shape_d', 'shape_h', 'shape_w')]}."
+                f"mc_comparison: cohort {cohort_cfg.name!r} case {case_id!r}: MC map is "
+                f"{mc_map.shape} but the preprocessed label is {tuple(label_shape)}. The MC "
+                "run and the ambiguity run used different preprocessing."
             )
 
         positive = np.asarray(any_rows["positive"], dtype=bool)
