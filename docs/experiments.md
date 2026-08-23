@@ -1340,6 +1340,99 @@ sessions by resume is still ONE row — sum the GPU hours.
     eight directories. Rebuild with `scripts/replay_logits.py
     analysis.replay.lesionwise.enabled=true` from `.venv-analysis`.
 
+
+42. **CONFORMAL RISK CONTROL: THE GUARANTEE HOLDS IN DISTRIBUTION AND BREAKS
+    UNDER SHIFT BY AN AMOUNT THAT TRACKS HOW FAR THE SHIFT IS. Both models,
+    same pattern, so it is a property of the setting rather than of an
+    architecture.** Run 2026-08-24, Phase B, pre-registered in
+    `docs/research/preregistration_conformal.md` (result section filled there;
+    nothing above its Result line was edited). Zero GPU: calibrated on val
+    (n=187), applied **frozen** to test (n=189), BraTS-Africa (n=60) and
+    BraTS-PEDs (n=99), for `neurovision` and again for `baseline_unet3d`.
+
+    **Guards first, per the pre-registration.** Replay self-consistency against
+    every committed `per_case_metrics.csv`: **1e-17** mean absolute Dice.
+    Degenerate-endpoint falsifier: α=1.0 selects the largest grid threshold for
+    both regions. Monotonicity held on every fitted risk curve. No α was
+    infeasible.
+
+    **B1 -- in distribution the bound holds, 6/6, for both models.** Realised
+    risk sits at 0.64x-0.96x of nominal α on the test split. The theorem does
+    what it says, and it does it for a model whose calibration claim is dead --
+    which is the point: the guarantee is a property of the *procedure*.
+
+    **B2 -- under shift, 7 of 12 cells violated for EACH model, none holds.**
+    Ratio of realised risk to nominal α:
+
+    | cohort | region | `neurovision` | `baseline_unet3d` |
+    |---|---|---|---|
+    | SSA (n=60) | WT | 1.07-1.10x (inconclusive) | 0.85-0.95x (inconclusive) |
+    | SSA | TC | 1.42-1.71x (**violated** at α=0.10, 0.20) | 1.48-1.81x (**violated** at all three) |
+    | PED (n=99) | WT | 1.39-1.94x (**violated** at α=0.05, 0.10) | 1.18-1.38x (**violated** at α=0.05) |
+    | PED | TC | **3.50x-11.47x** (violated at all three) | **3.44x-10.66x** (violated at all three) |
+
+    **The structure of the failure is the finding.** Excess risk is ordered by
+    how far the shift is -- BraTS-Africa is a scanner and population shift
+    within the same disease and barely dents WT coverage; BraTS-PEDs is a
+    different disease entity and breaks WT and destroys TC -- and ordered by
+    region difficulty, matching exactly where the segmentation itself fails
+    (note 41: PED TC lesion-wise Dice 0.234, both models failing identically).
+    A conformal guarantee does not survive a disease-entity shift, and it fails
+    *gradedly* rather than collapsing uniformly. That graded excess is the
+    quantity the Phase E refusal gate needs, and it says the gate must key on
+    **how far out of distribution the input is**, not on whether the mask looks
+    uncertain.
+
+    **Replication across models is the robustness check that matters here, and
+    it passed.** Both models violate 7 of 12, in substantially the same cells,
+    with PED TC at ~10.7x-11.5x for both. Nothing about this is architectural.
+
+    **A mildly counterintuitive detail worth keeping.** The *more accurate*
+    model does not have better coverage under shift. On SSA WT the baseline is
+    comfortably under nominal (0.85-0.95x) while `neurovision` sits slightly
+    over (1.07-1.10x); on PED WT at α=0.10 the baseline is inconclusive at
+    1.18x while `neurovision` is violated at 1.39x. Better Dice does not buy
+    better conformal coverage, which is exactly what the theory predicts and
+    is easy to assume otherwise.
+
+    **Mandatory secondary -- what the guarantee costs in mask volume.**
+    Registered as mandatory precisely so it could not be quietly dropped. It
+    came back surprising, in the useful direction. In distribution at α=0.05
+    the conservative mask grows only **1.10x (WT) / 1.18x (TC)** -- the
+    guarantee is cheap. At α=0.10 and 0.20 the inflation is **below 1.0**
+    (0.88x-0.96x): the bound is satisfied by a mask *smaller* than the default
+    0.5-threshold prediction. That is not a bug. It says the deployed operating
+    point is already more conservative than a 10%-miss-rate guarantee requires,
+    so at those α the conformal layer licenses being *less* cautious. Both
+    directions are legitimate outputs and both must be reported; quoting only
+    the α=0.05 row would misrepresent the method. PED TC at α=0.05 is the one
+    heavy tail: 2.29x mean against a 1.27x median, with 10 cases skipped for an
+    empty reference mask.
+
+    **Caveat that must travel with every α=0.20 row.** λ̂ = 0.95 is the largest
+    value in the threshold grid, so those are **boundary solutions**: the true
+    λ̂ is "≥ 0.95", censored by the grid rather than measured at it.
+
+    **The registered threat did not materialise, and that was a real test.**
+    The pre-registration predicted in advance that because every checkpoint in
+    this project was selected on val by `val/dice_mean`, λ̂ fitted on val might
+    be too permissive and test risk might exceed α -- *upward*, if at all. It
+    did not exceed α anywhere in distribution. The
+    exchangeable-halves-of-test arm was registered specifically to diagnose
+    such a violation; with no violation to diagnose it **was not run**, and
+    that is recorded rather than dropped.
+
+    **What this does not license.** No calibration claim and no risk-coverage
+    claim -- both are dead, and conformal risk control does not revive them,
+    because the bound holds for an arbitrarily bad model. Also, per
+    `configs/data/splits_ssa.yaml`'s standing rule that nothing may ever be
+    fitted on the external cohorts, the Mondrian per-cohort recalibration arm
+    remains a **counterfactual**, not an external-validation number.
+
+    Artifacts: `outputs/conformal/{neurovision,baseline_unet3d}/` --
+    `fit.json`, `realised_risk.csv`, `inflation.csv`, per-split `curves.npz`
+    (the sufficient statistic; recalibration at any α is arithmetic on it).
+
 ---
 
 ## Planned

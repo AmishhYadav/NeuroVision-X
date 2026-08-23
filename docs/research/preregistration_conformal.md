@@ -206,6 +206,107 @@ refuse to write results unless all four pass:
 
 ## Result
 
-*Empty by construction. Nothing above this line may be edited once a number exists — a prediction
-edited after the fact is not a prediction. `docs/research/master_plan.md` §4.6 is the checklist for
-filling this in.*
+**Resolved 2026-08-24 on `neurovision`.** Nothing above this line was edited. Calibrated on the val
+split (n=187), applied frozen to test (n=189), BraTS-Africa (n=60) and BraTS-PEDs (n=99). Zero GPU.
+Provenance checked first: replay self-consistency against every committed `per_case_metrics.csv`
+came back at **1e-17** mean absolute Dice, and the degenerate-endpoint falsifier passed (α=1.0
+selects the largest grid threshold for both regions). Monotonicity held on every fitted curve.
+
+### Fitted thresholds (val, n=187)
+
+| region | α | λ̂ | calibrated risk |
+|---|---|---|---|
+| WT | 0.05 | 0.100 | 0.0446 |
+| WT | 0.10 | 0.725 | 0.0929 |
+| WT | 0.20 | 0.950 | 0.1512 |
+| TC | 0.05 | 0.0158 | 0.0433 |
+| TC | 0.10 | 0.600 | 0.0941 |
+| TC | 0.20 | 0.950 | 0.1465 |
+
+No α was infeasible. **Caveat that must travel with the α=0.20 rows: λ̂ = 0.95 is the largest value
+in the grid, so those are boundary solutions — the true λ̂ is "≥ 0.95" and is censored by the grid,
+not measured at it.**
+
+### B1 — the guarantee in distribution: HOLDS, 6/6
+
+| region | α | realised | 95% CI | verdict |
+|---|---|---|---|---|
+| WT | 0.05 | 0.0364 | 0.0287–0.0447 | **holds** (CI upper < α) |
+| WT | 0.10 | 0.0829 | 0.0716–0.0947 | **holds** |
+| WT | 0.20 | 0.1409 | 0.1283–0.1547 | **holds** |
+| TC | 0.05 | 0.0444 | 0.0288–0.0634 | holds at the point estimate; CI straddles α |
+| TC | 0.10 | 0.0909 | 0.0719–0.1125 | holds at the point estimate; CI straddles α |
+| TC | 0.20 | 0.1478 | 0.1251–0.1722 | **holds** |
+
+Every realised risk is at or below nominal (0.70×–0.91× of α). The theorem does what it says.
+
+**The registered threat did not materialise.** This document predicted, in advance, that because
+every checkpoint was selected on val, λ̂ might be too permissive and test risk might exceed α —
+*upward*, if at all. It did not exceed α anywhere. The exchangeable-halves-of-test arm was registered
+specifically to diagnose such a violation; since there is no in-distribution violation to diagnose,
+**that arm was not run**, and this is recorded rather than quietly dropped.
+
+### B2 — under distribution shift: COVERAGE DEGRADES, and the degradation is graded
+
+Same λ̂, frozen, nothing fitted on either cohort.
+
+| cohort | region | α | realised | ratio to α | verdict |
+|---|---|---|---|---|---|
+| SSA (n=60) | WT | 0.05 | 0.0550 | 1.10× | inconclusive |
+| SSA | WT | 0.10 | 0.1069 | 1.07× | inconclusive |
+| SSA | WT | 0.20 | 0.1686 | 0.84× | inconclusive |
+| SSA | TC | 0.05 | 0.0724 | 1.45× | inconclusive |
+| SSA | TC | 0.10 | 0.1711 | 1.71× | **VIOLATED** (CI 0.129–0.223) |
+| SSA | TC | 0.20 | 0.2837 | 1.42× | **VIOLATED** (CI 0.230–0.343) |
+| PED (n=99) | WT | 0.05 | 0.0971 | 1.94× | **VIOLATED** (CI 0.068–0.132) |
+| PED | WT | 0.10 | 0.1390 | 1.39× | **VIOLATED** (CI 0.108–0.176) |
+| PED | WT | 0.20 | 0.1824 | 0.91× | inconclusive |
+| PED | TC | 0.05 | **0.5734** | **11.5×** | **VIOLATED** (CI 0.507–0.639) |
+| PED | TC | 0.10 | **0.6513** | **6.5×** | **VIOLATED** (CI 0.589–0.711) |
+| PED | TC | 0.20 | **0.7002** | **3.5×** | **VIOLATED** (CI 0.643–0.756) |
+
+**Seven of twelve violated, five inconclusive, none holds.** This is the outcome this pre-registration
+called "the expected result", and the number it asked for is now measured.
+
+The structure of the failure is the finding, not the fact of it. The excess risk is **ordered by how
+far the shift is**: BraTS-Africa is a scanner and population shift within the same disease and its WT
+coverage is essentially at nominal (1.07–1.10×), while BraTS-PEDs is a different disease entity and
+breaks WT (1.39–1.94×) and destroys TC (3.5–11.5×). It is also ordered by **region difficulty** —
+WT degrades gently, TC catastrophically — which matches where the underlying segmentation itself
+fails (note 41: PED TC lesion-wise Dice 0.234, with both models failing identically).
+
+A conformal guarantee therefore does **not** transfer across a disease-entity shift, and the amount
+by which it fails is a usable signal rather than a uniform collapse. That is precisely the quantity
+the Phase E refusal gate needs, and it is why the gate must key on *how far out of distribution the
+input is*, not merely on whether the mask looks uncertain.
+
+### Mandatory secondary — what the guarantee costs in mask volume
+
+Registered as mandatory so it could not be dropped if it looked bad. It does not look bad; it looks
+**surprising**, and in the useful direction.
+
+| cohort | region | α | mean inflation vs the τ=0.5 mask |
+|---|---|---|---|
+| test | WT | 0.05 | 1.10× |
+| test | TC | 0.05 | 1.18× |
+| test | WT | 0.10 | **0.96×** |
+| test | WT | 0.20 | **0.88×** |
+| test | TC | 0.20 | **0.90×** |
+| PED | TC | 0.05 | 2.29× mean / 1.27× median (10 cases skipped, empty reference mask) |
+
+At α=0.05 the conservative mask grows by only ~10–18% in distribution — the guarantee is cheap. At
+α=0.10 and 0.20 the inflation is **below 1.0**: the bound is met by a mask *smaller* than the default
+0.5-threshold prediction. That is not a bug. It says the deployed operating point is already more
+conservative than a 10%-miss-rate guarantee requires, so at those α the conformal layer licenses
+being *less* cautious rather than more. Both directions are legitimate outputs of the procedure and
+both must be reported; quoting only the α=0.05 row would misrepresent it.
+
+### What this does not license
+
+No claim that the model is better calibrated, and no risk–coverage claim: both are dead and conformal
+risk control does not revive them, because the guarantee holds for an arbitrarily bad model. The
+`baseline_unet3d` arm is a robustness check on whether the finding is model-specific, not an accuracy
+comparison.
+
+Full numbers, all caveats: `docs/experiments.md` note 42. Artifacts: `outputs/conformal/neurovision/`
+(`fit.json`, `realised_risk.csv`, `inflation.csv`, per-split `curves.npz`).
