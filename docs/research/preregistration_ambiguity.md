@@ -170,4 +170,89 @@ manufactured 41–57% of a reported ECE behind 984 passing tests.
 
 ## Result
 
-*To be filled in after the test runs. Do not edit anything above this line.*
+**Run 2026-08-23. Verdict: PARTIAL.** Computed by `scripts/detection_stats.py`
+over all 348 cases (BraTS test 189, SSA 60, PED 99), from ambiguity maps
+extracted by `scripts/extract_ambiguity_serial.py` and the already-saved
+`logits/` of the `neurovision` evaluation runs. Artifacts:
+`outputs/detection/detection_{case_level,voxel_level,family}.csv` and
+`detection_verdict.json`. The family was run **once**, on the complete data,
+after every cohort finished extracting — per pre-committed rule 3.
+
+### Primary endpoint A — case level (partial Spearman, controlling for entropy)
+
+| Cohort | n | ρ(disagreement) | ρ(entropy) | **ρ_partial** | 95% CI | p_holm |
+|---|---|---|---|---|---|---|
+| BraTS test | 189 | −0.472 | −0.659 | **−0.393** | (−0.512, −0.265) | 0.0006 |
+| SSA | 59 | +0.006 | −0.782 | **−0.173** | (−0.432, +0.090) | 0.4132 |
+| PED | 98 | +0.015 | −0.554 | **+0.000** | (−0.223, +0.211) | 0.9676 |
+
+### Primary endpoint B — voxel level (residualised AUROC for per-voxel error)
+
+| Cohort | region | AUROC(disagreement) | AUROC(entropy) | **residualised** | 95% CI | p_holm |
+|---|---|---|---|---|---|---|
+| BraTS test | ANY | 0.694 | 0.888 | **0.578** | (0.560, 0.596) | 0.0025 |
+| SSA | ANY | 0.726 | 0.875 | **0.569** | (0.545, 0.590) | 0.0025 |
+| PED | ANY | 0.777 | 0.785 | **0.677** | (0.655, 0.698) | 0.0025 |
+| BraTS test | ET | 0.867 | 0.942 | **0.733** | (0.708, 0.758) | — |
+| SSA | ET | 0.818 | 0.914 | **0.689** | (0.666, 0.714) | — |
+| PED | ET | 0.870 | 0.889 | **0.784** | (0.754, 0.817) | — |
+
+Per-region rows are secondary; `ANY` is the pre-registered endpoint. Holm was
+applied to the 6-test family (2 endpoints × 3 cohorts), **4 rejected**.
+
+### Why this is PARTIAL and not PASS
+
+PASS required, **on one external cohort**, |ρ_partial| ≥ 0.20 with a CI
+excluding zero **and** residualised voxel AUROC ≥ 0.60. No external cohort
+satisfies both. PED clears the voxel threshold decisively (0.677, CI lower
+bound 0.655) but its case-level partial correlation is **exactly nil**
+(+0.0001). SSA clears neither threshold, though its voxel CI does exclude 0.5.
+
+It is not FAIL either: the map is not flat (Test A, note 31), and on **both**
+external cohorts the residualised voxel AUROC's CI excludes 0.5 at
+p_holm = 0.0025.
+
+### What the numbers actually say
+
+**The signal is spatial, not case-ranking.** Disagreement tells you *where* a
+prediction is wrong, beyond what entropy already says, and it keeps doing so
+out of distribution. It does **not** tell you *which case* will be bad — not
+externally. The case-level columns show why, and they are worth reading
+directly: on SSA and PED the raw correlation between disagreement and Dice is
++0.006 and +0.015, i.e. nothing, while **entropy alone is already a strong
+case-quality predictor there** (ρ = −0.782 and −0.554). There is no headroom
+for disagreement to add case-level information on top of that, and it adds
+none.
+
+**ET is where the signal lives, on every cohort:** residualised AUROC 0.733
+(test), 0.689 (SSA), 0.784 (PED) — the highest of any region everywhere, and on
+PED entropy's own ET AUROC (0.889) is barely above disagreement's (0.870), so
+most of what disagreement knows there is *not* redundant with entropy. This
+matters for the project specifically: ET is the region carrying the accuracy
+gain, and the region whose gain failed to transfer to SSA.
+
+### Two cases dropped at case level, and the asymmetry is deliberate
+
+`BraTS-SSA-00215-000` and `BraTS-PED-00051-000` have an **empty predicted WT
+mask**, so the predicted-foreground-masked scalar is NaN and they leave the
+case-level correlation (n = 59 and 98, not 60 and 99). At voxel level the same
+two cases fall back to whole-volume sampling rather than being dropped, so
+voxel `n_cases` is the full 60 and 99. Both behaviours are correct for their
+endpoint, but they are not the same denominator and must not be reported as
+one.
+
+### Consequence, per the decision rule
+
+Proceed to Phase 2 with the claim **reframed as the rule requires** — equal
+detection at one forward pass instead of MC-dropout's ten, plus spatial error
+localisation that survives distribution shift — and **never as superiority over
+entropy at the case level**, which this data directly refutes on both external
+cohorts.
+
+One consequence for Phase 2's design, which the plan wrote before these
+numbers existed: Gate 2 is specified as *referral on disagreement beats entropy
+and MC-dropout MI on SSA/PED*. Referral is a **case-level** operation, and
+case-level is precisely the endpoint that came back null externally. Running
+Gate 2 as written is therefore predicted to fail, and it should be respecified
+around the endpoint that did survive — voxel- and region-level error
+localisation, ET first — before it is run, not after.

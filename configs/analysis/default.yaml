@@ -210,7 +210,14 @@ detection:
       eval_dir: outputs/eval_ped_neurovision
       prep_dir: data/preprocessed/brats_ped
 
-  out_dir: ${output_dir}/detection
+  # NOT ${output_dir}/detection. output_dir interpolates experiment_name, whose
+  # default is baseline_unet3d, so the Gate 1 tables -- which are computed from
+  # the `neurovision` run's eval directories and say nothing about the baseline
+  # -- landed in outputs/baseline_unet3d/detection/ on the first real run. This
+  # project has already been bitten by a directory name that misdescribes whose
+  # numbers are inside it (see CLAUDE.md, "three eval directories differ only by
+  # suffix and two of them hold a U-Net"). The path is fixed here instead.
+  out_dir: outputs/detection
 
   case:
     # Primary endpoint A. score/control are per-case scalars already written
