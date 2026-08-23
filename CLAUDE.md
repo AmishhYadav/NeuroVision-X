@@ -221,8 +221,14 @@ pre-registered in `docs/research/preregistration_strong_baseline.md`.
 
 **Data on disk.** `data/preprocessed/{brats,brats_ssa,brats_ped}` — `brats` is backed only by the live
 Kaggle dataset `amishyadav123/neurovision-brats-prep`, so **do not delete it**. Raw data was deleted
-2026-08-19 with SHA-256 manifests committed to `docs/data_manifests/`. Two checkpoints survive
-(`neurovision`, `baseline_unet3d`); two were permanently lost to `/tmp` and `~/Downloads`.
+2026-08-19 with SHA-256 manifests committed to `docs/data_manifests/`. **Three** checkpoints survive
+— `neurovision`, `baseline_unet3d`, and `ablation_content_only_gate`
+(`outputs/ablation_content_only_gate/checkpoints/checkpoints/best.pt`, epoch 79, val dice_mean
+0.8933, verified loadable 2026-08-23). Only `capacity_control` is permanently lost, and it has
+neither predictions, logits nor checkpoint — so **no capacity-control number can ever be re-scored
+under a new metric.** Saved artifacts are uneven and this bites any re-scoring plan: `outputs/
+eval_test` has `predictions/` but no `logits/`; every other eval directory has `logits/` but no
+`predictions/`.
 
 ---
 

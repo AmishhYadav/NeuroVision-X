@@ -186,8 +186,8 @@ queue, because the next session trusts it.
 
 | # | Item | State | Done when |
 |---|---|---|---|
-| A1 | Dependency files: `requirements-analysis.txt`, `requirements-clinical.txt` | `[ ]` | Both files exist, pinned; root `requirements.txt` untouched; `docs/reproducibility.md` says which env is for what |
-| A2 | `src/neurovision/metrics/lesionwise.py` + additive wiring into `scripts/evaluate.py` | `[ ]` | Lesion-wise columns appear in `per_case_metrics.csv` when enabled, and an additivity test proves no existing column moved |
+| A1 | Dependency files: `requirements-analysis.txt`, `requirements-clinical.txt` | `[x]` | Both files exist, pinned; root `requirements.txt` untouched; `docs/reproducibility.md` says which env is for what |
+| A2 | `src/neurovision/metrics/lesionwise.py` + additive wiring into `scripts/evaluate.py` | `[~]` | Lesion-wise columns appear in `per_case_metrics.csv` when enabled, and an additivity test proves no existing column moved |
 | A3 | Re-score every existing run lesion-wise via `scripts/replay_logits.py` | `[ ]` | A lesion-wise row exists for `neurovision`, `baseline_unet3d`, `capacity_control`, `ablation_content_only_gate`, on test and val |
 | A4 | Wire flip TTA into `scripts/evaluate.py` | `[ ]` | `cfg.inference.tta` exists; measured on val then test; result recorded as its own note |
 | A5 | Score the confidence head | `[ ]` | A number exists, and `docs/experiments.md` says whether the head learned anything |
