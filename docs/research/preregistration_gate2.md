@@ -158,4 +158,74 @@ would be claiming a measurement that was never taken.
 
 ## Result
 
-*To be filled in after the family runs. Do not edit anything above this line.*
+**Run 2026-08-23. Verdict: PARTIAL, and in substance mostly negative.** Combiner
+fitted once on the 187-case val split (3,740,000 voxels, both arms converged)
+and applied frozen. Artifacts: `outputs/gate2/gate2_{per_case,family}.csv` and
+`gate2_verdict.json`. Family run once, on complete data.
+
+Fitted coefficients — entropy-only `[-8.446, 7.786]`, entropy+disagreement
+`[-8.700, 7.351, 0.952]`. The disagreement feature does get a positive weight,
+about 13% of entropy's, so the combiner is genuinely using it.
+
+### The family
+
+| Cohort | endpoint | entropy alone | + disagreement | Δ | 95% CI | p_holm |
+|---|---|---|---|---|---|---|
+| BraTS test | AUROC | 0.9162 | 0.9150 | **−0.0013** | (−0.0023, −0.0003) | 0.042 |
+| BraTS test | recall@5% | 0.5113 | 0.4720 | **−0.0394** | (−0.0453, −0.0337) | 0.0006 |
+| SSA | AUROC | 0.8874 | 0.8888 | +0.0013 | (−0.0007, +0.0035) | 0.208 |
+| SSA | recall@5% | 0.3432 | 0.3304 | **−0.0128** | (−0.0201, −0.0062) | 0.0006 |
+| PED | AUROC | 0.8307 | 0.8428 | **+0.0121** | (+0.0102, +0.0139) | 0.0006 |
+| PED | recall@5% | 0.1826 | 0.1812 | −0.0014 | (−0.0033, +0.0003) | 0.208 |
+
+4 of 6 rejected under Holm — but **two of the four rejections are losses.**
+
+### Why this is PARTIAL and not PASS
+
+PASS needed both conjuncts on one external cohort. PED clears the AUROC
+threshold cleanly (+0.0121 against a pre-registered 0.01, CI excluding zero)
+and shows **nothing** on the operational endpoint. SSA shows nothing on AUROC
+and is significantly **worse** on recall. `passed_cohorts` is empty.
+
+### The plain reading, which is blunter than the label
+
+Adding disagreement to entropy does not improve error localisation. It
+**degrades** it in distribution on both endpoints, degrades the operational
+endpoint on SSA, and helps exactly one cohort on exactly one endpoint. The
+operational endpoint — how much of a case's error you catch by flagging 5% of
+predicted foreground — gets **worse or unchanged everywhere**: entropy alone
+catches 51.1% / 34.3% / 18.3% of error on test / SSA / PED, and adding
+disagreement never beats that.
+
+### This does NOT contradict Gate 1, and the gap between them is the finding
+
+Gate 1 asked whether disagreement carries error information entropy lacks, by
+residualising, and the answer was yes (voxel AUROC 0.578 / 0.569 / 0.677, all
+CIs excluding 0.5). Gate 2 asks whether that information makes a **fitted
+operating detector** better, and the answer is no. Both are true at once:
+information can be present in a residual and still fail to improve a detector
+that already has a very strong feature — entropy's own per-case AUROC here is
+0.916 in distribution. **Incremental information is not incremental utility**,
+and this project now has a measurement of both.
+
+### A limitation of this gate's own design, stated rather than hidden
+
+The combiner is fitted by **pooled logistic likelihood** while the endpoints are
+**per-case AUROC and per-case recall at a budget**. Those objectives are not the
+same, and a likelihood-optimal weighting can be worse on a per-case rank metric
+— which is the leading explanation for the in-distribution losses. That
+mismatch was baked into the pre-registration and cannot now be swapped for a
+rank-optimised combiner without the change being post-hoc: fitting directly for
+AUROC after seeing these numbers is exactly the move this pre-registration
+exists to prevent. It is recorded here as a limitation, and as the one
+defensible follow-up if the uncertainty line is ever resumed — pre-registered
+in advance, on fresh data.
+
+### Consequence, per the decision rule
+
+Partial: report as a small effect with the magnitude stated, and make **no
+deployment claim**. Concretely, for the paper: the disagreement map is a
+*mechanism* result (Gate 1, note 31, note 32) and a *localisation* result at
+residual level, **not** a better uncertainty estimator. Any sentence implying
+users should flag voxels by entropy+disagreement rather than entropy is
+contradicted by this table.

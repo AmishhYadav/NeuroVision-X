@@ -413,8 +413,12 @@ def run_gate2(cfg: DictConfig) -> Path:
     # Holm across the whole pre-registered family, applied ONCE. Fixed at 6
     # tests (2 endpoints x 3 cohorts) before any p-value was seen; if a cohort
     # is missing the family is smaller and that must be stated, not hidden.
-    family["p_holm"] = holm_bonferroni(family["p_boot"].to_numpy())
-    family["reject"] = family["p_holm"] < float(gate_cfg.alpha)
+    # holm_bonferroni returns (adjusted_pvalues, reject) -- both are used, so
+    # the rejection flag comes from the canonical implementation rather than
+    # from a re-comparison here that could drift from its alpha convention.
+    p_holm, reject = holm_bonferroni(family["p_boot"].to_numpy(), alpha=float(gate_cfg.alpha))
+    family["p_holm"] = p_holm
+    family["reject"] = reject
 
     per_case = pd.concat(per_case_frames)
     per_case.to_csv(out_dir / "gate2_per_case.csv")
