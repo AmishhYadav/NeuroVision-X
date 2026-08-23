@@ -24,6 +24,8 @@ any reviewer who reads the repository.
 | C5 | That information does **not** make a better error detector | Entropy + disagreement vs entropy alone: worse in distribution on both endpoints, better only on PED AUROC | **Strong negative.** Note 37 |
 | C6 | The interpretable reporting layer is stable with respect to segmentation quality | 189 paired cases, 25 report metrics, 1 conclusive difference; 16 of 25 identical medians across three models | **Strong negative**, and useful for deployment framing |
 | C7 | The accuracy gain does not transfer out of distribution | SSA/PED: ET gain gone; TC significantly worse under shift | **Strong negative.** Pre-registered external validation |
+| C8 | Single-pass predictive entropy is **equivalent to 10-sample MC-dropout** for voxel-level error localisation | Paired TOST @ 0.03 AUROC: SSA +0.0214 (p 0.024), PED −0.0129 (p 3.7e-05), both equivalent | **Moderate-strong.** Margin fixed in advance; a finding about the *baseline*, not about our model |
+| C9 | Inter-branch disagreement is **worse** than both entropy and MC-dropout as a localiser | SSA −0.157, PED −0.056 against MC, intervals entirely outside the margin; beats MC in 30 of 159 cases | **Strong negative.** Note 39 |
 
 ## 2. Claims the evidence does NOT support — do not write these
 
@@ -35,7 +37,7 @@ any reviewer who reads the repository.
 | "The disagreement-conditioned gate is what works" | P2 null. This is the founding hypothesis and it is not supported |
 | "Better structured reports" | 1 of 25 metrics. Phase 5 negative |
 | "Flag voxels by entropy + disagreement" | Contradicted by Gate 2's own table |
-| "Equal to MC-dropout at 1/10 the cost" | Not measured yet. MC maps for the external cohorts are being generated 2026-08-23; until they are analysed this stays unmade |
+| "Disagreement equals MC-dropout at 1/10 the cost" | **Measured 2026-08-23 and REFUTED.** Disagreement is not equivalent to MC on either external cohort and the intervals sit outside the margin on the wrong side. The equivalence that DOES hold belongs to free single-pass entropy (C8), not to this architecture. Note 39 |
 | Any claim on **WT** | Every WT comparison is inconclusive at a saturated ~0.93 |
 
 ## 3. Limitations that must appear in the paper
@@ -54,8 +56,9 @@ dual-encoder disagreement gate does and does not buy**: a real, attributable
 accuracy gain in enhancing tumour; a mechanism that is measurably active
 (P1/note 32) and measurably *not* responsible for the gain (P2/note 38); an
 uncertainty signal with genuine incremental information (Gate 1) that
-nonetheless fails to improve a working detector (Gate 2); and no transfer under
-distribution shift.
+nonetheless fails to improve a working detector (Gate 2), is worse than free
+entropy as a localiser (note 39), and whose removal costs no accuracy (P2); and
+no transfer under distribution shift.
 
 The methodological contribution is the discipline: pre-registration written
 before the numbers, thresholds fixed in advance, a width-matched capacity
