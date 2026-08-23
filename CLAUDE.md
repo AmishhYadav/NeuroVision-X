@@ -226,9 +226,26 @@ Kaggle dataset `amishyadav123/neurovision-brats-prep`, so **do not delete it**. 
 (`outputs/ablation_content_only_gate/checkpoints/checkpoints/best.pt`, epoch 79, val dice_mean
 0.8933, verified loadable 2026-08-23). Only `capacity_control` is permanently lost, and it has
 neither predictions, logits nor checkpoint — so **no capacity-control number can ever be re-scored
-under a new metric.** Saved artifacts are uneven and this bites any re-scoring plan: `outputs/
-eval_test` has `predictions/` but no `logits/`; every other eval directory has `logits/` but no
-`predictions/`.
+under a new metric.**
+
+**Saved fp16 logits, the artifact every re-scoring plan runs on** (inventory taken 2026-08-23; note
+that `neurovision`'s live directories are nested one level deeper than the others, so a
+`outputs/*/logits` glob misses them):
+
+| Run | val (187) | test (189) | SSA (60) | PED (99) |
+|---|---|---|---|---|
+| `neurovision` | `outputs/neurovision/eval_val/logits` | `outputs/neurovision/eval_test/logits` | `outputs/eval_ssa_neurovision/logits` | `outputs/eval_ped_neurovision/logits` |
+| `baseline_unet3d` | `outputs/eval_val_baseline_unet3d/logits` | `outputs/eval_test_baseline_unet3d/logits` | `outputs/eval_ssa_baseline_unet3d/logits` | `outputs/eval_ped_baseline_unet3d/logits` |
+| `ablation_content_only_gate` | — | — | — | — |
+| `capacity_control` | — | — | — | — |
+
+~17 GB in total, 79 GiB free. Both complete rows mean lesion-wise re-scoring and the whole conformal
+phase need **zero inference**. `ablation_content_only_gate` has no saved volume artifact at all but
+its checkpoint survives, so it costs one ~15 min CPU pass per split to bring back.
+
+Two traps in that table. `outputs/eval_test` is **not** `neurovision` — it is the superseded
+200-epoch/96³ U-Net (ET 0.8587), and it is the only directory holding `predictions/` rather than
+`logits/`. And `outputs/neurovision/eval_test/summary.csv` is the real published row: ET 0.8708593.
 
 ---
 
