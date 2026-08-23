@@ -25,7 +25,7 @@ Phases 0–5" refers to the *interpretable pipeline* plan, not this one.**
 | 1.3 Test A — is it flat? | **Done.** Not flat, and not a re-encoding of entropy (note 31) |
 | 1.3 Test B — does it beat entropy? | **DONE 2026-08-23.** All 348 cases extracted on CPU (~7 h, zero GPU hours) and the pre-registered family run once, on complete data |
 | **Gate 1** | **PARTIAL, 2026-08-23.** Voxel-level residualised AUROC clears 0.5 on all three cohorts (p_holm 0.0025) and the pre-registered 0.60 on PED (0.677, CI 0.655–0.698); case-level partial Spearman is −0.393 in distribution but **null on both external cohorts**. So the signal is spatial, not case-ranking. Proceed under the rule's *Partial* row — efficiency and localisation, never superiority. Full result: `preregistration_ambiguity.md` §Result, `docs/experiments.md` note 35 |
-| 2 — referral system | **Must be respecified before it runs.** Gate 2 as written tests referral, a CASE-LEVEL operation, on SSA/PED — precisely the endpoint Gate 1 returned null on. Rebuild it around voxel- and region-level localisation, ET first |
+| 2 — referral system | **RESPECIFIED 2026-08-23 in `docs/research/preregistration_gate2.md`**, which supersedes the Gate 2 row below. Gate 2 as originally written tests referral, a CASE-LEVEL operation, on SSA/PED — precisely the endpoint Gate 1 returned null on. The new gate asks whether entropy **plus** disagreement localises error better than entropy alone, with the combiner fitted on the val split and applied frozen |
 | 2.4 — inference-ROI sweep | **RUNNING 2026-08-23**, `neurovision` at ROI 96³ on CPU; ROI 64³ already exists as `outputs/neurovision/eval_test` |
 | 3.1 — multi-seed | Not started. Needs ~70 T4-h that do not exist |
 | 3.2 — ablation ladder | **1 of 5 rungs running.** `ablation_content_only_gate` launched on Kaggle 2026-08-22 against the reset 30 h ration, ~22–23 h over 3 sessions, pinned to `7caacfa`. The other four rungs have no hours behind them |
@@ -402,6 +402,13 @@ AUROC at those sizes is roughly ±0.10. State targets as **CI bounds, never poin
 estimates**: *"AUROC CI lower bound excludes 0.70"*, not *"AUROC ≥ 0.80"*.
 
 ### Gate 2
+
+> **SUPERSEDED 2026-08-23 by `docs/research/preregistration_gate2.md`.** The text
+> below is kept because it is what was pre-registered first, and a gate that
+> gets replaced must show what it was replaced with and why. The reason is
+> Gate 1's result: referral is case-level, and case-level came back null on
+> both external cohorts. The replacement tests voxel-level localisation and
+> an entropy-plus-disagreement combiner fitted on val, applied frozen.
 
 Referral on disagreement beats entropy **and** MC-dropout MI on SSA/PED
 specifically (CI on the paired difference excludes zero). Pass → failure
