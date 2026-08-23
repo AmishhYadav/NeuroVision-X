@@ -560,6 +560,19 @@ Results are `per_case_metrics.csv`, `summary.csv`, `eval_config.yaml` and the
 | `outputs/localize_*` | `scripts/localize.py` | Cheap CPU regeneration from predictions |
 | `outputs/report_*` | `scripts/report.py` | Cheap CPU regeneration from `burden.csv` + `anatomy.csv` + `anatomy_summary.csv` |
 | `outputs/calibration_*` | `scripts/calibrate.py` | Cheap CPU regeneration from per-case metrics / logits |
+| `outputs/replay_lesionwise/*` | `scripts/replay_logits.py analysis.replay.lesionwise.enabled=true`, **from `.venv-analysis`** | ~1.8 s/case → ~30 min for all 1,070 cases across both models and four splits. Rebuilt from `logits/` alone, no checkpoint needed |
+| `outputs/conformal/*` | `scripts/conformal.py calibration.conformal.calib_dir=... apply_dirs=[...]` | ~0.73 s/case for the loss curves, plus ~1.8 s/case for the self-consistency replay. ~10 min per model for all four splits |
+| `outputs/confidence/*` | `scripts/score_confidence.py` | One sliding-window pass per case on CPU. Requires a checkpoint with a confidence head — `neurovision` only, never `baseline_unet3d` |
+
+**A note on `curves.npz`, because it is a new KIND of artifact here.** Everything
+above this line is either a cache (regenerable, volume-sized) or a result
+(small, permanent). `outputs/conformal/*/curves.npz` is neither: it is a
+**sufficient statistic** — a few hundred integers per case recording, at each
+threshold in the grid, how many voxels the mask holds and how many true voxels
+it misses. Every conformal number derives from it by arithmetic, so
+recalibrating at a new α costs milliseconds rather than another full pass over
+17 GB of logits. It is ~100 KB per split, so keep it permanently; it is the
+one artifact here that makes Phase B cheap to revisit.
 
 ### Precondition: the checkpoint must still exist
 
