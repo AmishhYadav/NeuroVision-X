@@ -1172,6 +1172,57 @@ sessions by resume is still ONE row — sum the GPU hours.
     released data is worth pulling either way -- it is the closest public
     benchmark to the claim this project is now defending.
 
+    ---
+
+    **RESOLVED 2026-08-23, without a Synapse login. The 2026 window is CLOSED --
+    it shut on 31 July 2026, 23 days ago.** The dates were never behind the
+    login. They are in the challenge's own structured design document, attached
+    as a PDF to the same Zenodo record (19714728) whose *landing page* carries
+    no timeline -- `284-BraTS_2026_Cluster_of_Challenges_2026-04-22T16-36-39.pdf`,
+    100 pages, published 23 April 2026. The earlier check read the HTML and
+    stopped. Recording the method as well as the answer, because this is the
+    third instance of the same shape of miss in this project: **the artifact
+    that answers the question was one link below the page that did not.**
+
+    Official timeline, quoted from p. 13 of that document:
+
+    | Date | Milestone |
+    |---|---|
+    | 16 March 2026 (or earlier) | Registration opens -- release of training and validation data |
+    | **31 July 2026** | **Submission deadline for paper and containerized method** |
+    | 7 August 2026 | Initial invitations sent |
+    | 14 August 2026 | Paper reviews available |
+    | 19 August 2026 | Release of summary testing results to each participant |
+    | 21 August 2026 | Camera-ready paper and copyright form deadline |
+    | 24 August 2026 | Top-performing methods contacted for oral presentation slides |
+    | 4-8 October 2026 | Challenge at MICCAI |
+
+    Registration itself ran "from website opening ... until the short paper
+    submission deadline (July 31, 2026)", so registration is closed too.
+
+    One correction to the note above: the challenge sessions are **4-8 October
+    2026**, and the "27 Sep - 1 Oct" figure quoted earlier for MICCAI 2026 does
+    not match this document. Trust the challenge document for challenge dates.
+
+    Challenge 3's exact title, from p. 3: *"Generalizability of brain tumor
+    sub-region segmentation algorithms across tumor entities and appearances in
+    pre-operative brain multi-parametric structural MRI scans."*
+
+    **Consequences, and they are all mild.** BraTS 2026 was never a dependency
+    of the master plan -- it was flagged as an upside to check in week 1, which
+    is what just happened. The plan is unchanged: **target BraTS 2027.** Two
+    things are worth doing now rather than in a year:
+
+    1. The 2026 training and validation data was released publicly from 16 March
+       2026 and is the closest public benchmark to the claim this project is now
+       defending. Pull it when a phase needs it; it does not expire with the
+       deadline.
+    2. The 2026 cluster added **non-annotated training data for semi-supervised
+       learning** (p. 2), which is new this year and is a standing invitation
+       for the 2027 iteration.
+
+    Nothing in Phase A-H moves. This note is now closed.
+
 ---
 
 ## Planned

@@ -191,7 +191,7 @@ queue, because the next session trusts it.
 | A3 | Re-score every existing run lesion-wise via `scripts/replay_logits.py` | `[ ]` | A lesion-wise row exists for `neurovision`, `baseline_unet3d`, `capacity_control`, `ablation_content_only_gate`, on test and val |
 | A4 | Wire flip TTA into `scripts/evaluate.py` | `[ ]` | `cfg.inference.tta` exists; measured on val then test; result recorded as its own note |
 | A5 | Score the confidence head | `[ ]` | A number exists, and `docs/experiments.md` says whether the head learned anything |
-| A6 | Resolve the BraTS 2026 Challenge-3 deadline from a logged-in Synapse session | `[ ]` | Note 40 in `docs/experiments.md` carries a date instead of an uncertainty |
+| A6 | Resolve the BraTS 2026 Challenge-3 deadline from a logged-in Synapse session | `[x]` | Note 40 in `docs/experiments.md` carries a date instead of an uncertainty |
 | B1 | `src/neurovision/uncertainty/conformal.py` + `scripts/conformal.py` | `[ ]` | λ̂ fitted on val, applied frozen to test, realised risk ≤ α on test |
 | B2 | Apply the frozen λ̂ to SSA and PED; weighted/Mondrian variant | `[ ]` | A table of nominal α vs realised risk per cohort, with CIs |
 
