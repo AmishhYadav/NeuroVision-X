@@ -915,6 +915,60 @@ sessions by resume is still ONE row — sum the GPU hours.
     which is scored on mean disagreement over the whole volume and had not been
     computed when this note was written.
 
+35. **GATE 1 IS DECIDED, AND THE VERDICT IS PARTIAL: DISAGREEMENT LOCALISES
+    ERROR OUT OF DISTRIBUTION, BUT DOES NOT RANK CASES.** Run 2026-08-23 by
+    `scripts/detection_stats.py` over all 348 cases (BraTS test 189, SSA 60,
+    PED 99) against `docs/research/preregistration_ambiguity.md`. Every
+    threshold, mask, column and the 6-test Holm family were fixed before any
+    number existed, and the family was run **once**, on complete data. Full
+    tables live in that file's Result section and in
+    `outputs/detection/detection_{case_level,voxel_level,family}.csv`.
+
+    **Endpoint A, case level (partial Spearman vs Dice, controlling for
+    entropy).** BraTS test **-0.393** (CI -0.512 to -0.265, p_holm 0.0006);
+    SSA **-0.173** (CI -0.432 to +0.090); PED **+0.000** (CI -0.223 to
+    +0.211). Strong in distribution, **null on both external cohorts.**
+
+    **Endpoint B, voxel level (residualised AUROC for per-voxel error).** ANY
+    region: test **0.578** (CI 0.560-0.596), SSA **0.569** (0.545-0.590), PED
+    **0.677** (0.655-0.698) -- all three p_holm 0.0025, all three CIs
+    excluding 0.5. Per region, ET is the strongest everywhere: **0.733 /
+    0.689 / 0.784**.
+
+    **Why PARTIAL.** PASS needed both conjuncts on one EXTERNAL cohort. PED
+    clears the voxel threshold decisively and has a case-level correlation of
+    exactly nil; SSA clears neither threshold. Not FAIL, because the voxel
+    endpoint clears both its CI and its threshold on PED and the map is not
+    flat (note 31).
+
+    **The finding, stated so it cannot be inflated later.** Disagreement says
+    WHERE a prediction is wrong, beyond entropy, and keeps saying it under
+    distribution shift. It does NOT say WHICH CASE will be bad. The case-level
+    columns show the mechanism: on SSA and PED the raw disagreement-vs-Dice
+    correlation is +0.006 and +0.015, while ENTROPY ALONE is already a strong
+    case-quality predictor there (-0.782 and -0.554). There is no case-level
+    headroom left for disagreement to occupy, and it occupies none. Do not
+    write "better than entropy at flagging bad cases" -- this data refutes it
+    externally.
+
+    **Two cases leave the case-level analysis and stay in the voxel one.**
+    `BraTS-SSA-00215-000` and `BraTS-PED-00051-000` have an empty predicted WT
+    mask, so the predicted-foreground-masked scalar is NaN (n = 59 and 98);
+    at voxel level they fall back to whole-volume sampling (n_cases 60 and
+    99). Correct per endpoint, but two different denominators -- never report
+    them as one.
+
+    **Consequence for Phase 2, decided from these numbers rather than the
+    plan's assumption.** Gate 2 as written tests referral, which is a
+    CASE-LEVEL operation, on SSA/PED -- exactly the endpoint that came back
+    null. It is predicted to fail as specified and must be respecified around
+    voxel- and region-level localisation, ET first, BEFORE it is run.
+
+    **Cost: zero GPU hours.** Extraction of all 348 cases ran on the M4 CPU at
+    ~94 s/case, one process at a time via `scripts/extract_ambiguity_serial.py`
+    (~7 h wall, 5.3 GiB peak RSS, no swap), and the analysis loads only saved
+    caches.
+
 ---
 
 ## Planned
