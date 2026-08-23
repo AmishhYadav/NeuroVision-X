@@ -63,6 +63,11 @@ class Cohort:
     prep_dir: str
     logits_dir: str
     out_prefix: str
+    # Which split inside `splits_path` to read. The external cohorts put all
+    # their cases in "test"; "val" exists so the Gate 2 combiner can be fitted
+    # on data no reported number comes from (see
+    # docs/research/preregistration_gate2.md).
+    split: str = "test"
     extra: list[str] = field(default_factory=list)
 
 
@@ -73,6 +78,14 @@ COHORTS = {
         prep_dir="data/preprocessed/brats",
         logits_dir="outputs/neurovision/eval_test/logits",
         out_prefix="outputs/ambiguity_test",
+    ),
+    "val": Cohort(
+        name="val",
+        splits_path="configs/data/splits.yaml",
+        prep_dir="data/preprocessed/brats",
+        logits_dir="outputs/neurovision/eval_val/logits",
+        out_prefix="outputs/ambiguity_val",
+        split="val",
     ),
     "ssa": Cohort(
         name="ssa",
@@ -92,10 +105,10 @@ COHORTS = {
 
 
 def split_case_ids(cohort: Cohort) -> list[str]:
-    """Case ids of the cohort's frozen test split, in split-file order."""
+    """Case ids of the cohort's frozen split, in split-file order."""
     with (REPO_ROOT / cohort.splits_path).open(encoding="utf-8") as handle:
         splits = yaml.safe_load(handle)
-    return [str(c) for c in splits["test"]]
+    return [str(c) for c in splits[cohort.split]]
 
 
 def done_case_ids(cohort: Cohort) -> dict[str, str]:
@@ -141,7 +154,7 @@ def build_command(cohort: Cohort, case_ids: list[str], out_dir: Path) -> list[st
         f"data.preprocessing.out_dir={cohort.prep_dir}",
         *MEMORY_SAFE_OVERRIDES,
         *cohort.extra,
-        "explainability.ambiguity.split=test",
+        f"explainability.ambiguity.split={cohort.split}",
         "explainability.ambiguity.checkpoint=outputs/neurovision/checkpoints/best.pt",
         f"explainability.ambiguity.logits_dir={cohort.logits_dir}",
         f"explainability.ambiguity.out_dir={out_dir}",
