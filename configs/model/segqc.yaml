@@ -1,0 +1,29 @@
+# Phase C segmentation QC model. A SECOND, independently trained network:
+# it looks at a case and a predicted mask and estimates the Dice that mask
+# would score, with no ground truth available at inference time. It is not
+# a segmentation model and does not share the unet3d/swinunetr config shape.
+
+# Selected by string through neurovision.models.registry.
+name: segqc
+
+# Deliberately NOT ${data.in_channels} (that is 4, the raw MRI modality
+# count) -- this model's input is a PACKED triple, one region at a time:
+# [image modality, predicted mask for that region, uncertainty map for that
+# region]. Interpolating from data.in_channels here would silently feed it
+# the wrong number of channels and fail with a confusing shape error at
+# training time (C3's job), not here. If a later variant packs more
+# channels in (e.g. all 4 modalities alongside mask + uncertainty, giving
+# 6), change this value directly -- do not wire it to ${data.in_channels}.
+in_channels: 3
+
+# Encoder widths per resolution level. Small on purpose: this is a QC
+# regressor, not a second segmentation network, and stays well under 5M
+# parameters at these widths.
+widths: [16, 32, 64, 128]
+
+# Must evenly divide every entry of `widths` -- see SegQC's __init__, which
+# raises a clear error naming both numbers if it does not.
+num_groups: 8
+
+# Dropout right before the final linear layer of the regression head.
+dropout: 0.1
