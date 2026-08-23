@@ -31,6 +31,7 @@ import yaml
 from omegaconf import OmegaConf
 from torch import nn
 
+from neurovision.metrics.lesionwise import LESIONWISE_METRIC_PREFIXES
 from neurovision.models import baseline  # noqa: F401 -- registers "unet3d"
 from neurovision.models.registry import build_model
 from neurovision.training.checkpoint import save_checkpoint
@@ -48,6 +49,14 @@ resolve_checkpoint = evaluate_script.resolve_checkpoint
 load_eval_model = evaluate_script.load_eval_model
 run_evaluation = evaluate_script.run_evaluation
 evaluate_case = evaluate_script.evaluate_case
+resolve_lesionwise = evaluate_script.resolve_lesionwise
+
+# panoptica lives only in .venv-analysis (see requirements-analysis.txt), so
+# any test that actually RUNS lesion-wise scoring must skip cleanly in the
+# training .venv rather than fail. Tests that only exercise resolve_lesionwise
+# (no panoptica import) or the fail-fast ImportError path are NOT gated by
+# this -- they must run (and pass) in both venvs.
+_PANOPTICA_MISSING = importlib.util.find_spec("panoptica") is None
 
 # 32^3 cropped inside a 40^3 original volume -- small enough to run in
 # milliseconds on CPU, with room for a [4, 36) bbox on every axis.
@@ -160,6 +169,18 @@ def _make_cfg(
         "save_logits": False,
         "strict_arch_check": True,
         "boundary_bands": [[0.0, 2.0], [2.0, 5.0], [5.0, 10.0], [10.0, float("inf")]],
+        # Off by default, matching configs/inference/default.yaml -- so every
+        # existing test's meaning is unchanged unless a caller passes
+        # lesionwise=... as one of the **evaluation_overrides below (which
+        # replaces this whole sub-dict; resolve_lesionwise falls back to its
+        # own per-key defaults for anything the override omits).
+        "lesionwise": {
+            "enabled": False,
+            "min_lesion_voxels": 50,
+            "matching_threshold": 0.5,
+            "nsd_tolerance_mm": 1.0,
+            "connectivity": 26,
+        },
     }
     evaluation.update(evaluation_overrides)
 
@@ -942,3 +963,187 @@ def test_mc_dropout_enabled_deterministic_predictions_leave_dice_unchanged(
     pd.testing.assert_frame_equal(
         per_case_off[dice_columns].sort_index(), per_case_on[dice_columns].sort_index()
     )
+
+
+# ---------------------------------------------------------------------------
+# 19-24. Lesion-wise metrics wiring (cfg.inference.evaluation.lesionwise)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    _PANOPTICA_MISSING,
+    reason="panoptica is not installed in this venv (see requirements-analysis.txt); "
+    "run from .venv-analysis to exercise lesion-wise scoring",
+)
+def test_run_evaluation_lesionwise_adds_columns_and_disabled_omits_them(tmp_path: Path):
+    """Lesion-wise scoring is ADDITIVE -- it must not move an existing metric.
+
+    Same reasoning as the boundary-bands additivity test above: an
+    already-published results row stays valid only if turning this on
+    changes nothing but the column set.
+    """
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    _write_case(prep_dir, "case_000", seed=0, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=["case_000"])
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    cfg_on = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        out_dir=tmp_path / "eval_on",
+        lesionwise={"enabled": True, "min_lesion_voxels": 0},
+    )
+    _save_model_checkpoint(checkpoint_dir, cfg_on)
+    df_on = run_evaluation(cfg_on)
+
+    cfg_off = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        out_dir=tmp_path / "eval_off",
+        lesionwise={"enabled": False},
+    )
+    df_off = run_evaluation(cfg_off)
+
+    for region in ("ET", "TC", "WT"):
+        for prefix in LESIONWISE_METRIC_PREFIXES:
+            assert f"{prefix}_{region}" in df_on.columns
+            assert f"{prefix}_{region}" not in df_off.columns
+    for prefix in ("lwdice", "lwnsd", "lwf1"):
+        assert f"{prefix}_mean" in df_on.columns
+        assert f"{prefix}_mean" not in df_off.columns
+
+    # Every pre-existing metric is bit-identical between the two runs -- the
+    # whole point of "additive only".
+    shared = [c for c in df_off.columns if c in df_on.columns]
+    assert shared, "the off-run produced no columns to compare"
+    pd.testing.assert_frame_equal(df_on[shared], df_off[shared])
+
+
+def test_resolve_lesionwise_absent_key_returns_none():
+    """Backward compatibility: a config composed before this key existed
+    (an older saved eval_config.yaml, a minimal test config) must still run,
+    with lesion-wise scoring simply off. Runs in EVERY venv, unlike the
+    tests above -- resolve_lesionwise never imports panoptica."""
+    eval_cfg = OmegaConf.create({"split": "test"})
+    assert resolve_lesionwise(eval_cfg) is None
+
+
+def test_resolve_lesionwise_disabled_returns_none():
+    eval_cfg = OmegaConf.create({"lesionwise": {"enabled": False, "min_lesion_voxels": 10}})
+    assert resolve_lesionwise(eval_cfg) is None
+
+    # The whole block set to null is equally "off", same as boundary_bands.
+    eval_cfg_null = OmegaConf.create({"lesionwise": None})
+    assert resolve_lesionwise(eval_cfg_null) is None
+
+
+def test_resolve_lesionwise_returns_settings_when_enabled():
+    eval_cfg = OmegaConf.create(
+        {
+            "lesionwise": {
+                "enabled": True,
+                "min_lesion_voxels": 25,
+                "matching_threshold": 0.3,
+                "nsd_tolerance_mm": 2.0,
+                "connectivity": 6,
+            }
+        }
+    )
+
+    settings = resolve_lesionwise(eval_cfg)
+
+    assert settings == {
+        "min_lesion_voxels": 25,
+        "matching_threshold": 0.3,
+        "nsd_tolerance_mm": 2.0,
+        "connectivity": 6,
+    }
+    assert isinstance(settings["min_lesion_voxels"], int)
+    assert isinstance(settings["matching_threshold"], float)
+    assert isinstance(settings["nsd_tolerance_mm"], float)
+    assert isinstance(settings["connectivity"], int)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"min_lesion_voxels": -1},
+        {"matching_threshold": 0.0},
+        {"matching_threshold": 1.5},
+        {"nsd_tolerance_mm": 0.0},
+        {"nsd_tolerance_mm": -1.0},
+        {"connectivity": 10},
+    ],
+    ids=[
+        "negative_min_lesion_voxels",
+        "matching_threshold_zero",
+        "matching_threshold_above_one",
+        "nsd_tolerance_zero",
+        "nsd_tolerance_negative",
+        "connectivity_not_6_18_26",
+    ],
+)
+def test_resolve_lesionwise_raises_on_invalid_settings(overrides: dict[str, object]):
+    settings = {
+        "enabled": True,
+        "min_lesion_voxels": 50,
+        "matching_threshold": 0.5,
+        "nsd_tolerance_mm": 1.0,
+        "connectivity": 26,
+    }
+    settings.update(overrides)
+    eval_cfg = OmegaConf.create({"lesionwise": settings})
+
+    with pytest.raises(ValueError):
+        resolve_lesionwise(eval_cfg)
+
+
+def test_run_evaluation_lesionwise_raises_before_inference_when_panoptica_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A missing panoptica must fail BEFORE any case is scored -- not after a
+    sliding-window pass over the whole split. Not skipped: this is the test
+    that protects a 25-minute real run from discovering the wrong venv only
+    at the very end."""
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000"]
+    _write_case(prep_dir, "case_000", seed=0, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=case_ids)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    cfg = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        out_dir=tmp_path / "eval_out",
+        lesionwise={"enabled": True},
+    )
+    _save_model_checkpoint(checkpoint_dir, cfg)
+
+    # Simulates "panoptica is not importable" regardless of what is actually
+    # installed in the venv running this test -- monkeypatches the exact
+    # entry point run_evaluation calls to check importability, reusing the
+    # same message _load_panoptica itself raises.
+    def _raise_missing() -> None:
+        raise ImportError(
+            "lesionwise_case_metrics() requires the 'panoptica' package, which is "
+            "deliberately NOT installed in the project's main .venv. It lives in the "
+            "separate '.venv-analysis' virtualenv described in requirements-analysis.txt."
+        )
+
+    monkeypatch.setattr(evaluate_script, "_load_panoptica", _raise_missing)
+
+    with pytest.raises(ImportError, match="requirements-analysis.txt"):
+        run_evaluation(cfg)
+
+    # The decisive assertion: no per-case CSV was written, which is what
+    # proves this failed before scoring the first case rather than after.
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    assert not (out_dir / "per_case_metrics.csv").exists()

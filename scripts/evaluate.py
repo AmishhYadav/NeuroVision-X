@@ -34,6 +34,7 @@ tested without going through Hydra -- see tests/test_evaluate_script.py.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from dataclasses import fields as dataclass_fields
 from pathlib import Path
@@ -73,6 +74,7 @@ from neurovision.inference.sliding_window import sliding_window_predict
 # been imported first in the same process. Copied from scripts/train.py.
 from neurovision.losses import segmentation  # noqa: F401
 from neurovision.metrics.boundary import boundary_stratified_errors
+from neurovision.metrics.lesionwise import _load_panoptica, lesionwise_case_metrics
 from neurovision.metrics.segmentation import MetricAggregator, compute_case_metrics
 from neurovision.models import baseline  # noqa: F401
 from neurovision.models.registry import build_model
@@ -376,6 +378,69 @@ def resolve_boundary_bands(eval_cfg: DictConfig) -> tuple[tuple[float, float], .
     return tuple(bands)
 
 
+def resolve_lesionwise(eval_cfg: DictConfig) -> dict[str, Any] | None:
+    """Reads and validates `cfg.inference.evaluation.lesionwise`.
+
+    Args:
+        eval_cfg: `cfg.inference.evaluation`. The key is read with a default
+            of `None` rather than attribute access -- same reasoning as
+            `resolve_boundary_bands`: a config composed before this key
+            existed (an older saved `eval_config.yaml`, a minimal test
+            config) must still run, with the analysis simply off.
+
+    Returns:
+        A plain dict of the four settings `lesionwise_case_metrics` accepts
+        as keyword arguments (`min_lesion_voxels`, `matching_threshold`,
+        `nsd_tolerance_mm`, `connectivity`), ready to `**`-splat into that
+        call -- or `None` when the block is absent, is `None`, or has
+        `enabled: false`. Unset sub-keys fall back to
+        `lesionwise_case_metrics`'s own defaults, so a partially-specified
+        block still works.
+
+    Raises:
+        ValueError: If `min_lesion_voxels` is negative, `matching_threshold`
+            is not in `(0, 1]`, `nsd_tolerance_mm` is not positive, or
+            `connectivity` is not one of `{6, 18, 26}` (the only
+            neighbourhoods `cc3d.connected_components` accepts in 3-D).
+    """
+    raw = eval_cfg.get("lesionwise", None)
+    if raw is None or not raw.get("enabled", False):
+        return None
+
+    min_lesion_voxels = int(raw.get("min_lesion_voxels", 50))
+    matching_threshold = float(raw.get("matching_threshold", 0.5))
+    nsd_tolerance_mm = float(raw.get("nsd_tolerance_mm", 1.0))
+    connectivity = int(raw.get("connectivity", 26))
+
+    if min_lesion_voxels < 0:
+        raise ValueError(
+            "cfg.inference.evaluation.lesionwise.min_lesion_voxels must be >= 0, got "
+            f"{min_lesion_voxels}."
+        )
+    if not (0 < matching_threshold <= 1):
+        raise ValueError(
+            "cfg.inference.evaluation.lesionwise.matching_threshold must be in (0, 1], "
+            f"got {matching_threshold}."
+        )
+    if nsd_tolerance_mm <= 0:
+        raise ValueError(
+            "cfg.inference.evaluation.lesionwise.nsd_tolerance_mm must be > 0, got "
+            f"{nsd_tolerance_mm}."
+        )
+    if connectivity not in (6, 18, 26):
+        raise ValueError(
+            "cfg.inference.evaluation.lesionwise.connectivity must be one of {6, 18, 26}, "
+            f"got {connectivity}."
+        )
+
+    return {
+        "min_lesion_voxels": min_lesion_voxels,
+        "matching_threshold": matching_threshold,
+        "nsd_tolerance_mm": nsd_tolerance_mm,
+        "connectivity": connectivity,
+    }
+
+
 def evaluate_case(
     model: nn.Module, batch: dict[str, Any], cfg: DictConfig, device: torch.device
 ) -> CaseOutput:
@@ -524,10 +589,23 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
     mc_cfg = cfg.inference.mc_dropout
     _validate_mc_dropout_config(mc_cfg)
 
+    eval_cfg = cfg.inference.evaluation
+    lesionwise_cfg = resolve_lesionwise(eval_cfg)
+    if lesionwise_cfg is not None:
+        # Same reasoning as _validate_mc_dropout_config above, checked right
+        # next to it: fail before the checkpoint even loads, not after a
+        # ~25-minute sliding-window pass over 189 cases discovers on the
+        # last one that panoptica is missing. _load_panoptica() is cheap (an
+        # import plus one-time log setup) and is exactly the call that
+        # raises the ImportError this analysis needs -- naming
+        # requirements-analysis.txt and .venv-analysis -- when panoptica is
+        # not installed in the current interpreter. Its return value is
+        # unused here; only the import-succeeded check matters.
+        _load_panoptica()
+
     checkpoint_path = resolve_checkpoint(cfg)
     model, _resume_state = load_eval_model(cfg, checkpoint_path, device)
 
-    eval_cfg = cfg.inference.evaluation
     split = eval_cfg.split
     boundary_bands = resolve_boundary_bands(eval_cfg)
     loader, case_ids = build_eval_dataloader(cfg, split)
@@ -573,6 +651,7 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
     n_skipped_unlabeled = 0
     uncertainty_rows: dict[str, dict[str, float]] = {}
     mc_storage_logged = False
+    lesionwise_cost_logged = False
 
     model.eval()
     with torch.no_grad():
@@ -712,6 +791,41 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
                             bands=boundary_bands,
                         )
                     )
+                if lesionwise_cfg is not None:
+                    # Same additivity reasoning as boundary_bands right above
+                    # -- columns merged into the same per-case record, not a
+                    # second aggregator. Timed because panoptica's connected-
+                    # component labelling plus per-region surface-distance
+                    # computation is noticeably more expensive than the
+                    # metrics above it (see the one-time log line below).
+                    start_time = time.perf_counter()
+                    lw_metrics = lesionwise_case_metrics(
+                        pred_cpu, label_cpu, spacing=meta["spacing"], **lesionwise_cfg
+                    )
+                    elapsed = time.perf_counter() - start_time
+                    case_metrics.update(lw_metrics)
+
+                    if not lesionwise_cost_logged:
+                        # Only the first scored case's wall time is measured
+                        # and logged, same "one-time, not per-case" pattern
+                        # as the MC-dropout storage-guard warning above --
+                        # every case pays roughly this cost, so one number
+                        # tells a user watching a 189-case run what the
+                        # lesion-wise pass adds on top of sliding-window
+                        # inference (measured ~2.4s/case on a median-sized,
+                        # multi-lesion 137x171x140 synthetic volume).
+                        projected_minutes = elapsed * len(case_ids) / 60
+                        logger.info(
+                            "Lesion-wise scoring (panoptica: connected-component "
+                            "labelling + per-region surface-distance) took %.2fs for "
+                            "case %s. Projecting to ~%.1f min across %d case(s), on top "
+                            "of the sliding-window pass, which takes far longer per case.",
+                            elapsed,
+                            case_id,
+                            projected_minutes,
+                            len(case_ids),
+                        )
+                        lesionwise_cost_logged = True
                 aggregator.update(case_id, case_metrics)
 
             # Rewritten every iteration, not just at the end: cheap for a

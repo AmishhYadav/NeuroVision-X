@@ -128,3 +128,50 @@ evaluation:
   # for a median 137x171x140 cropped volume), against a sliding-window pass
   # that takes far longer. Cheap enough to leave on.
   boundary_bands: [[0.0, 2.0], [2.0, 5.0], [5.0, 10.0], [10.0, .inf]]
+
+  # Lesion-wise metrics -- the official BraTS metric family since 2023, via
+  # `panoptica`. `enabled: false` (the default) turns the whole analysis off,
+  # and so does a `null` for the whole block.
+  #
+  # Why default OFF, unlike boundary_bands: panoptica CANNOT be installed in
+  # the training environment. It declares numpy<2.3 / pandas<3.0 against our
+  # numpy==2.4.6 / pandas==3.0.5 pins, so it lives in a separate virtualenv
+  # (see requirements-analysis.txt and docs/reproducibility.md §5). Turning
+  # this on inside `.venv` raises an ImportError naming that file. Run
+  # evaluation from `.venv-analysis` when you want these columns.
+  #
+  # Adds `lwdice_/lwnsd_/lwf1_/lwtp_/lwfp_/lwfn_<REGION>` plus the three
+  # `lw*_mean` columns to per_case_metrics.csv. Strictly ADDITIVE: no existing
+  # Dice/HD95/boundary column moves when this is on, which is what keeps the
+  # already-published results rows valid. Enforced by an additivity test.
+  #
+  # WHY IT MATTERS: voxel Dice barely notices a missed 200-voxel satellite
+  # lesion beside a 60,000-voxel mass; lesion-wise scoring counts it as a whole
+  # missed lesion. This project over-reports multifocality (30.7-41.3% against
+  # a true 22.8%), which is that same failure seen from the other side.
+  #
+  # SANITY CHECK, and it has a known direction: lesion-wise ET for
+  # `baseline_unet3d` must come out LOWER than its voxel-wise 0.8442. A higher
+  # number means the wiring is wrong -- almost certainly panoptica's `sq_dsc`
+  # (mean Dice over MATCHED lesions only) being reported in place of
+  # `sq_dsc * tp/(tp+fp+fn)`.
+  lesionwise:
+    enabled: false
+    # Connected components below this voxel count are dropped from BOTH the
+    # prediction and the REFERENCE before matching. Dropping small reference
+    # lesions changes what counts as a false negative; that is the BraTS
+    # convention, because sub-50-voxel ground-truth annotations are not
+    # reliably drawn. 50 also matches inference.postprocess.min_component_size.
+    min_lesion_voxels: 50
+    # IoU above which a prediction instance is considered to have found a
+    # reference instance. panoptica's default and BraTS's convention.
+    matching_threshold: 0.5
+    # NSD tolerance in MILLIMETRES. 1.0 is the BraTS value. Set explicitly
+    # rather than inherited from the voxel spacing: panoptica's evaluator path
+    # silently ties the tolerance to min(spacing), which happens to be correct
+    # for 1 mm isotropic BraTS data and silently wrong for anything else.
+    nsd_tolerance_mm: 1.0
+    # 26 = full 3-D neighbourhood, the BraTS official convention (note this is
+    # NOT the 6-neighbourhood used by inference.postprocess.connectivity, which
+    # is doing a different job -- speckle removal, not lesion counting).
+    connectivity: 26
