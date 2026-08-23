@@ -471,3 +471,31 @@ replay:
     nsd_tolerance_mm: 1.0
     # 26 = full 3-D neighbourhood, the BraTS official convention.
     connectivity: 26
+
+# ---------------------------------------------------------------------------
+# scripts/score_confidence.py -- Master plan item A5. Scores the confidence
+# head (a small auxiliary head, trained alongside segmentation, that predicts
+# whether the segmentation head's own prediction is right) against FREE
+# single-pass predictive entropy, for the first time. Unlike every other
+# analysis.* block above, this one runs a model (a sliding-window pass), not
+# just already-saved evaluate.py/extract_ambiguity.py artifacts -- kept in
+# this group anyway because it is a post-hoc analysis of a trained
+# checkpoint's own head, not a training script.
+# ---------------------------------------------------------------------------
+confidence:
+  # null -> ${training.checkpoint.dir}/best.pt, same convention as
+  # scripts/evaluate.py's resolve_checkpoint / scripts/extract_ambiguity.py's
+  # resolve_ambiguity_checkpoint.
+  checkpoint: null
+  split: test
+  out_dir: ${output_dir}/confidence
+  # Label-free sampling: at most this many voxels per case per region, drawn
+  # from the predicted-foreground-dilated mask below, seeded from ${seed}.
+  max_voxels_per_case: 20000
+  # Millimetres. The label-free sampling mask is the predicted foreground for
+  # that region (see scripts/score_confidence.py's label_free_sample_mask),
+  # dilated by this margin -- the sample must straddle the decision boundary
+  # where errors actually live, never be built from the ground-truth label
+  # (CLAUDE.md's calibration-reporting-mask trap).
+  dilation_mm: 5.0
+  regions: [ET, TC, WT]
