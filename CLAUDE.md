@@ -6,7 +6,7 @@ Project instructions for Claude Code. Read this before doing anything in this re
 
 | File | What it holds |
 |---|---|
-| `docs/research/master_plan.md` | **THE ACTIVE PLAN.** Read it before planning any work |
+| `docs/research/master_plan.md` | **THE ACTIVE PLAN.** Read it before planning any work. Starting cold? Its §4 *Execution order* is the queue, the dependency arrows and the working agreement |
 | `docs/experiments.md` | Every run and every measured result, notes 1–39 |
 | `docs/paper/claims_and_evidence.md` | The gate on what may be written. A claim not in that table does not go in the paper |
 | `docs/lessons.md` | The traps, with evidence. Each one already cost GPU hours, a wrong number, or a silent bug |
@@ -200,10 +200,13 @@ explainability / anatomy / reporting / statistics stack, 1,630 tests, a demo wit
 inference, three preprocessed cohorts (BraTS 1251, SSA 60, PED 99), four trained runs. Details in
 `docs/project_state.md`.
 
-**What is next.** Milestone 4 Phase A — lesion-wise metrics via panoptica, flip TTA (the module
-`src/neurovision/inference/tta.py` exists and is *not wired into* `scripts/evaluate.py`),
-confidence-head scoring, and the strong-baseline gate (nnU-Net v2 on our frozen split), pre-registered
-in `docs/research/preregistration_strong_baseline.md`.
+**What is next.** Milestone 4 Phase A. The ordered queue, with its current state and the dependency
+arrows, is `docs/research/master_plan.md` §4 — **read that before starting anything**. In short: the
+dependency files, then lesion-wise metrics via panoptica, then re-scoring the existing runs from saved
+logits; flip TTA and confidence-head scoring as independent filler (`src/neurovision/inference/tta.py`
+exists and is *not wired into* `scripts/evaluate.py`); conformal risk control as the first real build;
+and on the GPU side a timing probe, then the strong-baseline gate (nnU-Net v2 on our frozen split),
+pre-registered in `docs/research/preregistration_strong_baseline.md`.
 
 **Data on disk.** `data/preprocessed/{brats,brats_ssa,brats_ped}` — `brats` is backed only by the live
 Kaggle dataset `amishyadav123/neurovision-brats-prep`, so **do not delete it**. Raw data was deleted

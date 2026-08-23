@@ -11,6 +11,10 @@ what was measured is `docs/experiments.md`; the gate on what may be written is
 `docs/paper/claims_and_evidence.md`; the traps that cost real money are `docs/lessons.md`; the
 Milestone 1–3 build record is `docs/project_state.md`.
 
+> **Starting a session cold, with no context? Go straight to §4, *Execution order*.** It carries
+> the reading order, the queue with its current state, the dependency arrows, and the working
+> agreement for building each module. Sections 0–3 are the *why*; §4 is the *what next*.
+
 ---
 
 ## 0. Context — why this plan exists
@@ -139,7 +143,177 @@ does it survive an effect-size argument.
 
 ---
 
-## 4. Phases
+## 4. Execution order — start here if you have no context
+
+**This section exists for a session that opens the repo cold, months from now, with nothing in
+memory.** It is the queue, the dependency arrows, and the working agreement. It is deliberately
+*directional* rather than rigid: the ordering constraints below are real, but where two items have no
+arrow between them, pick whichever suits the session you have.
+
+### 4.1 Orientation — the first fifteen minutes
+
+Read in this order, and stop when you have enough to act:
+
+1. `CLAUDE.md` — constraints, conventions, the ten traps. Short by design.
+2. This file, §0 to §3 — why the project changed shape, and what was cut.
+3. `docs/paper/claims_and_evidence.md` — the gate on what may be asserted. **Nothing is written into
+   the paper that is not in that table.**
+4. §4.3 below — the queue. Find the first unfinished item.
+5. Only then: the phase detail in §5 for whatever you are about to build.
+
+`docs/lessons.md` is not read front to back. It is read *by subsystem*, immediately before touching
+that subsystem, using the ten-trap index in `CLAUDE.md` to find the right entry.
+
+### 4.2 How to tell what is already done
+
+Do not trust this document's status claims over the filesystem — it will drift. Check, in order:
+
+| Question | Command |
+|---|---|
+| What was done recently? | `git log --oneline -25` |
+| Which experiments have results? | `ls outputs/` and the note titles in `docs/experiments.md` |
+| Which gates have fired? | `cat outputs/*/*verdict.json`, and the `## Result` section of each `docs/research/preregistration_*.md` |
+| Does the repo still build? | plain `pytest` (expect ~1,630 passing, ~35 s) and `python scripts/smoke_test.py` |
+
+**Then update the status board in §4.3 and commit it.** A queue that nobody ticks off is worse than no
+queue, because the next session trusts it.
+
+### 4.3 The queue
+
+`[ ]` not started · `[~]` in progress · `[x]` done. **Update these marks as you go.**
+
+#### Track 1 — CPU. No hardware needed. Start here.
+
+| # | Item | State | Done when |
+|---|---|---|---|
+| A1 | Dependency files: `requirements-analysis.txt`, `requirements-clinical.txt` | `[ ]` | Both files exist, pinned; root `requirements.txt` untouched; `docs/reproducibility.md` says which env is for what |
+| A2 | `src/neurovision/metrics/lesionwise.py` + additive wiring into `scripts/evaluate.py` | `[ ]` | Lesion-wise columns appear in `per_case_metrics.csv` when enabled, and an additivity test proves no existing column moved |
+| A3 | Re-score every existing run lesion-wise via `scripts/replay_logits.py` | `[ ]` | A lesion-wise row exists for `neurovision`, `baseline_unet3d`, `capacity_control`, `ablation_content_only_gate`, on test and val |
+| A4 | Wire flip TTA into `scripts/evaluate.py` | `[ ]` | `cfg.inference.tta` exists; measured on val then test; result recorded as its own note |
+| A5 | Score the confidence head | `[ ]` | A number exists, and `docs/experiments.md` says whether the head learned anything |
+| A6 | Resolve the BraTS 2026 Challenge-3 deadline from a logged-in Synapse session | `[ ]` | Note 40 in `docs/experiments.md` carries a date instead of an uncertainty |
+| B1 | `src/neurovision/uncertainty/conformal.py` + `scripts/conformal.py` | `[ ]` | λ̂ fitted on val, applied frozen to test, realised risk ≤ α on test |
+| B2 | Apply the frozen λ̂ to SSA and PED; weighted/Mondrian variant | `[ ]` | A table of nominal α vs realised risk per cohort, with CIs |
+
+#### Track 2 — GPU. Starts the day the cluster is live. Runs in parallel with Track 1.
+
+| # | Item | State | Done when |
+|---|---|---|---|
+| G0 | 2-epoch timing probe on the new hardware | `[ ]` | Measured step time and peak VRAM in a log, and the probe **reached the failure condition**, not merely executed |
+| G1 | `scripts/export_nnunet_dataset.py` — our frozen split to nnU-Net layout | `[ ]` | `splits_final.json` contains exactly our 875 train cases; no val or test case appears in it |
+| A7 | nnU-Net v2 `3d_fullres` single fold + Auto3DSeg SegResNet single fold | `[ ]` | Both scored through **our** `scripts/evaluate.py` metric path on the same 189 test cases |
+| — | **GATE A** | `[ ]` | `docs/research/preregistration_strong_baseline.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
+
+#### Later — kept coarse on purpose, because Gate A may reshape them
+
+| Phase | Item | Precondition |
+|---|---|---|
+| C | QC model: pair generator → `models/qc.py` → train → per-cohort validation → Gate C | A2 done (needs a metric to regress against) |
+| D | D1 multi-seed → D2 pooled multi-cohort → D3 fine-tune-on-SSA | GPU free after A7. D1 also unblocks B3 |
+| B3 | Deep-ensemble comparator, completing the uncertainty ladder | D1 seeds exist |
+| E | E1 DICOM ingest → E2 preprocessing → E3 input QC → E4 missing-sequence refusal → E5 gatekeeper → E6 DICOM-SEG → E7 UI | E5 needs B1 and C; the rest is independent |
+| F | IDH on UCSF-PDGM | Explicit go/no-go after Phase C. Costs a large download and a training run |
+| G | End-to-end error budget | Everything above that will actually ship |
+| H | Write-up and release | G |
+
+### 4.4 The dependency arrows that actually bind
+
+Everything else is free ordering.
+
+```
+A1 ──▶ A2 ──▶ A3
+        │
+        └────▶ (Gate A scoring)   ← lesion-wise ET Dice is a CO-PRIMARY endpoint,
+                                     so A2 is on the critical path for the GPU gate
+A2 ──▶ C1 (QC pair generator needs the metric it regresses against)
+
+B1 ──▶ B2 ──▶ E5 (the gatekeeper reads the conformal band width)
+C  ──▶ E5     (the gatekeeper reads the QC model's estimate)
+
+G0 ──▶ G1 ──▶ A7 ──▶ GATE A
+D1 ──▶ B3     (a deep ensemble needs the seeds)
+
+A4, A5, A6 — independent of everything. Good filler for a short session.
+```
+
+**The one non-obvious arrow:** A2 blocks the *scoring* of Gate A, not the training. Launch A7 on the
+GPU whenever hardware appears; just make sure A2 lands before you try to read the result, or you will
+be tempted to call the gate on voxel Dice alone, which is precisely the shortcut the pre-registration
+forbids.
+
+### 4.5 Parallelism rules
+
+- **One heavy local job at a time.** Parallel shards exhausted application memory twice. Sharding a
+  job into independent case chunks is fine; running two whole-volume jobs is not.
+- Track 1 and Track 2 are genuinely parallel — one is your Mac, the other is the cluster.
+- Within Track 1, build one module at a time. `CLAUDE.md` requires it and the reason is that the
+  author has to understand each piece.
+- A GPU run and a CPU analysis of a *different* artifact can overlap freely.
+
+### 4.6 When a gate fires — the mechanical checklist
+
+Gates are the only points where the plan forks, and each fork is already written down, so this is
+bookkeeping rather than judgement:
+
+1. Write the `## Result` section of that gate's pre-registration. **Nothing above that line may be
+   edited** — a prediction edited after the fact is not a prediction.
+2. Add a numbered note to `docs/experiments.md` with the numbers, the CIs, and the caveats that must
+   travel with them.
+3. Update `docs/paper/claims_and_evidence.md` — move claims between the "supported" and "do not
+   write" tables as the result requires.
+4. Update the status board in §4.3 and the `Current status` block in `CLAUDE.md`.
+5. Commit all of it together, so the result and its consequences share one timestamp.
+
+If a gate comes back negative, **that is a completed deliverable, not a failure.** Eight of this
+project's nine resolved comparisons were negative and the plan is built on top of them.
+
+### 4.7 If you only have a short session
+
+Ordered by how little context they need:
+
+- **30 minutes:** A1, or A6, or update the status board against the filesystem.
+- **Half a day:** A4 (TTA wiring), or A5 (confidence-head scoring), or A3 once A2 exists.
+- **A full day or more:** A2, B1, C2, E2 — these are real builds and deserve the full loop.
+- **Never start in a short session:** anything on the GPU. A probe that is not watched is a probe that
+  silently wastes hours, and this project has lost 10.5 GPU-hours to exactly that.
+
+### 4.8 Standing working agreement
+
+Every module follows the same loop, from `CLAUDE.md`:
+
+> decide the design → write a precise spec → `py-implementer` builds module + tests → `test-runner`
+> runs the suite and reports failures only → `code-reviewer` checks it against the spec and the hard
+> constraints → read it, judge it, **explain it back to the author in plain terms**, iterate.
+
+A spec that produces good code contains, every time:
+
+1. **File path** and whether it is new or a modification.
+2. **Public API** with full type signatures.
+3. **Tensor shapes** in and out, as `(B, C, D, H, W)`.
+4. **Edge cases** that must be handled — empty region, all-background mask, NaN, a cohort with no
+   ground truth.
+5. **The tests that must pass**, named, including the CPU shape test under one second.
+6. **The relevant hard constraints, restated.** A subagent starts with no memory of the conversation.
+   Constraints 2 (no hardcoded paths), 3 (no CUDA assumptions) and 8 (CPU shape test) apply to almost
+   everything.
+7. **What must NOT change** — the additivity requirement, and any already-published number the module
+   sits near.
+
+If a subagent returns something that violates a constraint, fix the spec and re-delegate rather than
+patching the output by hand. The patched version will not survive the next regeneration.
+
+### 4.9 Two things that are the author's call, not the implementer's
+
+- **When the GPU track starts.** Cluster access is outside this document.
+- **Whether Phase F (IDH) is gated in.** Decide after Phase C ships. It costs a large dataset
+  download and a training run, and the project functions completely without it.
+
+Everything else — what gets built, in what order, with what endpoints and what decision rules — is
+settled above. That was the point of writing it down before starting.
+
+---
+
+## 5. Phases
 
 Two tracks run in parallel. The **CPU track** never blocks on hardware. The **GPU track** starts the
 moment the cluster is available. Phase letters, not numbers, to avoid collision with the old plan.
@@ -366,7 +540,7 @@ papers are invited to extend into a MELBA special issue. Also MIDL, and MELBA di
 
 ---
 
-## 5. Cut list — decided, so they are not re-litigated
+## 6. Cut list — decided, so they are not re-litigated
 
 MGMT methylation · survival prediction · WHO grade · midline shift · the eloquence verdict · the
 remaining four ablation rungs · the full 96³ retrain · `baseline_swinunetr` (demoted) ·
@@ -376,7 +550,7 @@ Reasons are in §3. Re-opening any of these requires new evidence, not a new moo
 
 ---
 
-## 6. Risk register
+## 7. Risk register
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
@@ -390,7 +564,7 @@ Reasons are in §3. Re-opening any of these requires new evidence, not a new moo
 
 ---
 
-## 7. Dependency and data plan
+## 8. Dependency and data plan
 
 **New Python dependencies**, approved 2026-08-23, all isolated from the training environment:
 
@@ -410,7 +584,7 @@ frozen on creation like every existing split file.
 
 ---
 
-## 8. Timeline
+## 9. Timeline
 
 | Month | CPU track | GPU track |
 |---|---|---|
@@ -423,7 +597,7 @@ frozen on creation like every existing split file.
 
 ---
 
-## 9. Verification — applies to every phase
+## 10. Verification — applies to every phase
 
 | Level | Check |
 |---|---|
@@ -437,7 +611,7 @@ frozen on creation like every existing split file.
 
 ---
 
-## 10. What success looks like in six months
+## 11. What success looks like in six months
 
 A tool that ingests a real DICOM brain-MRI study, refuses what it should refuse with a stated reason,
 and otherwise returns a tumour segmentation carrying a distribution-free bound on its miss rate, an
