@@ -61,6 +61,35 @@ mc_dropout:
   # warning scripts/evaluate.py logs after the first case).
   save_fields: [mutual_information]
 
+tta:
+  # Flip test-time augmentation. src/neurovision/inference/tta.py has been
+  # implemented and tested since Milestone 2 and was never wired into
+  # scripts/evaluate.py -- no config key, no call site. This is that key.
+  #
+  # OFF by default, and unlike mc_dropout this flag genuinely CHANGES the
+  # prediction rather than only adding a side channel. mc_dropout defaults to
+  # `predictions_from: deterministic` precisely so turning it on cannot move a
+  # published Dice; TTA has no such escape hatch, because averaging the flipped
+  # views IS the point. So: a TTA run is a SEPARATE ARM. Write it to its own
+  # out_dir and report it as its own row -- never overwrite an existing
+  # eval directory with it, and never compare a TTA number against a
+  # non-TTA one without saying so.
+  enabled: false
+  # Spatial axes to flip over: 0=D, 1=H, 2=W. These are SPATIAL axis indices,
+  # never raw tensor dimensions -- tta_predict converts axis a to tensor dim
+  # a+2 internally. Flipping tensor dim 1 would reorder the MRI modalities
+  # rather than reflect the volume, and nothing would raise.
+  #
+  # All three axes gives 2^3 = 8 combinations (the identity plus 7 flips), so
+  # cost is exactly 8x a single sliding-window pass -- the same order as
+  # mc_dropout at num_samples: 10. Drop to [0, 1] for 4x if that is too slow.
+  #
+  # Only flips, and only these: configs/data/* trains with flip_prob 0.5 on
+  # each spatial axis independently and nothing else, so flip TTA tests exactly
+  # the invariance the model was trained to have. Rotations or rescaling would
+  # probe invariances the model was never asked to learn.
+  axes: [0, 1, 2]
+
 postprocess:
   threshold: 0.5
   # Restores ET <= TC <= WT after the component filters break it. Leave on:
