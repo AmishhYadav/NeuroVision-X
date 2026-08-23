@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import hydra
 import numpy as np
 import pandas as pd
 import pytest
@@ -29,6 +30,12 @@ from omegaconf import OmegaConf
 
 from neurovision.analysis.replay import per_case_replay
 from neurovision.utils.io import write_json
+
+# Real configs/ directory, resolved relative to this file -- never a
+# hardcoded absolute path -- so the "reachable at the composed path" test
+# below composes the PROJECT's actual config, not a hand-built stand-in.
+# Same pattern as tests/test_calibrate_script.py's _CONFIG_DIR.
+_CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "conformal.py"
 _spec = importlib.util.spec_from_file_location("conformal_script", _SCRIPT_PATH)
@@ -143,19 +150,28 @@ def _make_cfg(
     consistency_tol: float = 1e-6,
     seed: int = 0,
 ) -> OmegaConf:
+    # Nested under "calibration", not top-level -- this is the shape Hydra
+    # actually composes (configs/config.yaml pulls in configs/calibration/
+    # default.yaml under the "calibration:" group, which is where the
+    # "conformal:" block lives). A top-level "conformal" key here would test
+    # a config shape the real script never sees -- see
+    # test_conformal_config_block_is_reachable_at_the_composed_path below for
+    # the regression test that would have caught exactly that mismatch.
     return OmegaConf.create(
         {
             "seed": seed,
-            "conformal": {
-                "calib_dir": str(calib_dir) if calib_dir is not None else None,
-                "calib_prep_dir": str(calib_prep_dir),
-                "apply_dirs": [str(p) for p in apply_dirs],
-                "apply_prep_dirs": [str(p) for p in apply_prep_dirs],
-                "out_dir": str(out_dir),
-                "alphas": list(alphas),
-                "regions": list(regions),
-                "check_consistency": check_consistency,
-                "consistency_tol": consistency_tol,
+            "calibration": {
+                "conformal": {
+                    "calib_dir": str(calib_dir) if calib_dir is not None else None,
+                    "calib_prep_dir": str(calib_prep_dir),
+                    "apply_dirs": [str(p) for p in apply_dirs],
+                    "apply_prep_dirs": [str(p) for p in apply_prep_dirs],
+                    "out_dir": str(out_dir),
+                    "alphas": list(alphas),
+                    "regions": list(regions),
+                    "check_consistency": check_consistency,
+                    "consistency_tol": consistency_tol,
+                }
             },
         }
     )
@@ -438,3 +454,53 @@ def test_end_to_end_smoke(tmp_path: Path) -> None:
     assert (out_dir / calib_dir.name / "curves.npz").is_file()
     assert (out_dir / apply_dir_test.name / "curves.npz").is_file()
     assert (out_dir / apply_dir_ssa.name / "curves.npz").is_file()
+
+
+# ---------------------------------------------------------------------------
+# 11. The block scripts/conformal.py reads must be reachable at the path
+# Hydra actually composes it to -- not the path a hand-built OmegaConf dict
+# happens to use.
+# ---------------------------------------------------------------------------
+
+
+def test_conformal_config_block_is_reachable_at_the_composed_path() -> None:
+    """The REAL project config, composed through Hydra, must expose the
+    conformal block at `cfg.calibration.conformal` -- the exact path
+    `scripts/conformal.py` reads (`resolve_dirs`, `resolve_prep_dirs`,
+    `run_conformal`).
+
+    This is the test that would have caught the original bug: every unit
+    test above builds its own `OmegaConf.create(...)` fixture by hand, so a
+    fixture that puts "conformal" at the top level passes even though the
+    real composed config (configs/config.yaml pulling in
+    configs/calibration/default.yaml under the "calibration:" group) never
+    produces that shape. Composing the real configs/ tree here, the same way
+    `scripts/show_config.py` and `tests/test_calibrate_script.py`'s
+    `test_config_composes_with_calibration_group` do, is what closes that
+    gap -- a `cfg.conformal` read (instead of `cfg.calibration.conformal`)
+    would make `"calibration" in cfg` pass but the nested lookup below fail.
+
+    `data.root_dir` is Hydra-mandatory ("???" in configs/data/brats.yaml), so
+    it must be overridden for compose() to succeed at all; the value itself
+    is irrelevant here since this test never touches the filesystem.
+    """
+    overrides = ["data.root_dir=/unused/for/this/test"]
+    with hydra.initialize_config_dir(version_base="1.3", config_dir=_CONFIG_DIR):
+        cfg = hydra.compose(config_name="config", overrides=overrides)
+
+    assert "calibration" in cfg
+    assert "conformal" in cfg.calibration
+
+    conf_cfg = cfg.calibration.conformal
+    expected_keys = {
+        "calib_dir",
+        "calib_prep_dir",
+        "apply_dirs",
+        "apply_prep_dirs",
+        "out_dir",
+        "alphas",
+        "regions",
+        "check_consistency",
+        "consistency_tol",
+    }
+    assert expected_keys <= set(conf_cfg.keys())

@@ -173,7 +173,7 @@ def resolve_dirs(cfg: DictConfig) -> tuple[Path, list[Path]]:
             `apply_dirs`.
         FileNotFoundError: Any resolved path does not exist.
     """
-    conf_cfg = cfg.conformal
+    conf_cfg = cfg.calibration.conformal
     calib_raw = conf_cfg.calib_dir
     apply_raw = list(conf_cfg.apply_dirs) if conf_cfg.apply_dirs else []
 
@@ -236,7 +236,7 @@ def resolve_prep_dirs(cfg: DictConfig) -> tuple[Path, list[Path]]:
         ValueError: `conformal.apply_prep_dirs` is non-empty and its length
             does not match `conformal.apply_dirs`'s.
     """
-    conf_cfg = cfg.conformal
+    conf_cfg = cfg.calibration.conformal
     calib_prep_dir = Path(str(conf_cfg.calib_prep_dir))
     apply_prep_raw = list(conf_cfg.apply_prep_dirs) if conf_cfg.apply_prep_dirs else []
     n_apply = len(list(conf_cfg.apply_dirs))
@@ -860,7 +860,7 @@ def run_conformal(cfg: DictConfig) -> dict[str, Path]:
             `fit_threshold`'s monotonicity falsifier (via `fit_all`).
         AssertionError: `_check_alpha_one_degenerate`'s self-check fails.
     """
-    conf_cfg = cfg.conformal
+    conf_cfg = cfg.calibration.conformal
 
     calib_dir, apply_dirs = resolve_dirs(cfg)
     calib_prep_dir, apply_prep_dirs = resolve_prep_dirs(cfg)
