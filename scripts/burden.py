@@ -287,7 +287,14 @@ def run_burden(cfg: DictConfig) -> Path:
     sources = resolve_sources(cfg)
     root_dir, _cropped = _resolve_source_root(burden_cfg)
 
-    out_dir = ensure_dir(cfg.output_dir)
+    # cfg.output_dir interpolates experiment_name, whose default is
+    # baseline_unet3d -- so a burden profile computed from ANOTHER model's
+    # predictions lands in the baseline's directory and reads as the
+    # baseline's result. That has now happened twice in this project (see
+    # analysis.detection.out_dir). An explicit analysis.burden.out_dir wins
+    # when set; the old behaviour is the fallback so existing commands are
+    # unchanged.
+    out_dir = ensure_dir(burden_cfg.get("out_dir") or cfg.output_dir)
     csv_path = out_dir / burden_cfg.out_name
 
     rows: dict[str, dict[str, float | int | str]] = {}

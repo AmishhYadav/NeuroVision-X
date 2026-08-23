@@ -3,6 +3,12 @@
 # training run. Kept out of configs/inference/ because none of it runs a model.
 
 burden:
+  # Where burden.csv is written. null falls back to ${output_dir}, which
+  # interpolates experiment_name -- fine for the default model, silently
+  # misleading for any other (a profile computed from one model's predictions
+  # landing in another model's directory). Set it explicitly whenever the
+  # predictions do not come from the default experiment.
+  out_dir: null
   # Which masks to profile.
   #   prediction - <eval_dir>/predictions/<case>.npy, saved in ORIGINAL BraTS
   #                geometry (240x240x155) by uncrop_to_original.
