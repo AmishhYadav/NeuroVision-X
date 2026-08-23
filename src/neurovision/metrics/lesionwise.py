@@ -78,7 +78,11 @@ from torch import Tensor
 
 from neurovision.data.transforms import REGION_NAMES
 
-__all__ = ["LESIONWISE_METRIC_PREFIXES", "lesionwise_case_metrics"]
+__all__ = [
+    "LESIONWISE_METRIC_PREFIXES",
+    "lesionwise_case_metrics",
+    "require_panoptica",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +142,30 @@ def _load_panoptica() -> Any:
             pass
         _panoptica_configured = True
     return panoptica
+
+
+def require_panoptica() -> Any:
+    """Public fail-fast check that `panoptica` is importable in this interpreter.
+
+    Thin wrapper over `_load_panoptica` (kept private for internal use by
+    this module). Exists so callers OUTSIDE this module -- e.g.
+    `scripts/evaluate.py`, `neurovision.analysis.replay` -- can check
+    importability by a public name instead of reaching across the module
+    boundary for a private one. The typical use is calling this once, up
+    front, before starting an expensive sliding-window inference pass or a
+    logit replay, so a missing `panoptica` fails immediately rather than
+    after minutes of work.
+
+    Returns:
+        The imported `panoptica` module (usually unused by the caller; only
+        the fact that this returned instead of raising matters).
+
+    Raises:
+        ImportError: If `panoptica` is not installed in the current
+            interpreter, naming `requirements-analysis.txt` and the
+            `.venv-analysis` virtualenv.
+    """
+    return _load_panoptica()
 
 
 def _count_components(labels: np.ndarray) -> int:

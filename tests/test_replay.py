@@ -10,14 +10,26 @@ truth, written to `tmp_path` in the same on-disk layout `scripts/evaluate.py`
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from neurovision.analysis import replay
 from neurovision.analysis.statistics import compare_models
 from neurovision.utils.io import write_json
+
+# Lesion-wise scoring needs `panoptica`, which lives only in the separate
+# `.venv-analysis` virtualenv (see requirements-analysis.txt) -- not in this
+# project's main training `.venv`. Any test that actually RUNS lesion-wise
+# scoring must skip cleanly in the training .venv rather than fail. Tests
+# that only prove the `lesionwise=None` default is unchanged, or that the
+# module itself imports without panoptica, are NOT gated by this -- they
+# must run (and pass) in both venvs. Mirrors tests/test_evaluate_script.py's
+# own `_PANOPTICA_MISSING`.
+_PANOPTICA_MISSING = importlib.util.find_spec("panoptica") is None
 
 # A post-processing config with every optional step off, so a test can
 # reason about `_binarize_regions` alone without component filtering or
@@ -395,3 +407,85 @@ def test_per_case_replay_missing_label_is_skipped_and_warned(tmp_path, caplog):
 
     assert list(result.index) == ["case_labeled"]
     assert any("case_unlabeled" in record.message for record in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# lesion-wise support (opt-in, additive, panoptica lazily imported)
+# ---------------------------------------------------------------------------
+
+
+def test_replay_case_lesionwise_none_is_unchanged():
+    """`lesionwise=None` (the default) must be byte-identical to before this
+    parameter existed -- no new keys, same values."""
+    logits, label = _perfect_case()
+
+    baseline = replay.replay_case(logits, label, postprocess_cfg=_RAW_PP_CFG)
+    explicit_none = replay.replay_case(logits, label, postprocess_cfg=_RAW_PP_CFG, lesionwise=None)
+
+    assert explicit_none == baseline
+    assert not any(key.startswith("lw") for key in explicit_none)
+
+
+@pytest.mark.skipif(
+    _PANOPTICA_MISSING,
+    reason="panoptica is not installed in this venv (see requirements-analysis.txt); "
+    "run from .venv-analysis to exercise lesion-wise scoring",
+)
+def test_replay_case_lesionwise_adds_columns():
+    """Lesion-wise scoring is ADDITIVE -- turning it on must not move an
+    already-existing voxel-wise metric, only add new `lw*` keys."""
+    logits, label = _perfect_case()
+
+    without = replay.replay_case(logits, label, postprocess_cfg=_RAW_PP_CFG)
+    with_lw = replay.replay_case(logits, label, postprocess_cfg=_RAW_PP_CFG, lesionwise={})
+
+    # Every pre-existing key is bit-identical.
+    for key, value in without.items():
+        assert with_lw[key] == value
+
+    # New lesion-wise keys were actually added.
+    new_keys = set(with_lw) - set(without)
+    assert new_keys
+    assert all(key.startswith("lw") for key in new_keys)
+    assert with_lw["lwdice_ET"] == pytest.approx(1.0)
+
+
+@pytest.mark.skipif(
+    _PANOPTICA_MISSING,
+    reason="panoptica is not installed in this venv (see requirements-analysis.txt); "
+    "run from .venv-analysis to exercise lesion-wise scoring",
+)
+def test_per_case_replay_lesionwise_additive(tmp_path):
+    eval_dir = tmp_path / "eval"
+    prep_dir = tmp_path / "prep"
+    logits, label = _perfect_case()
+    _write_case(prep_dir, "case_001", label)
+    _write_logits(eval_dir, "case_001", logits)
+
+    df_off = replay.per_case_replay(eval_dir, prep_dir, postprocess_cfg=_RAW_PP_CFG)
+    df_on = replay.per_case_replay(eval_dir, prep_dir, postprocess_cfg=_RAW_PP_CFG, lesionwise={})
+
+    shared_cols = list(df_off.columns)
+    pd.testing.assert_frame_equal(df_on[shared_cols], df_off)
+
+    lw_cols = [c for c in df_on.columns if c.startswith("lw")]
+    assert lw_cols
+    assert all(col not in df_off.columns for col in lw_cols)
+
+
+def test_replay_module_imports_without_panoptica():
+    """Proves the lazy-import discipline documented in `replay_case`: the
+    module itself must never pull `lesionwise_case_metrics` (and therefore
+    never `panoptica`) into its own namespace just by being imported."""
+    import neurovision.analysis.replay as replay_module
+
+    assert "lesionwise_case_metrics" not in vars(replay_module)
+
+
+def test_require_panoptica_is_public_and_importable():
+    """`require_panoptica` must be reachable from the public `neurovision.metrics`
+    package, not just as a private helper inside `lesionwise.py`. Not called
+    here -- calling it would raise in a venv without panoptica."""
+    from neurovision.metrics import require_panoptica
+
+    assert callable(require_panoptica)

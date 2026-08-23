@@ -1,6 +1,7 @@
 from neurovision.metrics.lesionwise import (
     LESIONWISE_METRIC_PREFIXES,
     lesionwise_case_metrics,
+    require_panoptica,
 )
 from neurovision.metrics.segmentation import (
     REGION_NAMES,
@@ -24,4 +25,5 @@ __all__ = [
     "hd95",
     "iou_score",
     "lesionwise_case_metrics",
+    "require_panoptica",
 ]

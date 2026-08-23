@@ -44,6 +44,15 @@ run_replay = replay_logits_script.run_replay
 _resolve_out_dir = replay_logits_script._resolve_out_dir
 _check_self_consistency = replay_logits_script._check_self_consistency
 _compute_best_thresholds = replay_logits_script._compute_best_thresholds
+resolve_lesionwise = replay_logits_script.resolve_lesionwise
+
+# Lesion-wise scoring needs `panoptica`, which lives only in the separate
+# `.venv-analysis` virtualenv -- not this project's main training `.venv`.
+# `resolve_lesionwise` itself never imports panoptica (same reasoning as
+# scripts/evaluate.py's own resolver), so its tests below run in both
+# venvs; only a test that actually SCORES a case with lesionwise enabled
+# needs to skip.
+_PANOPTICA_MISSING = importlib.util.find_spec("panoptica") is None
 
 SHAPE = (8, 8, 8)
 
@@ -548,3 +557,125 @@ def test_run_replay_skips_comparison_when_disabled(tmp_path):
 
     assert "comparison_default" not in results
     assert not (out_dir / "eval" / "comparison_default.csv").exists()
+
+
+# ---------------------------------------------------------------------------
+# resolve_lesionwise (cfg.analysis.replay.lesionwise) -- mirrors
+# scripts/evaluate.py's own resolve_lesionwise tests exactly, off the
+# replay-specific config path. Never imports panoptica, so none of these
+# are skipped.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_lesionwise_absent_key_returns_none():
+    """Backward compatibility: a config composed before this key existed
+    must still run, with lesion-wise scoring simply off."""
+    replay_cfg = OmegaConf.create({"eval_dir": "x", "prep_dir": "y"})
+    assert resolve_lesionwise(replay_cfg) is None
+
+
+def test_resolve_lesionwise_disabled_returns_none():
+    replay_cfg = OmegaConf.create({"lesionwise": {"enabled": False, "min_lesion_voxels": 10}})
+    assert resolve_lesionwise(replay_cfg) is None
+
+    # The whole block set to null is equally "off".
+    replay_cfg_null = OmegaConf.create({"lesionwise": None})
+    assert resolve_lesionwise(replay_cfg_null) is None
+
+
+def test_resolve_lesionwise_returns_settings_when_enabled():
+    replay_cfg = OmegaConf.create(
+        {
+            "lesionwise": {
+                "enabled": True,
+                "min_lesion_voxels": 25,
+                "matching_threshold": 0.3,
+                "nsd_tolerance_mm": 2.0,
+                "connectivity": 6,
+            }
+        }
+    )
+
+    settings = resolve_lesionwise(replay_cfg)
+
+    assert settings == {
+        "min_lesion_voxels": 25,
+        "matching_threshold": 0.3,
+        "nsd_tolerance_mm": 2.0,
+        "connectivity": 6,
+    }
+    assert isinstance(settings["min_lesion_voxels"], int)
+    assert isinstance(settings["matching_threshold"], float)
+    assert isinstance(settings["nsd_tolerance_mm"], float)
+    assert isinstance(settings["connectivity"], int)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"min_lesion_voxels": -1},
+        {"matching_threshold": 0.0},
+        {"matching_threshold": 1.5},
+        {"nsd_tolerance_mm": 0.0},
+        {"nsd_tolerance_mm": -1.0},
+        {"connectivity": 10},
+    ],
+    ids=[
+        "negative_min_lesion_voxels",
+        "matching_threshold_zero",
+        "matching_threshold_above_one",
+        "nsd_tolerance_zero",
+        "nsd_tolerance_negative",
+        "connectivity_not_6_18_26",
+    ],
+)
+def test_resolve_lesionwise_raises_on_invalid_settings(overrides: dict[str, object]):
+    settings = {
+        "enabled": True,
+        "min_lesion_voxels": 50,
+        "matching_threshold": 0.5,
+        "nsd_tolerance_mm": 1.0,
+        "connectivity": 26,
+    }
+    settings.update(overrides)
+    replay_cfg = OmegaConf.create({"lesionwise": settings})
+
+    with pytest.raises(ValueError):
+        resolve_lesionwise(replay_cfg)
+
+
+# ---------------------------------------------------------------------------
+# lesionwise wiring end-to-end -- per_case_default.csv only, never the
+# sweep or the ablation.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    _PANOPTICA_MISSING,
+    reason="panoptica is not installed in this venv (see requirements-analysis.txt); "
+    "run from .venv-analysis to exercise lesion-wise scoring",
+)
+def test_run_replay_lesionwise_adds_columns_only_to_per_case_default(tmp_path):
+    eval_dir, prep_dir, _ = _build_split(tmp_path, n_graded=2, n_speckled=0)
+    out_dir = tmp_path / "out"
+    cfg = _make_cfg(
+        eval_dir,
+        prep_dir,
+        out_dir,
+        threshold_sweep={"enabled": True, "thresholds": [0.3, 0.5]},
+        postprocess_ablation={
+            "enabled": True,
+            "variants": {"raw": {"min_component_size": 0}},
+        },
+        lesionwise={"enabled": True, "min_lesion_voxels": 0},
+    )
+
+    results = run_replay(cfg)
+
+    per_case_cols = results["per_case_default"].columns
+    assert any(col.startswith("lw") for col in per_case_cols)
+    # Neither the sweep nor the ablation ever gets lesion-wise columns --
+    # they are per-threshold/per-variant summary tables (dice_*_mean /
+    # dice_*_median), which lesionwise_case_metrics does not feed at all.
+    assert not any(col.startswith("lw") for col in results["threshold_sweep"].columns)
+    assert not any(col.startswith("lw") for col in results["postprocess_ablation"].columns)

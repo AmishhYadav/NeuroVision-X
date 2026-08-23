@@ -1138,7 +1138,7 @@ def test_run_evaluation_lesionwise_raises_before_inference_when_panoptica_missin
             "separate '.venv-analysis' virtualenv described in requirements-analysis.txt."
         )
 
-    monkeypatch.setattr(evaluate_script, "_load_panoptica", _raise_missing)
+    monkeypatch.setattr(evaluate_script, "require_panoptica", _raise_missing)
 
     with pytest.raises(ImportError, match="requirements-analysis.txt"):
         run_evaluation(cfg)

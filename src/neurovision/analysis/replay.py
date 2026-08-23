@@ -264,6 +264,7 @@ def replay_case(
     threshold: float | Sequence[float] = 0.5,
     postprocess_cfg: Mapping[str, Any] | None = None,
     spacing: tuple[float, float, float] | None = None,
+    lesionwise: Mapping[str, Any] | None = None,
 ) -> dict[str, float]:
     """Scores one case's saved logits at a given threshold and post-processing setting.
 
@@ -282,17 +283,35 @@ def replay_case(
             `min_component_size`, `connectivity`, `keep_largest_only`,
             `et_min_volume`.
         spacing: Voxel spacing in mm, `(D, H, W)` order, as stored in the
-            case's `meta.json`. Passed straight through to HD95. When
-            `None`, HD95 is reported in VOXELS, not millimetres.
+            case's `meta.json`. Passed straight through to HD95 AND (when
+            `lesionwise` is set) to the lesion-wise NSD. When `None`, HD95
+            is reported in VOXELS, not millimetres.
+        lesionwise: `None` (the default) turns lesion-wise scoring OFF --
+            the return value is then byte-identical to what this function
+            returned before lesion-wise metrics existed. Otherwise, a
+            mapping of keyword arguments for
+            `neurovision.metrics.lesionwise.lesionwise_case_metrics`
+            (`min_lesion_voxels`, `matching_threshold`, `nsd_tolerance_mm`,
+            `connectivity`); its result is merged additively into the
+            returned dict, the same pattern `scripts/evaluate.py` uses.
+            `lesionwise_case_metrics` needs `panoptica`, imported lazily
+            inside this function -- see the module docstring's `.venv` /
+            `.venv-analysis` split.
 
     Returns:
         The same flat metric dict `compute_case_metrics` returns:
         `dice_R`/`iou_R`/`hd95_R`/`gt_empty_R` per region plus
-        `dice_mean`/`iou_mean`/`hd95_mean`.
+        `dice_mean`/`iou_mean`/`hd95_mean`. When `lesionwise` is not `None`,
+        also every key `lesionwise_case_metrics` returns (`lwdice_R`,
+        `lwnsd_R`, `lwf1_R`, `lwtp_R`, `lwfp_R`, `lwfn_R` per region, plus
+        the `lw*_mean` cross-region means).
 
     Raises:
         ValueError: If `logits` is not `(3, D, H, W)`, or `threshold` is a
             sequence of the wrong length.
+        ImportError: If `lesionwise` is not `None` and `panoptica` is not
+            installed in the current interpreter (see
+            `neurovision.metrics.lesionwise.require_panoptica`).
     """
     logits_arr = np.asarray(logits, dtype=np.float32)
     if logits_arr.ndim != 4 or logits_arr.shape[0] != 3:
@@ -308,7 +327,19 @@ def replay_case(
     label_t = torch.as_tensor(np.asarray(label))
     target = classes_to_regions(label_t)  # (1, 3, D, H, W)
 
-    return compute_case_metrics(regions, target, spacing=spacing)
+    metrics = compute_case_metrics(regions, target, spacing=spacing)
+
+    if lesionwise is not None:
+        # Imported here, not at module top level: `panoptica` is deliberately
+        # absent from the training `.venv` (see this module's docstring), and
+        # `neurovision.analysis.replay` must still be importable there. This
+        # branch is the only place that needs panoptica, and it is only
+        # reached when a caller opts in.
+        from neurovision.metrics.lesionwise import lesionwise_case_metrics
+
+        metrics.update(lesionwise_case_metrics(regions, target, spacing=spacing, **lesionwise))
+
+    return metrics
 
 
 def _load_label_and_spacing(
@@ -508,6 +539,7 @@ def per_case_replay(
     case_ids: Sequence[str] | None = None,
     threshold: float | Sequence[float] = 0.5,
     postprocess_cfg: Mapping[str, Any] | None = None,
+    lesionwise: Mapping[str, Any] | None = None,
 ) -> pd.DataFrame:
     """Replays every case once and returns a per-case metrics table.
 
@@ -523,6 +555,11 @@ def per_case_replay(
             logits.
         threshold: Forwarded to `replay_case`; scalar or per-channel.
         postprocess_cfg: Forwarded to `replay_case`.
+        lesionwise: `None` (the default) turns lesion-wise scoring OFF, and
+            the returned table's columns are byte-identical to before this
+            parameter existed. Otherwise forwarded to `replay_case` for
+            every case, adding the `lw*` columns on top of the existing
+            ones -- see `replay_case`'s docstring.
 
     Returns:
         A DataFrame indexed by `case_id`. Cases whose `label.npy` is missing
@@ -537,7 +574,12 @@ def per_case_replay(
         label, spacing = loaded
         logits = load_case_logits(eval_dir, case_id)
         records[case_id] = replay_case(
-            logits, label, threshold=threshold, postprocess_cfg=postprocess_cfg, spacing=spacing
+            logits,
+            label,
+            threshold=threshold,
+            postprocess_cfg=postprocess_cfg,
+            spacing=spacing,
+            lesionwise=lesionwise,
         )
         if i % _LOG_EVERY == 0:
             logger.info("per_case_replay: processed %d/%d case(s)", i, len(resolved_ids))

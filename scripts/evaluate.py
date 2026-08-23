@@ -74,7 +74,7 @@ from neurovision.inference.sliding_window import sliding_window_predict
 # been imported first in the same process. Copied from scripts/train.py.
 from neurovision.losses import segmentation  # noqa: F401
 from neurovision.metrics.boundary import boundary_stratified_errors
-from neurovision.metrics.lesionwise import _load_panoptica, lesionwise_case_metrics
+from neurovision.metrics.lesionwise import lesionwise_case_metrics, require_panoptica
 from neurovision.metrics.segmentation import MetricAggregator, compute_case_metrics
 from neurovision.models import baseline  # noqa: F401
 from neurovision.models.registry import build_model
@@ -595,13 +595,13 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
         # Same reasoning as _validate_mc_dropout_config above, checked right
         # next to it: fail before the checkpoint even loads, not after a
         # ~25-minute sliding-window pass over 189 cases discovers on the
-        # last one that panoptica is missing. _load_panoptica() is cheap (an
-        # import plus one-time log setup) and is exactly the call that
+        # last one that panoptica is missing. require_panoptica() is cheap
+        # (an import plus one-time log setup) and is exactly the call that
         # raises the ImportError this analysis needs -- naming
         # requirements-analysis.txt and .venv-analysis -- when panoptica is
         # not installed in the current interpreter. Its return value is
         # unused here; only the import-succeeded check matters.
-        _load_panoptica()
+        require_panoptica()
 
     checkpoint_path = resolve_checkpoint(cfg)
     model, _resume_state = load_eval_model(cfg, checkpoint_path, device)

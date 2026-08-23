@@ -67,6 +67,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from neurovision.analysis.replay import per_case_replay, postprocess_ablation, threshold_sweep
 from neurovision.analysis.statistics import compare_models, format_comparison, load_per_case
+from neurovision.metrics.lesionwise import require_panoptica
 from neurovision.utils.io import ensure_dir, write_json
 from neurovision.utils.logging import setup_logging
 from neurovision.utils.seed import set_seed
@@ -126,6 +127,71 @@ def _resolve_out_dir(cfg: DictConfig) -> Path:
         )
     leaf = Path(str(replay_cfg.eval_dir)).name
     return ensure_dir(Path(str(replay_cfg.out_dir)) / leaf)
+
+
+def resolve_lesionwise(replay_cfg: DictConfig) -> dict[str, Any] | None:
+    """Reads and validates `cfg.analysis.replay.lesionwise`.
+
+    Mirrors `scripts/evaluate.py`'s `resolve_lesionwise` exactly -- same
+    four settings, same `.get(key, None)` backward-compatibility reasoning
+    (a config composed before this key existed must still run, with
+    lesion-wise scoring simply off), same four range checks -- just read
+    off `cfg.analysis.replay.lesionwise` instead of
+    `cfg.inference.evaluation.lesionwise`, since replay's lesion-wise
+    scoring is this driver script's own opt-in, not part of a saved
+    `eval_config.yaml`.
+
+    Args:
+        replay_cfg: `cfg.analysis.replay`.
+
+    Returns:
+        A plain dict of the four settings `per_case_replay`'s `lesionwise`
+        keyword argument accepts (`min_lesion_voxels`, `matching_threshold`,
+        `nsd_tolerance_mm`, `connectivity`), ready to pass straight through
+        -- or `None` when the block is absent, is `None`, or has
+        `enabled: false`.
+
+    Raises:
+        ValueError: If `min_lesion_voxels` is negative, `matching_threshold`
+            is not in `(0, 1]`, `nsd_tolerance_mm` is not positive, or
+            `connectivity` is not one of `{6, 18, 26}` (the only
+            neighbourhoods `cc3d.connected_components` accepts in 3-D).
+    """
+    raw = replay_cfg.get("lesionwise", None)
+    if raw is None or not raw.get("enabled", False):
+        return None
+
+    min_lesion_voxels = int(raw.get("min_lesion_voxels", 50))
+    matching_threshold = float(raw.get("matching_threshold", 0.5))
+    nsd_tolerance_mm = float(raw.get("nsd_tolerance_mm", 1.0))
+    connectivity = int(raw.get("connectivity", 26))
+
+    if min_lesion_voxels < 0:
+        raise ValueError(
+            "analysis.replay.lesionwise.min_lesion_voxels must be >= 0, got "
+            f"{min_lesion_voxels}."
+        )
+    if not (0 < matching_threshold <= 1):
+        raise ValueError(
+            "analysis.replay.lesionwise.matching_threshold must be in (0, 1], "
+            f"got {matching_threshold}."
+        )
+    if nsd_tolerance_mm <= 0:
+        raise ValueError(
+            "analysis.replay.lesionwise.nsd_tolerance_mm must be > 0, got " f"{nsd_tolerance_mm}."
+        )
+    if connectivity not in (6, 18, 26):
+        raise ValueError(
+            "analysis.replay.lesionwise.connectivity must be one of {6, 18, 26}, got "
+            f"{connectivity}."
+        )
+
+    return {
+        "min_lesion_voxels": min_lesion_voxels,
+        "matching_threshold": matching_threshold,
+        "nsd_tolerance_mm": nsd_tolerance_mm,
+        "connectivity": connectivity,
+    }
 
 
 def _check_self_consistency(replayed: pd.DataFrame, eval_dir: Path) -> dict[str, float] | None:
@@ -299,6 +365,13 @@ def run_replay(cfg: DictConfig) -> dict[str, pd.DataFrame]:
       at the same project-default settings.
     - `replay_config.yaml` -- always, the fully resolved config this run used.
 
+    `per_case_default.csv` additionally carries lesion-wise (`lw*`) columns
+    when `analysis.replay.lesionwise.enabled` -- see `resolve_lesionwise`.
+    The threshold sweep and the post-processing ablation never do (see
+    `configs/analysis/default.yaml`'s comment on why: both loop over many
+    thresholds/variants per case, and lesion-wise scoring is too slow to pay
+    that many times per case).
+
     Args:
         cfg: The full composed Hydra config.
 
@@ -309,14 +382,28 @@ def run_replay(cfg: DictConfig) -> dict[str, pd.DataFrame]:
         `per_case_default` is always present.
 
     Raises:
-        ValueError: See `_resolve_out_dir`, `_check_self_consistency`, and
-            `_compute_best_thresholds`.
+        ValueError: See `_resolve_out_dir`, `_check_self_consistency`,
+            `_compute_best_thresholds`, and `resolve_lesionwise`.
+        ImportError: If `analysis.replay.lesionwise.enabled` is true and
+            `panoptica` is not installed in the current interpreter (see
+            `neurovision.metrics.lesionwise.require_panoptica`) -- raised
+            before any logits are loaded, not after a sweep and an ablation
+            have already run.
     """
     replay_cfg = cfg.analysis.replay
     out_dir = _resolve_out_dir(cfg)
     eval_dir = Path(str(replay_cfg.eval_dir))
     prep_dir = Path(str(replay_cfg.prep_dir))
     case_ids = list(replay_cfg.case_ids) if replay_cfg.case_ids is not None else None
+
+    lesionwise_cfg = resolve_lesionwise(replay_cfg)
+    if lesionwise_cfg is not None:
+        # Fail fast, before the threshold sweep or the post-processing
+        # ablation load a single case's logits -- same reasoning as
+        # scripts/evaluate.py's own require_panoptica() call before
+        # inference. Its return value is unused; only the import-succeeded
+        # check matters.
+        require_panoptica()
 
     logger.info(
         "replay_logits: eval_dir=%s prep_dir=%s out_dir=%s case_ids=%s",
@@ -356,7 +443,9 @@ def run_replay(cfg: DictConfig) -> dict[str, pd.DataFrame]:
         results["postprocess_ablation"] = ablation_df
 
     logger.info("replay_logits: replaying every selected case at project default settings.")
-    per_case_default = per_case_replay(eval_dir, prep_dir, case_ids=case_ids)
+    per_case_default = per_case_replay(
+        eval_dir, prep_dir, case_ids=case_ids, lesionwise=lesionwise_cfg
+    )
     per_case_default_path = out_dir / "per_case_default.csv"
     per_case_default.to_csv(per_case_default_path)
     logger.info("replay_logits: wrote %s", per_case_default_path)

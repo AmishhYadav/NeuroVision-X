@@ -438,3 +438,36 @@ replay:
     # post-processing choice made here can be shown to hold -- or not --
     # against a baseline scored the exact same way.
     eval_dir: null
+
+  # Lesion-wise (BraTS 2023-style, connected-component) Dice/NSD/F1, added
+  # on top of the voxel-wise metrics `per_case_default.csv` already
+  # reports. Needs `panoptica`, which is deliberately NOT installed in the
+  # project's main training .venv (it pins numpy<2.3, incompatible with
+  # this project's numpy==2.4.6) -- run this with
+  # '.venv-analysis/bin/python scripts/replay_logits.py ...', not the
+  # default interpreter, whenever `enabled: true`.
+  #
+  # Applies ONLY to `per_case_default.csv` -- NEVER to `threshold_sweep` or
+  # `postprocess_ablation` above. Both of those loop over many thresholds
+  # or variants per case (7 thresholds, 5 variants by default), and
+  # lesion-wise scoring measured ~2.4s/case on a median 137x171x140 volume
+  # (connected-component labelling plus per-region surface-distance,
+  # dominated by panoptica's matching step) -- paying that cost once per
+  # sweep POINT, not once per case, is not worth it for a number the sweep
+  # does not even report. Do not "fix" this by wiring it into the sweep or
+  # the ablation; it was left out on purpose.
+  lesionwise:
+    enabled: false
+    # Connected components smaller than this are dropped from BOTH the
+    # prediction and the reference mask before matching. See
+    # neurovision.metrics.lesionwise's module docstring for why this also
+    # changes what counts as a false negative, not just a filter on the
+    # prediction side.
+    min_lesion_voxels: 50
+    # IoU threshold for matching a predicted lesion to a reference lesion.
+    matching_threshold: 0.5
+    # Surface-distance tolerance for Normalized Surface Dice, in mm. BraTS
+    # uses 1mm.
+    nsd_tolerance_mm: 1.0
+    # 26 = full 3-D neighbourhood, the BraTS official convention.
+    connectivity: 26
