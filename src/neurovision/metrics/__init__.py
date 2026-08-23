@@ -1,3 +1,7 @@
+from neurovision.metrics.lesionwise import (
+    LESIONWISE_METRIC_PREFIXES,
+    lesionwise_case_metrics,
+)
 from neurovision.metrics.segmentation import (
     REGION_NAMES,
     MetricAggregator,
@@ -11,6 +15,7 @@ from neurovision.metrics.segmentation import (
 
 __all__ = [
     "REGION_NAMES",
+    "LESIONWISE_METRIC_PREFIXES",
     "MetricAggregator",
     "binarize",
     "classes_to_regions",
@@ -18,4 +23,5 @@ __all__ = [
     "dice_score",
     "hd95",
     "iou_score",
+    "lesionwise_case_metrics",
 ]

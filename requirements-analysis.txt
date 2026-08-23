@@ -29,6 +29,14 @@
 # Dice hides: a missed small lesion costs almost no voxel Dice.
 panoptica==2.1.7
 
+# panoptica's own connected-component labeller, and it arrives as one of its
+# dependencies. Pinned EXPLICITLY here because metrics/lesionwise.py imports
+# cc3d directly to label lesion instances, and a package you import directly
+# is a dependency of yours whether or not something else happens to install it.
+# Left implicit, a future panoptica release that swapped labellers would break
+# our module with a traceback pointing at the wrong project.
+connected-components-3d==3.29.0
+
 # --- Statistics -----------------------------------------------------------
 # analysis/statistics.py currently hand-rolls bootstrap CIs and Holm. TOST,
 # proportion CIs and the conformal coverage tables want a reference
