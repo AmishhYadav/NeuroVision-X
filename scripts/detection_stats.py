@@ -482,7 +482,8 @@ def _process_voxel_case(
     max_voxels: int,
     generator: np.random.Generator,
     cohort_name: str,
-) -> dict[str, dict[str, np.ndarray]] | None:
+    return_indices: bool = False,
+) -> dict[str, dict[str, np.ndarray]] | tuple[dict[str, dict[str, np.ndarray]], np.ndarray] | None:
     """Loads one case's saved ambiguity maps, samples a label-free voxel subset, and scores error.
 
     Args:
@@ -497,6 +498,12 @@ def _process_voxel_case(
         max_voxels: Maximum voxels drawn from the mask.
         generator: An explicit `np.random.Generator`.
         cohort_name: Used only in log messages.
+        return_indices: When True, also return the FLAT voxel indices that
+            were drawn. Additive and default-off, so Gate 1's own call site
+            is unchanged. It exists so a later analysis -- the MC-dropout
+            comparison -- can read a different map at exactly the same
+            voxels instead of re-deriving the mask and redrawing, which
+            would compare two quantities on two different samples.
 
     Returns:
         `None` if the case has no label on disk, or its sampling mask is
@@ -569,6 +576,8 @@ def _process_voxel_case(
         "control": entropy.mean(axis=0).reshape(-1)[drawn],
         "positive": positive.any(axis=0).reshape(-1)[drawn],
     }
+    if return_indices:
+        return out, drawn
     return out
 
 
