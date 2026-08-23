@@ -457,7 +457,7 @@ def _log_summary(family: pd.DataFrame, verdict: dict[str, Any]) -> None:
 @hydra.main(version_base="1.3", config_path=_CONFIG_DIR, config_name="config")
 def main(cfg: DictConfig) -> None:
     """Hydra entry point."""
-    setup_logging(cfg)
+    setup_logging(level="INFO")
     out_dir = run_gate2(cfg)
     logger.info("Gate 2 outputs written to %s", out_dir)
 
