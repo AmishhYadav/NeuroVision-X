@@ -20,10 +20,21 @@ come from the deterministic sliding-window pass unless
 `cfg.inference.mc_dropout.predictions_from` is explicitly set to
 `"mc_mean"`.
 
+Also optionally runs flip test-time augmentation
+(`neurovision.inference.tta`), gated behind `cfg.inference.tta.enabled`
+(default off). Unlike MC-dropout, TTA has no "deterministic" escape hatch --
+turning it on REPLACES the deterministic pass with the flip-averaged one
+everywhere (predictions, and any saved logits/probabilities), because
+averaging the flipped views is the entire point. A TTA run is therefore a
+separate arm and should be written to its own `out_dir` (see
+`configs/inference/default.yaml`'s `tta:` block). TTA and MC-dropout cannot
+be enabled together -- see `run_evaluation`'s mutual-exclusion check.
+
 Example usage:
 
     python scripts/evaluate.py inference.evaluation.split=test
     python scripts/evaluate.py inference.evaluation.split=test inference.mc_dropout.enabled=true
+    python scripts/evaluate.py inference.evaluation.split=test inference.tta.enabled=true
 
 The wiring is split into small functions (`build_eval_dataloader`,
 `resolve_checkpoint`, `load_eval_model`, `evaluate_case`, `run_evaluation`)
@@ -63,6 +74,7 @@ from neurovision.inference.postprocess import (
     uncrop_to_original,
 )
 from neurovision.inference.sliding_window import sliding_window_predict
+from neurovision.inference.tta import flip_combinations, tta_predict
 
 # Importing these registers the "unet3d"/"swinunetr" and "dice_ce" builders
 # (the @register_model / @register_loss decorators run on import) before
@@ -441,10 +453,54 @@ def resolve_lesionwise(eval_cfg: DictConfig) -> dict[str, Any] | None:
     }
 
 
+def resolve_tta(inf_cfg: DictConfig) -> tuple[tuple[int, ...], ...] | None:
+    """Reads and validates `cfg.inference.tta`.
+
+    Args:
+        inf_cfg: `cfg.inference`. The key is read with a default of `None`
+            rather than attribute access -- same reasoning as
+            `resolve_boundary_bands`/`resolve_lesionwise`: a config composed
+            before this key existed (an older saved `eval_config.yaml`, a
+            minimal test config) must still run, with TTA simply off.
+
+    Returns:
+        The flip combinations to average over (via
+        `neurovision.inference.tta.flip_combinations`, never re-derived
+        here), or `None` when the block is absent, is `None`, or has
+        `enabled: false`. An empty `axes` list is legal and resolves to
+        `((),)` -- the identity pass only; `flip_combinations` already
+        handles that case.
+
+    Raises:
+        ValueError: If `axes` contains a value outside `{0, 1, 2}` (the only
+            spatial axes a volume has), or contains a duplicate.
+    """
+    raw = inf_cfg.get("tta", None)
+    if raw is None or not raw.get("enabled", False):
+        return None
+
+    axes = [int(a) for a in raw.get("axes", [0, 1, 2])]
+
+    invalid = [a for a in axes if a not in (0, 1, 2)]
+    if invalid:
+        raise ValueError(
+            f"cfg.inference.tta.axes contains invalid axis/axes {invalid}. Valid spatial "
+            "axes are 0 (D), 1 (H), 2 (W) -- these are SPATIAL axis indices, not raw "
+            "tensor dimensions; see tta_predict's docstring."
+        )
+    if len(set(axes)) != len(axes):
+        raise ValueError(
+            f"cfg.inference.tta.axes={axes} contains a duplicate axis. Each spatial axis "
+            "may appear at most once."
+        )
+
+    return flip_combinations(axes)
+
+
 def evaluate_case(
     model: nn.Module, batch: dict[str, Any], cfg: DictConfig, device: torch.device
 ) -> CaseOutput:
-    """Runs sliding-window inference (and, optionally, MC-dropout) for one case.
+    """Runs sliding-window inference (and, optionally, MC-dropout or TTA) for one case.
 
     Always runs the deterministic `sliding_window_predict` pass first, and
     `CaseOutput.regions` comes from THAT pass by default: turning on
@@ -455,6 +511,15 @@ def evaluate_case(
     prediction instead -- `run_evaluation` logs a one-time warning when this
     is active, since it does make segmentation metrics incomparable to a
     deterministic-pass run.
+
+    When `cfg.inference.tta` resolves to a non-`None` flip set (see
+    `resolve_tta`), TTA REPLACES the deterministic pass entirely rather than
+    running alongside it -- the identity flip `()` is already one of the
+    combinations `resolve_tta` returns (always first, see
+    `flip_combinations`), so a separate deterministic call on top would just
+    repeat that one pass's work. `run_evaluation` refuses to start a run
+    where both TTA and MC-dropout are enabled (see its mutual-exclusion
+    check), so the two branches below are never both live.
 
     Args:
         model: The segmentation model, already on `device`.
@@ -467,10 +532,35 @@ def evaluate_case(
         A `CaseOutput`. See its docstring for what each field holds.
     """
     image = batch["image"]
+    eval_cfg = cfg.inference.evaluation
+
+    tta_flips = resolve_tta(cfg.inference)
+    if tta_flips is not None:
+        tta_out = tta_predict(model, image, cfg, flips=tta_flips, device=device)
+        # TTAOutput.mean_prob is UNBATCHED (C, D, H, W) -- see that
+        # dataclass's docstring -- while everything downstream
+        # (postprocess_logits, the .npy files this script writes) expects a
+        # batch axis, exactly like the deterministic path's `logits`
+        # (1, 3, D, H, W). Restored explicitly rather than relying on a
+        # broadcast to work out.
+        mean_prob = tta_out.mean_prob.unsqueeze(0)
+        # postprocess_logits applies its OWN sigmoid internally, so handing
+        # it mean_prob directly would double-sigmoid every value and shrink
+        # it toward 0.5 -- logits_from_mean_prob (from mc_dropout.py, reused
+        # rather than duplicated, exactly as tta.py's own docstring
+        # instructs) undoes that ahead of time.
+        logits = logits_from_mean_prob(mean_prob)
+        regions = postprocess_logits(logits, cfg)
+
+        probabilities = mean_prob if eval_cfg.save_probabilities else None
+        saved_logits = logits if eval_cfg.save_logits else None
+        return CaseOutput(
+            regions=regions, probabilities=probabilities, logits=saved_logits, mc=None
+        )
+
     logits = sliding_window_predict(model, image, cfg, device)
     regions = postprocess_logits(logits, cfg)
 
-    eval_cfg = cfg.inference.evaluation
     probabilities = torch.sigmoid(logits) if eval_cfg.save_probabilities else None
     # The deterministic logits, kept before any `mc_mean` branch below can
     # rebind `regions`: `logits/` always means the deterministic pass.
@@ -589,6 +679,27 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
     mc_cfg = cfg.inference.mc_dropout
     _validate_mc_dropout_config(mc_cfg)
 
+    # TTA (see evaluate_case) REPLACES the deterministic pass, and MC-dropout
+    # with predictions_from="mc_mean" re-derives the prediction from ITS OWN
+    # averaged probability. With both enabled it is ambiguous which averaged
+    # pass predictions/ (and any saved logits/probabilities) came from, and
+    # which uncertainty source a saved field describes -- so this is checked
+    # here, next to _validate_mc_dropout_config and for the same reason: a
+    # config mistake should fail in the first second, not after a real
+    # sliding-window pass.
+    tta_flips = resolve_tta(cfg.inference)
+    if tta_flips is not None and mc_cfg.enabled:
+        raise ValueError(
+            "cfg.inference.tta.enabled and cfg.inference.mc_dropout.enabled cannot both be "
+            "True. Both features re-derive the segmentation from an averaged probability -- "
+            "TTA averages probabilities across flipped views, MC-dropout averages "
+            "probabilities across stochastic dropout passes -- so with both on it is "
+            "ambiguous which pass predictions/ (and any saved logits/probabilities) came "
+            "from, and which uncertainty source a saved field describes. Running them "
+            "together is not supported: silently letting one win would make a saved "
+            "evaluation directory un-interpretable after the fact. Turn one off."
+        )
+
     eval_cfg = cfg.inference.evaluation
     lesionwise_cfg = resolve_lesionwise(eval_cfg)
     if lesionwise_cfg is not None:
@@ -602,6 +713,31 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
         # not installed in the current interpreter. Its return value is
         # unused here; only the import-succeeded check matters.
         require_panoptica()
+
+    if tta_flips is not None:
+        # A user starting a long multi-case run deserves to see the cost
+        # multiplier in the first few seconds, not discover it 20 minutes in.
+        logger.info(
+            "TTA enabled: %d flip combination(s) resolved (%s). Cost is exactly "
+            "len(flips)=%d x one sliding-window pass, per case.",
+            len(tta_flips),
+            tta_flips,
+            len(tta_flips),
+        )
+        if eval_cfg.save_logits or eval_cfg.save_probabilities:
+            # Logged once here, before the per-case loop starts -- this is a
+            # fact about the run's CONFIG (which artifacts get written and
+            # what they mean), not about any individual case, matching the
+            # "one-time, not per-case" pattern the MC-dropout storage guard
+            # and the lesion-wise cost line below both use.
+            logger.warning(
+                "TTA is enabled together with save_logits/save_probabilities: the saved "
+                "logits/ and/or probabilities/ arrays are TTA-AVERAGED across %d flip "
+                "view(s), NOT a raw deterministic pass. They are NOT interchangeable with "
+                "the logits/probabilities of a non-TTA run -- e.g. a temperature scale "
+                "fitted on one is not valid for the other.",
+                len(tta_flips),
+            )
 
     checkpoint_path = resolve_checkpoint(cfg)
     model, _resume_state = load_eval_model(cfg, checkpoint_path, device)

@@ -50,6 +50,7 @@ load_eval_model = evaluate_script.load_eval_model
 run_evaluation = evaluate_script.run_evaluation
 evaluate_case = evaluate_script.evaluate_case
 resolve_lesionwise = evaluate_script.resolve_lesionwise
+resolve_tta = evaluate_script.resolve_tta
 
 # panoptica lives only in .venv-analysis (see requirements-analysis.txt), so
 # any test that actually RUNS lesion-wise scoring must skip cleanly in the
@@ -137,6 +138,50 @@ def _write_case(
     )
 
 
+def _write_asymmetric_case(prep_dir: Path, case_id: str, seed: int) -> None:
+    """Writes one synthetic case whose IMAGE is not symmetric under any flip.
+
+    `_write_case`'s plain `standard_normal` image has no deliberate
+    structure, so an untrained model's response to it can happen to look
+    flip-invariant by coincidence. This helper adds a monotonic ramp along
+    each spatial axis (different slope per axis, so no single axis's flip is
+    a no-op either) to every channel, guaranteeing the 8 flipped views TTA
+    averages over are genuinely different inputs -- what
+    `test_tta_changes_predictions_on_an_asymmetric_case` needs to prove flip
+    TTA is not silently a no-op.
+    """
+    case_dir = prep_dir / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+
+    rng = np.random.default_rng(seed)
+    image = rng.standard_normal((4, *CROPPED_SHAPE)).astype(np.float32)
+    d, h, w = CROPPED_SHAPE
+    ramp = (
+        np.linspace(0.0, 4.0, d)[:, None, None]
+        + 0.5 * np.linspace(0.0, 4.0, h)[None, :, None]
+        + 0.25 * np.linspace(0.0, 4.0, w)[None, None, :]
+    )
+    image = (image + ramp[None]).astype(np.float16)
+    np.save(case_dir / "image.npy", image)
+
+    label = _build_synthetic_label(CROPPED_SHAPE)
+    np.save(case_dir / "label.npy", label)
+
+    write_json(
+        {
+            "case_id": case_id,
+            "original_shape": list(ORIGINAL_SHAPE),
+            "cropped_shape": list(CROPPED_SHAPE),
+            "bbox": BBOX,
+            "affine": np.eye(4).tolist(),
+            "spacing": SPACING,
+            "has_label": True,
+            "label_voxel_counts": None,
+        },
+        case_dir / "meta.json",
+    )
+
+
 def _write_splits(path: Path, train: list[str], val: list[str], test: list[str]) -> None:
     write_yaml({"train": train, "val": val, "test": test}, path)
 
@@ -147,6 +192,7 @@ def _make_cfg(
     splits_path: Path,
     checkpoint_dir: Path,
     mc_dropout_overrides: dict | None = None,
+    tta_overrides: dict | None = None,
     **evaluation_overrides: object,
 ) -> OmegaConf:
     """Builds a small evaluation config mirroring config.yaml + inference/default.yaml.
@@ -157,6 +203,9 @@ def _make_cfg(
     `mc_dropout_overrides` merges into `inference.mc_dropout` (default off,
     matching `configs/inference/default.yaml`), separately from
     `**evaluation_overrides` which merges into `inference.evaluation`.
+    `tta_overrides` merges into `inference.tta` (default off, matching
+    `configs/inference/default.yaml`'s `tta:` block) -- kept off by default
+    so no existing test's meaning changes.
     """
     out_dir = evaluation_overrides.pop("out_dir", tmp_path / "eval_out")
 
@@ -194,6 +243,13 @@ def _make_cfg(
     }
     if mc_dropout_overrides:
         mc_dropout.update(mc_dropout_overrides)
+
+    tta = {
+        "enabled": False,
+        "axes": [0, 1, 2],
+    }
+    if tta_overrides:
+        tta.update(tta_overrides)
 
     base = {
         "seed": 0,
@@ -240,6 +296,7 @@ def _make_cfg(
                 "et_min_volume": 0,
             },
             "mc_dropout": mc_dropout,
+            "tta": tta,
             "evaluation": evaluation,
         },
     }
@@ -1147,3 +1204,176 @@ def test_run_evaluation_lesionwise_raises_before_inference_when_panoptica_missin
     # proves this failed before scoring the first case rather than after.
     out_dir = Path(cfg.inference.evaluation.out_dir)
     assert not (out_dir / "per_case_metrics.csv").exists()
+
+
+# ---------------------------------------------------------------------------
+# 25-31. Flip TTA wiring (cfg.inference.tta)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_tta_absent_key_returns_none():
+    """Backward compatibility: a config composed before this key existed (an
+    older saved eval_config.yaml, a minimal test config) must still run,
+    with TTA simply off."""
+    inf_cfg = OmegaConf.create({"mc_dropout": {"enabled": False}})
+    assert resolve_tta(inf_cfg) is None
+
+
+def test_resolve_tta_disabled_returns_none():
+    inf_cfg = OmegaConf.create({"tta": {"enabled": False, "axes": [0, 1, 2]}})
+    assert resolve_tta(inf_cfg) is None
+
+    # The whole block set to null is equally "off", same as boundary_bands
+    # and lesionwise.
+    inf_cfg_null = OmegaConf.create({"tta": None})
+    assert resolve_tta(inf_cfg_null) is None
+
+
+def test_resolve_tta_enabled_returns_flip_combinations():
+    inf_cfg_all_axes = OmegaConf.create({"tta": {"enabled": True, "axes": [0, 1, 2]}})
+    combos_all = resolve_tta(inf_cfg_all_axes)
+    assert combos_all is not None
+    assert len(combos_all) == 8
+    assert combos_all[0] == ()  # identity pass always first
+
+    inf_cfg_two_axes = OmegaConf.create({"tta": {"enabled": True, "axes": [0, 1]}})
+    combos_two = resolve_tta(inf_cfg_two_axes)
+    assert combos_two is not None
+    assert len(combos_two) == 4
+    assert combos_two[0] == ()
+
+
+@pytest.mark.parametrize(
+    "axes",
+    [[3], [-1], [0, 0]],
+    ids=["axis_out_of_range_high", "axis_out_of_range_low", "duplicate_axis"],
+)
+def test_resolve_tta_raises_on_invalid_axes(axes: list[int]):
+    inf_cfg = OmegaConf.create({"tta": {"enabled": True, "axes": axes}})
+    with pytest.raises(ValueError):
+        resolve_tta(inf_cfg)
+
+
+def test_tta_identity_only_reproduces_non_tta_metrics(tmp_path: Path):
+    """The decisive correctness test for the TTA wiring.
+
+    Averaging exactly ONE pass (`axes: []` -> flip_combinations returns only
+    the identity `()`) is mathematically a no-op, so a TTA run configured
+    this way must reproduce every metric column of a plain (TTA-off) run on
+    the same case and checkpoint. If this fails, the flip/un-flip/
+    probability-averaging round trip inside tta_predict's wiring is wrong --
+    better to see it fail loudly here than as a mysterious few-thousandths
+    Dice difference in a real, 8-flip run.
+    """
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000", "case_001"]
+    for i, case_id in enumerate(case_ids):
+        _write_case(prep_dir, case_id, seed=i, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=case_ids)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    cfg_off = _make_cfg(
+        tmp_path, prep_dir, splits_path, checkpoint_dir, out_dir=tmp_path / "eval_off"
+    )
+    _save_model_checkpoint(checkpoint_dir, cfg_off)
+    df_off = run_evaluation(cfg_off)
+
+    cfg_on = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        out_dir=tmp_path / "eval_on",
+        tta_overrides={"enabled": True, "axes": []},
+    )
+    df_on = run_evaluation(cfg_on)
+
+    shared = [c for c in df_off.columns if c in df_on.columns]
+    assert shared, "the two runs produced no columns to compare"
+
+    # check_exact=True: the spec anticipated a possible tiny gap here, because
+    # the non-TTA path discretises raw logits directly while the
+    # identity-only TTA path round-trips them through sigmoid then
+    # logits_from_mean_prob (mandatory -- see
+    # mc_dropout.logits_from_mean_prob's docstring on why postprocess_logits
+    # cannot take mean_prob directly), and logit(sigmoid(x)) == x only in
+    # exact arithmetic. Measured on this test's actual synthetic data, that
+    # round trip introduces no float32 disagreement large enough to flip any
+    # voxel across the 0.5 threshold, so every downstream metric column comes
+    # out bit-identical -- exact equality is used here rather than a
+    # tolerance that this test does not actually need. If a future case
+    # exercises a voxel whose logit lands close enough to 0.0 to make this
+    # flaky, loosen to check_exact=False with a tight atol/rtol and say so
+    # here, rather than loosening silently.
+    pd.testing.assert_frame_equal(
+        df_off[shared].sort_index(),
+        df_on[shared].sort_index(),
+        check_exact=True,
+    )
+
+
+def test_tta_and_mc_dropout_together_raise_before_inference(tmp_path: Path):
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000"]
+    _write_case(prep_dir, "case_000", seed=0, has_label=True)
+    _write_splits(splits_path, train=[], val=[], test=case_ids)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    cfg = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        mc_dropout_overrides={"enabled": True},
+        tta_overrides={"enabled": True},
+    )
+    _save_model_checkpoint(checkpoint_dir, cfg)
+
+    with pytest.raises(ValueError) as excinfo:
+        run_evaluation(cfg)
+    message = str(excinfo.value).lower()
+    assert "tta" in message
+    assert "mc_dropout" in message
+
+    # The decisive assertion: no per-case CSV -- and no out_dir at all --
+    # was written, which is what proves this failed before any inference ran
+    # rather than after scoring.
+    out_dir = Path(cfg.inference.evaluation.out_dir)
+    assert not out_dir.exists()
+
+
+def test_tta_changes_predictions_on_an_asymmetric_case(tmp_path: Path):
+    """Guards against flip TTA being silently a no-op (e.g. flips applied to
+    the wrong tensor dimension and cancelling out): on a genuinely
+    asymmetric volume, averaging 8 flipped views must move the metrics away
+    from the single deterministic pass."""
+    prep_dir = tmp_path / "prep"
+    splits_path = tmp_path / "splits.yaml"
+    case_ids = ["case_000"]
+    _write_asymmetric_case(prep_dir, "case_000", seed=0)
+    _write_splits(splits_path, train=[], val=[], test=case_ids)
+
+    checkpoint_dir = tmp_path / "checkpoints"
+    cfg_off = _make_cfg(
+        tmp_path, prep_dir, splits_path, checkpoint_dir, out_dir=tmp_path / "eval_off"
+    )
+    _save_model_checkpoint(checkpoint_dir, cfg_off)
+    df_off = run_evaluation(cfg_off)
+
+    cfg_on = _make_cfg(
+        tmp_path,
+        prep_dir,
+        splits_path,
+        checkpoint_dir,
+        out_dir=tmp_path / "eval_on",
+        tta_overrides={"enabled": True, "axes": [0, 1, 2]},
+    )
+    df_on = run_evaluation(cfg_on)
+
+    dice_columns = ["dice_ET", "dice_TC", "dice_WT", "dice_mean"]
+    assert not np.allclose(
+        df_off.loc["case_000", dice_columns].to_numpy(dtype=float),
+        df_on.loc["case_000", dice_columns].to_numpy(dtype=float),
+    )
