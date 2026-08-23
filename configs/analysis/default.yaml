@@ -339,6 +339,48 @@ gate2:
     delta_auroc: 0.01
     delta_recall: 0.02
 
+# ---------------------------------------------------------------------------
+# Disagreement vs MC-dropout as a per-voxel error localiser (scripts/mc_comparison.py).
+#
+# SECONDARY, and deliberately outside the Gate 1 and Gate 2 families.
+# preregistration_gate2.md records that the "matches MC-dropout at 1/10 the
+# cost" claim is NOT made because the external cohorts had no MC maps; the
+# maps were generated 2026-08-23 (kernels neurovision-mc-{ssa,ped}, N=10),
+# so the claim becomes measurable rather than assumed.
+# ---------------------------------------------------------------------------
+mc_comparison:
+  cohorts:
+    - name: ssa
+      ambiguity_dirs: [outputs/ambiguity_ssa_*]
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+      mc_dir: outputs/mc_ssa/uncertainty
+    - name: ped
+      ambiguity_dirs: [outputs/ambiguity_ped_*]
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+      mc_dir: outputs/mc_ped/uncertainty
+
+  out_dir: outputs/mc_comparison
+
+  # Same sampling contract as analysis.detection.voxel and analysis.gate2.voxel.
+  # All three analyses must draw the same voxels or they are comparing samples
+  # rather than signals.
+  voxel:
+    mask: predicted_dilated
+    dilation_mm: 10.0
+    max_voxels_per_case: 20000
+    seed: ${seed}
+
+  # FIXED IN docs/research/execution_plan.md Phase 2, before any external MC
+  # map existed. A margin chosen after seeing the data is not a margin.
+  tost_margin: 0.03
+
+  bootstrap:
+    n_boot: 10000
+    ci: 0.95
+    seed: ${seed}
+
 replay:
   # scripts/replay_logits.py -- re-scores a checkpoint's SAVED fp16 logits
   # (<eval_dir>/logits/) at a different threshold or post-processing chain,
