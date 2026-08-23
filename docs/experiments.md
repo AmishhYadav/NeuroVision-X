@@ -1433,6 +1433,54 @@ sessions by resume is still ONE row — sum the GPU hours.
     `fit.json`, `realised_risk.csv`, `inflation.csv`, per-split `curves.npz`
     (the sufficient statistic; recalibration at any α is arithmetic on it).
 
+
+43. **COST NOTE: flip TTA is "free" in GPU-hours and emphatically NOT free in
+    Mac wall-clock. A4's measurement is deferred to the GPU track, and this is
+    the arithmetic.** Recorded 2026-08-24 while A5 was running.
+
+    The master plan lists A4 (wire flip TTA) as free filler -- "expected
+    +0.003-0.008 Dice for zero GPU hours". The wiring genuinely was free and is
+    committed. The **measurement** is not, and the plan's cost line was written
+    without a measured per-case inference figure for `neurovision` on this
+    machine.
+
+    **Measured 2026-08-24**: one deterministic sliding-window pass of
+    `neurovision` over a test case, on the M4 at `sw_batch_size=1`,
+    `overlap=0.5`, `roi=64`, costs **80.6 s/case** (from
+    `scripts/score_confidence.py`'s own progress bar, which does exactly one
+    such pass per case). Full test split: **~4 h 12 min**.
+
+    Flip TTA at `axes: [0, 1, 2]` is **8x** that by construction -- 8 flip
+    combinations, each a full sliding-window pass. So:
+
+    | Run | Cost on the M4 |
+    |---|---|
+    | one pass, 189 test cases | ~4.2 h |
+    | flip TTA (8x), 189 test cases | **~34 h** |
+    | flip TTA on val first, then test, as the plan requires | **~67 h** |
+
+    That is not a CPU job. It is roughly a weekend of wall-clock for a result
+    the literature prices at +0.003-0.008 Dice, and this project's own machine
+    split says "if it can run on a CPU, it does not belong in a GPU session" --
+    but the converse also applies: **an inference job that costs 67 h on the
+    Mac and minutes on a modern card belongs on the card.**
+
+    **Decision, and it is a change to the master plan's Track 1/Track 2
+    boundary:** A4 is wired and tested on CPU (that part is done and
+    committed); its measurement moves to the GPU track, to be run alongside the
+    Gate A work when the cluster appears. It is a pure-inference job, so it does
+    not violate "GPU for gradient descent only" in spirit -- the rule exists to
+    stop CPU-able work eating rationed GPU hours, and this is the opposite case.
+
+    **The general lesson, which is the reason this note exists at all:**
+    "expected gain per GPU-hour" and "expected gain per hour of my life" are
+    different quantities, and a plan that prices work only in the first will
+    schedule a weekend of Mac time as filler. `neurovision` is 10.7x the U-Net
+    per training epoch (note: probe v3/v4) and that multiplier does not vanish
+    at inference time. **Any future "free, just run it locally" line in a plan
+    needs a measured per-case number for the ACTUAL model behind it, not for
+    `baseline_unet3d`.**
+
 ---
 
 ## Planned
