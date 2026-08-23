@@ -1143,6 +1143,35 @@ sessions by resume is still ONE row — sum the GPU hours.
     it costs no accuracy (P2), and it is worse than both free entropy and
     MC-dropout as a localiser (here).
 
+
+40. **BraTS 2026 Challenge 3 (generalizability) -- deadline UNRESOLVED from
+    public sources; must be checked from a logged-in Synapse session.** Checked
+    2026-08-23 while drafting `docs/research/master_plan.md`. The 2026 cluster
+    is real and Challenge 3 is *"Generalizability of brain tumor sub-region
+    segmentation across tumor entities in MRI scans"* -- an unusually exact fit
+    for this project's one conclusively measured weakness (pooled external
+    `dice_TC` -0.0333, p_holm 0.0132, note 30). What could NOT be established:
+    the validation-phase window or the submission deadline. The challenge portal
+    (`syn74274097`, `challenges.synapse.org/brats2026`) is a JavaScript
+    application that serves no dates to a plain fetch, the Zenodo record
+    (19714728) lists the five challenges but no timeline, and the per-challenge
+    GitHub repos defer to Synapse.
+
+    What IS known and bounds the answer: MICCAI 2026 runs **27 Sep - 1 Oct 2026
+    in Strasbourg**, with the challenge sessions on 4 and 8 October; historical
+    BraTS validation phases run roughly July-August with a containerised
+    (MLCube/Docker) submission at the end. Today is 23 Aug 2026. So the 2026
+    window is **probably closed or closing**, and the plan assumes BraTS 2027 as
+    the realistic target while treating a 2026 entry as an upside to be checked,
+    not a dependency. Recorded rather than left implicit because "we could have
+    entered the one challenge that matches our result" is exactly the kind of
+    thing that gets discovered too late.
+
+    **Action, unchanged by this null result:** log in to Synapse, read the
+    Challenge 3 timeline, and replace this note's uncertainty with a date. The
+    released data is worth pulling either way -- it is the closest public
+    benchmark to the claim this project is now defending.
+
 ---
 
 ## Planned
