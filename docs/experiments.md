@@ -1099,6 +1099,50 @@ sessions by resume is still ONE row — sum the GPU hours.
     the other says removing it from the gate costs no accuracy. Two different
     experiments, same conclusion.
 
+39. **THE "1/10 THE COST" CLAIM IS REFUTED FOR DISAGREEMENT AND ESTABLISHED FOR
+    ENTROPY. MC-DROPOUT'S 10x COST BUYS NOTHING OVER A SINGLE-PASS ENTROPY
+    MAP.** Run 2026-08-23 after generating per-voxel MC mutual-information maps
+    for both external cohorts on the T4 (N=10; SSA 1.25 h, PED 2.07 h). All
+    three signals scored at the SAME label-free sampled voxels, per case, as
+    AUROC for per-voxel error. Secondary analysis, outside the pre-registered
+    families; the TOST margin of 0.03 AUROC was fixed in
+    `docs/research/execution_plan.md` Phase 2 before any external MC map
+    existed.
+
+    | Cohort | entropy | disagreement | MC-dropout (N=10) |
+    |---|---|---|---|
+    | SSA (n=60) | **0.8874** | 0.7095 | 0.8661 |
+    | PED (n=99) | 0.8307 | 0.7879 | **0.8437** |
+
+    **Disagreement vs MC, paired TOST @ 0.03:** SSA **-0.1566** (CI -0.1801 to
+    -0.1325), **NOT equivalent**, p 1.0. PED **-0.0558** (CI -0.0750 to
+    -0.0367), **NOT equivalent**, p 0.995. These are not underpowered nulls --
+    the intervals sit entirely OUTSIDE the margin on the wrong side.
+    Disagreement beats MC in only **30 of 159** cases.
+
+    **Entropy vs MC, same test:** SSA **+0.0214** (CI +0.0132 to +0.0300),
+    **EQUIVALENT**, p 0.0238. PED **-0.0129** (CI -0.0208 to -0.0048),
+    **EQUIVALENT**, p 3.7e-05. Note both are simultaneously *significantly
+    different* from MC and *practically equivalent* to it within the
+    pre-registered margin -- that is not a contradiction, it is precisely what
+    a margin is for, and both facts get reported.
+
+    **What this settles.** The project's cost argument was "inter-branch
+    disagreement matches MC-dropout at one tenth the inference cost". It does
+    not: it is clearly and consistently worse on both external cohorts. What
+    IS true is the more boring and more useful statement -- **single-pass
+    predictive entropy, which every segmentation model emits for free, is
+    equivalent to 10-sample MC-dropout for voxel-level error localisation on
+    both external cohorts.** MC-dropout's tenfold cost buys nothing here. That
+    is a real finding, it is just not a finding about this architecture.
+
+    **Consequence for the paper.** Delete the efficiency framing that Gate 1's
+    *Partial* row licensed. Combined with notes 37 and 38, three independent
+    experiments now agree that the disagreement signal does not carry
+    practical value: it does not improve a fitted detector (Gate 2), removing
+    it costs no accuracy (P2), and it is worse than both free entropy and
+    MC-dropout as a localiser (here).
+
 ---
 
 ## Planned
