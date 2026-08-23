@@ -14,8 +14,12 @@
 > baseline, while Dice improved substantially and significantly (ET +0.0267,
 > p_holm 7.2e-22). A parameter-matched capacity control then showed ~79% of that
 > ET gain is architecture rather than width. So the model is more **accurate**,
-> not more **reliable**, and P2 — the ablation that would say whether the
-> *ambiguity conditioning specifically* is what does it — **has not been run**.
+> not more **reliable**. **P2 has now landed and it is the null (2026-08-23):**
+> the content-only gate matches the full gate on every metric, so the
+> disagreement conditioning is not what produces the gain. What survives is
+> the gated fusion itself, which is published territory. Read the P2 row and
+> `docs/experiments.md` note 38 before writing any sentence that credits the
+> ambiguity signal.
 
 > **Status:** draft, 2026-08-04. Written *before* `related_work.md` existed. Every claim
 > about what prior work does is marked `[cite]` and must be checked against
@@ -101,7 +105,7 @@ measurements) and 19–21 (the capacity control).
 | Prediction | State | Outcome |
 |---|---|---|
 | **P1 — mechanism fires** | **MEASURED — fires, but not as predicted** | Measured 2026-08-20 over the full 189-case test split (`scripts/gate_boundary_profile.py`; `docs/experiments.md` note 32). The gate is strongly and monotonically organised by anatomy, with opposite polarity at adjacent fusion scales — but P1 as literally written (the gate peaking at the tumour margin) is **refuted**; what passed is the weaker claim that the gate carries a real, non-decorative spatial signal. See the subsection below |
-| **P2 — ambiguity conditioning is necessary** | **RUNNING since 2026-08-22** | The Kaggle weekly ration reset to 30 h and `ablation_content_only_gate` was launched as a 3-session chain (kernel `neurovision-p2ablation-s1`, ~22–23 GPU-h expected, `GIT_REF=7caacfa` — the same tree `neurovision` trained on, so the arms differ by the one key and not by the training code). Parameter-matched to 0.018% (6,360 of 34,911,341), verified from the pinned tree before launch. Until it lands this row is still an assertion, not a result, and the paper must say so |
+| **P2 — ambiguity conditioning is necessary** | **RESOLVED 2026-08-23 — THE NULL RESULT FIRED** | `ablation_content_only_gate` trained 80/80 epochs (24.16 GPU-h, `GIT_REF=7caacfa`, W&B `ddkbitjp`) and was evaluated on the test split on the GPU, the same device as `neurovision`'s own evaluation. Paired over 189 cases: **ET +0.0022 (CI −0.0067 to +0.0152, p_holm 0.17), TC +0.0003, WT −0.0012 — every metric inconclusive.** Meanwhile the ablation beats `baseline_unet3d` by **+0.0244 ET** (p_holm 3.9e-22) and the capacity control by **+0.0189** (p_holm 4.4e-20). **So rung 2 matches rung 3: the gate's INPUT does not matter, only its per-voxel spatial resolution does.** This is exactly the null this row declared in advance and it must be reported as the smaller claim it implies. Not proven identical — the CI admits up to +0.0152, single seed, no noise floor. `docs/experiments.md` note 38 |
 | **P3 — the gain is where the claim says it is** | **FAILED as stated** | Boundary-stratified error is within noise against the matched baseline. The improvement is a Dice improvement concentrated in ET, not a demonstrated near-boundary effect |
 | **P4 — gate as a cheap error predictor** | **MEASURED, exploratory** | `docs/experiments.md` note 34, 2026-08-20. A label-free gate read-out predicts per-case Dice after partialling out predictive entropy and two volume confounds. On PED — where the model is catastrophically worse and the free entropy baseline carries **no** usable signal (partial ρ 0.136, CI containing zero) — `gate1_fg` reaches +0.584 [0.380, 0.725], p_holm 0.013. On SSA no gate feature survives Holm. Not pre-registered, one patch per case, one external cohort out of two. Bonus result, still never load-bearing |
 | **P5 — the gain reaches the report** *(added post hoc, 2026-08-19)* | **FAILED** | Not pre-registered, and it should have been. 1 of 25 report-agreement metrics conclusive against the matched baseline, 0 of 25 for the capacity control. See the entry below and `docs/experiments.md` note 23 |
