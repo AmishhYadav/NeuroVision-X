@@ -128,6 +128,27 @@ looks bad.
 the ordinary point-estimate mask already satisfies the bound and the conformal layer is a no-op at
 that α — an honest and mildly deflating outcome that must be stated, not buried.
 
+**Infeasibility is a registered outcome, not an error.** Added 2026-08-23, still before any endpoint
+existed, prompted by a three-case feasibility probe on val logits that confirmed the loss is monotone
+and revealed the following. Mean FNR is dominated by a small number of catastrophic cases: on one
+probed case, TC false-negative rate was still 0.39 at $\tau = 0.01$, with the mask already inflated
+3.85×. If the calibration mean at the smallest candidate $\tau$ still exceeds α, then **no threshold
+satisfies the bound** and the correct report is "infeasible at this α", not a silently clipped
+$\hat\tau$. The driver must therefore
+
+- return an explicit infeasible status rather than the smallest candidate,
+- report, for each α, the smallest achievable mean risk $\hat R(\tau_{\min})$ alongside α, and
+- never present an infeasible α as though the guarantee held.
+
+This is registered as a *substantive scientific outcome*: a conformal bound at α = 0.05 on TC being
+unreachable at any threshold would say something real about this model's failure mode — that its
+misses are concentrated in cases it gets catastrophically wrong rather than spread thinly at the
+margin — and that is precisely the finding the Phase E refusal gate exists to act on.
+
+Disclosure, for the record: the probe computed FNR at five thresholds for three val cases in order to
+check monotonicity and array plumbing. No endpoint of this pre-registration — no $\hat\tau$, no
+realised test risk, no cohort comparison — was computed before this file was committed.
+
 ---
 
 ## What would falsify the implementation rather than the hypothesis
