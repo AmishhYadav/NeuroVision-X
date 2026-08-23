@@ -111,6 +111,26 @@ frozen from val. Reported as **excess risk**, realised − α, with a 95% CI.
 | Coverage degrades | CI lower bound > α on either cohort | The expected result. Publish the magnitude — the first such number for 3D tumour segmentation — and it becomes the motivation for the Phase E refusal gate |
 | Inconclusive | CI straddles α | Report as inconclusive at n = 60 / n = 99 and do not spin it |
 
+**A constraint on B2 that outranks this document, recorded 2026-08-23, before any endpoint
+existed.** `configs/data/splits_ssa.yaml` carries a standing rule for the external cohorts, written
+when they were introduced:
+
+> EVERY case is in `test`. `train` and `val` are deliberately EMPTY and must stay empty: this cohort
+> exists to measure out-of-distribution performance, so nothing may ever be fitted on it — not a
+> model, not a temperature, not a threshold.
+
+A conformal threshold is a threshold. The **primary** B2 result therefore uses the val-fitted λ̂
+applied frozen, with nothing whatsoever fitted on SSA or PED — which is what this document already
+specifies, and it is the number that may be reported as external validation.
+
+The Mondrian arm below *does* fit a threshold on a held-out slice of each cohort, so it sits outside
+that rule. It is retained, because "would per-cohort recalibration restore the guarantee?" is a real
+and useful question, but it is hereby fixed as a **counterfactual, not an external-validation
+result**. It answers "what would it take to fix this", never "how well does the pipeline do on
+unseen data". It must be labelled as such wherever it appears, and it must never be quoted as the
+cohort's coverage number. Registering the distinction now, because the difference between those two
+readings is invisible in a table of numbers and entirely visible in a caption.
+
 **B2 secondary — the Mondrian / weighted variant.** Recalibrate $\hat\tau$ per cohort on a random
 half of that cohort, evaluate on the other half, average over 100 splits (seed 42). Pre-registered
 claim: **this restores the guarantee within each cohort**, because exchangeability holds inside a
