@@ -23,10 +23,10 @@ Phases 0–5" refers to the *interpretable pipeline* plan, not this one.**
 | 1.1 — expose the ambiguity map | **Done.** `forward_with_ambiguity` on both `FusionBlock` and `NeuroVisionX` |
 | 1.2 — `scripts/extract_ambiguity.py` | **Done**, whole-volume sliding window as specified |
 | 1.3 Test A — is it flat? | **Done.** Not flat, and not a re-encoding of entropy (note 31) |
-| 1.3 Test B — does it beat entropy? | **RUNNING 2026-08-22.** This is the hard gate and it had never been run: `outputs/detection/` did not exist, and ambiguity maps covered 65 of 189 in-distribution cases and **zero** external ones — so the pass condition, scored only on SSA or PED, was not computable in any form. Extraction of the remaining 283 cases is in flight |
-| **Gate 1** | **Not yet decided.** Thresholds and every analysis parameter are pre-committed — see the addendum in `preregistration_ambiguity.md` |
-| 2 — referral system | Not started; blocked on Gate 1 |
-| 2.4 — inference-ROI sweep | Not started. **Not blocked on Gate 1** and should run regardless |
+| 1.3 Test B — does it beat entropy? | **DONE 2026-08-23.** All 348 cases extracted on CPU (~7 h, zero GPU hours) and the pre-registered family run once, on complete data |
+| **Gate 1** | **PARTIAL, 2026-08-23.** Voxel-level residualised AUROC clears 0.5 on all three cohorts (p_holm 0.0025) and the pre-registered 0.60 on PED (0.677, CI 0.655–0.698); case-level partial Spearman is −0.393 in distribution but **null on both external cohorts**. So the signal is spatial, not case-ranking. Proceed under the rule's *Partial* row — efficiency and localisation, never superiority. Full result: `preregistration_ambiguity.md` §Result, `docs/experiments.md` note 35 |
+| 2 — referral system | **Must be respecified before it runs.** Gate 2 as written tests referral, a CASE-LEVEL operation, on SSA/PED — precisely the endpoint Gate 1 returned null on. Rebuild it around voxel- and region-level localisation, ET first |
+| 2.4 — inference-ROI sweep | **RUNNING 2026-08-23**, `neurovision` at ROI 96³ on CPU; ROI 64³ already exists as `outputs/neurovision/eval_test` |
 | 3.1 — multi-seed | Not started. Needs ~70 T4-h that do not exist |
 | 3.2 — ablation ladder | **1 of 5 rungs running.** `ablation_content_only_gate` launched on Kaggle 2026-08-22 against the reset 30 h ration, ~22–23 h over 3 sessions, pinned to `7caacfa`. The other four rungs have no hours behind them |
 | 4 — closing the named gaps | Not started; ~170 T4-h |
