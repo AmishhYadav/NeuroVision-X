@@ -50,7 +50,18 @@ Prefer clear code over clever code.
 | Writing the **spec** a subagent implements | `code-reviewer` — read-only review after implementation, before the user sees it |
 | Reviewing what comes back, and **explaining it back to me** — I am learning, this is not optional | `docs-writer` — docstrings, MkDocs, README, appending to `docs/experiments.md` |
 | Judgement about the research claim, statistics, the paper | |
-| Small edits — a one-line fix is faster done directly | |
+| Config, requirements files, docs, plan and status updates | |
+
+**Opus writes no production code. This is a hard rule, not a preference.** Every `.py` file in
+`src/`, `scripts/`, `tests/` and `app/` — new or modified, one line or five hundred — is written by a
+Sonnet subagent (`py-implementer`) from a spec Opus wrote. Opus reads, judges, and sends it back if
+it is wrong; it does not pick up the keyboard. The exception is a genuine one-liner that a
+round-trip would make slower to fix than to read, and even then the fix is described in the response
+so it is visible. Opus *may* write directly: YAML config, `requirements*.txt`, Markdown, and the plan
+and status boards.
+
+Why: a spec that survives regeneration is worth more than a patch that does not, and the author has
+to be able to read every module as a self-contained artifact with its own tests.
 
 Standard loop: decide the design → write a precise spec → `py-implementer` → `test-runner` →
 `code-reviewer` → read, judge, explain in plain terms, iterate. Run the middle three in the

@@ -232,6 +232,55 @@ rather than fixed:
 
 ---
 
+### The four environments — which file is for what
+
+Added 2026-08-23 with Milestone 4. There is no single environment that can hold
+all of this project's dependencies, and the reason is measured rather than
+stylistic: `panoptica` declares `numpy<2.3, pandas<3.0`, while the training
+lockfile pins `numpy==2.4.6, pandas==3.0.5`. Forcing them together downgrades
+numpy under a scipy that was compiled against the newer one, which is the exact
+failure §5 already documents for Kaggle.
+
+| File | Virtualenv | Python | Holds | Resolved numpy / pandas / scipy |
+|---|---|---|---|---|
+| `requirements.txt` | `.venv` | 3.11 | The fixed training + dev stack. Kaggle installs this minus its `kaggle-exclude` line | 2.4.6 / 3.0.5 / 1.17.1 |
+| `requirements-analysis.txt` | `.venv-analysis` | 3.11 | Lesion-wise metrics (`panoptica`), `statsmodels`, plus the torch/MONAI subset that `evaluate.py` and `replay_logits.py` need to run there | 2.2.6 / 2.3.3 / 1.17.1 |
+| `requirements-clinical.txt` | `.venv-clinical` | 3.11 | Real-MRI ingest: `brainles-preprocessing`, `antspyx`, `HD-BET`, `dcm2niix`, `highdicom` | 2.3.5 / 3.0.5 / 1.15.3 |
+| `app/backend/requirements.txt` | any of the above | 3.11 | FastAPI demo server only | inherits |
+
+Resolved columns are **measured** — `uv pip compile <file> --python-version 3.11`
+on 2026-08-23, not read off the pins.
+
+```bash
+uv venv --python 3.11 .venv-analysis
+.venv-analysis/bin/pip install -r requirements-analysis.txt -e .
+
+uv venv --python 3.11 .venv-clinical
+.venv-clinical/bin/pip install -r requirements-clinical.txt -e .
+```
+
+**Which env runs which command.**
+
+| Command | Env |
+|---|---|
+| `scripts/train.py`, everything on the GPU | `.venv` (or Kaggle) |
+| `scripts/evaluate.py` with `inference.evaluation.lesionwise=false` — i.e. every number published so far | `.venv` |
+| `scripts/evaluate.py` with `lesionwise=true`, `scripts/replay_logits.py` lesion-wise re-scoring | `.venv-analysis` |
+| DICOM ingest, registration, skull-stripping, DICOM-SEG (Phase E) | `.venv-clinical` |
+| plain `pytest` | `.venv` for the whole suite; `.venv-analysis` additionally, for the lesion-wise tests, which skip when `panoptica` is absent |
+
+Two consequences worth stating plainly, because both are easy to trip over:
+
+- **A lesion-wise number and a voxel-wise number are produced under different
+  numpy versions.** They are not bit-identical stacks. This is fine for metrics
+  computed from `uint8` masks, and it is *not* fine for anything comparing
+  floating-point logits across the two — do not do that.
+- **`src/neurovision/metrics/lesionwise.py` must import `panoptica` lazily**, so
+  that `.venv` can still import the metrics package with the dependency absent.
+  The suite asserts this rather than trusting it.
+
+---
+
 ## 6. Hardware
 
 ### Local — MacBook Pro M4

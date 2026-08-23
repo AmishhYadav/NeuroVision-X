@@ -1,0 +1,56 @@
+# NeuroVision-X — CPU analysis stack (Milestone 4, Phase A/B/C).
+# Resolved for Python 3.11 on 2026-08-23.
+#
+# THIS IS A SEPARATE VIRTUALENV. It is not installed on top of
+# requirements.txt, and it must never be installed into a training session.
+#
+# Why a second environment instead of adding two lines to requirements.txt:
+# panoptica 2.1.7 declares `numpy<2.3` and `pandas<3.0.0`, while the training
+# lockfile pins numpy==2.4.6 and pandas==3.0.5. Resolving both sets together
+# is impossible, and the failure mode of forcing it is the one this project
+# has already paid for twice -- pip silently downgrades numpy, and the next
+# `import scipy.ndimage` raises an ImportError that looks nothing like a
+# dependency conflict (see requirements.txt's Kaggle note, measured
+# 2026-08-01).
+#
+# Measured resolution of this file (uv pip compile, Python 3.11, 2026-08-23):
+#   numpy 2.2.6 · pandas 2.3.3 · scipy 1.17.1 · scikit-image 0.26.0
+#   connected-components-3d 3.29.0 (panoptica's instance labeller)
+#
+# Build it with:
+#   uv venv --python 3.11 .venv-analysis
+#   .venv-analysis/bin/pip install -r requirements-analysis.txt -e .
+#
+# Anything in this file is CPU-only and is never needed to train.
+
+# --- Lesion-wise metrics: the official BraTS metric since 2023 -------------
+# Wrapped by src/neurovision/metrics/lesionwise.py. Emits lesion-wise Dice,
+# normalised surface Dice and instance TP/FP/FN, which is what voxel-wise
+# Dice hides: a missed small lesion costs almost no voxel Dice.
+panoptica==2.1.7
+
+# --- Statistics -----------------------------------------------------------
+# analysis/statistics.py currently hand-rolls bootstrap CIs and Holm. TOST,
+# proportion CIs and the conformal coverage tables want a reference
+# implementation to check those against rather than a second hand-rolled one.
+statsmodels==0.14.6
+
+# --- The subset of the training stack that evaluation needs ---------------
+# scripts/evaluate.py and scripts/replay_logits.py run inside THIS env when
+# lesion-wise scoring is enabled, so they still need the model stack. The
+# pins match requirements.txt exactly wherever the resolver allows it; numpy,
+# pandas and their dependents are the ones that cannot match, and that is the
+# whole reason this file exists.
+torch==2.13.0
+monai==1.6.0
+einops==0.8.2
+nibabel==5.4.2
+SimpleITK==2.5.6
+hydra-core==1.3.4
+tqdm==4.70.0
+matplotlib==3.11.1
+
+# --- Dev tooling ----------------------------------------------------------
+# The suite runs in this env too, so an additivity test can compare a
+# lesion-wise evaluation against a plain one in a single process.
+pytest==9.1.1

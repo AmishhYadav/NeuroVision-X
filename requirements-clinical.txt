@@ -1,0 +1,53 @@
+# NeuroVision-X — clinical ingest stack (Milestone 4, Phase E).
+# Resolved for Python 3.11 on 2026-08-23.
+#
+# THIS IS A THIRD, SEPARATE VIRTUALENV. Not requirements.txt, and not
+# requirements-analysis.txt -- all three resolve to different numpy/scipy
+# lines and cannot be merged:
+#
+#   requirements.txt           numpy 2.4.6 · pandas 3.0.5 · scipy 1.17.1
+#   requirements-analysis.txt  numpy 2.2.6 · pandas 2.3.3 · scipy 1.17.1
+#   requirements-clinical.txt  numpy 2.3.5 · pandas 3.0.5 · scipy 1.15.3
+#
+# (Measured with uv pip compile, Python 3.11, 2026-08-23.)
+#
+# Build it with:
+#   uv venv --python 3.11 .venv-clinical
+#   .venv-clinical/bin/pip install -r requirements-clinical.txt -e .
+#
+# What this stack is for: turning a real clinical study into something the
+# model can legally be fed. Today app/backend/jobs.py runs only
+# preprocess_case -- reorient, nonzero z-score, crop -- so a skulled,
+# unregistered DICOM series produces a confident and completely wrong mask
+# with nothing raising. Every package here closes one step of that gap.
+#
+# NOTE ON WEIGHTS: HD-BET downloads its brain-extraction weights on first use,
+# and brainles-preprocessing pulls the SRI24 atlas. Neither is vendored here.
+# Any environment that must run offline needs those caches primed first.
+
+# --- The orchestrator -----------------------------------------------------
+# Co-registration to a common frame, atlas registration (SRI24), skull
+# stripping and N4 bias correction, in the BraTS-standard order. ANTs is its
+# default registration backend and HD-BET its default brain extractor, which
+# is why both appear below as explicit pins rather than as loose transitives.
+brainles-preprocessing==0.6.13
+
+# --- Registration ---------------------------------------------------------
+antspyx==0.6.3
+
+# --- Skull stripping ------------------------------------------------------
+# Pulls nnunetv2 2.8.1 as a dependency. That is incidental here, but it is
+# also the strong baseline of Gate A -- if this env is already built, A7's
+# export script can be developed against it without a fourth environment.
+HD-BET==2.0.1
+
+# --- DICOM in ------------------------------------------------------------
+# Chris Rorden's dcm2niix, shipped as a pip-installable binary. This is the
+# reference converter for clinical MRI; hand-rolling DICOM -> NIfTI geometry
+# is the single fastest way to produce a silently mis-oriented volume.
+dcm2niix==1.0.20260724
+
+# --- DICOM out -----------------------------------------------------------
+# DICOM-SEG export, so a produced mask loads in any PACS or OHIF viewer
+# instead of only in our own demo.
+highdicom==0.28.1
