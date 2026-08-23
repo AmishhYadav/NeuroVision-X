@@ -26,6 +26,9 @@ any reviewer who reads the repository.
 | C7 | The accuracy gain does not transfer out of distribution | SSA/PED: ET gain gone; TC significantly worse under shift | **Strong negative.** Pre-registered external validation |
 | C8 | Single-pass predictive entropy is **equivalent to 10-sample MC-dropout** for voxel-level error localisation | Paired TOST @ 0.03 AUROC: SSA +0.0214 (p 0.024), PED −0.0129 (p 3.7e-05), both equivalent | **Moderate-strong.** Margin fixed in advance; a finding about the *baseline*, not about our model |
 | C9 | Inter-branch disagreement is **worse** than both entropy and MC-dropout as a localiser | SSA −0.157, PED −0.056 against MC, intervals entirely outside the margin; beats MC in 30 of 159 cases | **Strong negative.** Note 39 |
+| C10 | Under **lesion-wise** scoring — the metric BraTS has used since 2023 — the architecture gain in distribution is **larger** than voxel Dice showed: ET **+0.0508** (CI +0.0225 to +0.0798, p_holm 1.9e-15) and TC **+0.0371** (CI +0.0097 to +0.0653, p_holm 2.7e-10), n=189 paired | Note 41. Re-scored from saved logits; provenance verified to 1e-17 Dice against the committed per-case tables | **Moderate. EXPLORATORY — not pre-registered.** Cohen's dz 0.25 / 0.19, i.e. small. Holm applied within cohort, not across cohorts |
+| C11 | The mechanism of that gain is **fewer spurious lesions**, not better recall | Test ET false-positive lesions 0.32/case vs 0.47 for the baseline (32% fewer); false negatives near-identical (0.28 vs 0.30). SSA ET 0.98 vs 1.38 | **Moderate, exploratory.** Note 41. Consistent with the multifocality over-reporting of notes 22–25 |
+| C12 | Voxel Dice **overstates** this project's performance, most severely on WT | Lesion-wise minus voxel-wise Dice: −0.10 to −0.32 across all runs and splits; `neurovision` WT test reads 0.9321 voxel-wise and **0.7183** lesion-wise | **Strong, descriptive.** Note 41. Applies to both models equally, so it is a statement about the metric, not about either architecture |
 
 ## 2. Claims the evidence does NOT support — do not write these
 
@@ -38,7 +41,9 @@ any reviewer who reads the repository.
 | "Better structured reports" | 1 of 25 metrics. Phase 5 negative |
 | "Flag voxels by entropy + disagreement" | Contradicted by Gate 2's own table |
 | "Disagreement equals MC-dropout at 1/10 the cost" | **Measured 2026-08-23 and REFUTED.** Disagreement is not equivalent to MC on either external cohort and the intervals sit outside the margin on the wrong side. The equivalence that DOES hold belongs to free single-pass entropy (C8), not to this architecture. Note 39 |
-| Any claim on **WT** | Every WT comparison is inconclusive at a saturated ~0.93 |
+| Any claim on **WT** | Every WT comparison is inconclusive — voxel-wise, and lesion-wise too (+0.0300, CI **−0.0021** to +0.0620). Note the stated *reason* changed on 2026-08-24: WT is **not** "saturated at ~0.93". Lesion-wise it is 0.7183, and the 0.93 was a measurement artifact of a union region whose voxel count is dominated by one large component. The rule survives; the justification for it does not |
+| "The lesion-wise gain transfers out of distribution" | **Measured 2026-08-24 and it does not.** All six external comparisons (SSA and PED × ET/TC/WT) have CIs straddling zero. Every point estimate favours `neurovision`, which is exactly why this row exists: six positive-looking numbers with six CIs crossing zero is an underpowered null, not transfer. Note 41 |
+| Any architecture claim on **pediatric tumour core** | Both models score lesion-wise Dice 0.234 with **64 of 99 cases exact ties**. They fail identically; there is no gradient to claim on |
 
 ## 3. Limitations that must appear in the paper
 
@@ -48,6 +53,8 @@ any reviewer who reads the repository.
 4. **`ignore_empty=False`** for empty regions (BraTS convention). Measured effect on this data: only 2.6% of cases have no ET, so it moves headline ET Dice by well under a point — but the convention must be stated.
 5. **The eloquence layer is degenerate on this cohort** (100% "near eloquent"), so no per-case information; reporting agreement there would be true and misleading.
 6. **One ablation rung of five.** The remaining four have no GPU hours behind them.
+7. **The headline metric changed under us.** Every pre-2026-08-24 number in this project is voxel-wise Dice on a random split of the BraTS 2021 *training* set. That is not comparable to any published BraTS number, and lesion-wise re-scoring (note 41) shows it overstates performance by 0.10–0.32 Dice. Both conventions must be reported, and the lesion-wise one is the comparable one.
+8. **The lesion-wise family is exploratory.** It was not pre-registered before it was computed. Only `preregistration_strong_baseline.md` names lesion-wise ET as a co-primary endpoint, and that gate has not yet run.
 
 ## 4. The honest framing
 

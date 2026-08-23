@@ -1223,6 +1223,123 @@ sessions by resume is still ONE row — sum the GPU hours.
 
     Nothing in Phase A-H moves. This note is now closed.
 
+
+41. **LESION-WISE RE-SCORING OF EVERY SAVED RUN. Voxel Dice was overstating
+    this project's performance by 0.10-0.32 Dice, and the architecture gain is
+    ~1.9x LARGER under the metric BraTS has actually used since 2023 -- but it
+    still does not transfer out of distribution.** Run 2026-08-24, master plan
+    item A3. Zero GPU: re-scored from the saved fp16 logits of both surviving
+    models on all four splits, 1,070 cases, ~30 min on the M4.
+
+    **Provenance guard passed first.** Every one of the eight replays
+    self-consistency-checked against that run's committed `per_case_metrics.csv`
+    before anything else was computed. Mean absolute Dice deltas were **1e-17
+    to 5e-17** on `dice_ET/TC/WT` across all eight -- i.e. the logits on disk
+    reproduce the published numbers to floating-point noise, so these
+    lesion-wise numbers are scored on exactly the predictions the paper
+    already reports.
+
+    **Finding 1 -- voxel Dice flatters every model, and worst where the paper
+    was most confident.** Lesion-wise minus voxel-wise Dice:
+
+    | Run | ET | TC | WT |
+    |---|---|---|---|
+    | `neurovision` test | -0.116 | -0.101 | **-0.214** |
+    | `baseline_unet3d` test | -0.140 | -0.128 | **-0.239** |
+    | `neurovision` SSA | -0.233 | -0.225 | **-0.282** |
+    | `baseline_unet3d` SSA | -0.266 | -0.230 | **-0.321** |
+    | `neurovision` PED | -0.098 | -0.206 | -0.190 |
+    | `baseline_unet3d` PED | -0.136 | -0.265 | -0.228 |
+
+    WT is the worst case everywhere. `neurovision`'s WT on test reads **0.9321
+    voxel-wise and 0.7183 lesion-wise**. The project's standing instruction
+    "make no claim on WT, it is saturated at ~0.93" was correct not to claim it,
+    but for the wrong reason: WT is not saturated, it is *mis-measured*. A
+    region defined as the union of everything tumour-related is exactly where a
+    single large component dominates the voxel count and hides the satellites.
+
+    **Finding 2 -- the mechanism is spurious lesions, and it is now visible.**
+    Mean false-positive lesions per case, test split: ET **0.32** for
+    `neurovision` vs **0.47** for the baseline (32% fewer), WT 0.56 vs 0.61. On
+    SSA, ET 0.98 vs 1.38 (29% fewer). False *negatives* are near-identical
+    between the two models on every split (e.g. test ET 0.28 vs 0.30). So the
+    architecture's advantage is almost entirely **fewer invented lesions**, not
+    better recall -- which is the same over-reporting of multifocality already
+    measured from the report side (30.7-41.3% predicted against a true 22.8%,
+    notes 22-25), now seen in the segmentation metric itself and attributed to
+    the right model.
+
+    **Finding 3 -- in distribution, the gain is bigger lesion-wise than
+    voxel-wise.** Paired, Holm-corrected within each cohort's three regions,
+    10,000-sample bootstrap CIs, seed 42, via `analysis.statistics.compare_models`:
+
+    | test (n=189) | lesion-wise delta | 95% CI | p_holm | verdict |
+    |---|---|---|---|---|
+    | `lwdice_ET` | **+0.0508** | +0.0225 to +0.0798 | 1.9e-15 | **better** |
+    | `lwdice_TC` | **+0.0371** | +0.0097 to +0.0653 | 2.7e-10 | **better** |
+    | `lwdice_WT` | +0.0300 | **-0.0021** to +0.0620 | 9.6e-06 | inconclusive |
+
+    ET lesion-wise **+0.0508 against the voxel-wise +0.0267** -- 1.9x the
+    effect. TC is newly separable: voxel-wise TC was +0.0103 and never claimed;
+    lesion-wise it is +0.0371 with a CI excluding zero. WT stays inconclusive
+    because its CI crosses zero, so the "no claim on WT" rule survives intact
+    under the new metric as well.
+
+    Effect sizes stay honest: Cohen's dz is 0.25 (ET), 0.19 (TC), 0.13 (WT) --
+    `compare_models` labels these "small" and "negligible". A large p with a
+    small dz is what a consistent, modest, per-case advantage looks like at
+    n=189, and it should be reported that way rather than as a big win.
+
+    **Finding 4 -- and this is the one that did NOT go the way it looked.
+    Nothing transfers out of distribution, lesion-wise either.** Every external
+    point estimate favours `neurovision`, and **every single one is
+    inconclusive** -- all six confidence intervals straddle zero:
+
+    | Cohort | region | delta | 95% CI | p_holm | verdict |
+    |---|---|---|---|---|---|
+    | SSA (n=60) | ET | +0.0319 | -0.0184 to +0.0825 | 0.0367 | inconclusive |
+    | SSA | TC | +0.0149 | -0.0537 to +0.0797 | 0.3673 | inconclusive |
+    | SSA | WT | +0.0368 | -0.0214 to +0.0949 | 0.0718 | inconclusive |
+    | PED (n=99) | ET | +0.0282 | -0.0271 to +0.0863 | 0.0315 | inconclusive |
+    | PED | TC | -0.0006 | -0.0495 to +0.0486 | 0.6232 | inconclusive |
+    | PED | WT | +0.0156 | -0.0382 to +0.0672 | 0.5341 | inconclusive |
+
+    Worth stating plainly, because the table of point estimates invites the
+    opposite reading and I nearly took it: **six positive-looking numbers with
+    six CIs crossing zero is not evidence of transfer.** It is an underpowered
+    null at n=60 and n=99, consistent with note 30's voxel-wise finding rather
+    than a correction to it. Three of the six also have p_holm below 0.05 while
+    their CIs include zero -- the Wilcoxon is a rank test and the bootstrap CI
+    is on the mean, and they disagree here precisely because the per-case
+    differences are small, consistent in sign, and heavily tied. The CI is the
+    reported quantity, per this project's convention.
+
+    **Finding 5 -- pediatric tumour core is a floor, not a gradient.** PED TC
+    lesion-wise Dice is **0.2339** (`neurovision`) and **0.2345** (baseline),
+    with lwNSD ~0.15 and **64 of 99 cases exact ties between the two models**.
+    Both networks essentially fail to detect pediatric tumour-core lesions at
+    all, and they fail identically. No architecture claim of any kind can be
+    made on that cell, and the tie count is why.
+
+    **Status of these numbers: EXPLORATORY, not pre-registered.** The
+    lesion-wise family was not named in any pre-registration before it was
+    computed; only the strong-baseline gate (`preregistration_strong_baseline.md`)
+    names lesion-wise ET as a co-primary endpoint, and that gate has not run.
+    Holm correction was applied within each cohort's three regions but NOT
+    across the four cohorts. These rows enter
+    `docs/paper/claims_and_evidence.md` as secondary/exploratory and must be
+    labelled as such wherever they appear.
+
+    **Two cells that can never be filled.** `capacity_control` has no
+    checkpoint, no logits and no predictions, so the 79% architecture / 21%
+    capacity decomposition stays voxel-wise permanently.
+    `ablation_content_only_gate` has no saved volumes but its checkpoint
+    survives, so it costs one ~15 min CPU inference pass per split to add.
+
+    Artifacts: `outputs/replay_lesionwise/<eval_dir_basename>/per_case_default.csv`,
+    eight directories. Rebuild with `scripts/replay_logits.py
+    analysis.replay.lesionwise.enabled=true` from `.venv-analysis`.
+
 ---
 
 ## Planned
