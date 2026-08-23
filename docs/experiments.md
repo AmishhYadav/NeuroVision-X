@@ -969,6 +969,51 @@ sessions by resume is still ONE row — sum the GPU hours.
     (~7 h wall, 5.3 GiB peak RSS, no swap), and the analysis loads only saved
     caches.
 
+36. **PHASE 2.4 IS ANSWERED AND THE INFERENCE-ROI HYPOTHESIS IS REFUTED: A
+    BIGGER INFERENCE WINDOW DOES NOT FIX MULTIFOCALITY, AND IT COSTS WT DICE.**
+    Run 2026-08-23 on the M4 CPU, zero GPU hours: `neurovision`'s own
+    `best.pt` re-evaluated over the same 189 test cases at **ROI 96³** instead
+    of the trained 64³ (`outputs/roi_sweep/neurovision_roi96/`), then profiled
+    with `scripts/burden.py` and compared paired against the existing 64³ run.
+
+    **Segmentation quality, paired over 189 cases, Holm-corrected.** Every
+    region is inconclusive except one, and that one goes the wrong way:
+    **`dice_WT` -0.0045, CI (-0.0079, -0.0016), p_holm 0.0090 -- WORSE at
+    96³.** `dice_ET` +0.0029 (CI -0.0051 to +0.0154), `dice_TC` -0.0019, all
+    three HD95 rows inconclusive with CIs straddling zero.
+
+    **Multifocality, which is the reason 2.4 existed at all.** Ground truth
+    22.8% of cases multifocal; `neurovision` at 64³ reports **33.9%**
+    (+0.111); at 96³ it reports **41.3%** (+0.185). Mean WT component count
+    1.39 (GT) -> 1.65 (64³) -> 1.76 (96³). Per-case agreement with the ground
+    truth's multifocal flag falls 0.7302 -> 0.6878, but **that fall is NOT
+    established**: paired bootstrap delta -0.0423, CI (-0.1005, +0.0107),
+    McNemar exact p = 0.20 on 30 discordant cases. So the honest statement is
+    that a larger inference ROI **does not improve** multifocality agreement --
+    the point estimate moves the wrong way and no interval supports an
+    improvement -- rather than that it significantly harms it.
+
+    **What this closes.** CLAUDE.md recorded patch size as "the candidate
+    mechanism" for the superseded 96³/200-epoch U-Net producing a BETTER
+    structured report than a higher-Dice model. This experiment separates the
+    two things that were confounded in that observation: **inference ROI is not
+    the mechanism.** If patch size explains it at all, it must act through the
+    TRAINING patch size, which cannot be tested without a GPU run and is not
+    currently funded.
+
+    **ROI 128³ was planned and is DECLINED, for a measured reason.** Peak RSS
+    at ROI 96³ was **13.7 GiB** on a 16 GiB machine (measured with
+    `/usr/bin/time -l`; the 64³ jobs peak at ~5.3 GiB). A 128³ window is
+    ~2.4x the voxels of 96³, so the run would page heavily, and the 64->96
+    trend already points away from any benefit. Running it would cost ~5 h of
+    CPU to make a refuted hypothesis slightly more refuted.
+
+    **Filing note, second instance in one day.** `scripts/burden.py` wrote to
+    `cfg.output_dir`, which interpolates `experiment_name` (default
+    `baseline_unet3d`), so this profile initially landed in the BASELINE's
+    directory. Fixed by `analysis.burden.out_dir` (commit `570d3a2`), the same
+    fix `analysis.detection.out_dir` needed hours earlier.
+
 ---
 
 ## Planned
