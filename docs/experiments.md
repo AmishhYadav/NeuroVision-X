@@ -1015,6 +1015,90 @@ sessions by resume is still ONE row — sum the GPU hours.
     directory. Fixed by `analysis.burden.out_dir` (commit `570d3a2`), the same
     fix `analysis.detection.out_dir` needed hours earlier.
 
+37. **GATE 2 IS DECIDED: PARTIAL BY THE RULE, NEGATIVE IN SUBSTANCE. ADDING
+    DISAGREEMENT TO ENTROPY DOES NOT LOCALISE ERROR BETTER.** Run 2026-08-23,
+    zero GPU hours. Combiner fitted once on the 187-case val split (3,740,000
+    voxels) and applied FROZEN to all three cohorts, per
+    `docs/research/preregistration_gate2.md`. Fitted weights:
+    `[-8.700, 7.351, 0.952]` -- disagreement does get a positive weight, ~13%
+    of entropy's, so the combiner genuinely uses it.
+
+    | Cohort | AUROC: entropy -> +disagreement | recall@5%: entropy -> +disagreement |
+    |---|---|---|
+    | BraTS test | 0.9162 -> 0.9150 (**-0.0013**, p_holm 0.042) | 0.5113 -> 0.4720 (**-0.0394**, p_holm 0.0006) |
+    | SSA | 0.8874 -> 0.8888 (+0.0013, ns) | 0.3432 -> 0.3304 (**-0.0128**, p_holm 0.0006) |
+    | PED | 0.8307 -> **0.8428** (+0.0121, p_holm 0.0006) | 0.1826 -> 0.1812 (-0.0014, ns) |
+
+    4 of 6 rejected under Holm, **but two of the four rejections are losses**
+    and `passed_cohorts` is empty. The operational endpoint -- how much of a
+    case's error you catch by flagging 5% of predicted foreground -- is worse
+    or unchanged EVERYWHERE.
+
+    **The finding is the gap against Gate 1, not the table alone.** Gate 1
+    asked whether disagreement carries error information entropy lacks
+    (residualise, then test): yes, everywhere. Gate 2 asks whether that
+    information improves a FITTED OPERATING DETECTOR: no. Both are true.
+    **Incremental information is not incremental utility** -- entropy's own
+    per-case AUROC is already 0.916 in distribution, and there is no room left
+    that this feature can fill.
+
+    **A limitation of the gate's own design, recorded not hidden.** The
+    combiner is fitted by pooled logistic likelihood while the endpoints are
+    per-case rank metrics; a likelihood-optimal weighting can lose on a rank
+    metric, which is the leading explanation for the in-distribution losses.
+    That mismatch was baked into the pre-registration, so swapping in a
+    rank-optimised combiner now would be post-hoc -- exactly what the
+    pre-registration exists to prevent. It is the one defensible follow-up,
+    pre-registered in advance, on fresh data.
+
+38. **P2 IS ANSWERED AND IT IS THE PRE-REGISTERED NULL: THE AMBIGUITY
+    CONDITIONING BUYS NOTHING MEASURABLE. THE GAIN IS THE GATED FUSION
+    ITSELF.** `ablation_content_only_gate` trained 80/80 epochs over three
+    Kaggle sessions (24.16 GPU-h, `GIT_REF=7caacfa`, W&B `ddkbitjp`) and was
+    evaluated on the test split ON THE GPU -- deliberately the same device as
+    `neurovision`'s own evaluation, because the expected effect is tiny and
+    CPU-vs-GPU float differences land in the decimals that matter.
+
+    **Test Dice: ET 0.8686 / TC 0.9158 / WT 0.9333.** Paired over the same 189
+    cases, `neurovision` vs `ablation_content_only_gate`: **ET +0.0022 (CI
+    -0.0067 to +0.0152, p_holm 0.17), TC +0.0003, WT -0.0012 -- every metric
+    INCONCLUSIVE**, all three HD95 rows likewise.
+
+    **The decomposition, now complete, in ET Dice against `baseline_unet3d`:**
+
+    | Contribution | ET Dice | Verdict |
+    |---|---|---|
+    | Total (`neurovision` - baseline) | +0.0267 | better, p_holm 1.4e-21 |
+    | Width alone (`capacity_control` - baseline) | +0.0055 | better, p_holm 1.6e-09 |
+    | Content-only gated fusion (`ablation` - `capacity_control`) | **+0.0189** | better, p_holm 4.4e-20 |
+    | Ambiguity conditioning (`neurovision` - `ablation`) | **+0.0022** | **INCONCLUSIVE** |
+
+    The ablation on its own beats the baseline by **+0.0244** (p_holm 3.9e-22)
+    -- i.e. it recovers essentially all of `neurovision`'s advantage without
+    ever seeing inter-branch disagreement. **So ~92% of the architectural gain
+    is the dual-encoder gated fusion, and the ambiguity conditioning -- the
+    part this project claimed as its novelty -- contributes an amount
+    indistinguishable from zero.** `docs/research/contribution.md` P2 declared
+    this outcome in advance and requires it be reported: the contribution is
+    the gate's per-voxel spatial resolution, not the signal it is conditioned
+    on. That is a smaller and much more ordinary claim, and gated cross-
+    attention fusion for dual-branch medical segmentation is already published.
+
+    **Three caveats that must travel with it.** (i) The CI upper bound is
+    +0.0152, so an effect up to ~1.5 Dice points is NOT excluded -- this is
+    "no detectable difference at n=189", never "proven identical"; a real
+    equivalence claim needs a TOST with a pre-set margin. (ii) Single seed, so
+    there is no seed-to-seed noise floor to compare +0.0022 against. (iii) The
+    ablation's `best.pt` is its FINAL epoch (79) while `neurovision` peaked at
+    69, so the ablation was still improving when the budget ran out -- if
+    anything that handicaps the ablation and makes the null more robust, not
+    less.
+
+    **This agrees with Gate 2 (note 37), independently.** One line of evidence
+    says the disagreement feature adds no utility to an uncertainty detector;
+    the other says removing it from the gate costs no accuracy. Two different
+    experiments, same conclusion.
+
 ---
 
 ## Planned
