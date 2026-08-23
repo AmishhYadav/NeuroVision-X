@@ -265,6 +265,80 @@ detection:
 
   seed: ${seed}
 
+# ---------------------------------------------------------------------------
+# Gate 2 -- does entropy PLUS inter-branch disagreement localise per-voxel
+# error better than entropy alone? Pre-registered in
+# docs/research/preregistration_gate2.md BEFORE any number was computed; read
+# that file before changing a threshold, the budget, or the fit split.
+#
+# Gate 1 settled two things that shape this block. Disagreement carries error
+# information entropy lacks (residualised AUROC > 0.5 on all three cohorts),
+# AND entropy's own raw AUROC is higher than disagreement's everywhere -- so
+# the question is whether the two TOGETHER beat entropy, not whether
+# disagreement beats it alone.
+# ---------------------------------------------------------------------------
+gate2:
+  # The combiner is fitted here and scored nowhere. The val split backs no
+  # reported number in this project, which is the only reason a fitted
+  # quantity can be reported honestly at all -- the same rule that makes
+  # temperature scaling fit on val and apply to test.
+  fit_cohort:
+    name: val
+    ambiguity_dirs: [outputs/ambiguity_val_*]
+    eval_dir: outputs/neurovision/eval_val
+    prep_dir: data/preprocessed/brats
+
+  # Applied FROZEN to each of these. `external: true` marks the cohorts the
+  # pre-registered pass condition is scored on -- a detector that works only
+  # in distribution does not address the failure that motivated the pivot.
+  cohorts:
+    - name: brats_test
+      external: false
+      ambiguity_dirs: [outputs/ambiguity_test_*]
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+    - name: ssa
+      external: true
+      ambiguity_dirs: [outputs/ambiguity_ssa_*]
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+    - name: ped
+      external: true
+      ambiguity_dirs: [outputs/ambiguity_ped_*]
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+
+  out_dir: outputs/gate2
+
+  # Same sampling contract as analysis.detection.voxel, deliberately: Gate 1
+  # and Gate 2 must draw the SAME voxels under the SAME label-free mask, or a
+  # difference between the gates is bookkeeping rather than signal.
+  voxel:
+    mask: predicted_dilated
+    dilation_mm: 10.0
+    max_voxels_per_case: 20000
+    seed: ${seed}
+
+  # Fraction of each case's sampled voxels the operational endpoint is allowed
+  # to flag. Fixed at 5% in the pre-registration; a budget that can be tuned
+  # after seeing the answer is not an endpoint.
+  budget: 0.05
+
+  bootstrap:
+    n_boot: 10000
+    ci: 0.95
+    seed: ${seed}
+
+  alpha: 0.05
+
+  # Pre-registered magnitudes. Modest on purpose and for a stated reason:
+  # entropy's baseline AUROC is already ~0.88 in distribution, so a 0.01 gain
+  # on top of 0.88 is a different thing from 0.01 on top of 0.55. Always
+  # reported next to the baseline it improves.
+  thresholds:
+    delta_auroc: 0.01
+    delta_recall: 0.02
+
 replay:
   # scripts/replay_logits.py -- re-scores a checkpoint's SAVED fp16 logits
   # (<eval_dir>/logits/) at a different threshold or post-processing chain,
