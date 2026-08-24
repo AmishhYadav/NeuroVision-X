@@ -52,6 +52,20 @@ dcm2niix==1.0.20260724
 # instead of only in our own demo.
 highdicom==0.28.1
 
+# --- The subset of the research stack the clinical path imports -----------
+# NOT a new dependency: monai is already the core of requirements.txt, and
+# requirements-analysis.txt re-declares the same subset for the same reason.
+# reporting/dicom_seg.py reuses inference/postprocess.py::regions_to_classes
+# rather than growing a second copy of the nested-region collapse rule, and
+# that module -- along with metrics/segmentation.py underneath it -- imports
+# monai at module scope. Without this pin, every guarded test in
+# tests/test_dicom_seg.py fails on ModuleNotFoundError in this env while
+# passing in .venv, which is a test that only appears to exist.
+# Verified 2026-08-24: installs into the resolved clinical stack without
+# moving numpy off 2.3.5 or disturbing brainles/antspyx/highdicom.
+monai==1.6.0
+einops==0.8.2
+
 # --- Dev tooling ------------------------------------------------------------
 # tests/test_dicom_ingest.py's pydicom- and dcm2niix-guarded tests SKIP in the
 # training venv and only exercise real code here, so this env needs a runner.

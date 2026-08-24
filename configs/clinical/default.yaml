@@ -162,3 +162,56 @@ input_qc:
   # is below this, in units of its own robust scale, is constant or nearly
   # so -- a dropped acquisition, not an image.
   min_dynamic_range: 1.0e-6
+
+dicom_seg:
+  # E6: export the mask as a DICOM Segmentation object, so it loads in OHIF
+  # or any PACS instead of only in our own viewer.
+  #
+  # THE GEOMETRY TRAP, stated here because it is the thing that will go
+  # wrong. After E2 the mask lives in ATLAS space (SRI24), not in the
+  # geometry of the DICOM series it came from. A SEG that references the
+  # source series while carrying atlas-space voxels renders a
+  # plausible-looking overlay in the wrong place, and nothing raises -- the
+  # exact shape of the demo geometry re-crop this project already caught by
+  # recomputing a published Dice rather than by looking at a picture. So the
+  # writer VALIDATES that the mask's shape and spacing match the reference
+  # series and REFUSES otherwise. Resampling the mask back through E2's
+  # saved inverse transform is a separate step and is not done here.
+
+  # Written into SeriesDescription, whose DICOM value representation is LO
+  # and therefore capped at 64 CHARACTERS. Keep this under that limit: the
+  # first draft was 72 characters, and the only way to make it fit was to
+  # bypass highdicom's validation and assign the attribute directly, which
+  # produces a non-conformant object that a strict PACS may reject. A
+  # disclaimer that gets the study rejected is not a disclaimer.
+  series_description: "NeuroVision-X segmentation - RESEARCH ONLY, not diagnostic"
+
+  # The full statement, written to ImageComments, whose VR is LT (10240
+  # characters). The disclaimer is not decoration: the report artifact in
+  # this repo already carries its disclaimer as a REQUIRED field rather than
+  # as README text, and an object that leaves this pipeline for a PACS gets
+  # the same discipline.
+  disclaimer: >-
+    Produced by NeuroVision-X, a research segmentation pipeline. FOR RESEARCH,
+    EDUCATION AND DECISION SUPPORT ONLY. This object is not a diagnostic
+    device, has not been clinically validated, and must not be used as the
+    basis of a clinical decision. Segment boundaries are model output and
+    carry no guarantee of accuracy on any individual study.
+
+  # A high series number keeps the derived object sorting after the source
+  # series in every viewer's series list.
+  series_number: 9001
+
+  manufacturer: "NeuroVision-X"
+  manufacturer_model_name: "NeuroVision-X dual-encoder segmentation"
+  software_versions: "milestone-4"
+  device_serial_number: "neurovision-x-research"
+
+  # BINARY, not FRACTIONAL. The model's deployed output is a hard mask after
+  # postprocess_logits; writing it as fractional would imply a calibrated
+  # per-voxel probability that the thresholded mask no longer carries.
+  segmentation_type: BINARY
+
+  # Fixed, not ${output_dir}: an exported study object is a property of the
+  # study, not of any trained model.
+  out_dir: outputs/clinical_dicom_seg
