@@ -499,3 +499,56 @@ confidence:
   # (CLAUDE.md's calibration-reporting-mask trap).
   dilation_mm: 5.0
   regions: [ET, TC, WT]
+
+# ---------------------------------------------------------------------------
+# scripts/train_qc.py -- Phase C3. Trains SegQC (configs/model/segqc.yaml,
+# neurovision.models.qc.SegQC), a SECOND, independently trained network that
+# looks at one case and a predicted mask and estimates the Dice score that
+# mask would get -- with no ground truth available at inference time.
+# Training pairs come from neurovision.data.qc_pairs.generate_pairs, applied
+# to a checkpoint's own SAVED LOGITS under train_eval_dir/logits -- never to
+# ground truth (master plan section 2, principle 3; see qc_pairs.py's module
+# docstring for the full argument). Reachable as cfg.analysis.qc, NOT
+# cfg.qc -- see tests/test_train_qc.py's
+# test_config_block_is_reachable_at_the_composed_path for the regression
+# test a sibling script (scripts/conformal.py) already needed once.
+# ---------------------------------------------------------------------------
+qc:
+  # scripts/evaluate.py's output directory for the VAL split. The QC model
+  # TRAINS here -- must have inference.evaluation.save_logits=true.
+  train_eval_dir: outputs/neurovision/eval_val
+  train_prep_dir: ${data.preprocessing.out_dir}
+
+  # scripts/evaluate.py's output directory for the TEST split. The QC model
+  # is NEVER trained on this (scripts/train_qc.py's resolve_dirs raises if
+  # this resolves to the same path as train_eval_dir) -- it backs only the
+  # per-epoch Spearman/MAE report.
+  heldout_eval_dir: outputs/neurovision/eval_test
+  heldout_prep_dir: ${data.preprocessing.out_dir}
+
+  out_dir: ${output_dir}/qc
+
+  # Index into the 4 preprocessed MRI modalities, order [t1, t1ce, t2,
+  # flair] (neurovision.data.preprocessing's fixed channel order). Default 1
+  # = t1ce: enhancing tumor and tumor core are DEFINED by contrast
+  # enhancement, so t1ce is the modality most informative about whether a
+  # predicted ET/TC boundary looks anatomically right.
+  modality_index: 1
+
+  # Every packed (image, mask, entropy) volume is resized to this shape --
+  # see scripts/train_qc.py's QCPairsDataset docstring for why this is a
+  # downsample, never a crop: Dice is a whole-volume quantity, and a crop's
+  # Dice does not describe the crop.
+  target_shape: [64, 64, 64]
+
+  regions: [ET, TC, WT]
+
+  epochs: 10
+  batch_size: 2
+  lr: 1.0e-4
+  num_workers: 0
+
+  # Caps the number of cases used from train_eval_dir/heldout_eval_dir.
+  # null = every case with saved logits. A subsetting knob, because the
+  # first real run should be small.
+  max_cases: null

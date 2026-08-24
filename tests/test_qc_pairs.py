@@ -18,6 +18,7 @@ from neurovision.data.qc_pairs import (
     DEGRADATION_KINDS,
     DegradationSpec,
     degrade_mask,
+    generate_one_pair,
     generate_pairs,
 )
 from neurovision.metrics.segmentation import REGION_NAMES, dice_score
@@ -379,3 +380,59 @@ def test_label_accepts_class_map_or_region_stack() -> None:
     for a, b in zip(pairs_from_classmap, pairs_from_regions, strict=True):
         assert np.array_equal(a.mask, b.mask)
         assert a.dice == pytest.approx(b.dice)
+
+
+# ---------------------------------------------------------------------------
+# generate_one_pair -- must be bit-for-bit identical to generate_pairs, for
+# every region, including the STOCHASTIC spec kinds where this is only true
+# if the generator's random draws are consumed in the same order.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("region_index", [0, 1, 2])
+@pytest.mark.parametrize(
+    "kind,magnitude",
+    [
+        ("identity", 0.0),
+        ("erode", 2.0),
+        ("dilate", 2.0),
+        ("drop_component", 0.5),
+        ("shift", 3.0),
+        ("speckle", 0.5),
+    ],
+)
+def test_generate_one_pair_matches_generate_pairs_exactly(
+    kind: str, magnitude: float, region_index: int
+) -> None:
+    """For every degradation kind (stochastic or not) and every region, the fast
+    single-pair path must return exactly what generate_pairs would have, at the
+    same generator index -- proving generate_one_pair advances `generator`
+    identically to generate_pairs even though it skips scoring 3 of the 4 pairs
+    generate_pairs would compute."""
+    mask = _four_cluster_nested_case()
+    label = mask.copy()
+    spec = DegradationSpec(kind, magnitude)
+
+    full_pairs = generate_pairs(
+        mask, label, generator=np.random.default_rng(123), specs=[spec], per_region=True
+    )
+    expected = next(p for p in full_pairs if p.region_index == region_index)
+
+    got = generate_one_pair(mask, label, spec, region_index, generator=np.random.default_rng(123))
+
+    assert np.array_equal(got.mask, expected.mask)
+    assert got.dice == pytest.approx(expected.dice)
+    assert got.spec == expected.spec
+    assert got.region_index == expected.region_index
+
+
+def test_generate_one_pair_rejects_none_region_index() -> None:
+    mask = _nested_case()
+    with pytest.raises(ValueError, match="region_index"):
+        generate_one_pair(
+            mask,
+            mask,
+            DegradationSpec("identity", 0.0),
+            None,  # type: ignore[arg-type]
+            generator=np.random.default_rng(0),
+        )

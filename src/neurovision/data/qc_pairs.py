@@ -81,6 +81,7 @@ __all__ = [
     "QCPair",
     "degrade_mask",
     "generate_pairs",
+    "generate_one_pair",
     "DEFAULT_SPECS",
 ]
 
@@ -514,6 +515,101 @@ def generate_pairs(
         per_region,
     )
     return pairs
+
+
+def generate_one_pair(
+    pred_mask: np.ndarray,
+    label: np.ndarray,
+    spec: DegradationSpec,
+    region_index: int,
+    *,
+    generator: np.random.Generator,
+) -> QCPair:
+    """Builds exactly the ONE per-region pair `generate_pairs` would build, without
+    scoring the three pairs a caller who only wants one region never reads.
+
+    Added for `scripts/train_qc.py`'s `QCPairsDataset`, whose `__getitem__`
+    packs and trains on exactly one region at a time. Calling
+    `generate_pairs(pred_mask, label, generator=generator, specs=[spec],
+    per_region=True)` there and keeping only the pair matching one
+    `region_index` computes -- and immediately discards -- the whole-mask
+    pair and every OTHER region's pair, on the hot path of a CPU training
+    loop. This function returns the SAME pair `generate_pairs` would, at
+    the same generator state, without that waste.
+
+    **Why this cannot simply call `degrade_mask(pred_mask, spec,
+    generator=generator, region_index=region_index)` directly, skipping the
+    other three entirely:** `generate_pairs`, for one spec with
+    `per_region=True`, degrades the WHOLE mask first (its `region_index=
+    None` pair -- always built, regardless of `per_region`), then region 0,
+    then region 1, then region 2, ALL against the SAME `generator`,
+    consuming its random draws sequentially in that order. For a
+    stochastic `spec.kind` (`drop_component`, `shift`, `speckle` --
+    `degrade_mask`'s own docstring documents which kinds touch `generator`
+    at all; `identity`/`erode`/`dilate` never do), the exact result at
+    `region_index` therefore depends on how many draws the whole-mask
+    degrade and every earlier region already consumed. Skipping those calls
+    would leave `generator` in a DIFFERENT state than `generate_pairs`
+    would have reached, and the two would silently stop agreeing --
+    exactly the kind of drift `docs/lessons.md` exists to catalogue. So
+    this function performs the SAME `degrade_mask` calls, in the SAME
+    order, for the SAME reason (consuming `generator` identically): only
+    `_dice_tuple` -- the Dice computation, never the degradation itself --
+    is skipped for the discarded whole-mask pair and every region before
+    `region_index`.
+
+    Args:
+        pred_mask: The model's PREDICTED region mask, `(3, D, H, W)`,
+            channel order `(ET, TC, WT)`. Never ground truth -- see this
+            module's docstring for the binding principle.
+        label: Ground truth, either a `(D, H, W)` integer class map or an
+            already-expanded `(3, D, H, W)` region mask. Used ONLY to
+            compute the returned pair's Dice.
+        spec: The single degradation to apply.
+        region_index: Which region channel to degrade -- `0`, `1`, or `2`
+            for ET/TC/WT. Unlike `degrade_mask`'s own `region_index`,
+            `None` is not accepted: `generate_pairs` always scores the
+            whole-mask pair regardless of `per_region`, so there is no
+            wasted work this function would save for that case -- call
+            `degrade_mask` directly instead.
+        generator: Source of randomness, in the SAME state a fresh call to
+            `generate_pairs(..., specs=[spec], per_region=True)` would have
+            started from -- e.g. a generator just constructed from a fixed
+            seed. The result matches `generate_pairs`'s corresponding pair
+            only if this precondition holds; it is the caller's
+            responsibility, exactly as it already is for `generate_pairs`.
+
+    Returns:
+        The `QCPair` for `region_index`, identical to the matching entry of
+        `generate_pairs(pred_mask, label, generator=<same-state generator>,
+        specs=[spec], per_region=True)`.
+
+    Raises:
+        ValueError: `region_index` is not `0`, `1`, or `2`.
+    """
+    if region_index not in (0, 1, 2):
+        raise ValueError(
+            f"generate_one_pair: region_index must be 0, 1 or 2, got {region_index!r}. "
+            "(None is not accepted -- see this function's docstring.)"
+        )
+
+    pred_regions = _binarize_mask(pred_mask)
+    label_regions = _expand_label(label)
+
+    # Whole-mask degrade, then every region strictly BEFORE region_index --
+    # run for generator continuity ONLY. Their outputs and Dice are never
+    # computed; see the docstring for why they cannot simply be skipped.
+    degrade_mask(pred_regions, spec, generator=generator, region_index=None)
+    for earlier_region in range(region_index):
+        degrade_mask(pred_regions, spec, generator=generator, region_index=earlier_region)
+
+    degraded = degrade_mask(pred_regions, spec, generator=generator, region_index=region_index)
+    return QCPair(
+        mask=degraded,
+        dice=_dice_tuple(degraded, label_regions),
+        spec=spec,
+        region_index=region_index,
+    )
 
 
 # Magnitudes chosen to span mild to severe damage for each kind, at roughly
