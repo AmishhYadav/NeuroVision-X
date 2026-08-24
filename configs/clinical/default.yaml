@@ -1,0 +1,35 @@
+# Milestone 4 Phase E -- the clinical front-end. Turning a real hospital study
+# into something the model may legally be fed.
+#
+# THIS RUNS IN .venv-clinical, not the training venv. See
+# requirements-clinical.txt for why the three environments cannot be merged.
+# Nothing in this group is needed to train or to evaluate, so a training
+# session that never touches it costs nothing for its presence.
+
+ingest:
+  # E1: a DICOM study folder -> four named NIfTIs.
+
+  # Chris Rorden's dcm2niix, shipped as a pip-installable binary in
+  # .venv-clinical. null -> resolved from PATH with shutil.which at call
+  # time, which is what makes the same config work on macOS and Linux.
+  # Set explicitly only when a specific build must be pinned.
+  dcm2niix_path: null
+
+  # A series with fewer instances than this is not a diagnostic volume --
+  # localisers, scouts and derived single-frame objects all land here. It is
+  # deliberately low: a thick-slice clinical FLAIR can be 20-24 slices, and
+  # refusing a real sequence is worse than admitting a scout that the rule
+  # table will reject on other grounds anyway.
+  min_instances: 8
+
+  # Manual series -> role assignment from the UI, applied AFTER the automatic
+  # rule table and overriding it. Keys are SeriesInstanceUID, values are one
+  # of t1 / t1ce / t2 / flair. Empty by default: the automatic path is what
+  # gets measured, and an override silently baked into config would make the
+  # measured accuracy meaningless.
+  role_overrides: {}
+
+  # Where ingest writes the converted NIfTIs and its manifest. NOT
+  # ${output_dir}: that interpolates experiment_name, and an ingested study
+  # is a property of the study, not of any trained model.
+  out_dir: outputs/clinical_ingest

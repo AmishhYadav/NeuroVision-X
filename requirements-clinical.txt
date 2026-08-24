@@ -51,3 +51,12 @@ dcm2niix==1.0.20260724
 # DICOM-SEG export, so a produced mask loads in any PACS or OHIF viewer
 # instead of only in our own demo.
 highdicom==0.28.1
+
+# --- Dev tooling ------------------------------------------------------------
+# tests/test_dicom_ingest.py's pydicom- and dcm2niix-guarded tests SKIP in the
+# training venv and only exercise real code here, so this env needs a runner.
+# Without it those tests skip in every environment, which is the same as not
+# existing. Note the binary is at .venv-clinical/bin/dcm2niix and only lands on
+# PATH when the venv is ACTIVATED -- invoking the interpreter by path does not
+# add its own bin/ to PATH, and the dcm2niix-guarded test skips if you forget.
+pytest==9.1.1

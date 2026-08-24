@@ -12,6 +12,7 @@ defaults:
   - explainability: default
   - anatomy: sri24
   - analysis: default
+  - clinical: default
   - _self_
 
 # --- Run identity ---
