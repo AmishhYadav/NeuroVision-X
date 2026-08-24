@@ -563,3 +563,71 @@ qc:
   # null = every case with saved logits. A subsetting knob, because the
   # first real run should be small.
   max_cases: null
+
+qc_validate:
+  # Phase C4/C5 -- Gate C. Scores the trained SegQC checkpoint against the
+  # FREE baseline (mean predicted-foreground entropy) on every cohort.
+  # Endpoints, family and decision rule are fixed in
+  # docs/research/preregistration_qc.md; read it before changing anything
+  # here. Runs no segmentation model: every input is a cache
+  # scripts/evaluate.py already wrote, plus one small CNN forward per case
+  # per region.
+
+  # The QC checkpoint to score. NOT ${analysis.qc.out_dir}/best.pt by
+  # interpolation: analysis.qc.out_dir goes through ${output_dir}, which
+  # interpolates experiment_name (default baseline_unet3d), so an
+  # interpolated default would silently point at the wrong run's directory.
+  # Same trap detection.out_dir above documents.
+  checkpoint: outputs/neurovision/qc/best.pt
+
+  # Fixed, for the same reason.
+  out_dir: outputs/qc_validation
+
+  # Which cohort is "in distribution". Its cells are reported and supply the
+  # rho > 0.7 literature comparison, but are NOT in the gate family --
+  # Gate C is defined on external cohorts.
+  in_distribution_cohort: test
+
+  cohorts:
+    - name: test
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+      # Optional cross-check only. The entropy baseline is RECOMPUTED from
+      # the same logits the QC model sees, so it cannot drift from them;
+      # this file, written by scripts/detection_stats.py from the same
+      # `neurovision` logits, is compared against that recomputation and a
+      # mismatch is logged as a warning. null skips the check.
+      entropy_cache: outputs/detection/entropy_cache_brats_test.csv
+    - name: ssa
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+      entropy_cache: outputs/detection/entropy_cache_ssa.csv
+    - name: ped
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+      entropy_cache: outputs/detection/entropy_cache_ped.csv
+
+  # A case counts as a failure below this Dice. Taken from the master plan
+  # and pre-registered; not a tunable.
+  bad_dice_threshold: 0.7
+
+  # A cohort x region cell with fewer than this many failures is reported
+  # but excluded from the gate family -- an AUROC from four positives has an
+  # interval so wide that including it only costs the family a multiplicity
+  # correction.
+  min_positives: 5
+
+  n_boot: 10000
+  ci: 0.95
+  alpha: 0.05
+
+  # The falsification check that runs BEFORE any endpoint: identity-pair
+  # Dice, as the QC pipeline reconstructs it, against the already-published
+  # dice_R in per_case_metrics.csv. Two independent paths to one quantity.
+  # Measured by hand on 15 test cases on 2026-08-24: median and max absolute
+  # difference both exactly 0.000000 in all three regions, so this tolerance
+  # is loose by three orders of magnitude and any trip is a real defect.
+  falsification_tol: 0.01
+
+  # Caps cases per cohort. null = all. A subsetting knob for a smoke run.
+  max_cases: null
