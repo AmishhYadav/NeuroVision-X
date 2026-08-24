@@ -519,12 +519,23 @@ qc:
   train_eval_dir: outputs/neurovision/eval_val
   train_prep_dir: ${data.preprocessing.out_dir}
 
-  # scripts/evaluate.py's output directory for the TEST split. The QC model
-  # is NEVER trained on this (scripts/train_qc.py's resolve_dirs raises if
-  # this resolves to the same path as train_eval_dir) -- it backs only the
-  # per-epoch Spearman/MAE report.
-  heldout_eval_dir: outputs/neurovision/eval_test
+  # An OPTIONAL extra eval directory, reported every epoch and used for
+  # NOTHING else. null by default, and it must stay null while Gate C is
+  # open: the obvious value here is the TEST split, and scoring test every
+  # epoch is one line away from selecting the checkpoint on test. Model
+  # selection reads `val_frac` below instead -- a case-disjoint slice of
+  # train_eval_dir. Set this only for a diagnostic run whose numbers are
+  # not going into a claim.
+  heldout_eval_dir: null
   heldout_prep_dir: ${data.preprocessing.out_dir}
+
+  # Fraction of train_eval_dir's CASES held back, case-level and seeded, as
+  # the model-selection set -- the split whose Spearman decides which epoch
+  # becomes best.pt. Case-level, not sample-level: 63 degradations of one
+  # case share a volume, so a sample-level split would put near-duplicates
+  # of the same case on both sides and the selection metric would be
+  # measuring memorisation.
+  val_frac: 0.2
 
   out_dir: ${output_dir}/qc
 
