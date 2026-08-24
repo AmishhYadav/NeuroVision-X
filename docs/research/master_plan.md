@@ -212,10 +212,11 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 |---|---|---|---|
 | C1 | `src/neurovision/data/qc_pairs.py` — degradation pair generator | `[x]` | Six degradation kinds, structurally blind to the label except for the Dice target |
 | C2 | `src/neurovision/models/qc.py` — `SegQC`, `@register_model("segqc")` | `[x]` | CPU shape test on `(1, 3, 32, 32, 32)` under a second |
-| C3 | `scripts/train_qc.py` — the trainer, with case-grouped shuffling | `[x]` built · `[ ]` **run on real data** | `outputs/neurovision/qc/best.pt` exists with a `history.csv` beside it |
-| C3b | Model selection must not read the test split | `[~]` | `analysis.qc.val_frac` splits val case-level; `heldout_eval_dir: null`; a test proves `best.pt` tracks the select split's argmax |
-| C4 | `scripts/validate_qc.py` — per-cohort ΔAUROC vs free entropy, Spearman, MAE, bias | `[ ]` | The falsification check passes, and a table exists for test/SSA/PED × ET/TC/WT |
-| C5 | Silent-failure test — does the QC model degrade under shift? | `[ ]` | Signed bias and Spearman reported per cohort, against the pre-registered direction |
+| C3 | `scripts/train_qc.py` — the trainer, with case-grouped shuffling | `[x]` built · `[~]` **running** | `outputs/neurovision/qc/best.pt` exists with a `history.csv` beside it |
+| C3b | Model selection must not read the test split | `[x]` | `analysis.qc.val_frac` splits val case-level; `heldout_eval_dir: null`; a test proves `best.pt` tracks the select split's argmax |
+| C3c | `analysis/qc_inference.py` — the packing logic, extracted for reuse | `[x]` | An exact-equality test against `train_qc.py`'s copies |
+| C4 | `scripts/validate_qc.py` — per-cohort ΔAUROC vs free entropy, Spearman, MAE, bias | `[x]` built · `[ ]` **run** | The falsification check passes, and a table exists for test/SSA/PED × ET/TC/WT |
+| C5 | Silent-failure test — does the QC model degrade under shift? | `[x]` built · `[ ]` **run** | Signed bias and Spearman reported per cohort, against the pre-registered direction |
 | — | **GATE C** | `[ ]` | `preregistration_qc.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
 
 #### Later — kept coarse on purpose, because Gate A may reshape them
@@ -224,10 +225,25 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 |---|---|---|
 | D | D1 multi-seed → D2 pooled multi-cohort → D3 fine-tune-on-SSA | GPU free after A7. D1 also unblocks B3 |
 | B3 | Deep-ensemble comparator, completing the uncertainty ladder | D1 seeds exist |
-| E | E1 DICOM ingest → E2 preprocessing → E3 input QC → E4 missing-sequence refusal → E5 gatekeeper → E6 DICOM-SEG → E7 UI | E5 needs B1 and C; the rest is independent. **`.venv-clinical` is built and verified** (2026-08-24) — `dcm2niix`, `brainles-preprocessing`, `antspyx`, `HD-BET`, `highdicom` all import |
+| E | **E1–E6 built** (2026-08-24); E7 UI outstanding | See the Phase E board below |
 | F | IDH on UCSF-PDGM | Explicit go/no-go after Phase C. Costs a large download and a training run |
 | G | End-to-end error budget | Everything above that will actually ship |
 | H | Write-up and release | G |
+
+#### Track 1 continued — Phase E, the clinical front-end. CPU. E1–E6 built 2026-08-24.
+
+`.venv-clinical` is built and verified — `dcm2niix`, `brainles-preprocessing`, `antspyx`, `HD-BET`,
+`highdicom`, plus `monai` and `pytest` added so the guarded tests actually run somewhere.
+
+| # | Item | State | Note |
+|---|---|---|---|
+| E1 | `data/dicom_ingest.py` — study folder → four named NIfTIs | `[x]` | FLAIR beats T2 and T1CE beats T1 *structurally*, by score-zeroing, not by rule order |
+| E2 | `data/clinical_preprocess.py` — co-registration, SRI24, HD-BET, optional N4 | `[x]` built · `[ ]` **run on a real study** | Pure planning layer testable with no ANTs; needs an HD-BET weight download on first real run |
+| E3+E4 | `inference/input_qc.py` — 12 label-free checks, refusal with a named reason | `[x]` | E4 is one of E3's checks; splitting them would put one refusal rule in two places |
+| E5 | `inference/gatekeeper.py` — PROCEED / CAUTION / REFUSE | `[x]` built · `[ ]` **thresholds uncalibrated** | Raises on a null threshold rather than inventing one. `enabled_signals` must be set from Gate C's outcome |
+| E6 | `reporting/dicom_seg.py` — DICOM-SEG out | `[x]` | Validates geometry against the source series and refuses; does **not** resample from atlas space |
+| E7 | UI — bounded mask, QC estimate, refusal banner | `[ ]` | `app/frontend/`; extend the existing E2E harness rather than replacing it |
+| — | Wire E1–E6 into `app/backend/jobs.py` | `[ ]` | Deliberately not done yet: each module is standalone and tested first |
 
 ### 4.4 The dependency arrows that actually bind
 
