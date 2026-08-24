@@ -33,3 +33,65 @@ ingest:
   # ${output_dir}: that interpolates experiment_name, and an ingested study
   # is a property of the study, not of any trained model.
   out_dir: outputs/clinical_ingest
+
+preprocess:
+  # E2: the four ingested NIfTIs -> co-registered, atlas-registered,
+  # skull-stripped volumes in the geometry the model was trained in.
+  #
+  # This is the step that separates a demo from a tool. Today
+  # app/backend/jobs.py runs only preprocess_case -- reorient, nonzero
+  # z-score, crop -- so a skulled, unregistered clinical scan produces a
+  # confident and completely wrong mask with nothing raising.
+  #
+  # Wraps brainles-preprocessing's AtlasCentricPreprocessor. The research
+  # path (data/preprocessing.py) is NOT touched: this module produces the
+  # same kind of input that BraTS already is, and the research path runs
+  # afterwards exactly as it always has.
+
+  # Which modality everything else is co-registered to. T1CE is the BraTS
+  # convention and the right choice here for the same reason it is the QC
+  # model's image channel: enhancing tumour and tumour core are DEFINED by
+  # contrast enhancement.
+  center_modality: t1ce
+
+  # A member name of brainles_preprocessing.constants.Atlas. BRATS_SRI24 is
+  # the atlas BraTS 2021 itself is registered to, so this is what makes a
+  # clinical study land in the same space as the training data. Note this is
+  # brainles' OWN atlas copy, fetched by its fetch_atlases() -- it is NOT
+  # anatomy.atlas.dir (data/atlas/sri24), which is this project's separate
+  # SRI24 copy used for anatomical reporting. Two copies of one atlas is not
+  # ideal, but reusing ours would mean asserting the two are voxel-identical,
+  # and phase0_atlas_findings.md already records that two assumptions about
+  # this atlas were wrong.
+  atlas: BRATS_SRI24
+
+  # N4 is OFF by default because BraTS 2021 was not N4-corrected, so applying
+  # it here would move a clinical study AWAY from the training distribution,
+  # not toward it. Available for a study with visible bias field, at the cost
+  # of a distribution mismatch that must then be stated.
+  n4_bias_correction: false
+
+  # HD-BET. On by default: BraTS is skull-stripped and the model has never
+  # seen a skull.
+  brain_extraction: true
+
+  # Off by default. Defacing changes voxels the model may read, and this
+  # pipeline is not the right place to make an irreversible privacy decision
+  # on the user's behalf.
+  defacing: false
+
+  # null -> derived from cfg.device via get_device, so it cannot disagree
+  # with the rest of the run. Set true/false only to override deliberately.
+  # brainles' Preprocessor defaults this to True, which would try CUDA on a
+  # Mac; the derivation exists to stop that.
+  use_gpu: null
+
+  # Keep every intermediate stage on disk (coregistration, atlas
+  # registration, brain extraction, transformations). On by default: when a
+  # clinical case produces a wrong mask, the question is always WHICH stage
+  # went wrong, and without the intermediates that is unanswerable.
+  keep_intermediate: true
+
+  # Fixed, not ${output_dir}: a preprocessed study is a property of the
+  # study, not of any trained model.
+  out_dir: outputs/clinical_preprocess
