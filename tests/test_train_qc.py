@@ -18,6 +18,7 @@ from types import ModuleType
 
 import hydra
 import numpy as np
+import pandas as pd
 import pytest
 import torch
 import torch.nn.functional as F
@@ -41,10 +42,13 @@ _spec.loader.exec_module(train_qc_script)
 QCPairsDataset = train_qc_script.QCPairsDataset
 CaseGroupedSampler = train_qc_script.CaseGroupedSampler
 resolve_dirs = train_qc_script.resolve_dirs
+split_case_ids = train_qc_script.split_case_ids
 entropy_from_logits = train_qc_script.entropy_from_logits
 train_one_epoch = train_qc_script.train_one_epoch
+run_training = train_qc_script.run_training
 _load_case_arrays = train_qc_script._load_case_arrays
 _resize_packed = train_qc_script._resize_packed
+_shared_case_ids = train_qc_script._shared_case_ids
 
 SHAPE = (16, 16, 16)
 
@@ -146,6 +150,7 @@ def _make_cfg(
     max_cases: int | None = None,
     min_component_size: int = 0,
     seed: int = 0,
+    val_frac: float = 0.2,
 ):
     from omegaconf import OmegaConf
 
@@ -161,6 +166,7 @@ def _make_cfg(
                         str(heldout_eval_dir) if heldout_eval_dir is not None else None
                     ),
                     "heldout_prep_dir": str(heldout_prep_dir),
+                    "val_frac": val_frac,
                     "out_dir": str(out_dir),
                     "modality_index": modality_index,
                     "target_shape": list(target_shape),
@@ -415,6 +421,7 @@ def test_config_block_is_reachable_at_the_composed_path() -> None:
         "train_prep_dir",
         "heldout_eval_dir",
         "heldout_prep_dir",
+        "val_frac",
         "out_dir",
         "modality_index",
         "target_shape",
@@ -612,3 +619,233 @@ def test_dataloader_rejects_shuffle_true_with_sampler() -> None:
 
     with pytest.raises(ValueError):
         DataLoader(dataset, batch_size=2, shuffle=True, sampler=sampler)
+
+
+# ---------------------------------------------------------------------------
+# 12. split_case_ids -- the case-disjoint fit/select split model selection
+# now reads from, instead of a second directory.
+# ---------------------------------------------------------------------------
+
+
+def test_split_case_ids_is_deterministic_and_disjoint() -> None:
+    case_ids = [f"case_{i:03d}" for i in range(10)]
+
+    fit_a, select_a = split_case_ids(case_ids, val_frac=0.3, seed=42)
+    fit_b, select_b = split_case_ids(case_ids, val_frac=0.3, seed=42)
+
+    assert fit_a == fit_b
+    assert select_a == select_b
+
+    assert set(fit_a).isdisjoint(select_a)
+    assert set(fit_a) | set(select_a) == set(case_ids)
+    assert len(fit_a) > 0
+    assert len(select_a) > 0
+
+    # Both sides must be sorted -- see split_case_ids' docstring.
+    assert fit_a == sorted(fit_a)
+    assert select_a == sorted(select_a)
+
+
+def test_split_case_ids_differs_by_seed() -> None:
+    # 30 ids makes an accidental collision between two independent
+    # permutations of the selection side implausible.
+    case_ids = [f"case_{i:03d}" for i in range(30)]
+
+    _, select_seed_0 = split_case_ids(case_ids, val_frac=0.3, seed=0)
+    _, select_seed_1 = split_case_ids(case_ids, val_frac=0.3, seed=1)
+
+    assert select_seed_0 != select_seed_1
+
+
+@pytest.mark.parametrize("bad_val_frac", [0.0, 1.0, -0.1])
+def test_split_case_ids_rejects_bad_val_frac(bad_val_frac: float) -> None:
+    case_ids = [f"case_{i:03d}" for i in range(5)]
+    with pytest.raises(ValueError):
+        split_case_ids(case_ids, val_frac=bad_val_frac, seed=0)
+
+
+def test_split_case_ids_rejects_single_case() -> None:
+    with pytest.raises(ValueError):
+        split_case_ids(["only_case"], val_frac=0.2, seed=0)
+
+
+# ---------------------------------------------------------------------------
+# 13. QCPairsDataset's explicit case_ids path
+# ---------------------------------------------------------------------------
+
+
+def test_qc_pairs_dataset_honours_explicit_case_ids(tmp_path: Path) -> None:
+    prep_dir = tmp_path / "prep"
+    eval_dir = _write_split(tmp_path, prep_dir, "train", 5)
+    cfg = _make_cfg(eval_dir, prep_dir, eval_dir, prep_dir, tmp_path / "out")
+
+    # A strict subset of the 5 written cases -- max_cases is left at its
+    # default (None) in cfg, proving it is NOT applied on this path either.
+    chosen_ids = ["train_001", "train_003"]
+    specs = [DegradationSpec("identity", 0.0), DegradationSpec("erode", 1.0)]
+    dataset = QCPairsDataset(cfg, eval_dir, prep_dir, specs=specs, case_ids=chosen_ids)
+
+    assert dataset.num_cases == len(chosen_ids)
+    assert len(dataset) == len(chosen_ids) * len(specs) * 3  # 3 regions (ET, TC, WT)
+
+
+def test_qc_pairs_dataset_rejects_unknown_case_id(tmp_path: Path) -> None:
+    prep_dir = tmp_path / "prep"
+    eval_dir = _write_split(tmp_path, prep_dir, "train", 3)
+    cfg = _make_cfg(eval_dir, prep_dir, eval_dir, prep_dir, tmp_path / "out")
+
+    with pytest.raises(ValueError, match="train_999"):
+        QCPairsDataset(cfg, eval_dir, prep_dir, case_ids=["train_000", "train_999"])
+
+
+# ---------------------------------------------------------------------------
+# 14. resolve_dirs -- heldout_eval_dir is now optional
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_dirs_allows_null_heldout(tmp_path: Path) -> None:
+    prep_dir = tmp_path / "prep"
+    eval_dir = _write_split(tmp_path, prep_dir, "train", 2)
+    cfg = _make_cfg(eval_dir, prep_dir, None, prep_dir, tmp_path / "out")
+
+    train_eval_dir, train_prep_dir, heldout_eval_dir, heldout_prep_dir = resolve_dirs(cfg)
+
+    assert train_eval_dir == eval_dir
+    assert heldout_eval_dir is None
+
+
+# ---------------------------------------------------------------------------
+# 15. run_training -- model selection reads the SELECT split, never the
+# optional heldout_eval_dir. This is the point of the whole change.
+# ---------------------------------------------------------------------------
+
+
+def _write_split_with_fixed_image_rng(
+    tmp_path: Path, prep_dir: Path, tag: str, n_cases: int, *, seed_offset: int = 0
+) -> Path:
+    """Like `_write_split`, but seeds the synthetic image from an explicit int,
+    never from `hash(case_id)` (`_write_case`'s own default).
+
+    Python randomizes `str.__hash__` per PROCESS by default (a security
+    feature, `PYTHONHASHSEED`), so `_write_case`'s default `image` -- seeded
+    from `hash(case_id)` -- silently differs across separate test-process
+    launches even though every OTHER piece of this project's randomness is
+    seeded explicitly. That is invisible to every other test in this file
+    (none of them compares exact epoch-to-epoch metric orderings), but
+    `test_run_training_selects_on_the_select_split_not_the_heldout_dir`
+    below reads exactly that ordering, so it needs bit-identical synthetic
+    data on every run, not just within one process.
+    """
+    eval_dir = tmp_path / f"eval_{tag}"
+    for i in range(n_cases):
+        case_id = f"{tag}_{i:03d}"
+        label = _build_label(SHAPE)
+        logits = _good_logits(label, seed_offset + i)
+        image = (
+            np.random.default_rng(seed_offset + i + 9000)
+            .normal(size=(4, *SHAPE))
+            .astype(np.float32)
+        )
+        _write_case(prep_dir, eval_dir, case_id, label, logits, image=image)
+    return eval_dir
+
+
+def test_run_training_selects_on_the_select_split_not_the_heldout_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from neurovision.utils.seed import set_seed
+
+    # A short specs list -- monkeypatched onto the exact name
+    # QCPairsDataset's default resolves at call time (train_qc_script's
+    # imported DEFAULT_SPECS), since run_training has no specs override of
+    # its own and always builds its datasets with specs=None.
+    short_specs = [
+        DegradationSpec("erode", 2.0),
+        DegradationSpec("dilate", 2.0),
+        DegradationSpec("speckle", 0.4),
+    ]
+    monkeypatch.setattr(train_qc_script, "DEFAULT_SPECS", short_specs)
+
+    prep_dir = tmp_path / "prep"
+    # 6 cases in train_eval_dir: split_case_ids(val_frac=0.34, ...) gives 4
+    # fit / 2 select regardless of seed (round(6 * 0.34) == 2). 4 cases in
+    # heldout_eval_dir, a genuinely different split. This exact (cases,
+    # cfg.seed=22, specs) combination was found by search -- then verified
+    # stable across 6+ fresh process launches, including with
+    # PYTHONHASHSEED randomized -- to make the select-side and heldout-side
+    # argmax epochs land on DIFFERENT epochs with a comfortable margin
+    # (>0.1 Spearman between the best epoch and the runner-up on each side),
+    # so this assertion cannot flip on ordinary floating-point jitter. See
+    # `test_run_training_without_heldout_dir_writes_no_heldout_columns`,
+    # which reuses the ordinary hash-seeded `_write_split` -- that test
+    # never compares WHICH epoch won, only that the right columns exist.
+    train_eval_dir = _write_split_with_fixed_image_rng(tmp_path, prep_dir, "train", 6)
+    heldout_eval_dir = _write_split_with_fixed_image_rng(
+        tmp_path, prep_dir, "held", 4, seed_offset=500
+    )
+
+    cfg = _make_cfg(
+        train_eval_dir,
+        prep_dir,
+        heldout_eval_dir,
+        prep_dir,
+        tmp_path / "out",
+        regions=("WT",),
+        epochs=4,
+        batch_size=4,
+        lr=1.0e-2,
+        val_frac=0.34,
+        seed=22,
+    )
+
+    # Matches main()'s own convention: seed everything (including the
+    # model's random initialisation, which is NOT reached by any of this
+    # project's seeded-generator plumbing) before calling run_training.
+    set_seed(22)
+    result = run_training(cfg)
+
+    history = pd.read_csv(result["history_csv"])
+    assert {"select_mae", "select_spearman", "heldout_mae", "heldout_spearman"} <= set(
+        history.columns
+    )
+
+    best_select_epoch = int(history.loc[history["select_spearman"].idxmax(), "epoch"])
+    best_heldout_epoch = int(history.loc[history["heldout_spearman"].idxmax(), "epoch"])
+    # The fixture is deliberately constructed so these two differ -- proving
+    # is_best really reads the select column and not the heldout one.
+    assert best_select_epoch != best_heldout_epoch
+
+    best_path = result["checkpoint_dir"] / "best.pt"
+    assert best_path.is_file()
+    payload = torch.load(best_path, weights_only=True)
+    assert payload["epoch"] == best_select_epoch
+    assert payload["best_metric"] == pytest.approx(history["select_spearman"].max())
+
+
+def test_run_training_without_heldout_dir_writes_no_heldout_columns(tmp_path: Path) -> None:
+    from neurovision.utils.seed import set_seed
+
+    prep_dir = tmp_path / "prep"
+    train_eval_dir = _write_split(tmp_path, prep_dir, "train", 4, shape=(12, 12, 12))
+    cfg = _make_cfg(
+        train_eval_dir,
+        prep_dir,
+        None,
+        prep_dir,
+        tmp_path / "out",
+        regions=("WT",),
+        target_shape=(6, 6, 6),
+        epochs=2,
+        batch_size=2,
+        val_frac=0.5,
+    )
+
+    set_seed(0)
+    result = run_training(cfg)
+
+    history = pd.read_csv(result["history_csv"])
+    assert {"epoch", "train_loss", "select_mae", "select_spearman"} <= set(history.columns)
+    assert not any(col.startswith("heldout_") for col in history.columns)
+
+    best_path = result["checkpoint_dir"] / "best.pt"
+    assert best_path.is_file()

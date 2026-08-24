@@ -119,8 +119,20 @@ default model group is `unet3d`, which has none of the keys
 `neurovision.models.qc.build_segqc` reads):
 
     python scripts/train_qc.py model=segqc \\
-        analysis.qc.train_eval_dir=outputs/neurovision/eval_val \\
-        analysis.qc.heldout_eval_dir=outputs/neurovision/eval_test
+        analysis.qc.train_eval_dir=outputs/neurovision/eval_val
+
+## Model selection: a case-disjoint slice of `train_eval_dir`, never a second split
+
+Which epoch becomes `best.pt` is decided by Spearman on `split_case_ids`'s
+SELECT side -- a deterministic, case-level slice of `train_eval_dir`'s own
+cases (`analysis.qc.val_frac`), never a separate directory. Earlier versions
+of this script used a second, independent `heldout_eval_dir` (typically the
+TEST split's `eval_dir`) for exactly this decision, which is model selection
+on the TEST split -- and the QC model's in-distribution Spearman is a
+headline number for the master plan's Gate C, so a checkpoint chosen on test
+would contaminate it. `analysis.qc.heldout_eval_dir` still exists, but is now
+OPTIONAL and reports a per-epoch number for a genuinely separate split
+purely as a diagnostic -- it must never feed back into `is_best`.
 """
 
 from __future__ import annotations
@@ -164,70 +176,76 @@ _CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
 
 
 # ---------------------------------------------------------------------------
-# Directory resolution (fit-on-val / hold-out-test separation)
+# Directory resolution (train_eval_dir is required; heldout_eval_dir is an
+# optional, diagnostic-only extra report -- see `split_case_ids` for where
+# model selection actually comes from)
 # ---------------------------------------------------------------------------
 
 
-def resolve_dirs(cfg: DictConfig) -> tuple[Path, Path, Path, Path]:
-    """Resolves and validates `analysis.qc`'s two eval directories.
+def resolve_dirs(cfg: DictConfig) -> tuple[Path, Path, Path | None, Path]:
+    """Resolves and validates `analysis.qc`'s eval directories.
 
-    Mirrors `scripts/calibrate.py`'s `resolve_eval_dirs`: the QC model
-    trains on `train_eval_dir` and is scored, every epoch, against
-    `heldout_eval_dir` -- and the two must not resolve to the same
-    directory, or "held out" would just mean "the training split again",
-    making every epoch's Spearman/MAE number meaningless.
+    `train_eval_dir` is required: the QC model both trains AND is
+    model-selected on cases drawn from it (via `split_case_ids`,
+    `analysis.qc.val_frac`). `heldout_eval_dir` is OPTIONAL -- when set, it
+    is scored every epoch purely as an extra diagnostic report and must
+    never influence `is_best` (see the module docstring's "model selection"
+    section for why: an in-distribution Spearman that fed back from a TEST
+    directory would contaminate the master plan's Gate C headline number).
 
     Args:
         cfg: The full composed Hydra config.
 
     Returns:
         `(train_eval_dir, train_prep_dir, heldout_eval_dir, heldout_prep_dir)`.
+        `heldout_eval_dir` is `None` when `analysis.qc.heldout_eval_dir` is
+        not set -- no existence check and no same-path check are performed
+        in that case.
 
     Raises:
-        ValueError: Either eval_dir key is `None`, or the two resolve (via
-            `Path.resolve()`) to the same directory.
-        FileNotFoundError: Either resolved eval_dir does not exist.
+        ValueError: `analysis.qc.train_eval_dir` is `None`, or a non-null
+            `heldout_eval_dir` resolves (via `Path.resolve()`) to the same
+            directory as `train_eval_dir`.
+        FileNotFoundError: `train_eval_dir` does not exist, or a non-null
+            `heldout_eval_dir` does not exist.
     """
     qc_cfg = cfg.analysis.qc
     train_eval_raw = qc_cfg.train_eval_dir
     heldout_eval_raw = qc_cfg.heldout_eval_dir
 
-    missing = []
     if train_eval_raw is None:
-        missing.append("analysis.qc.train_eval_dir")
-    if heldout_eval_raw is None:
-        missing.append("analysis.qc.heldout_eval_dir")
-    if missing:
         raise ValueError(
-            f"{' and '.join(missing)} must be set. scripts/train_qc.py needs two eval "
-            "directories: one to TRAIN the QC model on (the VAL split's eval_dir) and one to "
-            "hold out for the per-epoch Spearman/MAE report (the TEST split's eval_dir). "
-            "Example:\n"
+            "analysis.qc.train_eval_dir must be set. scripts/train_qc.py needs one eval "
+            "directory to both TRAIN the QC model on and, via a case-disjoint slice "
+            "(analysis.qc.val_frac), SELECT the best checkpoint from -- see "
+            "`split_case_ids`. Example:\n"
             "  python scripts/train_qc.py model=segqc "
-            "analysis.qc.train_eval_dir=outputs/<experiment>/eval_val "
-            "analysis.qc.heldout_eval_dir=outputs/<experiment>/eval_test"
+            "analysis.qc.train_eval_dir=outputs/<experiment>/eval_val"
         )
 
     train_eval_dir = Path(train_eval_raw)
-    heldout_eval_dir = Path(heldout_eval_raw)
-
     if not train_eval_dir.is_dir():
         raise FileNotFoundError(
             f"analysis.qc.train_eval_dir does not exist: {train_eval_dir.resolve()}"
         )
-    if not heldout_eval_dir.is_dir():
-        raise FileNotFoundError(
-            f"analysis.qc.heldout_eval_dir does not exist: {heldout_eval_dir.resolve()}"
-        )
 
-    if train_eval_dir.resolve() == heldout_eval_dir.resolve():
-        raise ValueError(
-            f"analysis.qc.train_eval_dir and analysis.qc.heldout_eval_dir both resolve to "
-            f"{train_eval_dir.resolve()}. Training the QC model on the same split its "
-            "Spearman/MAE is reported against every epoch would make that report meaningless "
-            "-- point train_eval_dir at the VAL split's eval_dir and heldout_eval_dir at the "
-            "TEST split's."
-        )
+    heldout_eval_dir: Path | None = None
+    if heldout_eval_raw is not None:
+        heldout_eval_dir = Path(heldout_eval_raw)
+        if not heldout_eval_dir.is_dir():
+            raise FileNotFoundError(
+                f"analysis.qc.heldout_eval_dir does not exist: {heldout_eval_dir.resolve()}"
+            )
+        if train_eval_dir.resolve() == heldout_eval_dir.resolve():
+            raise ValueError(
+                f"analysis.qc.train_eval_dir and analysis.qc.heldout_eval_dir resolve to the "
+                f"same directory ({train_eval_dir.resolve()}). heldout_eval_dir is now an "
+                "OPTIONAL diagnostic-only report -- model selection reads a case-disjoint "
+                "slice of train_eval_dir instead (analysis.qc.val_frac) -- but scoring that "
+                "report against the training split itself would still make the report "
+                "meaningless. Point heldout_eval_dir at a genuinely different eval_dir (e.g. "
+                "the TEST split's), or leave it null."
+            )
 
     train_prep_dir = Path(qc_cfg.train_prep_dir)
     heldout_prep_dir = Path(qc_cfg.heldout_prep_dir)
@@ -273,6 +291,80 @@ def _shared_case_ids(eval_dir: Path, prep_dir: Path, max_cases: int | None) -> l
     if max_cases is not None:
         shared = shared[: int(max_cases)]
     return shared
+
+
+def split_case_ids(
+    case_ids: Sequence[str], val_frac: float, seed: int
+) -> tuple[list[str], list[str]]:
+    """Deterministic, CASE-level split into a fit set and a selection set.
+
+    This is where model selection actually comes from now -- `run_training`
+    trains on the fit side and computes `is_best` from the select side's
+    Spearman, both drawn from `train_eval_dir` alone (see the module
+    docstring's "model selection" section for why a second directory is no
+    longer used for this decision). Splitting by CASE, not by sample,
+    matters here specifically because `QCPairsDataset` turns one case into
+    many correlated training pairs (every spec x region degradation of the
+    same underlying volume) -- a sample-level split would leak near-
+    duplicates of the same case onto both sides, and the selection Spearman
+    would end up measuring memorisation of case-specific quirks rather than
+    generalisation.
+
+    Args:
+        case_ids: Case identifiers. Order does not matter and duplicates are
+            collapsed -- the split is computed from `sorted(set(case_ids))`
+            so the result never depends on how the caller happened to list
+            them.
+        val_frac: Fraction of the DISTINCT ids assigned to the selection
+            side. Must be strictly between 0 and 1.
+        seed: Seed for `numpy.random.default_rng`, the project's seeded-
+            generator convention -- never the global `numpy.random` or
+            `random` module. Typically `cfg.seed`.
+
+    Returns:
+        `(fit_ids, select_ids)`, each SORTED. Disjoint, and their union is
+        exactly `sorted(set(case_ids))`. Neither list is ever empty.
+
+    Raises:
+        ValueError: `val_frac` is not strictly in `(0, 1)`, or fewer than 2
+            distinct case ids were given (there is no way to split 0 or 1
+            case into two non-empty sides).
+    """
+    if not (0.0 < val_frac < 1.0):
+        raise ValueError(
+            f"split_case_ids: val_frac must be strictly between 0 and 1, got {val_frac!r}. "
+            "0 would leave the selection side empty; 1 would leave the fit side empty."
+        )
+
+    unique_ids = sorted(set(case_ids))
+    n_total = len(unique_ids)
+    if n_total < 2:
+        raise ValueError(
+            f"split_case_ids: need at least 2 distinct case ids to form a non-empty fit set "
+            f"and a non-empty selection set, got {n_total}. Point analysis.qc.train_eval_dir "
+            "at a directory with more cases, or raise analysis.qc.max_cases."
+        )
+
+    # A seeded generator, not the global np.random -- see this function's
+    # Args doc. Permutes POSITIONS into unique_ids (never the ids
+    # themselves), so the same seed always assigns the same set of
+    # positions to the selection side regardless of how NumPy happens to
+    # implement permutation internally.
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(n_total)
+
+    # round(), then clamp to [1, n_total - 1], so neither side is ever
+    # empty even at the extremes of a tiny n_total (e.g. n_total=2 with
+    # val_frac=0.2 would otherwise round to 0).
+    n_select = round(n_total * val_frac)
+    n_select = max(1, min(n_total - 1, n_select))
+
+    select_positions = order[:n_select]
+    fit_positions = order[n_select:]
+
+    select_ids = sorted(unique_ids[pos] for pos in select_positions)
+    fit_ids = sorted(unique_ids[pos] for pos in fit_positions)
+    return fit_ids, select_ids
 
 
 # ---------------------------------------------------------------------------
@@ -494,6 +586,7 @@ class QCPairsDataset(Dataset):
         prep_dir: str | Path,
         *,
         specs: Sequence[DegradationSpec] | None = None,
+        case_ids: Sequence[str] | None = None,
     ) -> None:
         """Builds the case/spec/region index. Touches the filesystem only to list case ids.
 
@@ -508,11 +601,27 @@ class QCPairsDataset(Dataset):
                 config-driven (`analysis.qc` has no `specs` key) -- tests
                 pass a short list here to keep runtime tiny; a real run
                 uses the library default.
+            case_ids: Explicit case ids to use, keyword-only. When `None`
+                (the default), behaviour is exactly as before: the full
+                shared case set is read from disk via `_shared_case_ids`,
+                truncated to `analysis.qc.max_cases` if that is set. When
+                given -- e.g. one side of `split_case_ids`'s
+                `(fit_ids, select_ids)` -- those exact ids are used
+                (stored `sorted()`), and `analysis.qc.max_cases` is
+                DELIBERATELY NOT applied on this path: the caller has
+                already decided which cases belong on this side of a split,
+                and truncating again here would silently drop cases the
+                caller picked for a reason (most often the selection side,
+                which is already small). Every supplied id is validated
+                against the full shared eval_dir/prep_dir case set; a
+                typo'd id must not silently produce a smaller dataset.
 
         Raises:
             FileNotFoundError: `<eval_dir>/logits` does not exist.
-            ValueError: No case id is shared between `eval_dir` and
-                `prep_dir`, or `analysis.qc.regions` names something outside
+            ValueError: `case_ids` is `None` and no case id is shared
+                between `eval_dir` and `prep_dir`; `case_ids` is given and
+                contains an id absent from that shared set (named in the
+                message); or `analysis.qc.regions` names something outside
                 `neurovision.data.transforms.REGION_NAMES`.
         """
         qc_cfg = cfg.analysis.qc
@@ -533,7 +642,22 @@ class QCPairsDataset(Dataset):
                 )
         self._region_channels: list[int] = [REGION_NAMES.index(name) for name in region_names]
 
-        self._case_ids = _shared_case_ids(self._eval_dir, self._prep_dir, qc_cfg.max_cases)
+        if case_ids is None:
+            self._case_ids = _shared_case_ids(self._eval_dir, self._prep_dir, qc_cfg.max_cases)
+        else:
+            # max_cases NOT applied here -- see the case_ids Args doc above.
+            # Validated against the FULL (untruncated) shared set, so an id
+            # that only exists because of a stale max_cases truncation
+            # elsewhere still raises rather than silently disappearing.
+            shared = set(_shared_case_ids(self._eval_dir, self._prep_dir, None))
+            requested = sorted(set(case_ids))
+            missing = [cid for cid in requested if cid not in shared]
+            if missing:
+                raise ValueError(
+                    f"QCPairsDataset({self._eval_dir}): case_ids contains id(s) not present in "
+                    f"the shared eval_dir/prep_dir case set: {missing}. Check for a typo."
+                )
+            self._case_ids = requested
         self._per_case = len(self._specs) * len(self._region_channels)
 
         # The single-entry cache _case_arrays relies on -- see class docstring.
@@ -754,11 +878,18 @@ def train_one_epoch(
 def evaluate_heldout(
     model: nn.Module, loader: DataLoader, device: torch.device
 ) -> dict[str, float]:
-    """Scores `model` on a held-out `QCPairsDataset`, with no gradient.
+    """Scores `model`, with no gradient, on ANY non-training `QCPairsDataset`.
+
+    Despite the name (kept for continuity -- nothing outside this file calls
+    it by a more specific one), this is used for two different datasets in
+    `run_training`: the SELECT split (the case-disjoint slice of
+    `train_eval_dir` that actually decides `is_best`) and the OPTIONAL extra
+    `heldout_eval_dir` dataset (a diagnostic report only). Neither dataset
+    was trained on, so nothing here is specific to either.
 
     Args:
         model: `SegQC` (or any module with the same `forward` contract).
-        loader: Yields `(x, target)` batches from the held-out
+        loader: Yields `(x, target)` batches from a non-training
             `QCPairsDataset`.
         device: Where `model` lives.
 
@@ -798,7 +929,14 @@ def evaluate_heldout(
 
 
 def _print_summary(history: pd.DataFrame, out_dir: Path) -> None:
-    """Prints (not logs -- see `scripts/evaluate.py`'s identical convention) a compact summary."""
+    """Prints (not logs -- see `scripts/evaluate.py`'s identical convention) a compact summary.
+
+    Reads only the always-present `select_*` columns for the "best" line --
+    `is_best` is decided from `select_spearman` alone (see `run_training`) --
+    and appends the optional `heldout_*` columns to the final-epoch line ONLY
+    when they exist, so this never raises on a run with
+    `analysis.qc.heldout_eval_dir=null` (no `heldout_*` columns at all).
+    """
     lines = [
         "=" * 70,
         f"QC training summary -- {len(history)} epoch(s), out_dir={out_dir}",
@@ -806,14 +944,21 @@ def _print_summary(history: pd.DataFrame, out_dir: Path) -> None:
     ]
     if not history.empty:
         last = history.iloc[-1]
-        lines.append(
+        final_line = (
             f"  final (epoch {int(last['epoch'])}): train_loss={last['train_loss']:.4f} "
-            f"heldout_mae={last['mae']:.4f} heldout_spearman={last['spearman']:.4f}"
+            f"select_mae={last['select_mae']:.4f} select_spearman={last['select_spearman']:.4f}"
         )
-        if history["spearman"].notna().any():
-            best = history.loc[history["spearman"].idxmax()]
+        if "heldout_spearman" in history.columns:
+            final_line += (
+                f" heldout_mae={last['heldout_mae']:.4f} "
+                f"heldout_spearman={last['heldout_spearman']:.4f}"
+            )
+        lines.append(final_line)
+        if history["select_spearman"].notna().any():
+            best = history.loc[history["select_spearman"].idxmax()]
             lines.append(
-                f"  best heldout spearman: {best['spearman']:.4f} at epoch {int(best['epoch'])}"
+                f"  best select spearman: {best['select_spearman']:.4f} "
+                f"at epoch {int(best['epoch'])}"
             )
     # print only, not logger.info as well -- matches scripts/evaluate.py's
     # _log_and_print_summary and scripts/calibrate.py's _print_summary.
@@ -840,8 +985,33 @@ def run_training(cfg: DictConfig) -> dict[str, Any]:
     out_dir = ensure_dir(qc_cfg.out_dir)
     device = get_device(cfg)
 
-    train_dataset = QCPairsDataset(cfg, train_eval_dir, train_prep_dir)
-    heldout_dataset = QCPairsDataset(cfg, heldout_eval_dir, heldout_prep_dir)
+    # Model selection reads a CASE-DISJOINT slice of train_eval_dir, never a
+    # second directory -- see split_case_ids' docstring and the module
+    # docstring's "model selection" section. Computed from the SAME shared,
+    # max_cases-limited case list QCPairsDataset would build on its own
+    # (max_cases is applied exactly once, here), so fit_ids and select_ids
+    # are always drawn from one consistent pool.
+    shared_ids = _shared_case_ids(train_eval_dir, train_prep_dir, qc_cfg.max_cases)
+    fit_ids, select_ids = split_case_ids(shared_ids, float(qc_cfg.val_frac), int(cfg.seed))
+    logger.info(
+        "run_training: split %d shared case(s) from %s into %d fit / %d select " "(disjoint: %s).",
+        len(shared_ids),
+        train_eval_dir,
+        len(fit_ids),
+        len(select_ids),
+        set(fit_ids).isdisjoint(select_ids),
+    )
+
+    train_dataset = QCPairsDataset(cfg, train_eval_dir, train_prep_dir, case_ids=fit_ids)
+    select_dataset = QCPairsDataset(cfg, train_eval_dir, train_prep_dir, case_ids=select_ids)
+
+    # The optional extra report -- built only when configured, and never fed
+    # into is_best (see resolve_dirs and the module docstring).
+    heldout_dataset = (
+        QCPairsDataset(cfg, heldout_eval_dir, heldout_prep_dir)
+        if heldout_eval_dir is not None
+        else None
+    )
 
     # CaseGroupedSampler, not shuffle=True and not shuffle=False -- see the
     # module docstring's "case-grouped shuffling" section. shuffle=False is
@@ -857,14 +1027,25 @@ def run_training(cfg: DictConfig) -> dict[str, Any]:
         sampler=train_sampler,
         num_workers=int(qc_cfg.num_workers),
     )
-    # The held-out split is never trained on, so it has no gradient-
-    # correlation problem to solve -- plain sequential order is fine and
-    # still gets the full benefit of QCPairsDataset's single-case cache.
-    heldout_loader = DataLoader(
-        heldout_dataset,
+    # Neither the select split nor the optional extra split is ever trained
+    # on, so neither has a gradient-correlation problem to solve -- plain
+    # sequential order is fine for both and still gets the full benefit of
+    # QCPairsDataset's single-case cache.
+    select_loader = DataLoader(
+        select_dataset,
         batch_size=int(qc_cfg.batch_size),
         shuffle=False,
         num_workers=int(qc_cfg.num_workers),
+    )
+    heldout_loader = (
+        DataLoader(
+            heldout_dataset,
+            batch_size=int(qc_cfg.batch_size),
+            shuffle=False,
+            num_workers=int(qc_cfg.num_workers),
+        )
+        if heldout_dataset is not None
+        else None
     )
 
     model = build_segqc(cfg).to(device)
@@ -892,21 +1073,48 @@ def run_training(cfg: DictConfig) -> dict[str, Any]:
         train_loss, global_step = train_one_epoch(
             model, train_loader, optimizer, device, global_step
         )
-        metrics = evaluate_heldout(model, heldout_loader, device)
-        logger.info(
-            "run_training: epoch %d/%d -- train_loss=%.4f heldout_mae=%.4f "
-            "heldout_spearman=%.4f",
+
+        # is_best is decided from THIS ONLY -- the select split, a
+        # case-disjoint slice of train_eval_dir. See the module docstring's
+        # "model selection" section for why the optional heldout dataset
+        # below must never influence it.
+        select_metrics = evaluate_heldout(model, select_loader, device)
+
+        row: dict[str, float] = {
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "select_mae": select_metrics["mae"],
+            "select_spearman": select_metrics["spearman"],
+        }
+        log_msg = (
+            "run_training: epoch %d/%d -- train_loss=%.4f select_mae=%.4f select_spearman=%.4f"
+        )
+        log_args: list[Any] = [
             epoch,
             total_epochs - 1,
             train_loss,
-            metrics["mae"],
-            metrics["spearman"],
-        )
-        history.append({"epoch": epoch, "train_loss": train_loss, **metrics})
+            select_metrics["mae"],
+            select_metrics["spearman"],
+        ]
 
-        is_best = (not math.isnan(metrics["spearman"])) and metrics["spearman"] > best_spearman
+        # The optional extra report -- scored every epoch when configured,
+        # recorded under a heldout_ prefix, and read by NOTHING else in this
+        # function. No heldout_* columns exist at all when it is None.
+        if heldout_loader is not None:
+            heldout_metrics = evaluate_heldout(model, heldout_loader, device)
+            row["heldout_mae"] = heldout_metrics["mae"]
+            row["heldout_spearman"] = heldout_metrics["spearman"]
+            log_msg += " heldout_mae=%.4f heldout_spearman=%.4f"
+            log_args += [heldout_metrics["mae"], heldout_metrics["spearman"]]
+
+        logger.info(log_msg, *log_args)
+        history.append(row)
+
+        is_best = (not math.isnan(select_metrics["spearman"])) and select_metrics[
+            "spearman"
+        ] > best_spearman
         if is_best:
-            best_spearman = metrics["spearman"]
+            best_spearman = select_metrics["spearman"]
 
         save_checkpoint(
             out_dir,
