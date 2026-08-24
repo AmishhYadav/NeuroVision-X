@@ -204,14 +204,27 @@ queue, because the next session trusts it.
 | A7 | nnU-Net v2 `3d_fullres` single fold + Auto3DSeg SegResNet single fold | `[ ]` | Both scored through **our** `scripts/evaluate.py` metric path on the same 189 test cases |
 | — | **GATE A** | `[ ]` | `docs/research/preregistration_strong_baseline.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
 
+#### Track 1 continued — Phase C, the QC model. CPU. In progress.
+
+Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the model had trained once.
+
+| # | Item | State | Done when |
+|---|---|---|---|
+| C1 | `src/neurovision/data/qc_pairs.py` — degradation pair generator | `[x]` | Six degradation kinds, structurally blind to the label except for the Dice target |
+| C2 | `src/neurovision/models/qc.py` — `SegQC`, `@register_model("segqc")` | `[x]` | CPU shape test on `(1, 3, 32, 32, 32)` under a second |
+| C3 | `scripts/train_qc.py` — the trainer, with case-grouped shuffling | `[x]` built · `[ ]` **run on real data** | `outputs/neurovision/qc/best.pt` exists with a `history.csv` beside it |
+| C3b | Model selection must not read the test split | `[~]` | `analysis.qc.val_frac` splits val case-level; `heldout_eval_dir: null`; a test proves `best.pt` tracks the select split's argmax |
+| C4 | `scripts/validate_qc.py` — per-cohort ΔAUROC vs free entropy, Spearman, MAE, bias | `[ ]` | The falsification check passes, and a table exists for test/SSA/PED × ET/TC/WT |
+| C5 | Silent-failure test — does the QC model degrade under shift? | `[ ]` | Signed bias and Spearman reported per cohort, against the pre-registered direction |
+| — | **GATE C** | `[ ]` | `preregistration_qc.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
+
 #### Later — kept coarse on purpose, because Gate A may reshape them
 
 | Phase | Item | Precondition |
 |---|---|---|
-| C | QC model: pair generator → `models/qc.py` → train → per-cohort validation → Gate C | A2 done (needs a metric to regress against) |
 | D | D1 multi-seed → D2 pooled multi-cohort → D3 fine-tune-on-SSA | GPU free after A7. D1 also unblocks B3 |
 | B3 | Deep-ensemble comparator, completing the uncertainty ladder | D1 seeds exist |
-| E | E1 DICOM ingest → E2 preprocessing → E3 input QC → E4 missing-sequence refusal → E5 gatekeeper → E6 DICOM-SEG → E7 UI | E5 needs B1 and C; the rest is independent |
+| E | E1 DICOM ingest → E2 preprocessing → E3 input QC → E4 missing-sequence refusal → E5 gatekeeper → E6 DICOM-SEG → E7 UI | E5 needs B1 and C; the rest is independent. **`.venv-clinical` is built and verified** (2026-08-24) — `dcm2niix`, `brainles-preprocessing`, `antspyx`, `HD-BET`, `highdicom` all import |
 | F | IDH on UCSF-PDGM | Explicit go/no-go after Phase C. Costs a large download and a training run |
 | G | End-to-end error budget | Everything above that will actually ship |
 | H | Write-up and release | G |
