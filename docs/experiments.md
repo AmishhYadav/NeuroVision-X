@@ -1481,6 +1481,86 @@ sessions by resume is still ONE row — sum the GPU hours.
     needs a measured per-case number for the ACTUAL model behind it, not for
     `baseline_unet3d`.**
 
+
+
+44. **THE CONFIDENCE HEAD, SCORED FOR THE FIRST TIME: IT LEARNED SOMETHING ON
+    ET AND TC, NOTHING AT ALL ON WT, AND IT IS BEATEN BY FREE SINGLE-PASS
+    ENTROPY ON ALL THREE.** Run 2026-08-24, master plan item A5. 189 test cases,
+    one sliding-window pass each on the M4 (~83 s/case, 4.4 h total),
+    `scripts/score_confidence.py`.
+
+    The `neurovision` model has carried an auxiliary confidence head since
+    Milestone 2, trained at loss weight 0.05 to predict per voxel and per region
+    whether the segmentation head got that voxel right. It had **never been
+    scored**. This is that number.
+
+    Per-case voxel AUROC for detecting segmentation error, on a seeded
+    label-free sample (predicted foreground dilated 5 mm, ≤20,000 voxels/case):
+
+    | region | confidence head | free entropy | paired Δ | 95% CI | Cohen's dz | verdict |
+    |---|---|---|---|---|---|---|
+    | ET | 0.8552 | **0.9119** | **-0.0567** | -0.0628 to -0.0508 | -1.35 (large) | **worse** |
+    | TC | 0.8710 | **0.9077** | **-0.0367** | -0.0436 to -0.0295 | -0.73 (medium) | **worse** |
+    | WT | **0.4766** | **0.9036** | **-0.4271** | -0.4433 to -0.4111 | -3.83 (large) | **worse** |
+
+    Paired, Holm-corrected, 10,000-sample bootstrap, seed 42. All three
+    p_holm = 0.0, all three CIs entirely below zero.
+
+    **Three separate findings, and they should not be collapsed into one.**
+
+    1. **The head is not dead on ET and TC.** 0.855 and 0.871 are far above the
+       0.5 chance line, so a head trained at weight 0.05 as an afterthought did
+       learn a real error signal. That is worth stating plainly before the
+       negative, because "the auxiliary head learned nothing" would be the
+       lazy summary and it is false for two of three regions.
+    2. **On WT it is at chance. 0.4766, and the rank-biserial correlation
+       against entropy is exactly -1.00 -- entropy wins on every single one of
+       the 189 cases.** Hypothesis, offered as a hypothesis and not a claim:
+       WT is the easiest region (voxel Dice ~0.93), so "the segmentation head
+       was correct here" is true for the overwhelming majority of voxels, the
+       BCE target is extremely imbalanced, and at weight 0.05 the head collapses
+       to predicting "correct" everywhere. Testing that would need a training
+       run and is not scheduled.
+    3. **It never beats free entropy anywhere.** Entropy costs nothing -- it is
+       computed from the same single forward pass -- while the confidence head
+       costs parameters, a loss term and a training objective.
+
+    **The one place it carries orthogonal information: TC.** Residualised AUROC,
+    i.e. what the confidence head adds *over and above* entropy, is **0.6621 on
+    TC** against 0.4904 on ET and 0.4305 on WT. Only the TC figure is
+    meaningfully above the 0.5 no-information line. So the head is not merely a
+    noisy copy of entropy on TC -- it sees something entropy does not -- it is
+    simply worse on its own.
+
+    **What this joins.** This is now the fourth uncertainty signal measured
+    against the same free baseline, and the pattern is consistent:
+
+    | signal | vs single-pass entropy |
+    |---|---|
+    | MC-dropout, N=10 | statistically EQUIVALENT (note 39, paired TOST @ 0.03) |
+    | inter-branch disagreement | WORSE (note 39) |
+    | confidence head | **WORSE (here)** |
+    | deep ensemble | not yet measured -- needs the Phase D seeds |
+
+    **Single-pass predictive entropy remains undefeated, and it is free.** Three
+    of this project's uncertainty mechanisms have now been measured against it
+    and none has beaten it. That is a genuinely useful finding for the paper --
+    it is a statement about the strength of the free baseline, not a defect of
+    any one mechanism -- and it is why the master plan moved the reliability
+    claim from "a property of our architecture" to "a component that ships"
+    (the QC model of Phase C, the conformal layer of Phase B).
+
+    **Caveats.** Two ET cases were skipped for a single-class voxel sample (the
+    known 2.6% of BraTS cases with no enhancing tumour) and are reported as
+    `n_missing`, never as 0.5. The scoring sample is drawn from the predicted
+    foreground and **never touches the label** -- a structural property of
+    `label_free_sample_mask`, which takes no label argument, with a test that
+    asserts identical draws for an all-zero and an all-one label. Not
+    pre-registered; exploratory.
+
+    Artifacts: `outputs/confidence/neurovision_test/` --
+    `per_case_confidence.csv`, `summary.csv`, `confidence_vs_entropy.csv`.
+
 ---
 
 ## Planned

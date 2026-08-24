@@ -190,7 +190,7 @@ queue, because the next session trusts it.
 | A2 | `src/neurovision/metrics/lesionwise.py` + additive wiring into `scripts/evaluate.py` | `[x]` | Lesion-wise columns appear in `per_case_metrics.csv` when enabled, and an additivity test proves no existing column moved |
 | A3 | Re-score every existing run lesion-wise via `scripts/replay_logits.py` | `[x]` | A lesion-wise row exists for `neurovision`, `baseline_unet3d`, `capacity_control`, `ablation_content_only_gate`, on test and val |
 | A4 | Wire flip TTA into `scripts/evaluate.py` | `[x]` wired + tested; **measurement moved to Track 2** — 8x inference is ~34 h on the Mac, minutes on a card. See note 43 | `cfg.inference.tta` exists; measured on val then test; result recorded as its own note |
-| A5 | Score the confidence head | `[~]` built, not yet run | A number exists, and `docs/experiments.md` says whether the head learned anything |
+| A5 | Score the confidence head | `[x]` — beaten by free entropy on all three regions; note 44 | A number exists, and `docs/experiments.md` says whether the head learned anything |
 | A6 | Resolve the BraTS 2026 Challenge-3 deadline from a logged-in Synapse session | `[x]` | Note 40 in `docs/experiments.md` carries a date instead of an uncertainty |
 | B1 | `src/neurovision/uncertainty/conformal.py` + `scripts/conformal.py` | `[x]` | λ̂ fitted on val, applied frozen to test, realised risk ≤ α on test |
 | B2 | Apply the frozen λ̂ to SSA and PED; weighted/Mondrian variant | `[x]` (Mondrian arm deferred — registered as a counterfactual, see prereg) | A table of nominal α vs realised risk per cohort, with CIs |
