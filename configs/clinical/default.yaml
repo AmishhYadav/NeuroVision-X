@@ -95,3 +95,70 @@ preprocess:
   # Fixed, not ${output_dir}: a preprocessed study is a property of the
   # study, not of any trained model.
   out_dir: outputs/clinical_preprocess
+
+input_qc:
+  # E3 + E4: the gate that decides whether a study may be segmented at all.
+  #
+  # E4 (missing-sequence handling) is not a separate module because it IS
+  # one of E3's checks -- "detect and refuse with a named reason" is exactly
+  # what the sequence_completeness check does. Splitting them would put one
+  # refusal rule in two places, which is how two copies of a rule drift.
+  #
+  # Every check here is LABEL-FREE by construction, not by convention. This
+  # project has already shipped a reporting mask defined from the ground
+  # truth; it manufactured 41-57% of a reported ECE behind a fully green
+  # test suite. A deployment gate that consulted a label would be the same
+  # bug with higher stakes, and there is no label at deployment anyway.
+
+  # Which roles must be present. A study missing any of these is REFUSED
+  # with the missing ones named. v1 refuses rather than synthesises; the
+  # BraSyn line of work is a Phase-G stretch, recorded in the master plan.
+  required_roles: [t1, t1ce, t2, flair]
+
+  # Affine agreement tolerance between modalities, mm. Matches
+  # app/backend/jobs.py::_AFFINE_ATOL so the API gate and this gate cannot
+  # disagree about whether one study is geometrically consistent.
+  affine_atol: 1.0e-4
+
+  # Voxel spacing bounds, mm. Outside this range the volume is not a
+  # diagnostic brain MRI at a resolution the model has ever seen -- BraTS is
+  # 1 mm isotropic throughout.
+  spacing_min_mm: 0.3
+  spacing_max_mm: 3.0
+
+  # Ratio of largest to smallest voxel dimension. A 5 mm-slice clinical
+  # acquisition resampled to 1 mm in-plane is anisotropy 5, and the model has
+  # never seen one; it is a WARN rather than a REFUSE because the
+  # registration in E2 resamples it, and refusing every thick-slice clinical
+  # study would refuse most real studies.
+  anisotropy_warn_ratio: 2.0
+  anisotropy_refuse_ratio: 6.0
+
+  # Expected shape after E2's atlas registration. WARN, not REFUSE: a
+  # different but self-consistent atlas is a legal configuration, and this
+  # check exists to notice that E2 did not run, not to enforce one atlas.
+  expected_shape: [240, 240, 155]
+
+  # Brain volume bounds in millilitres, from the brain mask when one is
+  # available. Deliberately wide: an adult brain is ~1100-1500 mL, but this
+  # pipeline is also pointed at a paediatric cohort, and a bound tuned to
+  # adults would refuse every child.
+  brain_volume_min_ml: 600.0
+  brain_volume_max_ml: 2600.0
+
+  # Fraction of in-brain-mask voxels that are nonzero. A skull-stripped
+  # volume is nearly all nonzero inside the mask; a near-empty channel means
+  # the modality did not survive whatever produced it.
+  min_nonzero_fraction_in_brain: 0.5
+
+  # Fraction of the WHOLE volume that is nonzero. A skull-stripped brain
+  # occupies roughly 10-25% of a 240x240x155 box; a volume where far more
+  # than that is nonzero still has a head on it, which the model has never
+  # seen. WARN, because the number is a heuristic and the honest failure
+  # mode is a study that is fine and looks unusual.
+  skull_present_warn_fraction: 0.45
+
+  # A channel whose robust dynamic range (p99.5 - p0.5 over nonzero voxels)
+  # is below this, in units of its own robust scale, is constant or nearly
+  # so -- a dropped acquisition, not an image.
+  min_dynamic_range: 1.0e-6
