@@ -215,3 +215,58 @@ dicom_seg:
   # Fixed, not ${output_dir}: an exported study object is a property of the
   # study, not of any trained model.
   out_dir: outputs/clinical_dicom_seg
+
+gatekeeper:
+  # E5: the refusal gate. Combines the input QC verdict, the QC model's
+  # predicted Dice, the conformal band width and a case-level
+  # out-of-distribution score into PROCEED / PROCEED_WITH_CAUTION / REFUSE,
+  # with the reason surfaced.
+  #
+  # Master plan principle 2: errors multiply in a cascade -- five stages at
+  # 95% each is 77% end-to-end -- so every stage emits a confidence and the
+  # pipeline has an explicit REFUSE state. This is that state.
+
+  # Which signals participate. input_qc is not optional: it is the only one
+  # that can detect a study the model must not see at all.
+  #
+  # WHICH OF THE OTHERS ARE ENABLED MUST FOLLOW GATE C'S OUTCOME
+  # (docs/research/preregistration_qc.md). On a negative Gate C the QC
+  # model's estimate still SHIPS as a displayed number but makes no claim,
+  # and wiring it into a refusal decision would be making one. Set this list
+  # from the measured result, not from the hope.
+  enabled_signals: [input_qc]
+
+  # A signal in enabled_signals that arrives as None is a REFUSE, not a
+  # pass. A gate that treats "I could not measure this" as "this is fine"
+  # is not a gate.
+  #
+  # A signal NOT in enabled_signals is absent by design and is reported as
+  # such, never counted either way.
+
+  # Regions the mask-quality signals are read on. WT and TC are the
+  # conformal pre-registration's primary endpoints; ET is secondary there
+  # because 2.6% of BraTS 2021 cases have no enhancing tumour at all and
+  # several quantities are undefined on them.
+  regions: [WT, TC]
+
+  # Thresholds are QUANTILES of the calibration split's own distribution of
+  # each signal, not absolute numbers. Distribution-free, computable with no
+  # label, and they state an operating point a reader can check: "the gate
+  # refuses the 2% of studies most unlike the calibration set on any enabled
+  # signal, and cautions on the next 8%."
+  #
+  # Directions differ by signal and are NOT configurable, because getting one
+  # backwards silently inverts the gate: predicted Dice is LOW-is-bad, while
+  # band width and the OOD score are HIGH-is-bad.
+  caution_quantile: 0.10
+  refuse_quantile: 0.02
+
+  # Absolute thresholds, derived by scripts/calibrate_gatekeeper.py from the
+  # quantiles above on the frozen val split and then FROZEN. null means
+  # uncalibrated, and the gate RAISES on an enabled signal with a null
+  # threshold rather than inventing one. A made-up threshold that looks
+  # plausible is the failure mode here.
+  thresholds: null
+
+  # Where the calibrated thresholds are written. Fixed, not ${output_dir}.
+  out_dir: outputs/gatekeeper
