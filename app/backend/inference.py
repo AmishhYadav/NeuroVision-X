@@ -137,6 +137,32 @@ def cached_prediction_path(settings: Settings, case_id: str) -> Path:
     return settings.cache_dir / settings.experiment / f"{case_id}.npy"
 
 
+def cached_logits_path(settings: Settings, case_id: str) -> Path:
+    """Where raw (pre-postprocessing) logits for a live-inference run of `case_id` are cached.
+
+    Namespaced by `settings.experiment` for the same reason
+    `cached_prediction_path` is: two different checkpoints must never share a
+    cache entry, or switching `NVX_EXPERIMENT` (to point at a different
+    trained model) would silently mix logits from the OLD model into a
+    directory a caller now expects to hold the NEW one's.
+
+    This mirrors the on-disk convention `scripts/evaluate.py` already uses
+    for every saved eval run (`<eval_dir>/logits/<case_id>.npy`, fp16), so a
+    downstream consumer that reads logits from an eval directory can read
+    from this cache with the same code path.
+
+    Args:
+        settings: Resolved backend settings.
+        case_id: Case identifier.
+
+    Returns:
+        `<cache_dir>/<experiment>/logits/<case_id>.npy`. The directory is NOT
+        created here -- only `segment_case` (when called with
+        `save_logits=True`) writes to it.
+    """
+    return settings.cache_dir / settings.experiment / "logits" / f"{case_id}.npy"
+
+
 def _report(progress: Callable[[str, float], None] | None, stage: str, fraction: float) -> None:
     """Calls `progress(stage, fraction)` if a callback was given."""
     if progress is not None:
@@ -303,6 +329,7 @@ def segment_case(
     case_id: str,
     *,
     force: bool = False,
+    save_logits: bool = False,
     progress: Callable[[str, float], None] | None = None,
 ) -> Path:
     """Segments one PREPROCESSED case with the configured checkpoint, caching the result.
@@ -322,6 +349,21 @@ def segment_case(
         case_id: Case identifier; must have a `<prep_dir>/<case_id>/image.npy`.
         force: If True, recompute and overwrite even if a cached prediction
             already exists.
+        save_logits: If True, also persist the raw (pre-postprocessing)
+            logits to `cached_logits_path(settings, case_id)`, fp16, shape
+            `(3, D, H, W)` -- the same on-disk convention
+            `scripts/evaluate.py` uses for its saved `logits/`. Default
+            False, so every existing caller that never asks for logits is
+            byte-for-byte unaffected.
+
+            A cache is only a hit if it can satisfy THIS call: if the
+            prediction is already cached but `save_logits=True` and no
+            logits file exists yet (e.g. an earlier call ran with
+            `save_logits=False`), that is treated exactly like `force=True`
+            for this call only -- inference is re-run and BOTH files are
+            rewritten. This is deliberate: silently returning the old
+            prediction would leave the caller believing logits were saved
+            when they never were.
         progress: Optional callback invoked with `(stage_name, fraction)` at
             `("loading model", 0.1)`, `("running inference", 0.3)`,
             `("post-processing", 0.85)`, `("done", 1.0)`. Not called at all
@@ -330,18 +372,29 @@ def segment_case(
 
     Returns:
         Path to the cached `.npy` prediction (uint8, values in `{0,1,2,3}`,
-        shape `(D, H, W)` matching the case's cropped image shape).
+        shape `(D, H, W)` matching the case's cropped image shape). Callers
+        that also passed `save_logits=True` and want the logits path call
+        `cached_logits_path(settings, case_id)` themselves afterward -- the
+        same pattern `cached_prediction_path` already establishes.
 
     Raises:
         FileNotFoundError: If `settings.checkpoint` does not exist, or if
             `<prep_dir>/<case_id>/image.npy` does not exist.
     """
     out_path = cached_prediction_path(settings, case_id)
+    logits_path = cached_logits_path(settings, case_id)
 
-    # Fast path: no torch, no Hydra, no lock -- just a filesystem check. Most
+    # A prediction cache hit only counts if it satisfies THIS call: a caller
+    # asking for logits that were never saved must not be handed a stale
+    # prediction with no logits to go with it (see the `save_logits` Args
+    # note above) -- so that case is folded into the same "must recompute"
+    # condition as force=True.
+    logits_missing = save_logits and not logits_path.is_file()
+
+    # Fast path: no torch, no Hydra, no lock -- just filesystem checks. Most
     # calls in a running demo hit this, since a case is only ever segmented
     # once per (experiment, case_id).
-    if out_path.is_file() and not force:
+    if out_path.is_file() and not force and not logits_missing:
         logger.info("Using cached live-inference prediction for %s at %s", case_id, out_path)
         return out_path
 
@@ -361,9 +414,11 @@ def segment_case(
     lock = _lock_for(settings.experiment, case_id)
     with lock:
         # Re-check under the lock: another thread may have finished
-        # segmenting this exact case while this one was waiting to acquire
-        # it, in which case there is nothing left to do (unless force=True).
-        if out_path.is_file() and not force:
+        # segmenting this exact case (and, if requested, its logits) while
+        # this one was waiting to acquire it, in which case there is nothing
+        # left to do (unless force=True or the logits are still missing).
+        logits_missing = save_logits and not logits_path.is_file()
+        if out_path.is_file() and not force and not logits_missing:
             logger.info(
                 "Using cached live-inference prediction for %s at %s (written while waiting "
                 "for the lock)",
@@ -382,6 +437,16 @@ def segment_case(
         classes = _postprocess_to_classes(logits, cfg)
         _atomic_np_save(classes, out_path)
         logger.info("Wrote live-inference prediction for %s to %s", case_id, out_path)
+
+        if save_logits:
+            import numpy as np
+
+            # Drop the leading batch dim of 1 (logits is `(1, 3, D, H, W)`)
+            # and cast to fp16 to match the project-wide convention for
+            # saved logits on disk -- see cached_logits_path's docstring.
+            logits_np = logits.squeeze(0).cpu().numpy().astype(np.float16)  # (3, D, H, W)
+            _atomic_np_save(logits_np, logits_path)
+            logger.info("Wrote live-inference logits for %s to %s", case_id, logits_path)
 
         _report(progress, "done", 1.0)
         return out_path

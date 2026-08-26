@@ -244,6 +244,78 @@ def test_segment_case_progress_is_monotonic_and_ends_at_one(ready_settings: Sett
     assert calls[-1][0] == "done"
 
 
+# --- 12. save_logits (optional, default-off) --------------------------------
+
+
+def test_segment_case_default_save_logits_false_writes_no_logits_file(
+    ready_settings: Settings,
+) -> None:
+    """`save_logits` defaults to False: no logits file must appear at all."""
+    out_path = inf.segment_case(ready_settings, CASE_ID)
+    assert out_path.is_file()
+    assert not inf.cached_logits_path(ready_settings, CASE_ID).is_file()
+
+
+def test_segment_case_save_logits_true_on_fresh_case_writes_both_files(
+    ready_settings: Settings,
+) -> None:
+    """A fresh call with `save_logits=True` must produce the prediction AND the logits."""
+    out_path = inf.segment_case(ready_settings, CASE_ID, save_logits=True)
+    logits_path = inf.cached_logits_path(ready_settings, CASE_ID)
+
+    assert out_path.is_file()
+    assert logits_path.is_file()
+
+    logits = np.load(logits_path)
+    assert logits.shape == (3, *CASE_SHAPE)
+    assert logits.dtype == np.float16
+
+
+def test_segment_case_save_logits_true_recomputes_when_prediction_cached_without_logits(
+    ready_settings: Settings,
+) -> None:
+    """A prior save_logits=False call must not leave a stale prediction with no logits.
+
+    Calling again with save_logits=True must NOT silently return the old
+    prediction as-is -- it must recompute so that both the prediction and
+    the logits file exist afterward.
+    """
+    first_out = inf.segment_case(ready_settings, CASE_ID, save_logits=False)
+    logits_path = inf.cached_logits_path(ready_settings, CASE_ID)
+    assert first_out.is_file()
+    assert not logits_path.is_file()  # nothing saved logits yet
+
+    second_out = inf.segment_case(ready_settings, CASE_ID, save_logits=True)
+
+    assert second_out == first_out
+    assert second_out.is_file()
+    assert logits_path.is_file(), "save_logits=True must not silently no-op on a stale cache"
+
+    logits = np.load(logits_path)
+    assert logits.shape == (3, *CASE_SHAPE)
+    assert logits.dtype == np.float16
+
+
+def test_segment_case_save_logits_true_both_cached_skips_recomputation(
+    ready_settings: Settings,
+) -> None:
+    """Once both the prediction and the logits are cached, a repeat call must not recompute."""
+    out_path = inf.segment_case(ready_settings, CASE_ID, save_logits=True)
+    logits_path = inf.cached_logits_path(ready_settings, CASE_ID)
+    pred_mtime_1 = out_path.stat().st_mtime_ns
+    logits_mtime_1 = logits_path.stat().st_mtime_ns
+    pred_content_1 = np.load(out_path).copy()
+    logits_content_1 = np.load(logits_path).copy()
+
+    out_path_2 = inf.segment_case(ready_settings, CASE_ID, save_logits=True)
+
+    assert out_path_2 == out_path
+    assert out_path_2.stat().st_mtime_ns == pred_mtime_1
+    assert logits_path.stat().st_mtime_ns == logits_mtime_1
+    np.testing.assert_array_equal(np.load(out_path_2), pred_content_1)
+    np.testing.assert_array_equal(np.load(logits_path), logits_content_1)
+
+
 def test_segment_case_output_respects_region_nesting(ready_settings: Settings) -> None:
     """ET (class 3) must always be a subset of TC ({1,3}), which is a subset of WT (>0).
 
