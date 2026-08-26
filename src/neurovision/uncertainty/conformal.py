@@ -123,6 +123,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from torch import Tensor
@@ -131,6 +132,7 @@ __all__ = [
     "DEFAULT_THRESHOLDS",
     "CaseLossCurve",
     "case_loss_curve",
+    "load_curves_npz",
     "ConformalFit",
     "fit_threshold",
     "realised_risk",
@@ -344,6 +346,65 @@ def case_loss_curve(
         fn_voxels=tuple(fn_voxels),
         mask_voxels=tuple(mask_voxels),
     )
+
+
+# ---------------------------------------------------------------------------
+# Reloading a cached curves.npz -- a public reader, because scripts/ is not
+# an importable package
+# ---------------------------------------------------------------------------
+
+
+def load_curves_npz(path: Path, regions: Sequence[str]) -> dict[str, list[CaseLossCurve]]:
+    """Reloads a `curves.npz` cache (written by `scripts/conformal.py`) into `CaseLossCurve`s.
+
+    `scripts/conformal.py::_write_curves_npz` is the only writer of this file format, and
+    that script keeps its own private, underscore-prefixed reader
+    (`_load_curves_npz`) for its own use. `scripts/` is not an importable package
+    (`pyproject.toml`'s `packages.find` only looks under `src/`), so a second caller that
+    also needs to read a `curves.npz` -- today, `neurovision.analysis.
+    gatekeeper_calibration`, which reads a previously-extracted conformal run's curves to
+    build the gatekeeper's calibration table -- cannot import that private function
+    across the script boundary, the same problem `neurovision.analysis.qc_inference`'s
+    module docstring already describes and solves for the QC case. This function is that
+    same fix, applied here: a small, PUBLIC reader living next to `CaseLossCurve` itself,
+    so a second caller reads exactly the same format through exactly the same logic
+    instead of maintaining a second, drifting copy of it.
+
+    Args:
+        path: Path to a `curves.npz` file, in EXACTLY the layout
+            `scripts/conformal.py::_write_curves_npz` writes: a shared `"thresholds"`
+            float64 array, plus, for every region `R` in `regions`, `f"{R}__case_ids"`,
+            `f"{R}__gt_voxels"` (int64), `f"{R}__fn_voxels"` (int64, shape `(n_cases,
+            n_thresholds)`) and `f"{R}__mask_voxels"` (int64, same shape).
+        regions: Region names to read back, e.g. `("WT", "TC")`. Must match (or be a
+            subset of) the regions the file was written with -- a region absent from
+            the file raises `KeyError` via the missing `.npz` array lookup.
+
+    Returns:
+        `{region: [CaseLossCurve, ...]}`, one `CaseLossCurve` per case saved under that
+        region, in the same order they were saved, all sharing the file's threshold
+        grid.
+    """
+    data = np.load(path)
+    thresholds = tuple(float(t) for t in data["thresholds"])
+    curves: dict[str, list[CaseLossCurve]] = {}
+    for region in regions:
+        case_ids = data[f"{region}__case_ids"]
+        gt = data[f"{region}__gt_voxels"]
+        fn = data[f"{region}__fn_voxels"]
+        mask = data[f"{region}__mask_voxels"]
+        curves[region] = [
+            CaseLossCurve(
+                case_id=str(case_ids[i]),
+                region=region,
+                gt_voxels=int(gt[i]),
+                thresholds=thresholds,
+                fn_voxels=tuple(int(v) for v in fn[i]),
+                mask_voxels=tuple(int(v) for v in mask[i]),
+            )
+            for i in range(len(case_ids))
+        ]
+    return curves
 
 
 # ---------------------------------------------------------------------------

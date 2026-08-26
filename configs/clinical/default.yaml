@@ -242,7 +242,14 @@ gatekeeper:
   # scripts/calibrate_gatekeeper.py's module docstring) and stays disabled.
   enabled_signals: [input_qc, predicted_dice, conformal_band]
 
-  # Which alpha's fitted conformal threshold (outputs/conformal/<experiment>/fit.json)
+  # Root of the deployed model's Phase B conformal run -- holds fit.json and
+  # eval_val/curves.npz. Fixed to the neurovision run specifically, same
+  # reasoning as analysis.qc_validate.checkpoint above: this artifact
+  # belongs to one deployed model, not to whatever experiment a generic
+  # Settings happens to name.
+  conformal_dir: outputs/conformal/neurovision
+
+  # Which alpha's fitted conformal threshold (conformal_dir/fit.json)
   # backs the conformal_band signal. 0.10 is a deliberate middle-of-the-grid
   # choice among the pre-registered {0.05, 0.10, 0.20} -- not itself a
   # pre-registered endpoint, just the deployed operating point.
