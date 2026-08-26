@@ -16,6 +16,14 @@ imports torch": they import `app.backend.jobs`, which itself imports torch
 only lazily (inside `run_job`, at the one call that reaches live inference --
 see that module's docstring). Importing `jobs` here at module scope is safe
 for the same reason it is safe in `jobs.py` itself.
+
+The `/clinical/*` routes are a second, similar exception, importing
+`app.backend.clinical_jobs` -- but note that module imports `torch` eagerly
+at its own module scope (it needs it for `postprocess_logits` and the QC
+model), unlike `jobs.py`'s lazy import. So importing `clinical_jobs` here
+means this whole API module now requires torch to be importable, same as
+every other module in this backend that already does (CPU-only, per
+CLAUDE.md constraint 3 -- never GPU-only).
 """
 
 from __future__ import annotations
@@ -34,7 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import inference, jobs
+from . import clinical_jobs, inference, jobs
 from .config import REPO_ROOT, Settings, get_settings
 from .volumes import (
     MODALITIES,
@@ -554,6 +562,147 @@ def get_job_mask(job_id: str) -> Response:
         raise HTTPException(
             status_code=404,
             detail=f"job {job_id!r} is done but has no cached segmentation at {pred_path}",
+        )
+    arr = np.load(pred_path, mmap_mode="r")
+    data = np.ascontiguousarray(arr, dtype=np.uint8).tobytes()
+    return _binary_response(data, meta.shape)
+
+
+def _clinical_job_to_json(job: clinical_jobs.ClinicalJob) -> dict[str, Any]:
+    """Serialises one `ClinicalJob` dataclass to a plain JSON-able dict.
+
+    Same `dataclasses.asdict` pattern as `_job_to_json` -- every field
+    (`ingest_result`, `input_qc_pre`, `input_qc_post`, `gatekeeper_decision`,
+    ...) is already a plain, JSON-serialisable dict or `None`, so no further
+    translation is needed here.
+    """
+    return dataclasses.asdict(job)
+
+
+@router.post("/clinical/upload", status_code=202)
+async def post_clinical_upload(dicom_zip: UploadFile = File(...)) -> dict[str, Any]:
+    """Accepts a raw DICOM study `.zip`, validates it, and queues a clinical job.
+
+    A `ValueError` from `clinical_jobs.create_clinical_job` (empty upload,
+    oversized upload, not a valid zip, or a zip-slip-attempting member)
+    surfaces as 400 with the underlying message -- unlike the generic 500
+    `_register_exception_handlers` gives every other `ValueError` in this
+    file, because a bad upload is the caller's fault, not a server-side data
+    inconsistency. Same reasoning `post_upload` already applies to a bad
+    NIfTI upload.
+    """
+    settings = get_settings()
+    data = await dicom_zip.read()
+    try:
+        job = clinical_jobs.create_clinical_job(settings, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    clinical_jobs.start_clinical_job(settings, job.job_id)
+    return _clinical_job_to_json(job)
+
+
+@router.get("/clinical/jobs")
+def get_clinical_jobs() -> dict[str, Any]:
+    """Lists every known clinical job, newest first."""
+    return {"jobs": [_clinical_job_to_json(job) for job in clinical_jobs.list_clinical_jobs()]}
+
+
+@router.get("/clinical/jobs/{job_id}")
+def get_clinical_job_detail(job_id: str) -> dict[str, Any]:
+    """Returns one clinical job's full state, or 404 if `job_id` is unknown.
+
+    Carries `ingest_result`, `input_qc_pre`, `input_qc_post`,
+    `gatekeeper_decision`, `state` and `error` exactly as
+    `clinical_jobs.ClinicalJob` stores them -- everything a refusal-banner UI
+    needs to explain a `"refused"` outcome, or a caution/success UI needs for
+    a `"done"` one. A `"refused"` job is served the same way as any other
+    (200, full payload): see `clinical_jobs.py`'s module docstring for why
+    refusal is a distinct, successful terminal state, never an error.
+    """
+    job = clinical_jobs.get_clinical_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown clinical job {job_id!r}")
+    return _clinical_job_to_json(job)
+
+
+@router.delete("/clinical/jobs/{job_id}")
+def delete_clinical_job_route(job_id: str) -> dict[str, Any]:
+    """Deletes a clinical job and everything it wrote to disk, or 404 if it did not exist."""
+    settings = get_settings()
+    if not clinical_jobs.delete_clinical_job(settings, job_id):
+        raise HTTPException(status_code=404, detail=f"unknown clinical job {job_id!r}")
+    return {"job_id": job_id, "deleted": True}
+
+
+def _require_done_clinical_job(job_id: str) -> clinical_jobs.ClinicalJob:
+    """Returns a known clinical job in state `"done"`, or raises the matching HTTP error.
+
+    A `"refused"` job is a legitimate terminal state (see
+    `clinical_jobs.py`'s module docstring), not an error -- so the 409
+    message below just states the actual state, worded neutrally, rather
+    than implying refusal is a bug.
+    """
+    job = clinical_jobs.get_clinical_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"unknown clinical job {job_id!r}")
+    if job.state != "done":
+        raise HTTPException(
+            status_code=409,
+            detail=f"clinical job {job_id!r} is not done yet (state={job.state!r})",
+        )
+    return job
+
+
+def _clinical_job_settings(settings: Settings, job_id: str) -> Settings:
+    """`Settings` pointing at a clinical job's own prep/cache directories AND its pinned model.
+
+    Unlike `_job_settings` (which only overrides `prep_dir`/`cache_dir` on
+    the passed-in generic `settings`), a clinical job's segmentation always
+    ran against the pinned `neurovision` experiment/checkpoint, never
+    whatever the generic backend `Settings` happens to name -- see
+    `clinical_jobs.py`'s module docstring, "Which model runs a clinical job
+    is fixed" section. So this goes through
+    `clinical_jobs.clinical_segmentation_settings`, the same function
+    `run_clinical_job` itself uses to build the `Settings` it segments with.
+    """
+    job_prep_dir = jobs.job_root(settings) / job_id / "prep"
+    job_cache_dir = jobs.job_root(settings) / job_id / "cache"
+    return clinical_jobs.clinical_segmentation_settings(job_prep_dir, job_cache_dir)
+
+
+@router.get("/clinical/jobs/{job_id}/volume/{modality}")
+def get_clinical_job_volume(job_id: str, modality: str) -> Response:
+    """Returns one clinical job's preprocessed modality volume, exactly like `/jobs/.../volume`."""
+    if modality not in MODALITIES:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown modality {modality!r}; expected one of {list(MODALITIES)}",
+        )
+    job = _require_done_clinical_job(job_id)
+    job_settings = _clinical_job_settings(get_settings(), job_id)
+    meta = read_meta(job.case_id, job_settings)
+    data = load_modality(job.case_id, modality, job_settings)
+    return _binary_response(data, meta.shape)
+
+
+@router.get("/clinical/jobs/{job_id}/mask/prediction")
+def get_clinical_job_mask(job_id: str) -> Response:
+    """Returns the clinical job's segmentation as a `{0,1,2,3}` class map, raw uint8 bytes.
+
+    Same "already cropped, just re-encode" path `get_job_mask` takes:
+    `inference.segment_case` writes its prediction in the job's own cropped
+    geometry, not the original DICOM/BraTS geometry `volumes.load_mask`
+    re-crops with `meta.bbox`.
+    """
+    job = _require_done_clinical_job(job_id)
+    job_settings = _clinical_job_settings(get_settings(), job_id)
+    meta = read_meta(job.case_id, job_settings)
+    pred_path = inference.cached_prediction_path(job_settings, job.case_id)
+    if not pred_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=f"clinical job {job_id!r} is done but has no cached segmentation at "
+            f"{pred_path}",
         )
     arr = np.load(pred_path, mmap_mode="r")
     data = np.ascontiguousarray(arr, dtype=np.uint8).tobytes()

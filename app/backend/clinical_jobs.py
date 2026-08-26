@@ -475,7 +475,7 @@ def _load_qc_model_and_cfg(qc_checkpoint: Path) -> tuple[Any, Any]:
     return model, cfg
 
 
-def _clinical_segmentation_settings(job_prep_dir: Path, job_cache_dir: Path) -> Settings:
+def clinical_segmentation_settings(job_prep_dir: Path, job_cache_dir: Path) -> Settings:
     """Builds a dedicated `Settings` for the segmentation step of a clinical job.
 
     A clinical job ALWAYS segments with the `neurovision` checkpoint,
@@ -850,7 +850,7 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         # --- Segmentation (existing, unmodified path; ALWAYS neurovision) ----
         _update_clinical_job(job, stage="segmenting")
         job_cache_dir = job_dir / "cache"
-        clinical_settings = _clinical_segmentation_settings(job_prep_dir, job_cache_dir)
+        clinical_settings = clinical_segmentation_settings(job_prep_dir, job_cache_dir)
 
         if not inference.checkpoint_available(clinical_settings):
             # A missing DEPLOYED checkpoint is a server-configuration
