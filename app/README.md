@@ -61,6 +61,8 @@ hardcoded to one machine.
 | `NVX_EXPERIMENT` | `baseline_unet3d` | Name shown in the header |
 | `NVX_MAX_CASES` | `200` | Upper bound on the case list |
 | `NVX_CHECKPOINT` | `outputs/checkpoints/baseline_unet3d/best.pt` | Reserved for live inference |
+| `NVX_CLINICAL_CHECKPOINT` | `outputs/neurovision/checkpoints/best.pt` | The clinical pipeline's segmentation checkpoint (see below) — always `neurovision`, independent of `NVX_CHECKPOINT`/`NVX_EXPERIMENT` |
+| `NVX_JOB_DIR` | `outputs/demo_jobs` | Where an uploaded case (either job kind below) is unpacked, preprocessed, and cached |
 | `NVX_CORS_ORIGINS` | — | Extra allowed origins, comma-separated |
 
 ```bash
@@ -69,6 +71,36 @@ NVX_EVAL_DIR=outputs/eval_val_baseline_unet3d uvicorn app.backend.main:app
 
 `GET /api/health` reports every resolved path and what it can actually see, so
 a misconfigured setup explains itself rather than showing an empty list.
+
+## Two kinds of upload job
+
+**`/api/upload`** — the original demo path: four already-registered,
+already-skull-stripped BraTS-style NIfTI files in (`t1`/`t1ce`/`t2`/`flair`
+form fields), research preprocessing + segmentation out. Uses whatever
+`NVX_EXPERIMENT`/`NVX_CHECKPOINT` the server is configured with.
+
+**`/api/clinical/upload`** — the real pipeline (Milestone 4 Phase E): a raw
+hospital DICOM study as a `.zip` (arbitrarily nested folder of `.dcm` files,
+form field `dicom_zip`). Runs DICOM ingest → input QC → co-registration /
+atlas registration / skull-stripping → input QC again → the same research
+preprocessing + segmentation → two safety signals (the QC model's own
+predicted Dice, the conformal band width) → the refusal gate, and always
+segments with the **`neurovision`** checkpoint (`NVX_CLINICAL_CHECKPOINT`),
+never whatever `NVX_EXPERIMENT` the rest of the demo is showing. **Requires
+`.venv-clinical`** (`pydicom`, `dcm2niix`, `brainles-preprocessing`, `HD-BET`
+— see `docs/reproducibility.md`); the plain `/api/upload` path above does not.
+
+| Route | |
+|---|---|
+| `POST /api/clinical/upload` | 202, queues the job |
+| `GET /api/clinical/jobs` / `GET /api/clinical/jobs/{id}` | List / poll one job. `state` is one of `queued`/`running`/`done`/`refused`/`failed` — **`refused` is a normal, successful outcome** (the input QC gate or the refusal gate correctly said no, with a reason in `error` and full detail in `ingest_result`/`input_qc_pre`/`input_qc_post`/`gatekeeper_decision`), never conflated with `failed` (something actually broke) |
+| `DELETE /api/clinical/jobs/{id}` | Removes the job and everything it wrote to disk |
+| `GET /api/clinical/jobs/{id}/volume/{modality}` / `.../mask/prediction` | Only once `state=="done"` (409 otherwise, including a refused job) |
+
+E6 (DICOM-SEG export) is not wired into this pipeline yet — see
+`docs/research/master_plan.md`'s Phase E row for why (the mask lives in atlas
+space after co-registration, and the exporter refuses on a geometry mismatch
+against the source series until a resample-back step exists).
 
 ## What the display means
 
