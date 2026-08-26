@@ -267,7 +267,15 @@ uv venv --python 3.11 .venv-clinical
 | `scripts/evaluate.py` with `inference.evaluation.lesionwise=false` — i.e. every number published so far | `.venv` |
 | `scripts/evaluate.py` with `lesionwise=true`, `scripts/replay_logits.py` lesion-wise re-scoring | `.venv-analysis` |
 | DICOM ingest, registration, skull-stripping, DICOM-SEG (Phase E) | `.venv-clinical` |
+| `app/backend` demo server, serving ONLY precomputed cases and the plain `/upload` NIfTI path | any of `.venv` / `.venv-analysis` / `.venv-clinical` (`app/backend/requirements.txt` on top) |
+| `app/backend` demo server, serving the **clinical DICOM pipeline** (`app/backend/clinical_jobs.py`, `/clinical/*` routes) | **`.venv-clinical` only**, with `app/backend/requirements.txt` additionally installed into it. This is the one place the "any of the above" rule above does not apply: `clinical_jobs.py` needs `pydicom`/`dcm2niix`/`brainles-preprocessing`/`HD-BET` (only in `.venv-clinical`) in the SAME process that also runs segmentation inference (needs `torch`/`monai`, present in `.venv-clinical` transitively via its pinned `monai==1.6.0`, verified 2026-08-26: `.venv-clinical/bin/python -c "import torch"` succeeds) |
 | plain `pytest` | `.venv` for the whole suite; `.venv-analysis` additionally, for the lesion-wise tests, which skip when `panoptica` is absent |
+
+```bash
+# Serving the full clinical pipeline (once, per machine):
+uv pip install -r app/backend/requirements.txt --python .venv-clinical/bin/python
+.venv-clinical/bin/uvicorn app.backend.main:app --reload
+```
 
 Two consequences worth stating plainly, because both are easy to trip over:
 
