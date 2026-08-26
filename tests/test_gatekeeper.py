@@ -505,8 +505,21 @@ def test_config_block_is_reachable_at_the_composed_path() -> None:
 
     # run_gatekeeper must actually work against the real composed config, not just
     # expose the right keys -- see CLAUDE.md's driver-whose-tests-passed-against-a-
-    # hand-built-fixture trap.
+    # hand-built-fixture trap. Gate C fired POSITIVE 2026-08-26, so the real config
+    # now enables predicted_dice and conformal_band too (not just input_qc) -- a
+    # signal that is enabled but unmeasured is a REFUSE by design (see
+    # `_judge_region_signal`), so a case that should PROCEED must supply values for
+    # every region on the safe side of the real, calibrated thresholds.json this
+    # config now points at (scripts/calibrate_gatekeeper.py, 2026-08-26).
     report = _report(Severity.OK)
-    decision = run_gatekeeper(cfg, GateSignals(input_qc=report))
+    regions = list(gk_cfg.regions)
+    decision = run_gatekeeper(
+        cfg,
+        GateSignals(
+            input_qc=report,
+            predicted_dice=dict.fromkeys(regions, 0.95),
+            conformal_band=dict.fromkeys(regions, 0.5),
+        ),
+    )
     assert isinstance(decision, GateDecision)
     assert decision.decision is Decision.PROCEED

@@ -285,7 +285,16 @@ gatekeeper:
   # uncalibrated, and the gate RAISES on an enabled signal with a null
   # threshold rather than inventing one. A made-up threshold that looks
   # plausible is the failure mode here.
-  thresholds: null
+  #
+  # Calibrated 2026-08-26 (`python scripts/calibrate_gatekeeper.py
+  # model=segqc`), n=187 val cases. outputs/ is gitignored, so this file
+  # does not travel with a fresh clone -- rerun that exact command to
+  # regenerate it (see docs/reproducibility.md). Sanity-checked numbers:
+  # predicted_dice refuse_below WT=0.7074 TC=0.4652; conformal_band
+  # refuse_above WT=0.9793 TC=0.9943 (both <1 at this operating point,
+  # consistent with the already-published C15 finding that alpha=0.10
+  # inflation runs 0.88x-0.96x in distribution -- not a bug).
+  thresholds: outputs/gatekeeper/thresholds.json
 
   # Where the calibrated thresholds are written. Fixed, not ${output_dir}.
   out_dir: outputs/gatekeeper
