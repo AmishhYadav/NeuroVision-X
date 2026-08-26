@@ -230,11 +230,23 @@ gatekeeper:
   # that can detect a study the model must not see at all.
   #
   # WHICH OF THE OTHERS ARE ENABLED MUST FOLLOW GATE C'S OUTCOME
-  # (docs/research/preregistration_qc.md). On a negative Gate C the QC
-  # model's estimate still SHIPS as a displayed number but makes no claim,
-  # and wiring it into a refusal decision would be making one. Set this list
-  # from the measured result, not from the hope.
-  enabled_signals: [input_qc]
+  # (docs/research/preregistration_qc.md). Gate C fired POSITIVE on
+  # 2026-08-26 (PED-TC delta AUROC +0.1686, CI [0.0686, 0.2747], p_holm
+  # 0.006) so predicted_dice is enabled below -- but see that
+  # pre-registration's Result section before trusting it on an
+  # externally-shifted case: the SAME family shows the QC model losing to
+  # free entropy on SSA-TC and PED-WT, and C5 found its bias turns MORE
+  # optimistic under shift in every external cell measured. conformal_band
+  # is enabled because Phase B (B1/B2) is unconditionally done -- no gate
+  # attached to that signal. ood_score has no scorer built yet (see
+  # scripts/calibrate_gatekeeper.py's module docstring) and stays disabled.
+  enabled_signals: [input_qc, predicted_dice, conformal_band]
+
+  # Which alpha's fitted conformal threshold (outputs/conformal/<experiment>/fit.json)
+  # backs the conformal_band signal. 0.10 is a deliberate middle-of-the-grid
+  # choice among the pre-registered {0.05, 0.10, 0.20} -- not itself a
+  # pre-registered endpoint, just the deployed operating point.
+  conformal_alpha: 0.10
 
   # A signal in enabled_signals that arrives as None is a REFUSE, not a
   # pass. A gate that treats "I could not measure this" as "this is fine"

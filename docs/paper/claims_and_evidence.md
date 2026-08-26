@@ -34,6 +34,8 @@ any reviewer who reads the repository.
 | C15 | The cost of the guarantee is small, and at looser α it is **negative** | In distribution at α=0.05 the conservative mask grows 1.10× (WT) / 1.18× (TC); at α=0.10 and 0.20 inflation is **0.88×–0.96×**, i.e. smaller than the default 0.5-threshold mask | **Strong, descriptive.** The default operating point is already more conservative than a 10%-miss guarantee requires |
 | C16 | The trained **confidence head is beaten by free single-pass entropy** on every region — ET 0.855 vs 0.912, TC 0.871 vs 0.908, WT 0.477 vs 0.904 (all p_holm 0.0, all CIs below zero) | Note 44, n=189 paired | **Strong negative.** Exploratory, not pre-registered |
 | C17 | **Single-pass predictive entropy is undefeated** as an error localiser in this project: MC-dropout is equivalent to it, inter-branch disagreement is worse, the confidence head is worse | Notes 39 and 44. Three mechanisms, one free baseline | **Strong.** A statement about the strength of the baseline, not a defect of any one mechanism |
+| C18 | An independently trained QC model beats free entropy at flagging bad tumour-core segmentations on the **pediatric** cohort | ΔAUROC +0.1686, CI [0.0686, 0.2747], p_holm 0.006, PED·TC | **Moderate. One cell of a five-cell pre-registered family.** Gate C is POSITIVE by the fixed decision rule (≥1 firing cell), but the QC model loses to entropy, significantly, on SSA·TC (−0.1951, p_holm 0.050) and PED·WT (−0.1898, p_holm 0.010) in the same family. Report all three, never PED·TC alone |
+| C19 | Under distribution shift, the QC model's own error becomes **more optimistic**, not more conservative | Bias shifts positive vs. in-distribution in **all six** external cells (`silent_failure.csv`); largest shift PED·TC, Δbias +0.298 | **Strong.** This is the dominant, unambiguous fact from Phase C — a QC gate that grows more confident exactly where the segmentation is least trustworthy |
 
 ## 2. Claims the evidence does NOT support — do not write these
 
@@ -50,6 +52,8 @@ any reviewer who reads the repository.
 | Any claim on **WT** | Every WT comparison is inconclusive — voxel-wise, and lesion-wise too (+0.0300, CI **−0.0021** to +0.0620). Note the stated *reason* changed on 2026-08-24: WT is **not** "saturated at ~0.93". Lesion-wise it is 0.7183, and the 0.93 was a measurement artifact of a union region whose voxel count is dominated by one large component. The rule survives; the justification for it does not |
 | "The lesion-wise gain transfers out of distribution" | **Measured 2026-08-24 and it does not.** All six external comparisons (SSA and PED × ET/TC/WT) have CIs straddling zero. Every point estimate favours `neurovision`, which is exactly why this row exists: six positive-looking numbers with six CIs crossing zero is an underpowered null, not transfer. Note 41 |
 | Any architecture claim on **pediatric tumour core** | Both models score lesion-wise Dice 0.234 with **64 of 99 cases exact ties**. They fail identically; there is no gradient to claim on |
+| "The QC model detects bad segmentations" (unqualified) | Gate C is POSITIVE on exactly one of five family cells (PED·TC). It is significantly WORSE than free entropy on two others (SSA·TC, PED·WT). Any claim must name all three, never PED·TC in isolation |
+| "The QC model is reliable under distribution shift" | **Refuted by C5/C19.** Its bias becomes more optimistic under shift in every external cell measured, which is the opposite of reliable |
 
 ## 3. Limitations that must appear in the paper
 

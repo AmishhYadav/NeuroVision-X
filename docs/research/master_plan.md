@@ -215,9 +215,9 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 | C3 | `scripts/train_qc.py` — the trainer, with case-grouped shuffling | `[x]` built · `[~]` **running** | `outputs/neurovision/qc/best.pt` exists with a `history.csv` beside it |
 | C3b | Model selection must not read the test split | `[x]` | `analysis.qc.val_frac` splits val case-level; `heldout_eval_dir: null`; a test proves `best.pt` tracks the select split's argmax |
 | C3c | `analysis/qc_inference.py` — the packing logic, extracted for reuse | `[x]` | An exact-equality test against `train_qc.py`'s copies |
-| C4 | `scripts/validate_qc.py` — per-cohort ΔAUROC vs free entropy, Spearman, MAE, bias | `[x]` built · `[ ]` **run** | The falsification check passes, and a table exists for test/SSA/PED × ET/TC/WT |
-| C5 | Silent-failure test — does the QC model degrade under shift? | `[x]` built · `[ ]` **run** | Signed bias and Spearman reported per cohort, against the pre-registered direction |
-| — | **GATE C** | `[ ]` | `preregistration_qc.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
+| C4 | `scripts/validate_qc.py` — per-cohort ΔAUROC vs free entropy, Spearman, MAE, bias | `[x]` run 2026-08-26 | The falsification check passes, and a table exists for test/SSA/PED × ET/TC/WT |
+| C5 | Silent-failure test — does the QC model degrade under shift? | `[x]` run 2026-08-26 — bias turns more optimistic under shift in all 6 external cells | Signed bias and Spearman reported per cohort, against the pre-registered direction |
+| — | **GATE C** | `[x]` **POSITIVE** (PED·TC only; loses to entropy on SSA·TC, PED·WT) | `preregistration_qc.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
 
 #### Later — kept coarse on purpose, because Gate A may reshape them
 
@@ -240,7 +240,7 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 | E1 | `data/dicom_ingest.py` — study folder → four named NIfTIs | `[x]` | FLAIR beats T2 and T1CE beats T1 *structurally*, by score-zeroing, not by rule order |
 | E2 | `data/clinical_preprocess.py` — co-registration, SRI24, HD-BET, optional N4 | `[x]` built · `[ ]` **run on a real study** | Pure planning layer testable with no ANTs; needs an HD-BET weight download on first real run |
 | E3+E4 | `inference/input_qc.py` — 12 label-free checks, refusal with a named reason | `[x]` | E4 is one of E3's checks; splitting them would put one refusal rule in two places |
-| E5 | `inference/gatekeeper.py` — PROCEED / CAUTION / REFUSE | `[x]` built · `[ ]` **thresholds uncalibrated** | Raises on a null threshold rather than inventing one. `enabled_signals` must be set from Gate C's outcome |
+| E5 | `inference/gatekeeper.py` — PROCEED / CAUTION / REFUSE | `[x]` built · `enabled_signals` set from Gate C (POSITIVE) 2026-08-26 · `[ ]` **thresholds still uncalibrated** | Raises on a null threshold rather than inventing one. `scripts/calibrate_gatekeeper.py` is the next item that fixes this |
 | E6 | `reporting/dicom_seg.py` — DICOM-SEG out | `[x]` | Validates geometry against the source series and refuses; does **not** resample from atlas space |
 | E7 | UI — bounded mask, QC estimate, refusal banner | `[ ]` | `app/frontend/`; extend the existing E2E harness rather than replacing it |
 | — | Wire E1–E6 into `app/backend/jobs.py` | `[ ]` | Deliberately not done yet: each module is standalone and tested first |

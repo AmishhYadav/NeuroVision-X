@@ -178,4 +178,47 @@ mask nobody ever evaluated.
 
 ## Result
 
-*(To be written only after `scripts/validate_qc.py` has run. Nothing above this line may be edited.)*
+**Run:** `scripts/validate_qc.py model=segqc`, 2026-08-26. Falsification check passed for all three
+cohorts (identity-pair Dice matched the published `dice_R` in every case; see
+`outputs/qc_validation/falsification.csv`). Full table: `outputs/qc_validation/cells.csv`. Verdict
+record: `outputs/qc_validation/gate_c_verdict.json`.
+
+**Gate C fires POSITIVE.** Exactly one of the five family cells clears the pre-registered bar:
+
+| Cohort | Region | ΔAUROC | 95% CI | p_holm |
+|---|---|---|---|---|
+| **PED** | **TC** | **+0.1686** | **[0.0686, 0.2747]** | **0.006** |
+| SSA | ET | +0.0375 | [−0.1096, 0.1758] | 1.0 |
+| SSA | TC | −0.1951 | [−0.3551, −0.0429] | 0.050 |
+| PED | ET | +0.0290 | [−0.0959, 0.1556] | 1.0 |
+| PED | WT | −0.1898 | [−0.3312, −0.0667] | 0.010 |
+
+**This is a mixed result, not a clean win, and must be written up as one.** The QC model beats free
+entropy on PED·TC by a wide, clearly significant margin. But in the same five-cell family, it *loses*
+to free entropy — significantly, in the opposite direction — on SSA·TC and PED·WT. The decision rule
+fixed in advance asks only whether *at least one* cell clears the bar, and one does, so the gate is
+POSITIVE by that rule. The honest sentence for the paper is: **the QC model adds real, significant
+value on tumour-core detection in the paediatric cohort, and is significantly worse than the free
+baseline on two other cells in the same family** — not "the QC model works" and not "the QC model beats
+entropy." In-distribution (test), no cell reaches the bar at all (not in the gate family regardless,
+reported for the ρ > 0.7 comparison only) — spearman_qc is 0.45–0.57 there, below the literature bar,
+though this project's own free-entropy baseline is already unusually strong in distribution, which is
+the same pattern note 39 and note 44 established for the other two learned-uncertainty attempts.
+
+**C5, the silent-failure test, is unambiguous and the more important number.** In **all six** external
+cells (SSA and PED × ET/TC/WT), the QC model's bias shifts *more positive* than its in-distribution
+bias (`bias_more_positive_than_in_distribution = True` everywhere, `outputs/qc_validation/silent_failure.csv`).
+The largest shift is PED·TC: bias moves from −0.070 in distribution to +0.228 under shift, a
+Δ of +0.298. **Under distribution shift, the QC model systematically becomes more optimistic about
+mask quality, exactly when it should become more cautious.** This is the failure mode C5 was
+registered to look for, and it is present everywhere it was measured. It does not reverse Gate C's
+verdict (the pre-registered rule is silent on bias direction), but it is the dominant fact for the
+refusal gate: `enabled_signals` may include `predicted_dice`, per Gate C firing POSITIVE, but any
+document or UI surfacing the QC model's number to an external-cohort case must carry this bias warning
+alongside it, and the gate's calibrated thresholds must not assume the QC model is honest about a case
+that looks like SSA or PED.
+
+**Consequence for `configs/clinical/default.yaml`'s `gatekeeper.enabled_signals`.** `predicted_dice` is
+now enabled — Gate C fired POSITIVE, per the master plan's binding rule. The claim carried alongside it
+in any report or paper text is exactly the two paragraphs above, never "the QC model detects failures"
+unqualified.
