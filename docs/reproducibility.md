@@ -245,7 +245,7 @@ failure §5 already documents for Kaggle.
 |---|---|---|---|---|
 | `requirements.txt` | `.venv` | 3.11 | The fixed training + dev stack. Kaggle installs this minus its `kaggle-exclude` line | 2.4.6 / 3.0.5 / 1.17.1 |
 | `requirements-analysis.txt` | `.venv-analysis` | 3.11 | Lesion-wise metrics (`panoptica`), `statsmodels`, plus the torch/MONAI subset that `evaluate.py` and `replay_logits.py` need to run there | 2.2.6 / 2.3.3 / 1.17.1 |
-| `requirements-clinical.txt` | `.venv-clinical` | 3.11 | Real-MRI ingest: `brainles-preprocessing`, `antspyx`, `HD-BET`, `dcm2niix`, `highdicom` | 2.3.5 / 3.0.5 / 1.15.3 |
+| `requirements-clinical.txt` | `.venv-clinical` | 3.11 | Real-MRI ingest: `brainles-preprocessing`, `antspyx`, `HD-BET`, `dcm2niix`, `highdicom`, plus `monai`/`einops`/`hydra-core` so `app/backend/clinical_jobs.py` runs in this same env | 2.3.5 / 3.0.5 / 1.15.3 |
 | `app/backend/requirements.txt` | any of the above | 3.11 | FastAPI demo server only | inherits |
 
 Resolved columns are **measured** — `uv pip compile <file> --python-version 3.11`
