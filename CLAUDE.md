@@ -188,36 +188,50 @@ package's `__init__.py` for the decorator to run.
 
 ---
 
-## Current status — 2026-08-23
+## Current status — 2026-08-26
 
 **Phase: Milestone 4. Read `docs/research/master_plan.md` first.** It is the active plan and
 supersedes the sequencing and gates of `execution_plan.md` and `improvement_plan.md`.
 
-**Where the science stands.** Nine pre-registered or matched comparisons have resolved. One positive:
-ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189), decomposing as ~79% architecture /
-~21% capacity against a width-matched control. Eight null or negative, including the founding
-hypothesis — the content-only gate ablation **matched** the full model (+0.0022, CI −0.0067 to
-+0.0152), so the disagreement conditioning contributes nothing measurable, and branch disagreement is
-*worse* than free single-pass entropy as an error localiser. Single-pass entropy is statistically
-equivalent to 10-sample MC-dropout (paired TOST, margin 0.03). The accuracy gain does not transfer
-out of distribution (`dice_TC` −0.0333 pooled, p_holm 0.0132).
+**Where the science stands.** Eleven pre-registered or matched comparisons have resolved. One clean
+positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189), decomposing as ~79%
+architecture / ~21% capacity against a width-matched control. One MIXED positive: Gate C (the QC
+model) beats free entropy on exactly one of five family cells (PED·TC, ΔAUROC +0.1686, p_holm 0.006)
+but **loses to it, significantly, on two others** (SSA·TC, PED·WT) — and its bias turns more
+optimistic under distribution shift in every external cell measured, the opposite of what a safety
+gate should do. Nine null or negative, including the founding hypothesis — the content-only gate
+ablation **matched** the full model (+0.0022, CI −0.0067 to +0.0152), so the disagreement conditioning
+contributes nothing measurable, and branch disagreement is *worse* than free single-pass entropy as an
+error localiser. Single-pass entropy is statistically equivalent to 10-sample MC-dropout (paired TOST,
+margin 0.03). The accuracy gain does not transfer out of distribution (`dice_TC` −0.0333 pooled,
+p_holm 0.0132).
 
 **Do not write:** better calibrated · better boundary accuracy · better uncertainty or risk-coverage ·
 "the disagreement-conditioned gate is what works" · better structured reports · "equal to MC-dropout
-at 1/10 the cost" · any claim on WT. Full table in `docs/paper/claims_and_evidence.md`.
+at 1/10 the cost" · "the QC model detects bad segmentations" (unqualified — name all three Gate C
+cells) · "reliable under distribution shift" (any signal) · any claim on WT. Full table in
+`docs/paper/claims_and_evidence.md`.
 
-**What is built.** Everything through Milestone 3: full training / evaluation / calibration /
-explainability / anatomy / reporting / statistics stack, 1,630 tests, a demo with live upload and CPU
-inference, three preprocessed cohorts (BraTS 1251, SSA 60, PED 99), four trained runs. Details in
-`docs/project_state.md`.
+**What is built.** Everything through Milestone 3 (see `docs/project_state.md`), plus, as of
+2026-08-26: lesion-wise metrics, TTA, confidence-head scoring, conformal risk control (in distribution
+and under shift), the QC model and Gate C, and — the headline addition — **the full clinical pipeline
+is live end to end**: a real DICOM study zip in, through ingest → input QC → co-registration/atlas
+registration/skull-stripping → input QC again → segmentation (always the deployed `neurovision`
+checkpoint) → the QC model's and conformal risk control's signals → the refusal gate, out to
+PROCEED / PROCEED_WITH_CAUTION / REFUSE — reachable in the browser at `/clinical`
+(`app/backend/clinical_jobs.py`, `/api/clinical/*`, `app/frontend/src/pages/clinical/`). A `"refused"`
+job is a distinct, successful outcome, never conflated with a failure. E6 (DICOM-SEG export) is built
+and tested but deliberately not wired into this pipeline — see the master plan's Phase E row for why.
+2004+ tests passing, frontend build/tests clean, `scripts/smoke_test.py` clean.
 
-**What is next.** Milestone 4 Phase A. The ordered queue, with its current state and the dependency
-arrows, is `docs/research/master_plan.md` §4 — **read that before starting anything**. In short: the
-dependency files, then lesion-wise metrics via panoptica, then re-scoring the existing runs from saved
-logits; flip TTA and confidence-head scoring as independent filler (`src/neurovision/inference/tta.py`
-exists and is *not wired into* `scripts/evaluate.py`); conformal risk control as the first real build;
-and on the GPU side a timing probe, then the strong-baseline gate (nnU-Net v2 on our frozen split),
-pre-registered in `docs/research/preregistration_strong_baseline.md`.
+**What is next.** The CPU track (Phases A, B, C, and E1–E5+wiring) is done. What remains and is
+gated, per `docs/research/master_plan.md` §4.9: **Track 2 (GPU)** — a timing probe, then the
+strong-baseline gate (nnU-Net v2 on our frozen split), pre-registered in
+`docs/research/preregistration_strong_baseline.md` — starts only when cluster access exists, which is
+outside this document. **Phase F (IDH)** was explicitly decided **not gated in yet** (2026-08-26,
+after Gate C) — revisit later, not closed. Everything else that was CPU-buildable has been built;
+re-read `docs/research/master_plan.md` §4.2 ("how to tell what is already done") before assuming
+otherwise, since this file drifts and the filesystem is the ground truth.
 
 **Data on disk.** `data/preprocessed/{brats,brats_ssa,brats_ped}` — `brats` is backed only by the live
 Kaggle dataset `amishyadav123/neurovision-brats-prep`, so **do not delete it**. Raw data was deleted
