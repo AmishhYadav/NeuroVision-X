@@ -39,8 +39,11 @@ if (!CHROME) {
 }
 
 // "/" now serves the landing page (main.tsx routes on pathname); the tool
-// this harness actually exercises lives at "/app".
+// this harness actually exercises lives at "/app". "/clinical" (section 11
+// below) is a THIRD, independent route - the live DICOM-upload page - on
+// the same origin.
 const BASE = process.argv[2] ?? "http://localhost:5173/app";
+const CLINICAL_URL = `${new URL(BASE).origin}/clinical`;
 const PORT = 9344;
 
 const profile = mkdtempSync(join(tmpdir(), "e2e-"));
@@ -427,6 +430,69 @@ check(
   "no console errors from the report panel's interactions",
   consoleErrors.length === consoleErrorsBeforePanel,
   consoleErrors.slice(consoleErrorsBeforePanel).join(" | "),
+);
+
+console.log("\n11. Clinical upload page - refusal path");
+// Deliberately the FASTEST possible refusal, and the one requiring no
+// external stack (no dcm2niix, no ANTs, no HD-BET): a completely empty file
+// makes `create_clinical_job` (app/backend/clinical_jobs.py) raise
+// "dicom_zip is empty" before a job is even queued, which the backend
+// answers with a plain 400 + {detail}. This never reaches a ClinicalJob at
+// all, so it exercises ClinicalUploadPanel's error path rather than
+// RefusalBanner (a `state="refused"` job) - see this harness's module
+// docstring convention of testing what is fast and available rather than
+// fabricating a real DICOM fixture just for this.
+await send("Page.navigate", { url: CLINICAL_URL });
+await sleep(1500);
+
+const clinicalLoadedText = await js(bodyText);
+check(
+  "clinical page loads with an upload panel",
+  /Upload a DICOM study/.test(clinicalLoadedText),
+);
+// Case-insensitive: the header link carries Tailwind's `uppercase`, which
+// Chrome's innerText reflects (unlike textContent) - the same trap section
+// 10's badge-text check below already documents.
+check(
+  "back-to-landing link is present",
+  /neurovision-x/i.test(clinicalLoadedText),
+);
+
+// Drive the REAL <input type="file"> the same way a user would: construct a
+// File in-page (0 bytes - the empty-upload case), attach it via a
+// DataTransfer, and dispatch the change event React's onChange listens for.
+const fileAttached = await js(`(function(){
+  const input = document.querySelector('input[type="file"]');
+  if (!input) return 'MISSING_INPUT';
+  const file = new File([], 'empty.zip', { type: 'application/zip' });
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'ok';
+})()`);
+check("file input accepts a picked file", fileAttached === "ok", fileAttached);
+await sleep(300);
+
+const uploadResult = await js(clickText("Upload study"));
+check("Upload study button is enabled once a file is picked", uploadResult === "ok", uploadResult);
+
+// Poll rather than a fixed sleep: the request itself is fast, but this is
+// still a real network round trip through the dev proxy.
+let clinicalErrorText = "";
+for (let i = 0; i < 20; i++) {
+  clinicalErrorText = await js(bodyText);
+  if (/dicom_zip is empty/.test(clinicalErrorText)) break;
+  await sleep(500);
+}
+check(
+  "backend's actual refusal reason (\"dicom_zip is empty\") is shown, not a generic message",
+  /dicom_zip is empty/.test(clinicalErrorText),
+  clinicalErrorText.slice(0, 200),
+);
+check(
+  "no job/progress UI appears for a rejected upload (it never became a job)",
+  !/Declined — not segmented/.test(clinicalErrorText),
 );
 
 console.log(`\n${passed} passed, ${failures.length} failed`);

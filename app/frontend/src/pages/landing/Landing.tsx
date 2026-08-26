@@ -39,16 +39,21 @@ const NOT_CLAIMED: { what: string; why: string }[] = [
   },
 ];
 
-function openViewer() {
-  window.history.pushState({}, "", "/app");
+// Shared by every pushState-based nav link on this page (ViewerLink below,
+// and ClinicalPage's own back-to-landing link) - a plain pathname + pushState
+// navigation, no router dependency.
+function navigateTo(path: string) {
+  window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
 function ViewerLink({
+  href = "/app",
   className,
   variant = "ghost",
   children,
 }: {
+  href?: string;
   className?: string;
   variant?: "ghost" | "solid";
   children: React.ReactNode;
@@ -59,10 +64,10 @@ function ViewerLink({
       : "border border-landing-seam text-landing-text hover:border-landing-text-dim";
   return (
     <a
-      href="/app"
+      href={href}
       onClick={(e) => {
         e.preventDefault();
-        openViewer();
+        navigateTo(href);
       }}
       className={`inline-flex items-center justify-center rounded-full px-6 py-2.5 font-mono text-xs font-semibold transition-all duration-[120ms] hover:scale-[1.02] active:scale-[0.98] ${base} ${className ?? ""}`}
     >
@@ -78,9 +83,22 @@ function Nav() {
         <span className="font-condensed text-sm font-semibold tracking-[0.12em] text-landing-text uppercase">
           NeuroVision-X
         </span>
-        <ViewerLink variant="ghost" className="!px-4 !py-1.5">
-          Open the viewer
-        </ViewerLink>
+        <div className="flex items-center gap-2">
+          {/* Unobtrusive: a plain-text link rather than a second pill, so it
+              reads as a secondary path next to the primary "Open the viewer"
+              CTA, not a competing one. Routes to /clinical - see main.tsx;
+              /app remains the separate precomputed-case viewer. */}
+          <ViewerLink
+            href="/clinical"
+            variant="ghost"
+            className="!border-transparent !px-3 !py-1.5 !text-landing-text-secondary hover:!text-landing-text"
+          >
+            Upload a scan
+          </ViewerLink>
+          <ViewerLink variant="ghost" className="!px-4 !py-1.5">
+            Open the viewer
+          </ViewerLink>
+        </div>
       </div>
     </nav>
   );

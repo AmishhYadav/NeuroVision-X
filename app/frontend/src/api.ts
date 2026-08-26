@@ -383,3 +383,214 @@ export async function fetchReport(caseId: string, signal?: AbortSignal): Promise
   const raw = (await res.json()) as unknown;
   return validateReport(raw);
 }
+
+// --------------------------------------------------------------------- //
+// Clinical pipeline (Milestone 4 Phase E) - a REAL DICOM study, uploaded
+// live and run through ingest -> input QC -> clinical preprocessing ->
+// segmentation -> the gatekeeper. Mirrors `app.backend.clinical_jobs
+// .ClinicalJob` (a plain dataclass, serialised field-for-field via
+// `dataclasses.asdict` in `app/backend/api.py`'s `_clinical_job_to_json`)
+// and the nested report/decision shapes from
+// `neurovision.inference.input_qc.InputQCReport.to_dict` and
+// `neurovision.inference.gatekeeper.GateDecision.to_dict`. Every field name
+// and nesting level below was checked against those three functions'
+// current source, not assumed.
+// --------------------------------------------------------------------- //
+
+export type ClinicalJobState = "queued" | "running" | "done" | "refused" | "failed";
+
+/** `neurovision.inference.input_qc.Severity` - ordered ok < warn < refuse. */
+export type GateSeverity = "ok" | "warn" | "refuse";
+
+/** `neurovision.inference.gatekeeper.Decision` - ordered proceed < proceed_with_caution < refuse. */
+export type GateDecisionValue = "proceed" | "proceed_with_caution" | "refuse";
+
+/** `neurovision.inference.input_qc.Finding.to_dict()`'s per-item shape. */
+export interface InputQCFinding {
+  check: string;
+  severity: GateSeverity;
+  message: string;
+  detail: Record<string, unknown>;
+}
+
+/** `neurovision.inference.input_qc.InputQCReport.to_dict()`. */
+export interface InputQCReportJson {
+  verdict: GateSeverity;
+  findings: InputQCFinding[];
+}
+
+/** `neurovision.inference.gatekeeper.SignalVerdict`, as serialised by `GateDecision.to_dict()`. */
+export interface GatekeeperSignalVerdict {
+  signal: string;
+  decision: GateDecisionValue;
+  available: boolean;
+  enabled: boolean;
+  message: string;
+  detail: Record<string, unknown>;
+}
+
+/** `neurovision.inference.gatekeeper.GateDecision.to_dict()`. */
+export interface GatekeeperDecisionJson {
+  decision: GateDecisionValue;
+  verdicts: GatekeeperSignalVerdict[];
+}
+
+/**
+ * One DICOM series' role assignment, from `neurovision.data.dicom_ingest
+ * .RoleAssignment` (`role` is `null` when a series matched none of ours, or
+ * was rejected outright, or was too ambiguous to call).
+ */
+export interface ClinicalSeriesAssignment {
+  role: string | null;
+  score: number;
+  reasons: string[];
+  outcome: string;
+}
+
+/**
+ * A series `assign_roles` could not place. `app/backend/clinical_jobs.py`'s
+ * `_ingest_result_to_dict` emits this as an OBJECT, `{series_uid, reason}` -
+ * not the `[uid, reason]` tuple pair this file's own docstring conventions
+ * might otherwise suggest, so it is typed exactly as the server sends it.
+ */
+export interface ClinicalRejectedSeries {
+  series_uid: string;
+  reason: string;
+}
+
+/** `app/backend/clinical_jobs.py`'s `_ingest_result_to_dict` of E1's `IngestResult`. */
+export interface ClinicalIngestResult {
+  paths: Record<string, string>;
+  assignments: Record<string, ClinicalSeriesAssignment>;
+  missing_roles: string[];
+  rejected: ClinicalRejectedSeries[];
+  warnings: string[];
+}
+
+/**
+ * `app.backend.clinical_jobs.ClinicalJob`, serialised verbatim via
+ * `dataclasses.asdict`. See that dataclass's docstring for the field-by-
+ * field meaning and the fixed pipeline order that populates them.
+ *
+ * `state="refused"` is a distinct, successful terminal state, not an error -
+ * one of the label-free gates (input QC or the gatekeeper) looked at this
+ * exact study and correctly declined it. `error` is set for both `"refused"`
+ * and `"failed"`; only `state` tells them apart.
+ */
+export interface ClinicalJob {
+  job_id: string;
+  state: ClinicalJobState;
+  stage: string;
+  progress: number;
+  case_id: string;
+  error: string | null;
+  ingest_result: ClinicalIngestResult | null;
+  input_qc_pre: InputQCReportJson | null;
+  input_qc_post: InputQCReportJson | null;
+  preprocess_warnings: string[] | null;
+  gatekeeper_decision: GatekeeperDecisionJson | null;
+  created_at: number;
+  updated_at: number;
+}
+
+/**
+ * Uploads a raw DICOM study `.zip` and queues a clinical job.
+ *
+ * `FormData` sets its own multipart boundary via `Content-Type` - setting
+ * that header manually here would omit the boundary parameter and the
+ * server would fail to parse the body at all.
+ *
+ * Mirrors `fetchReport`'s error handling exactly: a non-2xx response's body
+ * is read for a `detail` string (the server's actual reason - "dicom_zip is
+ * empty", a zip-slip attempt, an oversized upload) and that becomes the
+ * thrown `ApiError`'s message, falling back to the generic
+ * status-line message when the body is not JSON or carries no `detail`.
+ */
+export async function createClinicalJob(
+  dicomZip: Blob,
+  signal?: AbortSignal,
+): Promise<ClinicalJob> {
+  const path = "/clinical/upload";
+  const formData = new FormData();
+  formData.append("dicom_zip", dicomZip);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { method: "POST", body: formData, signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (!res.ok) {
+    if (GATEWAY_DOWN.has(res.status)) throw new ApiUnreachableError();
+    let detail: string | undefined;
+    try {
+      const body = (await res.json()) as unknown;
+      if (body && typeof body === "object" && typeof (body as { detail?: unknown }).detail === "string") {
+        detail = (body as { detail: string }).detail;
+      }
+    } catch {
+      // Body wasn't JSON (or was empty) - fall through to the generic message.
+    }
+    throw new ApiError(res.status, detail ?? `${res.status} ${res.statusText} on ${path}`);
+  }
+  return (await res.json()) as ClinicalJob;
+}
+
+export function getClinicalJob(jobId: string, signal?: AbortSignal): Promise<ClinicalJob> {
+  return getJson<ClinicalJob>(`/clinical/jobs/${encodeURIComponent(jobId)}`, signal);
+}
+
+/**
+ * Deletes a clinical job and everything it wrote to disk.
+ *
+ * Not built on `getJson` (GET-only) or `getBinary` (binary-only) - a small,
+ * one-off `fetch` with `method: "DELETE"`, same non-2xx handling as every
+ * other JSON route (`responseError`, so a dead backend behind the dev proxy
+ * still classifies as unreachable rather than a bare 502 `ApiError`).
+ */
+export async function deleteClinicalJob(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<{ job_id: string; deleted: boolean }> {
+  const path = `/clinical/jobs/${encodeURIComponent(jobId)}`;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { method: "DELETE", signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (!res.ok) {
+    throw responseError(res, path);
+  }
+  return (await res.json()) as { job_id: string; deleted: boolean };
+}
+
+/**
+ * One modality volume from a `"done"` clinical job - same wire shape as
+ * `getVolume`, a 409 (job not done yet, including a `"refused"` job - there
+ * is nothing to view) or 404 (unknown modality or job) surfacing as an
+ * `ApiError` via `getBinary`'s existing handling.
+ */
+export function getClinicalJobVolume(
+  jobId: string,
+  modality: Modality,
+  fallbackShape: [number, number, number],
+  signal?: AbortSignal,
+): Promise<VolumeBuffer> {
+  return getBinary(
+    `/clinical/jobs/${encodeURIComponent(jobId)}/volume/${modality}`,
+    fallbackShape,
+    signal,
+  );
+}
+
+/** The clinical job's segmentation as a `{0,1,2,3}` class map - same wire shape as `getMask`. */
+export function getClinicalJobMask(
+  jobId: string,
+  fallbackShape: [number, number, number],
+  signal?: AbortSignal,
+): Promise<VolumeBuffer> {
+  return getBinary(`/clinical/jobs/${encodeURIComponent(jobId)}/mask/prediction`, fallbackShape, signal);
+}
