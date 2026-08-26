@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   ApiUnreachableError,
@@ -22,6 +22,7 @@ import { MetricsPanel } from "./components/MetricsPanel";
 import { Legend } from "./components/Legend";
 import { ControlBar, MODALITY_ORDER } from "./components/ControlBar";
 import { ReportPanel, type ReportPanelStatus } from "./components/ReportPanel";
+import { BrainTwinScene, type BrainTwinInput } from "./components/BrainTwinScene";
 
 const UNCERTAINTY_OPACITY = 0.6;
 const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 };
@@ -51,6 +52,8 @@ export default function App() {
   const [singlePlane, setSinglePlane] = useState<Plane>("axial");
   const [focusedPlane, setFocusedPlane] = useState<Plane>("axial");
   const [sliceIndices, setSliceIndices] = useState<Record<Plane, number>>(ZERO_PLANES);
+
+  const [twinOpen, setTwinOpen] = useState(false);
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reportStatus, setReportStatus] = useState<ReportPanelStatus>("loading");
@@ -258,6 +261,38 @@ export default function App() {
   const profilePlane = caseData.profile?.planes[ribbonPlane];
   const showCaseListInline = isPanelWidth;
 
+  // Built only while the twin view is actually open (a worker pass over a
+  // full volume is not free) and only once every modality has arrived, so
+  // the brain shell it produces reflects the whole case, not a partial one.
+  const twinInput: BrainTwinInput | null = useMemo(() => {
+    if (!twinOpen || !detail || !selectedCaseId) return null;
+    const modalityVolumes = Object.values(caseData.volumes)
+      .map((v) => v?.data)
+      .filter((d): d is Uint8Array => d != null);
+    if (modalityVolumes.length < 4) return null;
+    const tumorMask = caseData.labelMask?.data ?? caseData.predictionMask?.data ?? null;
+    const tumorSource: "label" | "prediction" | null = caseData.labelMask
+      ? "label"
+      : caseData.predictionMask
+        ? "prediction"
+        : null;
+    return {
+      caseId: selectedCaseId,
+      shape: detail.meta.shape,
+      spacing: detail.meta.spacing,
+      modalityVolumes,
+      tumorMask,
+      tumorSource,
+    };
+  }, [
+    twinOpen,
+    detail,
+    selectedCaseId,
+    caseData.volumes,
+    caseData.labelMask,
+    caseData.predictionMask,
+  ]);
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-text-primary">
       <Header
@@ -347,44 +382,52 @@ export default function App() {
                   </span>
                 </div>
               )}
-              <div className="min-h-0 flex-1">
-                <ViewportGrid
-                  layout={layout}
-                  expandedPlane={expandedPlane}
-                  onToggleExpand={(plane) =>
-                    setExpandedPlane((prev) => (prev === plane ? null : plane))
-                  }
-                  singlePlane={singlePlane}
-                  onChangeSinglePlane={setSinglePlane}
-                  onFocusPlane={setFocusedPlane}
-                  sliceIndices={sliceIndices}
-                  planeCounts={planeCounts}
-                  shape={shape}
-                  image={caseData.volumes[modality]?.data ?? null}
-                  predictionMask={caseData.predictionMask?.data ?? null}
-                  labelMask={caseData.labelMask?.data ?? null}
-                  uncertainty={caseData.uncertainty?.data ?? null}
-                  overlayMode={overlayMode}
-                  overlayOpacity={overlayOpacity}
-                  showTruthOutline={showTruthOutline}
-                  showUncertainty={showUncertainty}
-                  uncertaintyOpacity={UNCERTAINTY_OPACITY}
-                />
-              </div>
-              <div className="shrink-0">
-                <SliceRibbon
-                  planeLabel={ribbonLabel}
-                  sliceCount={planeCounts[ribbonPlane]}
-                  currentIndex={sliceIndices[ribbonPlane]}
-                  onScrub={(i) =>
-                    setSliceIndices((prev) => ({ ...prev, [ribbonPlane]: i }))
-                  }
-                  tumor={profilePlane?.tumor ?? EMPTY_PROFILE}
-                  error={profilePlane?.error ?? null}
-                  entropy={profilePlane?.entropy ?? null}
-                  onFocusRibbon={() => setFocusedPlane(ribbonPlane)}
-                />
-              </div>
+              {twinOpen ? (
+                <div className="min-h-0 flex-1 border border-surface-seam bg-surface-panel">
+                  <BrainTwinScene input={twinInput} />
+                </div>
+              ) : (
+                <>
+                  <div className="min-h-0 flex-1">
+                    <ViewportGrid
+                      layout={layout}
+                      expandedPlane={expandedPlane}
+                      onToggleExpand={(plane) =>
+                        setExpandedPlane((prev) => (prev === plane ? null : plane))
+                      }
+                      singlePlane={singlePlane}
+                      onChangeSinglePlane={setSinglePlane}
+                      onFocusPlane={setFocusedPlane}
+                      sliceIndices={sliceIndices}
+                      planeCounts={planeCounts}
+                      shape={shape}
+                      image={caseData.volumes[modality]?.data ?? null}
+                      predictionMask={caseData.predictionMask?.data ?? null}
+                      labelMask={caseData.labelMask?.data ?? null}
+                      uncertainty={caseData.uncertainty?.data ?? null}
+                      overlayMode={overlayMode}
+                      overlayOpacity={overlayOpacity}
+                      showTruthOutline={showTruthOutline}
+                      showUncertainty={showUncertainty}
+                      uncertaintyOpacity={UNCERTAINTY_OPACITY}
+                    />
+                  </div>
+                  <div className="shrink-0">
+                    <SliceRibbon
+                      planeLabel={ribbonLabel}
+                      sliceCount={planeCounts[ribbonPlane]}
+                      currentIndex={sliceIndices[ribbonPlane]}
+                      onScrub={(i) =>
+                        setSliceIndices((prev) => ({ ...prev, [ribbonPlane]: i }))
+                      }
+                      tumor={profilePlane?.tumor ?? EMPTY_PROFILE}
+                      error={profilePlane?.error ?? null}
+                      entropy={profilePlane?.entropy ?? null}
+                      onFocusRibbon={() => setFocusedPlane(ribbonPlane)}
+                    />
+                  </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -433,6 +476,8 @@ export default function App() {
         hasReport={hasReport}
         reportOpen={reportOpen}
         onToggleReport={() => setReportOpen((v) => !v)}
+        twinOpen={twinOpen}
+        onToggleTwin={() => setTwinOpen((v) => !v)}
       />
     </div>
   );

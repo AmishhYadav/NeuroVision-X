@@ -1,0 +1,9 @@
+{
+  "case_id": "BraTS2021_00000",
+  "modality": "t1ce",
+  "plane": "axial",
+  "slice_index": 70,
+  "width": 136,
+  "height": 171,
+  "source": "ground-truth label, BraTS 2021 evaluation cohort, preprocessed frame"
+}

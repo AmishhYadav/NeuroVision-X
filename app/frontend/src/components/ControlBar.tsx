@@ -1,4 +1,4 @@
-import { FileText, Power } from "lucide-react";
+import { Brain, FileText, Power } from "lucide-react";
 import type { Modality } from "../api";
 import type { OverlayMode } from "../lib/render";
 
@@ -19,6 +19,8 @@ interface ControlBarProps {
   hasReport: boolean;
   reportOpen: boolean;
   onToggleReport: () => void;
+  twinOpen: boolean;
+  onToggleTwin: () => void;
 }
 
 // Visual left-to-right order shown in the control bar; keys 1-4 map to this
@@ -59,6 +61,8 @@ export function ControlBar({
   hasReport,
   reportOpen,
   onToggleReport,
+  twinOpen,
+  onToggleTwin,
 }: ControlBarProps) {
   return (
     // Wraps to a second row on narrow screens rather than clipping. It used to
@@ -204,6 +208,23 @@ export function ControlBar({
           No report has been generated for this case.
         </span>
       )}
+
+      <Divider />
+
+      <button
+        type="button"
+        onClick={onToggleTwin}
+        aria-pressed={twinOpen}
+        title="Real 3D reconstruction of this case's own tumour"
+        className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+          twinOpen
+            ? "bg-surface-raised text-text-primary"
+            : "text-text-secondary hover:text-text-primary"
+        }`}
+      >
+        <Brain size={13} aria-hidden="true" />
+        3D twin
+      </button>
     </div>
   );
 }

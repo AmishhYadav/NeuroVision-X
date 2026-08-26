@@ -38,6 +38,21 @@
   --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
   --font-condensed: "IBM Plex Sans Condensed", ui-sans-serif, system-ui, sans-serif;
+
+  /* Landing page ONLY - a deliberately separate light palette. Never used
+     inside the clinical viewer (App.tsx and its components), which stays on
+     the dark surface and text tokens above; a marketing surface and a
+     clinical instrument are allowed different registers, but neither may
+     bleed into the other (Page Theme Lock applies WITHIN each, not across
+     the boundary between them). */
+  --color-landing-bg: #f6f5f2;
+  --color-landing-bg-raised: #ffffff;
+  --color-landing-seam: #e3e1da;
+  --color-landing-text: #14171c;
+  --color-landing-text-secondary: #4b5058;
+  --color-landing-text-dim: #868c95;
+  --color-landing-accent: #0b5fff;
+  --color-landing-accent-ink: #ffffff;
 }
 
 @layer base {
@@ -84,5 +99,117 @@
       transition-duration: 0.001ms !important;
       animation-duration: 0.001ms !important;
     }
+  }
+}
+
+/* --- Landing page only: restrained glass + entrance motion ---------------
+   Kept separate from the tool's own (motion-free) chrome. Liquid glass is a
+   web approximation (see design-taste-frontend skill Appendix C), not the
+   Apple platform material -- used only on the landing nav and one CTA, never
+   on the clinical viewer itself. */
+@layer components {
+  .liquid-glass {
+    position: relative;
+    overflow: hidden;
+    background: rgba(231, 234, 238, 0.04);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(231, 234, 238, 0.08);
+  }
+
+  .liquid-glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      180deg,
+      rgba(231, 234, 238, 0.22) 0%,
+      rgba(231, 234, 238, 0.06) 40%,
+      rgba(231, 234, 238, 0) 60%,
+      rgba(231, 234, 238, 0.1) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .liquid-glass {
+      background: var(--color-surface-panel);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+
+  /* Same construction, tuned for the landing page's light background. */
+  .liquid-glass-light {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .liquid-glass-light::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      180deg,
+      rgba(20, 23, 28, 0.14) 0%,
+      rgba(20, 23, 28, 0.04) 40%,
+      rgba(20, 23, 28, 0) 60%,
+      rgba(20, 23, 28, 0.08) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .liquid-glass-light {
+      background: var(--color-landing-bg-raised);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+  }
+}
+
+@keyframes heroRise {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+    filter: blur(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.hero-rise {
+  opacity: 0;
+  animation: heroRise 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-fill-mode: forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise {
+    opacity: 1;
+    animation: none;
+    filter: none;
+    transform: none;
   }
 }

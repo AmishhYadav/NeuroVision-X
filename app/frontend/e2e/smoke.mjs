@@ -11,7 +11,7 @@
 //
 // Pass a different URL as the first argument if the dev server moved:
 //
-//   node e2e/smoke.mjs http://localhost:5199/
+//   node e2e/smoke.mjs http://localhost:5199/app
 //
 // Uses no npm dependencies: Node 22 ships a global WebSocket and Chrome speaks
 // CDP over it. Exits non-zero if any check fails, and always reports console
@@ -38,7 +38,9 @@ if (!CHROME) {
   process.exit(2);
 }
 
-const BASE = process.argv[2] ?? "http://localhost:5173/";
+// "/" now serves the landing page (main.tsx routes on pathname); the tool
+// this harness actually exercises lives at "/app".
+const BASE = process.argv[2] ?? "http://localhost:5173/app";
 const PORT = 9344;
 
 const profile = mkdtempSync(join(tmpdir(), "e2e-"));
