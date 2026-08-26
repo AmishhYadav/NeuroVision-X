@@ -336,6 +336,8 @@ patching the output by hand. The patched version will not survive the next regen
 - **When the GPU track starts.** Cluster access is outside this document.
 - **Whether Phase F (IDH) is gated in.** Decide after Phase C ships. It costs a large dataset
   download and a training run, and the project functions completely without it.
+  **Decided 2026-08-26, after Gate C: not yet.** Revisit later — nothing about this is closed,
+  it is simply not started.
 
 Everything else — what gets built, in what order, with what endpoints and what decision rules — is
 settled above. That was the point of writing it down before starting.
