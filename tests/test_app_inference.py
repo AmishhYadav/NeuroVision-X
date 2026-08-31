@@ -331,3 +331,136 @@ def test_segment_case_output_respects_region_nesting(ready_settings: Settings) -
 
     assert np.all(tc[et]), "an ET voxel exists that is not part of TC"
     assert np.all(wt[tc]), "a TC voxel exists that is not part of WT"
+
+
+# --- 13+. cached_gradcam_path / explain_case --------------------------------
+#
+# explain_case's hardcoded _GRADCAM_TARGET_LAYER ("decoder.conv_blocks.2") only
+# exists on the real NeuroVisionX architecture (the "neurovision" experiment),
+# not on "baseline_unet3d"'s plain MONAI UNet -- so these tests build a real
+# "neurovision" checkpoint instead of reusing EXPERIMENT/ready_settings above.
+# That checkpoint (and the one real forward+backward grad_cam pass it costs) is
+# the slow part of this file, so it is built ONCE per module and reused
+# read-only by every test below, rather than once per test.
+
+GRADCAM_EXPERIMENT = "neurovision"
+GRADCAM_CASE_ID = "SYNTH_GRADCAM_001"
+# Strictly larger than the checkpoint's own trained 64^3 patch size on every
+# axis, so placing the Grad-CAM patch back into full geometry leaves a real
+# "outside the patch" shell to assert is exactly 0 -- a volume exactly equal
+# to the patch size would trivially pass that check with no shell left at all.
+GRADCAM_CASE_SHAPE = (80, 80, 80)
+
+
+@pytest.fixture(scope="module")
+def gradcam_checkpoint(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Builds one real 'neurovision' checkpoint, shared read-only by every test below."""
+    ckpt_dir = tmp_path_factory.mktemp("gradcam_ckpt")
+    checkpoint = ckpt_dir / "model.pt"
+    settings = _settings(ckpt_dir, checkpoint=checkpoint, experiment=GRADCAM_EXPERIMENT)
+    _build_checkpoint(settings, checkpoint)
+    return checkpoint
+
+
+@pytest.fixture
+def gradcam_settings(tmp_path: Path, gradcam_checkpoint: Path) -> Settings:
+    """A `Settings` using the shared real 'neurovision' checkpoint, with its own case."""
+    settings = _settings(tmp_path, checkpoint=gradcam_checkpoint, experiment=GRADCAM_EXPERIMENT)
+    _write_case(settings.prep_dir, GRADCAM_CASE_ID, GRADCAM_CASE_SHAPE)
+    return settings
+
+
+def _write_gradcam_prediction(settings: Settings) -> None:
+    """Writes a cached class-map prediction with a small enhancing-tumor blob near a corner.
+
+    The blob (class 3, enhancing -- counts toward both TC and WT) sits at
+    indices [15:25) on every axis, centroid 19.5 -> rounds to 20. A 64-wide
+    patch centred at 20 would start at 20 - 32 = -12 on every axis, clamped by
+    `center_patch_on_mask` to `max(0, min(-12, 80 - 64)) = 0` -- so the patch
+    deterministically occupies exactly `[0:64)` on every axis, independent of
+    any rounding subtlety, letting the tests below hand-verify the "outside
+    the patch" region directly.
+    """
+    prediction = np.zeros(GRADCAM_CASE_SHAPE, dtype=np.uint8)
+    prediction[15:25, 15:25, 15:25] = 3
+    out_path = inf.cached_prediction_path(settings, GRADCAM_CASE_ID)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(out_path, prediction)
+
+
+def test_cached_gradcam_path_is_namespaced_by_experiment_and_region(tmp_path: Path) -> None:
+    settings_a = _settings(tmp_path, experiment="baseline_unet3d")
+    settings_b = _settings(tmp_path, experiment="neurovision")
+    path_wt = inf.cached_gradcam_path(settings_a, CASE_ID, "WT")
+    path_tc = inf.cached_gradcam_path(settings_a, CASE_ID, "TC")
+    path_other_experiment = inf.cached_gradcam_path(settings_b, CASE_ID, "WT")
+
+    assert path_wt != path_tc
+    assert path_wt != path_other_experiment
+    assert "baseline_unet3d" in str(path_wt)
+    assert "neurovision" in str(path_other_experiment)
+    assert path_wt.name == f"{CASE_ID}.npy"
+    # Never created eagerly.
+    assert not path_wt.parent.exists()
+
+
+def test_explain_case_invalid_region_raises_value_error(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)  # no checkpoint/case needed -- must raise before either is read
+    with pytest.raises(ValueError, match="WT"):
+        inf.explain_case(settings, CASE_ID, "ET")
+
+
+def test_explain_case_missing_prediction_raises_file_not_found(gradcam_settings: Settings) -> None:
+    # image.npy exists (from the gradcam_settings fixture), but segment_case was
+    # never called for this case -- no cached prediction exists yet.
+    with pytest.raises(FileNotFoundError, match=GRADCAM_CASE_ID):
+        inf.explain_case(gradcam_settings, GRADCAM_CASE_ID, "WT")
+
+
+def test_explain_case_produces_full_shape_output_zero_outside_patch(
+    gradcam_settings: Settings,
+) -> None:
+    _write_gradcam_prediction(gradcam_settings)
+
+    out_path = inf.explain_case(gradcam_settings, GRADCAM_CASE_ID, "TC")
+
+    assert out_path == inf.cached_gradcam_path(gradcam_settings, GRADCAM_CASE_ID, "TC")
+    assert out_path.is_file()
+
+    cam = np.load(out_path)
+    assert cam.shape == GRADCAM_CASE_SHAPE  # the full image shape, not the 64^3 patch
+    assert cam.dtype == np.uint8
+
+    # See _write_gradcam_prediction's docstring: the patch deterministically
+    # occupies exactly [0:64) on every axis, so index >= 64 on ANY axis is
+    # strictly outside it and must carry no evidence (0 = "not computed here").
+    assert np.all(cam[64:, :, :] == 0)
+    assert np.all(cam[:, 64:, :] == 0)
+    assert np.all(cam[:, :, 64:] == 0)
+
+    # And INSIDE the patch (the same [0:64) region on every axis), there must be
+    # a real, non-degenerate heatmap -- a regression that always hit grad_cam's
+    # all-zero fallback path would still leave the outside-patch checks above
+    # green, so this guards against that silently-blank case.
+    assert cam[:64, :64, :64].max() > 0
+
+
+def test_explain_case_second_call_is_cached_not_recomputed(
+    gradcam_settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_gradcam_prediction(gradcam_settings)
+
+    out_path = inf.explain_case(gradcam_settings, GRADCAM_CASE_ID, "WT")
+    content_1 = np.load(out_path).copy()
+
+    # If the second call tried to reload the model, this raises -- proving the
+    # cache hit short-circuits before ever reaching _load_model.
+    def _raise_if_called(*args: object, **kwargs: object) -> None:
+        raise AssertionError("explain_case must not reload the model on a cache hit")
+
+    monkeypatch.setattr(inf, "_load_model", _raise_if_called)
+
+    out_path_2 = inf.explain_case(gradcam_settings, GRADCAM_CASE_ID, "WT")
+
+    assert out_path_2 == out_path
+    np.testing.assert_array_equal(np.load(out_path_2), content_1)

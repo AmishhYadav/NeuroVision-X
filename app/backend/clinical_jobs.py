@@ -20,16 +20,37 @@ PROCEED / PROCEED_WITH_CAUTION / REFUSE decision. The pipeline, in order:
          `_live_conformal_band_width`)
       -> E5 the gatekeeper (`neurovision.inference.gatekeeper.run_gatekeeper`)
 
-E6 (DICOM-SEG export) is deliberately NOT wired in here. After E2 the
-predicted mask lives in atlas (SRI24) space, not in the geometry of the
-source DICOM series it came from, and `neurovision.reporting.dicom_seg`'s
-writer REFUSES whenever a mask's geometry does not match its reference
-series (see `configs/clinical/default.yaml`'s `dicom_seg:` block comment) --
-which, without a "resample the mask back through E2's saved inverse
-transform" step that has not been built yet, is every real case. Wiring E6
-in today would mean it refuses every time; that follow-up is a separate,
-not-yet-scoped task, so no function in this module ever imports
-`neurovision.reporting.dicom_seg`.
+E6 (DICOM-SEG export, `_export_dicom_seg`) now runs after the gatekeeper, as
+a SUPPLEMENTARY artifact -- never a requirement for the clinical decision the
+job has already made by the time it runs. The chain: uncrop the cropped
+research-frame prediction back to the full atlas-space grid E2 produced
+(`neurovision.inference.postprocess.uncrop_to_original`); resample that
+ATLAS-SPACE CLASS MAP (not yet split into regions) back into the center
+modality's native (pre-E2) geometry through E2's own saved inverse transform
+(`neurovision.data.clinical_resample.resample_mask_to_source`); only THEN
+split the resampled, native-space class map into the three nested ET/TC/WT
+region channels `neurovision.reporting.dicom_seg.write_dicom_seg` wants;
+find that modality's own raw DICOM headers under this job's `raw_dicom/`
+directory; and write the SEG object. A geometry mismatch there (`write_dicom_seg`'s
+own named refusal) or any other failure in this chain is caught, logged, and
+turned into "no SEG object for this job" -- it can never turn an otherwise-good
+segmentation into a `"failed"` job, mirroring exactly the failure-isolation
+philosophy the Grad-CAM block right before it already established.
+
+Before any of that chain runs, `_validate_dicom_seg_cfg` checks the STATIC,
+config-derived parts of `cfg.clinical.dicom_seg` (`segmentation_type`,
+`series_description` length) exactly once per job, from a call site OUTSIDE
+`_export_dicom_seg`'s own narrow `except ValueError` around
+`write_dicom_seg`'s call. Those two checks are properties of the deployed
+CONFIG, not of any one case -- wrong for every job, forever, if wrong at
+all -- so they must never blend into the same routine per-job
+geometry-refusal WARNING `_export_dicom_seg` logs for a genuine per-case
+outcome. A validation failure still reaches `run_clinical_job`'s own generic
+"DICOM-SEG export failed unexpectedly" catch (the same "unexpected exception
+in the export chain" path any other unexpected failure in this chain already
+takes), logged at ERROR with a full traceback -- distinguishable from, never
+conflated with, a genuine refusal, and still never `"failed"`: this remains a
+supplementary artifact.
 
 **`"refused"` is a distinct, successful terminal state, never `"failed"`.**
 A `state="refused"` job means one of the label-free gates (E3's input QC, or
@@ -95,28 +116,30 @@ import uuid
 import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
+import nibabel as nib
 import numpy as np
 import torch
 from scipy.special import expit
 
 from neurovision.analysis.qc_inference import CaseArrays, entropy_from_logits, pack_sample
 from neurovision.data.brats import BratsCase
-from neurovision.data.clinical_preprocess import preprocess_clinical_study
+from neurovision.data.clinical_preprocess import PreprocessResult, preprocess_clinical_study
 from neurovision.data.dicom_ingest import ROLES, IngestResult, ingest_study
 from neurovision.data.preprocessing import preprocess_case
 from neurovision.data.transforms import REGION_NAMES
 from neurovision.inference.gatekeeper import Decision, GateSignals, run_gatekeeper
 from neurovision.inference.input_qc import InputQCReport, Severity, load_volume_infos, run_input_qc
-from neurovision.inference.postprocess import postprocess_logits
+from neurovision.inference.postprocess import postprocess_logits, uncrop_to_original
 from neurovision.models.qc import build_segqc
 from neurovision.models.qc import predicted_dice as qc_predicted_dice
 from neurovision.training.checkpoint import load_checkpoint
 from neurovision.utils.device import get_device
 
-from . import inference, jobs
+from . import inference, jobs, volumes
 from .config import REPO_ROOT, Settings, _path_env
 
 logger = logging.getLogger(__name__)
@@ -132,6 +155,14 @@ _CLINICAL_EXPERIMENT = "neurovision"
 # because it is part of that function's PUBLIC docstring contract ("a path
 # keyed `"brain_mask"`"), not an implementation detail.
 _BRAIN_MASK_ROLE_KEY = "brain_mask"
+
+# Must match neurovision.anatomy.localize's internal `_UNLABELLED_NAME`
+# exactly -- it is not exported, since it is an implementation detail of that
+# module's table, but `_generate_report`'s own min_frac filter has to name it
+# too when deciding which row `min_frac` filtering may never drop. Same
+# constant, same reasoning, as `scripts/localize.py`'s own
+# `_UNLABELLED_STRUCTURE_NAME`.
+_UNLABELLED_STRUCTURE_NAME = "unlabelled"
 
 # A real multi-series brain MRI study (localisers, scouts, T1/T1CE/T2/FLAIR,
 # sometimes DWI/perfusion series a real hospital PACS exports alongside them)
@@ -621,6 +652,77 @@ def _live_conformal_band_width(
     return fitted_voxels / ref_voxels
 
 
+def clinical_conformal_band_mask(
+    logits: np.ndarray,
+    region_channel: int,
+    fitted_threshold: float,
+    *,
+    reference_threshold: float = 0.5,
+) -> np.ndarray:
+    """Per-voxel conformal band, for visualization: which voxels are in which mask.
+
+    Pure and label-free, like `_live_conformal_band_width` (which this does
+    NOT replace -- that function stays the gatekeeper's scalar signal; this
+    one is for drawing an overlay, at the SAME two thresholds on the SAME
+    two masks).
+
+    Args:
+        logits: `(3, D, H, W)` raw model logits, channel order (ET, TC, WT).
+        region_channel: Which region channel to read (0=ET, 1=TC, 2=WT).
+        fitted_threshold: The region's fitted conformal threshold.
+        reference_threshold: The ordinary segmentation threshold, default 0.5.
+
+    Returns:
+        `(D, H, W)` uint8 array:
+          - 0   = outside the conservative (fitted-threshold) mask entirely
+          - 128 = inside the conservative mask but outside the reference
+                  (0.5) mask -- the "uncertain band": voxels only the
+                  distribution-free guarantee covers, not the point estimate
+          - 255 = inside the reference (0.5) mask (and therefore, by the
+                  masks' nesting, inside the conservative mask too, since a
+                  lower/more permissive threshold can only add voxels, never
+                  remove them -- asserted below rather than assumed, since a
+                  mis-fitted threshold on the wrong side of 0.5 would
+                  silently produce a nonsensical band otherwise)
+
+    Raises:
+        ValueError: If `fitted_threshold` is on the wrong side of
+            `reference_threshold` for this data -- i.e. some voxel is inside
+            the reference (0.5) mask but NOT inside the conservative
+            (fitted-threshold) mask. This should never happen for a validly
+            fitted conformal threshold under this project's
+            false-negative-rate loss (see the module docstring's conformal
+            section), so it is treated as a data problem worth surfacing
+            loudly rather than a buffer that would look plausible while
+            encoding a violated invariant.
+    """
+    prob = expit(logits[region_channel].astype(np.float64))
+    reference_mask = prob > reference_threshold
+    conservative_mask = prob > fitted_threshold
+
+    # Voxels the reference mask claims but the "conservative" mask does not
+    # -- if any exist, fitted_threshold is not actually more permissive than
+    # reference_threshold, and the nesting this function's Returns section
+    # promises does not hold.
+    violation = reference_mask & ~conservative_mask
+    if violation.any():
+        region_name = REGION_NAMES[region_channel]
+        raise ValueError(
+            f"clinical_conformal_band_mask: invariant violated for region {region_name!r} "
+            f"(region_channel={region_channel}) -- fitted_threshold={fitted_threshold} "
+            f"produced a conservative mask SMALLER than the reference mask at "
+            f"reference_threshold={reference_threshold} ({int(violation.sum())} voxel(s) "
+            "affected). A validly-fitted conformal threshold must sit on the permissive side "
+            "of the reference threshold; refusing to return a band buffer that would encode "
+            "this violated invariant."
+        )
+
+    band = np.zeros(prob.shape, dtype=np.uint8)
+    band[conservative_mask] = 128
+    band[reference_mask] = 255  # overwrites 128 wherever both masks agree
+    return band
+
+
 def _load_conformal_fitted_thresholds(regions: Sequence[str], alpha: float) -> dict[str, float]:
     """Loads the fitted conformal threshold for each region, at one alpha, from `fit.json`.
 
@@ -709,6 +811,597 @@ def _ingest_result_to_dict(result: IngestResult) -> dict[str, Any]:
         "rejected": [{"series_uid": uid, "reason": reason} for uid, reason in result.rejected],
         "warnings": list(result.warnings),
     }
+
+
+# ---------------------------------------------------------------------------
+# _export_dicom_seg (E6): the mask, as a DICOM Segmentation object.
+# ---------------------------------------------------------------------------
+
+
+def _class_map_to_regions(class_map: np.ndarray) -> np.ndarray:
+    """Expands a `{0,1,2,3}` class map into `(3, D, H, W)` binary (ET, TC, WT) regions.
+
+    The inverse of `neurovision.reporting.dicom_seg.classes_from_regions` --
+    `write_dicom_seg` needs region channels IN, not a class map. Same nesting
+    definition as `neurovision.data.transforms.ConvertToRegionsd._convert`
+    and `app.backend.volumes.region_voxel_counts` (the canonical source of
+    truth for these three lines): ET is class 3 alone, TC is necrotic core
+    (1) or enhancing (3), WT is any nonzero class. Written directly rather
+    than reusing `ConvertToRegionsd` itself, which is a MONAI dict-transform
+    built for a keyed, tensor-based data-loading pipeline and is not a clean
+    fit for a bare numpy array outside one.
+
+    Args:
+        class_map: `(D, H, W)` integer array, values in `{0, 1, 2, 3}`.
+
+    Returns:
+        `(3, D, H, W)` `uint8` array, channel order `(ET, TC, WT)`, values
+        in `{0, 1}`.
+    """
+    et = class_map == 3
+    tc = et | (class_map == 1)
+    wt = tc | (class_map == 2)
+    return np.stack([et, tc, wt], axis=0).astype(np.uint8)
+
+
+def _series_uid_for_role(ingest_result: IngestResult, role: str) -> str | None:
+    """Finds which series_uid E1 assigned to `role`, or `None` if none was.
+
+    Args:
+        ingest_result: E1's result.
+        role: One of `neurovision.data.dicom_ingest.ROLES`.
+
+    Returns:
+        The series_uid whose `RoleAssignment.role == role`, or `None` if no
+        series in `ingest_result.assignments` was assigned that role.
+    """
+    for uid, assignment in ingest_result.assignments.items():
+        if assignment.role == role:
+            return uid
+    return None
+
+
+def _collect_source_datasets(raw_dicom_dir: Path, series_uid: str) -> list[Any]:
+    """Reads every DICOM file under `raw_dicom_dir` belonging to one series, header-only.
+
+    Mirrors `neurovision.data.dicom_ingest.convert_series`'s own series-matching
+    scan exactly (that function is the reference for "the real, correct way to
+    collect one series' files" under this job's `raw_dicom/` directory): walk
+    every file recursively, read its header only (`stop_before_pixels=True`,
+    matching `dicom_seg.read_source_geometry`'s own stated "header only -- pixel
+    data need not be loaded" contract), silently skip anything that is not
+    readable DICOM (a DICOMDIR index, a stray README -- the same tolerance
+    `read_series_headers`/`convert_series` already have for a real study
+    folder), and keep the ones whose `SeriesInstanceUID` matches. This does NOT
+    re-run role assignment; the series_uid to look for is already decided (see
+    `_series_uid_for_role`).
+
+    Args:
+        raw_dicom_dir: This job's own extracted DICOM study directory
+            (`<job_dir>/raw_dicom`).
+        series_uid: The target series' `SeriesInstanceUID`.
+
+    Returns:
+        One `pydicom.Dataset` per matching file, in `raw_dicom_dir.rglob("*")`
+        order (sorted, for a deterministic result). Possibly empty.
+    """
+    import pydicom
+
+    datasets: list[Any] = []
+    for path in sorted(Path(raw_dicom_dir).rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            dataset = pydicom.dcmread(str(path), stop_before_pixels=True, force=True)
+        except Exception:  # noqa: BLE001 - a study folder may hold non-DICOM files
+            continue
+        if str(getattr(dataset, "SeriesInstanceUID", "")) == series_uid:
+            datasets.append(dataset)
+    return datasets
+
+
+def _validate_dicom_seg_cfg(cfg: Any) -> None:
+    """Validates the STATIC, config-derived parts of `cfg.clinical.dicom_seg`.
+
+    Deliberately separate from `write_dicom_seg`'s own `ValueError`s (raised
+    inside `neurovision.reporting.dicom_seg.write_dicom_seg`, per its
+    `Raises` docstring): that function's checks mix genuine PER-CASE outcomes
+    (a geometry mismatch against one job's own source series; one job's
+    all-empty predicted class map) with checks that are actually properties
+    of the CONFIG alone (`segmentation_type` not `"BINARY"`; an over-length
+    `series_description`) -- wrong here means wrong for every job, forever,
+    not just this one. `_export_dicom_seg`'s own `except ValueError` around
+    `write_dicom_seg`'s call treats every one of those identically (a routine
+    WARNING, no SEG object for this job), which is correct for the per-case
+    ones but would quietly bury a config bug behind that same unremarkable
+    per-job log line. This function exists so the caller (`run_clinical_job`)
+    can check the config-derived pieces ONCE, from a call site that is NOT
+    inside that narrow `except ValueError`, so a config bug instead surfaces
+    through the caller's generic "something unexpected happened in this
+    chain" handling -- logged distinguishably (see that call site) rather
+    than silently.
+
+    Does not check `regions`' shape/values (also named in
+    `write_dicom_seg`'s `Raises` section): that one is driven entirely by
+    `_class_map_to_regions`'s own output, which is well-formed by
+    construction, never by anything in `cfg` -- there is no static config
+    value to validate for it.
+
+    Args:
+        cfg: The composed config; reads `cfg.clinical.dicom_seg`.
+
+    Raises:
+        ValueError: If `cfg.clinical.dicom_seg.segmentation_type` is not
+            `"BINARY"`, or if `cfg.clinical.dicom_seg.series_description` is
+            longer than 64 characters -- DICOM's Long String (LO) value
+            representation, which is what `SeriesDescription` uses, caps a
+            value at 64 characters (the same limit
+            `write_dicom_seg` itself enforces immediately before writing;
+            checking it here as well means a misconfigured description is
+            caught before any of this job's uncrop/resample work runs, not
+            only after `write_dicom_seg` gets around to it).
+    """
+    dicom_seg_cfg = cfg.clinical.dicom_seg
+
+    if dicom_seg_cfg.segmentation_type != "BINARY":
+        raise ValueError(
+            "_validate_dicom_seg_cfg: cfg.clinical.dicom_seg.segmentation_type must be "
+            f"'BINARY', got {dicom_seg_cfg.segmentation_type!r}. This is a STATIC "
+            "configuration problem -- it would misconfigure DICOM-SEG export for every "
+            "clinical job, not just this one -- so it is checked here, separately from "
+            "write_dicom_seg's own per-job ValueError, precisely so it cannot be mistaken for "
+            "a routine per-case geometry refusal."
+        )
+
+    series_description = str(dicom_seg_cfg.series_description)
+    if len(series_description) > 64:
+        raise ValueError(
+            "_validate_dicom_seg_cfg: cfg.clinical.dicom_seg.series_description is "
+            f"{len(series_description)} characters, over DICOM's Long String (LO) "
+            "SeriesDescription limit of 64. This is a STATIC configuration problem, checked "
+            "here separately from write_dicom_seg's own per-job ValueError for the same "
+            "reason as the segmentation_type check above."
+        )
+
+
+def _export_dicom_seg(
+    job: ClinicalJob,
+    preprocess_result: PreprocessResult,
+    ingest_result: IngestResult,
+    clinical_settings: Settings,
+    job_dir: Path,
+    cfg: Any,
+) -> Path | None:
+    """Exports E6's DICOM-SEG object for one finished clinical job, or gives up cleanly.
+
+    The chain, in the order actually executed: (1) uncrop the cropped
+    research-frame prediction back to the FULL, uncropped atlas-space grid E2
+    produced (`neurovision.inference.postprocess.uncrop_to_original`, using
+    `<job_prep_dir>/<case_id>/meta.json`'s `bbox`/`original_shape` -- read via
+    `app.backend.volumes.read_meta`, the same helper the research/demo path
+    already uses for this exact file); (2) resample THAT ATLAS-SPACE CLASS MAP
+    -- not yet split into regions -- into the center-role modality's native
+    (pre-E2) geometry, through E2's own saved inverse transform
+    (`neurovision.data.clinical_resample.resample_mask_to_source`); this order
+    matters and cannot be reversed, because `resample_mask_to_source`'s own
+    docstring states its `mask` argument is a class map, not region channels;
+    (3) only THEN split the resampled, now-native-space class map into the
+    three nested ET/TC/WT region channels `write_dicom_seg` actually wants
+    (`_class_map_to_regions`); (4) find the center-role series' own raw DICOM
+    headers under this job's `raw_dicom/` directory (`_series_uid_for_role` +
+    `_collect_source_datasets`); (5) write the SEG object
+    (`neurovision.reporting.dicom_seg.write_dicom_seg`).
+
+    `preprocess_result.plan.center_role` is used throughout -- as the resample
+    target AND as the DICOM-SEG reference series -- rather than any separately
+    chosen "which modality to attach the SEG to" policy, matching how this
+    project already treats the center modality as the pipeline's anchor.
+
+    This is a SUPPLEMENTARY artifact for PACS/OHIF interoperability, never a
+    requirement for the clinical decision the job has already made by the time
+    this runs (see `run_clinical_job`'s own Grad-CAM block, computed just
+    before this one, for the same philosophy). Three "cannot export, but
+    nothing is wrong" cases are absorbed HERE, returning `None` rather than
+    raising: no series was assigned the center role at all; no raw DICOM files
+    under `raw_dicom/` actually match that series_uid; and `write_dicom_seg`'s
+    own named refusal (`ValueError` -- e.g. a residual geometry mismatch after
+    a correct resample, which should be rare and worth logging distinctly from
+    a bug, but is handled identically). Any OTHER exception in this chain (a
+    missing E2 transformations directory, a bad resample, a corrupt atlas
+    NIfTI, ...) is NOT caught here -- it propagates, so `run_clinical_job`'s
+    own outer try/except around this call (mirroring the Grad-CAM loop's
+    per-region try/except) is the second, generic layer of the same
+    failure-isolation contract.
+
+    Args:
+        job: The clinical job being exported. `job.case_id` names the cached
+            prediction and the output filename.
+        preprocess_result: E2's result -- `.outputs[plan.center_role]` is read
+            for the atlas affine; `.plan.center_role` is the modality the SEG
+            is anchored to throughout; `.transformations_dir` backs the
+            resample.
+        ingest_result: E1's result -- `.assignments` is searched for the
+            series_uid E1 gave the center role; `.paths[center_role]` is the
+            target native-geometry NIfTI `resample_mask_to_source` resamples
+            onto.
+        clinical_settings: This job's segmentation `Settings` (from
+            `clinical_segmentation_settings`) -- `.prep_dir` is where
+            `meta.json` for `job.case_id` lives (read via
+            `app.backend.volumes.read_meta`), and it locates the cached
+            prediction via `inference.cached_prediction_path`.
+        job_dir: This job's own root directory (`<job root>/<job_id>`).
+            `raw_dicom/` (E1's extracted study) and `dicom_seg/`/
+            `dicom_seg_work/` (this function's own output and resample
+            working directory) all live under here.
+        cfg: The composed config, passed straight through to `write_dicom_seg`
+            (reads `cfg.clinical.dicom_seg`).
+
+    Returns:
+        Path to the written `.dcm` file, or `None` if no SEG object could be
+        produced for one of the reasons named above (logged at the point it
+        happened).
+    """
+    from neurovision.data.clinical_resample import resample_mask_to_source
+    from neurovision.reporting.dicom_seg import write_dicom_seg
+
+    center_role = preprocess_result.plan.center_role
+
+    # --- 1. Uncrop the research-frame (cropped) prediction back to the full,
+    # uncropped atlas-space grid E2 produced. ---------------------------------
+    pred_path = inference.cached_prediction_path(clinical_settings, job.case_id)
+    cropped_class_map = np.load(pred_path)  # (D, H, W), cropped research frame
+    meta = volumes.read_meta(job.case_id, clinical_settings)
+    atlas_class_map = uncrop_to_original(cropped_class_map, meta.bbox, meta.original_shape)
+
+    # --- 2. Resample the atlas-space CLASS MAP -- resample_mask_to_source's
+    # own docstring is explicit that `mask` is a class map, not region
+    # channels, so this must happen BEFORE the region split, not after. ------
+    atlas_affine = nib.load(str(preprocess_result.outputs[center_role])).affine
+    resample_dir = job_dir / "dicom_seg_work"
+    resampled_path = resample_mask_to_source(
+        atlas_class_map,
+        atlas_affine,
+        preprocess_result.transformations_dir,
+        center_role,
+        ingest_result.paths[center_role],
+        out_dir=resample_dir,
+    )
+    native_class_map = np.asarray(nib.load(str(resampled_path)).dataobj).astype(np.uint8)
+
+    # --- 3. NOW split the resampled, native-space class map into the three
+    # nested region channels write_dicom_seg wants. --------------------------
+    regions = _class_map_to_regions(native_class_map)
+
+    # --- 4. Find the center-role series' own raw DICOM headers. -------------
+    series_uid = _series_uid_for_role(ingest_result, center_role)
+    if series_uid is None:
+        logger.warning(
+            "_export_dicom_seg: no ingest assignment names role %r as a series_uid for job "
+            "%s; skipping DICOM-SEG export.",
+            center_role,
+            job.job_id,
+        )
+        return None
+
+    raw_dicom_dir = job_dir / "raw_dicom"
+    source_datasets = _collect_source_datasets(raw_dicom_dir, series_uid)
+    if not source_datasets:
+        logger.warning(
+            "_export_dicom_seg: no DICOM file(s) under %s match series_uid %r for job %s; "
+            "skipping DICOM-SEG export.",
+            raw_dicom_dir,
+            series_uid,
+            job.job_id,
+        )
+        return None
+
+    # --- 5. Write, or accept write_dicom_seg's own named refusal. -----------
+    out_path = job_dir / "dicom_seg" / f"{job.case_id}.dcm"
+    try:
+        write_dicom_seg(cfg, regions, source_datasets, out_path)
+    except ValueError as exc:
+        # write_dicom_seg's own refusal (a geometry mismatch, an all-empty
+        # class map, ...) -- see its docstring's Raises section. A correct
+        # resample should make this rare; it is worth logging distinctly from
+        # a bug, but the outcome (no SEG artifact, job still reaches "done")
+        # is identical either way.
+        logger.warning("_export_dicom_seg: write_dicom_seg refused for job %s: %s", job.job_id, exc)
+        return None
+
+    logger.info("_export_dicom_seg: wrote DICOM-SEG for job %s to %s", job.job_id, out_path)
+    return out_path
+
+
+# ---------------------------------------------------------------------------
+# _generate_report: the Phase 4 structured anatomical report, computed live.
+# ---------------------------------------------------------------------------
+
+
+def _generate_report(
+    job: ClinicalJob,
+    clinical_settings: Settings,
+    job_dir: Path,
+    cfg: Any,
+) -> Path | None:
+    """Builds and caches one clinical job's structured anatomical report (Phase 4).
+
+    `scripts/report.py` (the offline batch driver) only JOINS a `burden.csv`
+    and an `anatomy.csv` that `scripts/burden.py` / `scripts/localize.py`
+    already wrote for MANY cases -- a clinical job has exactly one case and
+    nothing written for it yet, so there is no batch CSV to join. This
+    function instead calls the single-case functions those two batch
+    drivers call underneath (`localize_case`, `summarize_case`,
+    `burden_profile`, `involvement_profile`) directly, on THIS job's own
+    already-cached prediction and its own `meta.json`, and feeds their
+    outputs straight into `build_report` -- the same assembly
+    `scripts/report.py::report_one` does, minus the CSV round trip. One
+    consequence of skipping that round trip: `report_one` pops
+    `INVOLVEMENT_FIELDS` back OUT of an `anatomy_summary` row only because
+    `scripts/localize.py`'s batch driver had already merged them IN for the
+    CSV to carry as one row. `involvement_profile` is called here directly
+    and its result is never merged into `summarize_case`'s own output in the
+    first place, so there is nothing to split back out.
+
+    Two pieces of `localize_one`'s own post-processing are replicated here,
+    NOT skipped: (1) the `cfg.analysis.localize.min_frac` filter, dropping
+    non-`"unlabelled"` rows whose `frac_of_structure` AND `frac_of_tumour`
+    are both below threshold, before the table reaches `summarize_case` /
+    `build_report`; and (2) overwriting `summarize_case`'s
+    `distance_to_eloquent_mm` (which can only ever be `0.0` on overlap or
+    `NaN` otherwise, since a tidy table carries no voxel coordinates) with
+    the real geometric distance from `distance_to_eloquent`, and
+    `near_eloquent` recomputed from it -- otherwise a lesion sitting well
+    within the configured near-eloquent threshold, but not overlapping an
+    eloquent structure, would render as `distance_mm: null, near_eloquent:
+    no` instead of the true, computable answer.
+
+    Same failure-isolation PHILOSOPHY as `_export_dicom_seg` -- a report is
+    a SUPPLEMENTARY artifact, never a requirement for the clinical decision
+    already made by the time this runs (only reached after the gatekeeper's
+    PROCEED/CAUTION) -- but a DIFFERENT SHAPE: `_export_dicom_seg` absorbs a
+    few named, expected "cannot export, but nothing is wrong" cases itself
+    and returns `None` for them. Every input this function touches (this
+    job's own just-written `meta.json` and cached prediction; the atlas and
+    knowledge files `scripts/fetch_atlas.py` and this repo's `knowledge/`
+    directory are expected to provide) is either genuinely present or a real
+    configuration problem worth surfacing loudly, so this function does not
+    catch anything itself -- it raises freely, and `run_clinical_job`'s own
+    try/except around this call (mirroring its DICOM-SEG try/except) is the
+    ONLY layer that turns a failure here into "no report for this job",
+    never `"failed"`.
+
+    The atlas, knowledge base, and involvement groups are reloaded fresh on
+    EVERY call, never cached across jobs at module scope. This matches the
+    established convention elsewhere in this backend
+    (`_load_qc_model_and_cfg` reloads the QC checkpoint every job; every
+    Hydra composition here recomposes every call) for the same reason: a
+    corrected `knowledge/eloquence_map.yaml` or a re-fetched atlas must take
+    effect on the very next job, not after a process restart. The cost is a
+    few small NIfTI files and two YAML files (single-digit MB, well under
+    the segmentation step this function runs after), which this project's
+    own convention already judges cheap enough to pay per request rather
+    than risk a stale in-memory copy.
+
+    Args:
+        job: The clinical job to report on. `job.case_id` names the cached
+            prediction and `meta.json`, and becomes the report's own
+            `case_id`.
+        clinical_settings: This job's segmentation `Settings` (from
+            `clinical_segmentation_settings`) -- `.prep_dir` is where
+            `meta.json` for `job.case_id` lives, and
+            `inference.cached_prediction_path` locates the cached class map.
+        job_dir: This job's own root directory (`<job root>/<job_id>`). The
+            report is cached at `<job_dir>/report/<case_id>.json`, mirroring
+            `_export_dicom_seg`'s own `<job_dir>/dicom_seg/<case_id>.dcm`
+            convention.
+        cfg: The composed config (`_compose_clinical_cfg`'s return value).
+            Reads `cfg.anatomy`, `cfg.analysis.localize`,
+            `cfg.analysis.burden`, and `cfg.analysis.report`.
+
+    Returns:
+        Path to the written `<case_id>.json`. This function never actually
+        returns `None` itself -- the `| None` in the signature matches the
+        same "supplementary, may not exist" contract `_export_dicom_seg`'s
+        return type states; here it is `run_clinical_job`'s wrapping
+        try/except that turns a raised exception into "no report for this
+        job", not an internal `None` return.
+
+    Raises:
+        FileNotFoundError: If this job's `meta.json`, its cached prediction,
+            or a required atlas/knowledge file is missing.
+        ValueError: See `build_report`, `localize_case`, `load_knowledge`,
+            or `load_involvement_groups`.
+    """
+    import math
+
+    from neurovision.anatomy.atlas import load_atlas
+    from neurovision.anatomy.burden import CaseGeometry, burden_profile, region_mask
+    from neurovision.anatomy.involvement import (
+        involvement_profile,
+        load_involvement_groups,
+        load_involvement_notes,
+    )
+    from neurovision.anatomy.localize import (
+        atlas_for_case,
+        distance_to_eloquent,
+        eloquent_union_mask,
+        load_classification,
+        load_knowledge,
+        localize_case,
+        summarize_case,
+    )
+    from neurovision.reporting.report import Provenance, build_report, write_report
+    from neurovision.utils.io import read_json, read_yaml
+
+    # --- This job's own artifacts first, so an incomplete pipeline fails
+    # fast, before anything as comparatively expensive as an atlas load. ----
+    meta_path = clinical_settings.prep_dir / job.case_id / "meta.json"
+    meta = read_json(meta_path)  # a raw dict, not a CaseMeta -- see this
+    # function's docstring: localize_case/atlas_for_case/CaseGeometry.from_meta
+    # all index it like a plain Mapping (meta["bbox"], meta["affine"], ...),
+    # which app.backend.volumes.CaseMeta does not expose.
+
+    pred_path = inference.cached_prediction_path(clinical_settings, job.case_id)
+    classes = np.load(pred_path)  # (D, H, W) uint8, cropped research frame, {0,1,2,3}
+
+    localize_cfg = cfg.analysis.localize
+    burden_cfg = cfg.analysis.burden
+    report_cfg = cfg.analysis.report
+
+    # --- Atlas + knowledge base, reloaded fresh every job -- see docstring. #
+    atlas = load_atlas(cfg.anatomy)
+    knowledge = load_knowledge(localize_cfg.eloquence_map, localize_cfg.lobe_map, atlas)
+
+    # `KnowledgeBase` (above) carries no `version` field of its own --
+    # `Classification` does, and the lobe map's version lives in that YAML
+    # file directly. Read exactly like scripts/report.py::load_inputs does,
+    # rather than adding a version field to KnowledgeBase for one caller.
+    classification = load_classification(localize_cfg.eloquence_map)
+    lobe_doc = read_yaml(localize_cfg.lobe_map)
+    knowledge_versions = {
+        "eloquence_map": classification.version,
+        "aal_lobes": int(lobe_doc["version"]),
+    }
+
+    # Unlike scripts/localize.py::resolve_involvement, this reads
+    # cfg.analysis.localize.involvement directly rather than defensively via
+    # `.get(...)`: that defensiveness exists there for an OLD, recorded
+    # localize_config.yaml snapshot that might predate the key. cfg here is
+    # always freshly composed by _compose_clinical_cfg, so the committed
+    # configs/analysis/default.yaml's involvement block is always present.
+    involvement_cfg = localize_cfg.involvement
+    groups = None
+    involvement_caveats: tuple[str, ...] = ()
+    if bool(involvement_cfg.enabled):
+        groups = load_involvement_groups(involvement_cfg.groups_map, atlas)
+        involvement_caveats = load_involvement_notes(involvement_cfg.groups_map)
+
+    # --- The four single-case functions scripts/burden.py's profile_case and
+    # scripts/localize.py's localize_one each call, run directly for this one
+    # case. ------------------------------------------------------------------
+    regions = [str(r) for r in localize_cfg.regions]
+    anatomy_table = localize_case(
+        classes, atlas, meta, cropped=True, regions=regions, knowledge=knowledge
+    )
+
+    # Bug fix: this function used to pass localize_case's raw table straight
+    # through, with no filtering at all. scripts/localize.py::localize_one
+    # drops any non-"unlabelled" row where BOTH frac_of_structure and
+    # frac_of_tumour are below cfg.analysis.localize.min_frac, BEFORE the
+    # table reaches summarize_case/build_report -- this keeps boundary-noise,
+    # single-voxel partial-volume overlaps out of the report's
+    # eloquence.involved list and out of n_structures_involved. Replicated
+    # here exactly (same three-part drop_mask localize_one builds; the
+    # "unlabelled" row is never dropped by it).
+    min_frac = float(localize_cfg.min_frac)
+    drop_mask = (
+        (anatomy_table["frac_of_structure"] < min_frac)
+        & (anatomy_table["frac_of_tumour"] < min_frac)
+        & (anatomy_table["structure"] != _UNLABELLED_STRUCTURE_NAME)
+    )
+    anatomy_table = anatomy_table.loc[~drop_mask].reset_index(drop=True)
+
+    anatomy_summary = summarize_case(anatomy_table, knowledge)
+
+    # Bug fix: summarize_case can only report 0.0 (the table already shows
+    # overlap with an eloquent structure) or NaN (it doesn't) for
+    # distance_to_eloquent_mm -- a tidy structure table carries no voxel
+    # coordinates, so it has no geometric distance computation of its own by
+    # design (see its own docstring). Left as-is, build_report's
+    # `_near_eloquent` treats that NaN as "unmeasured" and reports
+    # near_eloquent=False even when the true, computable distance is inside
+    # the configured near-eloquent threshold -- a confident, well-formed "no"
+    # where the right answer is "yes". Overwrite both fields with the real
+    # geometric measurement here, replicating
+    # scripts/localize.py::localize_one's own override exactly: the WT
+    # (whole-tumour) mask against the knowledge base's eloquent-structure
+    # union, cropped to this case's bbox the same way `atlas_for_case` crops
+    # the parcellation, then compared against the same near-eloquent
+    # threshold.
+    wt_mask = region_mask(classes, "WT")
+    spacing = tuple(float(s) for s in meta["spacing"])
+    eloquent_mask = eloquent_union_mask(atlas, knowledge)
+    bbox = tuple(tuple(int(v) for v in pair) for pair in meta["bbox"])
+    cropped_eloquent_mask = eloquent_mask[tuple(slice(start, end) for start, end in bbox)]
+    distance_mm = distance_to_eloquent(wt_mask, cropped_eloquent_mask, spacing=spacing)
+    near_eloquent_mm = float(knowledge.near_eloquent_mm)
+    # False (never NaN-propagated) when the distance is NaN: "near an
+    # eloquent structure" cannot be true of an undefined distance -- same
+    # rule localize_one applies.
+    near_eloquent = bool(not math.isnan(distance_mm) and distance_mm <= near_eloquent_mm)
+    anatomy_summary["distance_to_eloquent_mm"] = distance_mm
+    anatomy_summary["near_eloquent"] = near_eloquent
+
+    geom = CaseGeometry.from_meta(meta, cropped=True, midline_index=burden_cfg.midline_index)
+    burden = burden_profile(
+        classes,
+        geom,
+        min_volume_mm3=float(burden_cfg.min_volume_mm3),
+        connectivity=int(burden_cfg.connectivity),
+    )
+
+    involvement = None
+    if groups is not None:
+        # WT (never ET/TC), reusing the `wt_mask` already computed above for
+        # the eloquence-distance fix: this layer answers "what does the
+        # lesion touch overall", the same scope Phase 3b's own driver uses it
+        # for -- see scripts/localize.py::localize_one's comment on this
+        # exact choice.
+        parcellation, tissue = atlas_for_case(atlas, meta, cropped=True)
+        involvement = involvement_profile(
+            wt_mask,
+            parcellation,
+            tissue,
+            atlas,
+            groups,
+            geom,
+            min_overlap_mm3=float(involvement_cfg.min_overlap_mm3),
+            lobe=knowledge.lobe,
+        )
+
+    coverage_line = knowledge.coverage_line(len(knowledge.eloquence))
+
+    provenance = Provenance(
+        atlas_name=atlas.name,
+        atlas_version=atlas.version,
+        atlas_source=atlas.source,
+        atlas_licence=str(cfg.anatomy.licence),
+        knowledge_versions=knowledge_versions,
+        # A live clinical job's mask is always the deployed model's own
+        # prediction -- there is no ground truth to report against here.
+        segmentation_source="prediction",
+        # No <eval_dir> exists for a live job (see this module's docstring,
+        # "which model" section) -- the job id is this artifact's own
+        # sufficient provenance back to exactly which run produced it.
+        segmentation_dir=f"live clinical pipeline, job {job.job_id}",
+        # No cheap, correct way to attach a git SHA to a live server request
+        # the way scripts/report.py::git_revision does ONCE per batch run --
+        # left unset (Provenance.code_revision is optional) rather than
+        # guessed.
+        code_revision=None,
+        generated_utc=datetime.now(UTC).isoformat(),
+    )
+
+    report = build_report(
+        job.case_id,
+        burden,
+        anatomy_table,
+        anatomy_summary,
+        provenance,
+        evidence=knowledge.evidence,
+        citation=knowledge.citation,
+        classification_name=knowledge.classification_name,
+        coverage_line=coverage_line,
+        coverage_gaps=knowledge.coverage_gaps,
+        near_eloquent_mm=knowledge.near_eloquent_mm,
+        top_n=int(report_cfg.top_n),
+        involvement=involvement,
+        involvement_caveats=involvement_caveats,
+    )
+
+    out_dir = job_dir / "report"
+    written = write_report(report, out_dir, markdown=False)
+    return written["json"]
 
 
 # ---------------------------------------------------------------------------
@@ -929,6 +1622,88 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
                 job, state="refused", stage="gatekeeper", error=f"Gatekeeper refused: {reasons}"
             )
             return job
+
+        # --- Explainability (supplementary; failures here must never fail the job) --
+        # Only reached once the gatekeeper has already said PROCEED/CAUTION -- a
+        # refused segmentation is never explained (see this module's docstring: it
+        # has already been rejected). Grad-CAM is a supplementary feature, not core
+        # to producing a valid segmentation, so each region gets its OWN try/except:
+        # a WT failure must not also skip TC, and neither must ever turn an
+        # otherwise-good job into "failed". `inference.explain_case` already handles
+        # the normal, expected "no predicted foreground for this region" case
+        # gracefully (see `center_patch_on_mask`'s own empty-mask fallback), so a
+        # raise here means something more unusual happened -- worth logging loudly,
+        # not worth losing the whole job over.
+        _update_clinical_job(job, stage="explaining", progress=0.9)
+        for region in ("WT", "TC"):
+            try:
+                inference.explain_case(clinical_settings, job.case_id, region)
+            except Exception:  # noqa: BLE001 - explainability must never fail the job
+                logger.error(
+                    "run_clinical_job: Grad-CAM failed for job %s, region %s",
+                    job_id,
+                    region,
+                    exc_info=True,
+                )
+
+        # --- DICOM-SEG export (E6; supplementary, must never fail the job) --
+        # `_validate_dicom_seg_cfg` checks the STATIC, config-derived parts of
+        # cfg.clinical.dicom_seg (segmentation_type, series_description
+        # length) ONCE, here -- deliberately OUTSIDE `_export_dicom_seg`'s own
+        # narrow `except ValueError` around write_dicom_seg's call, so a
+        # config bug (wrong for EVERY job, forever) cannot blend into that
+        # per-job geometry-refusal WARNING. `_export_dicom_seg` itself already
+        # absorbs write_dicom_seg's own named refusal and a couple of
+        # "nothing to export" edge cases internally (returning None); this
+        # try/except is the second, generic layer that catches anything else
+        # in the chain -- a config bug raised by the validation call just
+        # below, a missing E2 transformations directory, a bad resample, ...
+        # -- same failure-isolation pattern as the Grad-CAM loop just above,
+        # applied to a single call instead of a per-region loop. Either way
+        # the job still reaches "done": a config bug is made DISTINGUISHABLE
+        # (this ERROR log with a traceback, vs. the routine WARNING
+        # `_export_dicom_seg` logs for a genuine per-case refusal), not
+        # FATAL -- this remains a supplementary artifact.
+        _update_clinical_job(job, stage="exporting_dicom_seg", progress=0.95)
+        try:
+            _validate_dicom_seg_cfg(cfg)
+            dicom_seg_path = _export_dicom_seg(
+                job, preprocess_result, ingest_result, clinical_settings, job_dir, cfg
+            )
+            if dicom_seg_path is None:
+                logger.info(
+                    "run_clinical_job: no DICOM-SEG object produced for job %s (see the "
+                    "preceding log line for why).",
+                    job_id,
+                )
+        except Exception:  # noqa: BLE001 - DICOM-SEG export must never fail the job
+            logger.error(
+                "run_clinical_job: DICOM-SEG export failed unexpectedly for job %s",
+                job_id,
+                exc_info=True,
+            )
+
+        # --- Structured anatomical report (Phase 4; supplementary, must
+        # never fail the job) -- same failure-isolation philosophy as
+        # Grad-CAM and DICOM-SEG export just above. Unlike DICOM-SEG's own
+        # export function, `_generate_report` absorbs nothing internally
+        # (see its own docstring for why); this try/except is the ONLY
+        # layer that keeps a report-generation failure from turning an
+        # otherwise-good job into "failed".
+        _update_clinical_job(job, stage="generating_report", progress=0.98)
+        try:
+            report_path = _generate_report(job, clinical_settings, job_dir, cfg)
+            logger.info(
+                "run_clinical_job: wrote structured report for job %s to %s",
+                job_id,
+                report_path,
+            )
+        except Exception:  # noqa: BLE001 - report generation must never fail the job
+            logger.error(
+                "run_clinical_job: report generation failed unexpectedly for job %s",
+                job_id,
+                exc_info=True,
+            )
 
         _update_clinical_job(job, state="done", stage="done", progress=1.0)
         return job

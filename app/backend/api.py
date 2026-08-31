@@ -39,15 +39,17 @@ from typing import Any
 import numpy as np
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import clinical_jobs, inference, jobs
 from .config import REPO_ROOT, Settings, get_settings
 from .volumes import (
     MODALITIES,
+    REGION_NAMES,
     case_metrics,
     list_cases,
+    load_clinical_uncertainty,
     load_mask,
     load_modality,
     load_uncertainty,
@@ -707,6 +709,213 @@ def get_clinical_job_mask(job_id: str) -> Response:
     arr = np.load(pred_path, mmap_mode="r")
     data = np.ascontiguousarray(arr, dtype=np.uint8).tobytes()
     return _binary_response(data, meta.shape)
+
+
+@router.get("/clinical/jobs/{job_id}/uncertainty")
+def get_clinical_job_uncertainty(job_id: str) -> Response:
+    """Returns the clinical job's per-voxel predictive entropy, like `/cases/.../uncertainty`.
+
+    Reads from the job's OWN namespaced logits cache
+    (`inference.cached_logits_path`, via `volumes.load_clinical_uncertainty`)
+    rather than the demo path's `settings.logits_dir` -- see that function's
+    docstring for why the two must not be conflated. A missing logits file
+    raises `FileNotFoundError`, which propagates to the global handler
+    registered in `_register_exception_handlers` (404), same as every other
+    "nothing to serve" case in this module.
+    """
+    job = _require_done_clinical_job(job_id)
+    job_settings = _clinical_job_settings(get_settings(), job_id)
+    meta = read_meta(job.case_id, job_settings)
+    data = load_clinical_uncertainty(job.case_id, job_settings)
+    response = _binary_response(data, meta.shape)
+    # Same label the demo's /cases/.../uncertainty route uses -- a single
+    # deterministic pass's entropy, never an MC-dropout epistemic estimate.
+    # The frontend's PREDICTIVE_ENTROPY_SINGLE_PASS constant matches this
+    # exact string.
+    response.headers["X-Uncertainty-Kind"] = "predictive-entropy-single-pass"
+    return response
+
+
+@router.get("/clinical/jobs/{job_id}/conformal-band/{region}")
+def get_clinical_job_conformal_band(job_id: str, region: str) -> Response:
+    """Returns the clinical job's per-voxel conformal band for one region.
+
+    `region` must be one of `cfg.clinical.gatekeeper.regions` (currently
+    `[WT, TC]`) -- an unrecognised region, a region with no cached logits, or
+    a region with no fitted conformal threshold are all 404s, since each
+    means there is nothing to serve for THIS job, not a server-side fault.
+    A `ValueError` from `clinical_jobs.clinical_conformal_band_mask` (the
+    invariant-violation case -- see that function's docstring) propagates to
+    the global `ValueError` handler as a 500: it means the fitted threshold
+    itself is on the wrong side of the reference threshold, a data problem
+    this route cannot resolve by re-asking.
+    """
+    job = _require_done_clinical_job(job_id)
+    cfg = clinical_jobs._compose_clinical_cfg()
+    valid_regions = [str(r) for r in cfg.clinical.gatekeeper.regions]
+    if region not in valid_regions:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown region {region!r}; expected one of {valid_regions}",
+        )
+
+    job_settings = _clinical_job_settings(get_settings(), job_id)
+    meta = read_meta(job.case_id, job_settings)
+
+    logits_path = inference.cached_logits_path(job_settings, job.case_id)
+    if not logits_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=f"clinical job {job_id!r} is done but has no cached logits at {logits_path}",
+        )
+    logits = np.load(logits_path).astype(np.float32)
+
+    alpha = float(cfg.clinical.gatekeeper.conformal_alpha)
+    fitted = clinical_jobs._load_conformal_fitted_thresholds([region], alpha)
+    if region not in fitted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no fitted conformal threshold for region {region!r} (alpha={alpha})",
+        )
+
+    data = clinical_jobs.clinical_conformal_band_mask(
+        logits, REGION_NAMES.index(region), fitted[region]
+    )
+    response = _binary_response(np.ascontiguousarray(data, dtype=np.uint8).tobytes(), meta.shape)
+    response.headers["X-Uncertainty-Kind"] = "conformal-band"
+    return response
+
+
+_GRADCAM_REGIONS = ("WT", "TC")
+
+
+@router.get("/clinical/jobs/{job_id}/gradcam/{region}")
+def get_clinical_job_gradcam(job_id: str, region: str) -> Response:
+    """Returns the clinical job's Seg-Grad-CAM heatmap for one region.
+
+    `region` must be one of `"WT"`, `"TC"` -- the same two regions
+    `inference.explain_case` computes (see that function's docstring for why `"ET"`
+    is out of scope). An unrecognised region, or a region with no cached heatmap
+    (e.g. that region's Grad-CAM failed during the job's run -- see
+    `run_clinical_job`'s failure-isolation handling -- or the job predates this
+    feature), is a 404: there is nothing to serve for THIS job, not a server-side
+    fault.
+    """
+    job = _require_done_clinical_job(job_id)
+    if region not in _GRADCAM_REGIONS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown region {region!r}; expected one of {list(_GRADCAM_REGIONS)}",
+        )
+
+    job_settings = _clinical_job_settings(get_settings(), job_id)
+    meta = read_meta(job.case_id, job_settings)
+
+    gradcam_path = inference.cached_gradcam_path(job_settings, job.case_id, region)
+    if not gradcam_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"clinical job {job_id!r} has no cached Grad-CAM for region {region!r} at "
+                f"{gradcam_path}"
+            ),
+        )
+    data = np.load(gradcam_path)
+    response = _binary_response(np.ascontiguousarray(data, dtype=np.uint8).tobytes(), meta.shape)
+    response.headers["X-Uncertainty-Kind"] = "gradcam"
+    return response
+
+
+def _clinical_dicom_seg_path(settings: Settings, job: clinical_jobs.ClinicalJob) -> Path:
+    """Where `clinical_jobs._export_dicom_seg` would have cached this job's DICOM-SEG object.
+
+    Mirrors that function's own `out_path` convention exactly (see its
+    docstring): `<job_dir>/dicom_seg/<case_id>.dcm`, where `job_dir` is
+    `jobs.job_root(settings) / job.job_id`. Not itself derived from
+    `_export_dicom_seg`, since that function returns a path only on success
+    -- this route needs to name the expected path even when nothing was ever
+    written there, to report exactly that as a 404.
+    """
+    return jobs.job_root(settings) / job.job_id / "dicom_seg" / f"{job.case_id}.dcm"
+
+
+@router.get("/clinical/jobs/{job_id}/dicom-seg")
+def get_clinical_job_dicom_seg(job_id: str) -> FileResponse:
+    """Returns the clinical job's DICOM-SEG object as a binary `.dcm` download.
+
+    Unlike every other binary route in this module, this is a FILE download --
+    a complete, self-describing DICOM object with its own header -- not a flat
+    shape-plus-raw-bytes volume buffer, so it does not go through
+    `_binary_response`. `fastapi.responses.FileResponse` serves the cached
+    file directly, streamed from disk, with `Content-Type: application/dicom`
+    (the registered DICOM media type) and a `Content-Disposition` filename so
+    a browser download keeps the `.dcm` extension.
+
+    404 if the job is not done yet, or if it has no cached SEG object -- e.g.
+    `clinical_jobs._export_dicom_seg` refused or failed for this job (see that
+    function's own failure-isolation contract) or the job predates this
+    feature; either way, there is nothing to serve for THIS job, not a
+    server-side fault.
+    """
+    job = _require_done_clinical_job(job_id)
+    dicom_seg_path = _clinical_dicom_seg_path(get_settings(), job)
+    if not dicom_seg_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=(f"clinical job {job_id!r} has no cached DICOM-SEG object at {dicom_seg_path}"),
+        )
+    return FileResponse(
+        path=dicom_seg_path,
+        media_type="application/dicom",
+        filename=dicom_seg_path.name,
+    )
+
+
+def _clinical_report_path(settings: Settings, job: clinical_jobs.ClinicalJob) -> Path:
+    """Where `clinical_jobs._generate_report` would have cached this job's structured report.
+
+    Mirrors `_clinical_dicom_seg_path`'s own convention exactly (see its
+    docstring): `<job_dir>/report/<case_id>.json`. Not itself derived from
+    `_generate_report`, since that function returns a path only on success --
+    this route needs to name the expected path even when nothing was ever
+    written there, to report exactly that as a 404.
+    """
+    return jobs.job_root(settings) / job.job_id / "report" / f"{job.case_id}.json"
+
+
+@router.get("/clinical/jobs/{job_id}/report")
+def get_clinical_job_report(job_id: str) -> dict[str, Any]:
+    """Returns the clinical job's structured anatomical report (Phase 4), as JSON.
+
+    Mirrors the demo's `/report/{case_id}` route: the cached JSON file is
+    read and parsed, then returned as a plain dict (FastAPI re-serialises
+    it), rather than streamed back as a raw file -- unlike the DICOM-SEG
+    route, which serves an opaque binary `.dcm` via `FileResponse`. Unlike
+    `/report/{case_id}`, this route does NOT run `_load_verified_report`'s
+    provenance cross-check: that guard exists because a demo-viewer
+    `NVX_REPORT_DIR` could point at a report generated from a DIFFERENT
+    segmentation than the one `predictions_dir` is currently serving. A
+    clinical job's report has no equivalent configuration seam -- its path
+    is derived entirely from `job_id`, and `clinical_jobs._generate_report`
+    always computes it from THIS job's own cached prediction -- so there is
+    nothing to cross-check.
+
+    404 if the job is unknown or not done yet is wrong -- see
+    `_require_done_clinical_job`: unknown is 404, not-done is 409, matching
+    every other clinical job route. A separate 404 covers a done job with no
+    cached report (e.g. report generation failed for this job -- see
+    `run_clinical_job`'s failure-isolation handling -- or the job predates
+    this feature): either way there is nothing to serve for THIS job, not a
+    server-side fault.
+    """
+    job = _require_done_clinical_job(job_id)
+    report_path = _clinical_report_path(get_settings(), job)
+    if not report_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=f"clinical job {job_id!r} has no cached report at {report_path}",
+        )
+    return json.loads(report_path.read_text(encoding="utf-8"))
 
 
 def _register_exception_handlers(app: FastAPI) -> None:

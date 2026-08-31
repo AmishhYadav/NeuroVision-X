@@ -175,8 +175,10 @@ dicom_seg:
   # exact shape of the demo geometry re-crop this project already caught by
   # recomputing a published Dice rather than by looking at a picture. So the
   # writer VALIDATES that the mask's shape and spacing match the reference
-  # series and REFUSES otherwise. Resampling the mask back through E2's
-  # saved inverse transform is a separate step and is not done here.
+  # series and REFUSES otherwise. `neurovision.data.clinical_resample` does
+  # the resampling through E2's saved inverse transform, and
+  # `app.backend.clinical_jobs._export_dicom_seg` wires it into the live
+  # clinical job pipeline.
 
   # Written into SeriesDescription, whose DICOM value representation is LO
   # and therefore capped at 64 CHARACTERS. Keep this under that limit: the

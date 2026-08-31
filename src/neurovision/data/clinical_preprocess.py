@@ -150,6 +150,19 @@ class PreprocessResult:
             whether their intermediates were kept.
         warnings: Non-fatal notes -- missing roles, no moving modalities,
             an `out_dir` that already held a previous run's output.
+        transformations_dir: `plan.intermediate_dirs["transformations"]`,
+            the directory `AtlasCentricPreprocessor.run` was told to write
+            every modality's fitted registration transforms into (one
+            subdirectory per role, named after that role's own
+            `modality_name` -- see
+            `neurovision.data.clinical_resample.resample_mask_to_source`,
+            which reads this directory back to resample a predicted mask
+            from atlas space into a modality's native geometry). `None`
+            when the "transformations" stage was not kept -- today that
+            only happens if `cfg.clinical.preprocess.keep_intermediate` is
+            `False`, since `_stage_flags` always requests this stage, but
+            the type stays honest rather than assuming the config can never
+            change.
     """
 
     plan: PreprocessPlan
@@ -157,6 +170,11 @@ class PreprocessResult:
     brain_mask: Path
     stages_run: tuple[str, ...]
     warnings: tuple[str, ...]
+    # Defaults to None (rather than being a required positional field) so
+    # existing call sites that build a PreprocessResult by hand (fakes in
+    # tests, e.g. test_app_clinical_jobs.py's _fake_preprocess_clinical_study)
+    # do not have to be touched just because this field was added.
+    transformations_dir: Path | None = None
 
 
 def resolve_atlas_name(name: str) -> str:
@@ -521,6 +539,7 @@ def run_plan(plan: PreprocessPlan) -> PreprocessResult:
         brain_mask=plan.brain_mask_path,
         stages_run=stages_run,
         warnings=warnings,
+        transformations_dir=plan.intermediate_dirs.get("transformations"),
     )
 
 

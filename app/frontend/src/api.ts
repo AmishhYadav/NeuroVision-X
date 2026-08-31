@@ -87,6 +87,12 @@ export interface VolumeBuffer {
 /** The only uncertainty kind the client is allowed to present as such - see UncertaintyBuffer. */
 export const PREDICTIVE_ENTROPY_SINGLE_PASS = "predictive-entropy-single-pass";
 
+/** The conformal risk-control band - see `getClinicalJobConformalBand`. */
+export const CONFORMAL_BAND = "conformal-band";
+
+/** Seg-Grad-CAM explainability evidence - see `getClinicalJobGradcam`. */
+export const GRADCAM = "gradcam";
+
 /**
  * `VolumeBuffer` plus the `X-Uncertainty-Kind` response header, verbatim.
  * The backend is CORS-exposing that header on purpose so the client cannot
@@ -593,4 +599,106 @@ export function getClinicalJobMask(
   signal?: AbortSignal,
 ): Promise<VolumeBuffer> {
   return getBinary(`/clinical/jobs/${encodeURIComponent(jobId)}/mask/prediction`, fallbackShape, signal);
+}
+
+/**
+ * Same as `getUncertainty`, but for a clinical job's live-computed entropy.
+ * Returns null on 404 (no cached logits for this job) rather than throwing.
+ */
+export async function getClinicalJobUncertainty(
+  jobId: string,
+  fallbackShape: [number, number, number],
+  signal?: AbortSignal,
+): Promise<UncertaintyBuffer | null> {
+  const path = `/clinical/jobs/${encodeURIComponent(jobId)}/uncertainty`;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw responseError(res, path);
+  }
+  const shapeHeader = res.headers.get("X-Volume-Shape");
+  const shape: [number, number, number] = shapeHeader
+    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
+    : fallbackShape;
+  const kind = res.headers.get("X-Uncertainty-Kind");
+  const buf = await res.arrayBuffer();
+  return { data: new Uint8Array(buf), shape, kind };
+}
+
+/**
+ * The fitted conformal-risk-control band for one region (`WT` or `TC`) of a
+ * clinical job's live segmentation - same wire format and same "null on 404"
+ * convention as `getClinicalJobUncertainty` (a 404 here means no fitted
+ * threshold is available for this region yet, a normal outcome, not an
+ * error). Byte values: 0 outside the conservative mask, 128 inside the
+ * conservative ("safety margin") mask but not the ordinary prediction, 255
+ * inside the ordinary prediction.
+ */
+export async function getClinicalJobConformalBand(
+  jobId: string,
+  region: "WT" | "TC",
+  fallbackShape: [number, number, number],
+  signal?: AbortSignal,
+): Promise<UncertaintyBuffer | null> {
+  const path = `/clinical/jobs/${encodeURIComponent(jobId)}/conformal-band/${region}`;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw responseError(res, path);
+  }
+  const shapeHeader = res.headers.get("X-Volume-Shape");
+  const shape: [number, number, number] = shapeHeader
+    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
+    : fallbackShape;
+  const kind = res.headers.get("X-Uncertainty-Kind");
+  const buf = await res.arrayBuffer();
+  return { data: new Uint8Array(buf), shape, kind };
+}
+
+/**
+ * The Seg-Grad-CAM explainability heatmap for one region (`WT` or `TC`) of a
+ * clinical job's live segmentation - same wire format and same "null on 404"
+ * convention as `getClinicalJobConformalBand` (a 404 here means either the
+ * job predates this feature or that region's Grad-CAM computation failed and
+ * was skipped during the job run, per the backend's per-region failure
+ * isolation - a normal outcome, not an error). Byte values are a `[0, 1]`-
+ * normalized evidence score scaled to uint8, the same convention as entropy.
+ */
+export async function getClinicalJobGradcam(
+  jobId: string,
+  region: "WT" | "TC",
+  fallbackShape: [number, number, number],
+  signal?: AbortSignal,
+): Promise<UncertaintyBuffer | null> {
+  const path = `/clinical/jobs/${encodeURIComponent(jobId)}/gradcam/${region}`;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw responseError(res, path);
+  }
+  const shapeHeader = res.headers.get("X-Volume-Shape");
+  const shape: [number, number, number] = shapeHeader
+    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
+    : fallbackShape;
+  const kind = res.headers.get("X-Uncertainty-Kind");
+  const buf = await res.arrayBuffer();
+  return { data: new Uint8Array(buf), shape, kind };
 }

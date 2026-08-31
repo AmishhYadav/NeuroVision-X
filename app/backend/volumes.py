@@ -246,6 +246,46 @@ def load_uncertainty(case_id: str, settings: Settings | None = None) -> bytes:
     return (field * 255.0).astype(np.uint8).tobytes()
 
 
+def load_clinical_uncertainty(case_id: str, settings: Settings) -> bytes:
+    """Same as `load_uncertainty`, but reads logits from a clinical job's cache path.
+
+    A clinical job's logits are namespaced by `settings.experiment` (see
+    `inference.cached_logits_path`), not `settings.logits_dir` -- the
+    convention `load_uncertainty` uses for the demo/research job path. This
+    is the same computation (`entropy_from_logits`), just pointed at the
+    right file.
+
+    Args:
+        case_id: The clinical job's case identifier (equal to its job id).
+        settings: The clinical job's OWN `Settings`, as built by
+            `clinical_jobs.clinical_segmentation_settings` -- not the
+            generic backend `Settings` the demo routes use.
+
+    Returns:
+        Per-voxel predictive entropy in the cropped frame, scaled to uint8
+        `(D, H, W)` bytes, identical in meaning to `load_uncertainty`'s
+        output.
+
+    Raises:
+        FileNotFoundError: If no logits were cached for this case (e.g. the
+            job's segmentation step never ran with `save_logits=True`, or
+            the job's cache directory was deleted).
+    """
+    # Imported here, not at module top level: this module deliberately has
+    # no top-level import of `.inference`, so a caller that only wants the
+    # demo/research path (which never touches torch) does not pay torch's
+    # import cost. See this module's docstring in `jobs.py`/`clinical_jobs
+    # .py` for the same lazy-import discipline.
+    from .inference import cached_logits_path
+
+    path = cached_logits_path(settings, case_id)
+    if not path.exists():
+        raise FileNotFoundError(f"no saved logits for {case_id}")
+    logits = np.asarray(np.load(path, mmap_mode="r"), dtype=np.float32)
+    field = entropy_from_logits(logits)
+    return (field * 255.0).astype(np.uint8).tobytes()
+
+
 def region_voxel_counts(mask: np.ndarray, spacing: tuple[float, float, float]) -> dict:
     """Counts voxels and millilitres per nested region from a class map.
 

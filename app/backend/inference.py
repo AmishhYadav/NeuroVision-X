@@ -39,6 +39,42 @@ from .config import REPO_ROOT, Settings
 
 logger = logging.getLogger(__name__)
 
+# --- Grad-CAM target layer -----------------------------------------------
+#
+# Empirically chosen, not guessed from reading the architecture source -- see
+# `explain_case`'s docstring for why that matters. `available_layers()` on a
+# real `neurovision` (`NeuroVisionX`) checkpoint returns 302 candidate names.
+# The ones shaped like a "middle decoder stage" (see
+# `neurovision.explainability.gradcam.grad_cam`'s own docstring on layer
+# choice) are the 4 top-level `UNetDecoder` stages,
+# `decoder.conv_blocks.{0,1,2,3}`, fine to coarse: stage 0 runs at full
+# resolution (one 1x1x1 conv away from the segmentation logits -- a CAM there
+# is nearly the mask itself), stage 3 sits right next to the bottleneck (very
+# blurry). `decoder.conv_blocks.2` is the middle-of-range pick, VERIFIED end
+# to end with a real `grad_cam()` forward+backward call against a real
+# `neurovision` model at 64^3 (this checkpoint's own trained
+# `data.patch_size`): it ran in ~3.3s, produced a finite `(1, 1, 64, 64, 64)`
+# cam correctly upsampled from its native `(1, 1, 16, 16, 16)` resolution
+# (stride 4, i.e. halfway between stage 0's stride 1 and the stride-16
+# bottleneck), with a nonzero target score.
+#
+# This constant is tied to the `NeuroVisionX` architecture specifically --
+# `explain_case` is only ever called against the pinned `neurovision`
+# checkpoint in this codebase (see `app/backend/clinical_jobs.py`'s module
+# docstring), so that is not a real limitation in practice, but calling it
+# against a different experiment (e.g. `baseline_unet3d`, a plain MONAI
+# `UNet` with no `decoder.conv_blocks` submodule at all) will raise a clear
+# `ValueError` from `resolve_layer` rather than silently doing something
+# meaningless.
+_GRADCAM_TARGET_LAYER = "decoder.conv_blocks.2"
+
+# `explain_case` is scoped to these two regions only -- the same two the
+# clinical gatekeeper and the conformal-band route already operate on
+# (`cfg.clinical.gatekeeper.regions`), not a third ("ET") nobody downstream
+# reads yet. A deliberate scoping choice, not an oversight -- see
+# `cached_gradcam_path`'s docstring.
+_GRADCAM_REGIONS = ("WT", "TC")
+
 # --- Locking -----------------------------------------------------------
 #
 # Two different hazards, two different locks:
@@ -161,6 +197,34 @@ def cached_logits_path(settings: Settings, case_id: str) -> Path:
         `save_logits=True`) writes to it.
     """
     return settings.cache_dir / settings.experiment / "logits" / f"{case_id}.npy"
+
+
+def cached_gradcam_path(settings: Settings, case_id: str, region: str) -> Path:
+    """Where a Seg-Grad-CAM heatmap for one region of a live-inference run of `case_id` is cached.
+
+    Namespaced by `settings.experiment` for the same reason `cached_logits_path` is:
+    two different checkpoints must never share a cache entry, or switching
+    `NVX_EXPERIMENT` (to point at a different trained model) would silently mix one
+    model's explanation into a directory a caller now expects to hold another's.
+
+    Scoped to `region in {"WT", "TC"}` only -- deliberately not `"ET"`. These are the
+    same two regions the clinical gatekeeper's signals and the conformal-band route
+    (`app.backend.clinical_jobs.clinical_conformal_band_mask`,
+    `cfg.clinical.gatekeeper.regions`) already operate on, so this cache follows that
+    existing scope rather than introducing a third region nobody downstream reads yet.
+    This function does not itself validate `region` (see `explain_case`, which does,
+    for the function that actually computes something) -- it only builds a path.
+
+    Args:
+        settings: Resolved backend settings.
+        case_id: Case identifier.
+        region: One of `"WT"`, `"TC"`.
+
+    Returns:
+        `<cache_dir>/<experiment>/gradcam/<region>/<case_id>.npy`. The directory is
+        NOT created here -- only `explain_case` writes to it.
+    """
+    return settings.cache_dir / settings.experiment / "gradcam" / region / f"{case_id}.npy"
 
 
 def _report(progress: Callable[[str, float], None] | None, stage: str, fraction: float) -> None:
@@ -449,4 +513,171 @@ def segment_case(
             logger.info("Wrote live-inference logits for %s to %s", case_id, logits_path)
 
         _report(progress, "done", 1.0)
+        return out_path
+
+
+def explain_case(
+    settings: Settings,
+    case_id: str,
+    region: str,
+    *,
+    force: bool = False,
+) -> Path:
+    """Computes (or returns the cached) Seg-Grad-CAM heatmap for one region of one case.
+
+    A sibling of `segment_case`, not a modification of it: this function is only
+    ever useful AFTER `segment_case` has already produced a cached prediction for
+    `case_id` (see the `Raises` section) -- it explains an existing segmentation, it
+    does not produce one. Every call that is not a cache hit loads a FRESH model via
+    `_load_model` (the same helper `segment_case` uses), exactly like `segment_case`
+    does; there is no model-caching layer anywhere in this backend today (see
+    `_load_model`'s own body), so this is a second full model load per job, on
+    purpose, following the existing convention rather than introducing a new one.
+
+    Geometry: like `segment_case`, the returned heatmap is in CROPPED geometry -- the
+    same frame `<prep_dir>/<case_id>/image.npy` and the cached prediction are in (see
+    `segment_case`'s own docstring for why that frame is never uncropped). The actual
+    Seg-Grad-CAM computation only ever runs on a small PATCH cropped around the
+    region's predicted footprint (see `neurovision.explainability.gradcam`'s
+    top-of-file docstring, hazard 4, for why a whole-volume backward pass does not
+    fit this project's memory budget); the result is then written into an all-zero,
+    FULL-image-shaped buffer at that patch's own location (the `slices`
+    `center_patch_on_mask` returns), never returned in patch-local coordinates alone.
+    Voxels outside the patch are left at 0, meaning "no evidence computed here" --
+    the same convention this project's other per-voxel buffers (predictive entropy,
+    the conformal band) already use for "nothing to show" there.
+
+    Args:
+        settings: Resolved backend settings.
+        case_id: Case identifier; must have both a `<prep_dir>/<case_id>/image.npy`
+            and an already-cached prediction (i.e. `segment_case` must have run for
+            this exact `(settings.experiment, case_id)` first).
+        region: One of `"WT"`, `"TC"` -- see `cached_gradcam_path`'s docstring for
+            why `"ET"` is deliberately out of scope here, not an oversight.
+        force: If True, recompute and overwrite even if a cached heatmap already
+            exists.
+
+    Returns:
+        Path to the cached `.npy` heatmap: `uint8`, values in `[0, 255]`, shape
+        matching the case's cropped image shape (i.e. `image.npy`'s spatial shape).
+
+    Raises:
+        ValueError: If `region` is not `"WT"` or `"TC"`.
+        FileNotFoundError: If `<prep_dir>/<case_id>/image.npy` does not exist, or if
+            no prediction has been cached yet for this `(settings.experiment,
+            case_id)` (call `segment_case` first).
+    """
+    if region not in _GRADCAM_REGIONS:
+        raise ValueError(
+            f"region must be one of {_GRADCAM_REGIONS!r}, got {region!r}. 'ET' is "
+            "deliberately out of scope for live Grad-CAM -- see cached_gradcam_path's "
+            "docstring."
+        )
+
+    out_path = cached_gradcam_path(settings, case_id, region)
+
+    # Fast path, mirroring segment_case's own cache-hit short-circuit: no torch, no
+    # Hydra, no model load -- just a filesystem check.
+    if out_path.is_file() and not force:
+        logger.info("Using cached Seg-Grad-CAM for %s/%s at %s", case_id, region, out_path)
+        return out_path
+
+    image_path = settings.prep_dir / case_id / "image.npy"
+    if not image_path.is_file():
+        raise FileNotFoundError(
+            f"no preprocessed case {case_id!r} at {image_path} (expected under "
+            f"settings.prep_dir={settings.prep_dir})"
+        )
+
+    pred_path = cached_prediction_path(settings, case_id)
+    if not pred_path.is_file():
+        raise FileNotFoundError(
+            f"no cached prediction for case {case_id!r} at {pred_path}; call "
+            "segment_case(settings, case_id) before explain_case for the same "
+            "(settings.experiment, case_id)."
+        )
+
+    # Same (experiment, case_id) lock segment_case uses -- so two concurrent
+    # requests for the same case (e.g. one segmenting, one explaining, or two
+    # explain_case calls for different regions) cannot both decide the cache is
+    # empty and race to write it, and, worse, both pay the cost of a full model
+    # load. See the module docstring's "Locking" section.
+    lock = _lock_for(settings.experiment, case_id)
+    with lock:
+        # Re-check under the lock, mirroring segment_case: another thread may
+        # have finished computing this exact heatmap while this one was
+        # waiting to acquire the lock, in which case there is nothing left to
+        # do (unless force=True).
+        if out_path.is_file() and not force:
+            logger.info(
+                "Using cached Seg-Grad-CAM for %s/%s at %s (written while waiting " "for the lock)",
+                case_id,
+                region,
+                out_path,
+            )
+            return out_path
+
+        import numpy as np
+        import torch
+
+        from neurovision.data.transforms import REGION_NAMES
+        from neurovision.explainability.gradcam import center_patch_on_mask, grad_cam
+
+        image = np.asarray(np.load(image_path), dtype=np.float32)  # (C, D, H, W)
+        prediction = np.asarray(np.load(pred_path))  # (D, H, W), values in {0, 1, 2, 3}
+
+        # Same region definitions app/backend/volumes.py's region_voxel_counts uses --
+        # that function is the source of truth, but exposes no reusable single-region
+        # helper, so these are duplicated here as plain boolean expressions rather than
+        # imported. ET (mask == 3) is not one of the two cases below -- see
+        # cached_gradcam_path's docstring for why it is out of scope.
+        if region == "TC":
+            region_mask = (prediction == 1) | (prediction == 3)
+        else:  # region == "WT" -- already validated above to be "WT" or "TC"
+            region_mask = prediction > 0
+
+        model, cfg, device = _load_model(settings)
+        if model.training:
+            # _load_model already leaves the model in eval mode, so this never actually
+            # runs -- but grad_cam RAISES if model.training is True rather than fixing
+            # it silently (see its own top-of-file docstring, hazard 1), so this makes
+            # that requirement visible here too instead of relying on an implementation
+            # detail of a function this one happens to call.
+            model.eval()
+
+        # The checkpoint's own trained patch size (cfg.data.patch_size), never an
+        # arbitrary new number -- the same config _load_model already composed.
+        patch_size = tuple(int(p) for p in cfg.data.patch_size)
+        image_tensor = torch.from_numpy(image).unsqueeze(0)  # (1, C, D, H, W)
+        mask_tensor = torch.from_numpy(region_mask)  # (D, H, W)
+        patch, slices = center_patch_on_mask(image_tensor, mask_tensor, patch_size)
+
+        region_index = REGION_NAMES.index(region)
+        # target_mask=None (the default): grad_cam builds its OWN predicted-positive
+        # mask from a fresh forward pass on the PATCH. region_mask above was only used
+        # to decide WHERE to crop -- it must not also be passed in as target_mask.
+        result = grad_cam(
+            model,
+            patch,
+            target_layer=_GRADCAM_TARGET_LAYER,
+            region_index=region_index,
+            target_mask=None,
+        )
+
+        # Place the patch back into full-image geometry: an all-zero buffer at
+        # image.npy's own spatial shape, with the CAM's values written in at exactly
+        # the slices center_patch_on_mask cropped from. result.cam (not .raw_cam) is
+        # already upsampled to the patch's own spatial shape by grad_cam's default
+        # upsample=True, so it matches `slices`'s extents exactly.
+        full = np.zeros(image.shape[1:], dtype=np.float32)  # (D, H, W)
+        cam_patch = result.cam[0, 0].cpu().numpy()  # (patch_D, patch_H, patch_W)
+        full[slices] = cam_patch
+
+        # cam is already [0, 1]-normalized by grad_cam's default normalize=True -- the
+        # same uint8 scaling this project's other normalized per-voxel maps already use
+        # (see entropy_from_logits's own caller).
+        cam_uint8 = (full * 255).astype(np.uint8)
+
+        _atomic_np_save(cam_uint8, out_path)
+        logger.info("Wrote Seg-Grad-CAM for %s/%s to %s", case_id, region, out_path)
         return out_path

@@ -337,6 +337,267 @@ def test_clinical_volume_unknown_modality_on_done_job_is_404(
     assert response.status_code == 404
 
 
+# --- GET /api/clinical/jobs/{job_id}/uncertainty -----------------------------
+
+
+def _write_clinical_logits(
+    settings: config.Settings, job: clinical_jobs.ClinicalJob, logits: np.ndarray
+) -> Path:
+    """Writes a `(3, D, H, W)` logits array to this job's namespaced logits cache.
+
+    Mirrors `_fabricate_done_clinical_job`'s own resolution of the job's
+    dedicated clinical `Settings` -- the logits must land where
+    `inference.cached_logits_path` (via `clinical_segmentation_settings`)
+    actually looks, not under the generic `settings`.
+    """
+    job_prep_dir = jobs.job_root(settings) / job.job_id / "prep"
+    job_cache_dir = jobs.job_root(settings) / job.job_id / "cache"
+    clinical_settings = clinical_jobs.clinical_segmentation_settings(job_prep_dir, job_cache_dir)
+    logits_path = inference.cached_logits_path(clinical_settings, job.case_id)
+    logits_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(logits_path, logits.astype(np.float32))
+    return logits_path
+
+
+def test_clinical_job_uncertainty_done_with_logits_is_200(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    shape = (5, 6, 7)
+    _write_clinical_logits(settings, job, np.zeros((3, *shape), dtype=np.float32))
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/uncertainty")
+    assert response.status_code == 200
+    assert response.headers["x-uncertainty-kind"] == "predictive-entropy-single-pass"
+    assert response.headers["x-volume-shape"] == "5,6,7"
+    assert len(response.content) == 5 * 6 * 7
+
+
+def test_clinical_job_uncertainty_done_without_logits_is_404(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/uncertainty")
+    assert response.status_code == 404
+
+
+# --- GET /api/clinical/jobs/{job_id}/conformal-band/{region} ----------------
+
+
+def test_clinical_job_conformal_band_valid_region_with_threshold_is_200(
+    client: TestClient, backend: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    shape = (5, 6, 7)
+    _write_clinical_logits(settings, job, np.zeros((3, *shape), dtype=np.float32))
+
+    # Real cfg.clinical.gatekeeper.conformal_alpha is 0.10; f"{0.10}" == "0.1",
+    # so the fit.json key convention here must match that exactly (see
+    # `clinical_jobs._load_conformal_fitted_thresholds`'s docstring).
+    fit_path = tmp_path / "fit.json"
+    fit_path.write_text(json.dumps({"WT__alpha_0.1": {"threshold": 0.3}}))
+    monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/conformal-band/WT")
+    assert response.status_code == 200
+    assert response.headers["x-uncertainty-kind"] == "conformal-band"
+    assert response.headers["x-volume-shape"] == "5,6,7"
+    assert len(response.content) == 5 * 6 * 7
+
+
+def test_clinical_job_conformal_band_invalid_region_is_404(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    # "ET" is not in the real cfg.clinical.gatekeeper.regions ([WT, TC]).
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/conformal-band/ET")
+    assert response.status_code == 404
+
+
+def test_clinical_job_conformal_band_no_fitted_threshold_is_404(
+    client: TestClient, backend: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    shape = (5, 6, 7)
+    _write_clinical_logits(settings, job, np.zeros((3, *shape), dtype=np.float32))
+
+    missing_fit_path = tmp_path / "does_not_exist" / "fit.json"
+    monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: missing_fit_path)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/conformal-band/WT")
+    assert response.status_code == 404
+
+
+# --- GET /api/clinical/jobs/{job_id}/gradcam/{region} -----------------------
+
+
+def _write_clinical_gradcam(
+    settings: config.Settings,
+    job: clinical_jobs.ClinicalJob,
+    region: str,
+    shape: tuple[int, int, int],
+) -> Path:
+    """Writes a cached Grad-CAM heatmap directly to disk for a fabricated 'done' job.
+
+    Mirrors `_write_clinical_logits`'s own resolution of the job's dedicated
+    clinical `Settings` -- the heatmap must land where
+    `inference.cached_gradcam_path` (via `clinical_segmentation_settings`)
+    actually looks, not under the generic `settings`.
+    """
+    job_prep_dir = jobs.job_root(settings) / job.job_id / "prep"
+    job_cache_dir = jobs.job_root(settings) / job.job_id / "cache"
+    clinical_settings = clinical_jobs.clinical_segmentation_settings(job_prep_dir, job_cache_dir)
+    gradcam_path = inference.cached_gradcam_path(clinical_settings, job.case_id, region)
+    gradcam_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(gradcam_path, np.zeros(shape, dtype=np.uint8))
+    return gradcam_path
+
+
+def test_clinical_job_gradcam_valid_region_with_cached_cam_is_200(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    shape = (5, 6, 7)
+    _write_clinical_gradcam(settings, job, "WT", shape)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/gradcam/WT")
+    assert response.status_code == 200
+    assert response.headers["x-uncertainty-kind"] == "gradcam"
+    assert response.headers["x-volume-shape"] == "5,6,7"
+    assert response.headers["x-volume-dtype"] == "uint8"
+    assert len(response.content) == 5 * 6 * 7
+
+
+def test_clinical_job_gradcam_invalid_region_is_404(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    # "ET" is out of scope for live Grad-CAM (see inference.explain_case's docstring).
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/gradcam/ET")
+    assert response.status_code == 404
+
+
+def test_clinical_job_gradcam_no_cached_cam_is_404(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    # Valid region, but nothing was ever written for it (e.g. this job predates
+    # the feature, or that region's Grad-CAM failed during the job's run).
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/gradcam/WT")
+    assert response.status_code == 404
+
+
+# --- GET /api/clinical/jobs/{job_id}/dicom-seg -------------------------------
+
+
+def _write_clinical_dicom_seg(
+    settings: config.Settings, job: clinical_jobs.ClinicalJob, content: bytes = b"fake dicom bytes"
+) -> Path:
+    """Writes a placeholder `.dcm` file at the path `clinical_jobs._export_dicom_seg`
+    would have cached it at: `<job_dir>/dicom_seg/<case_id>.dcm`, NOT namespaced by
+    experiment/checkpoint the way logits/Grad-CAM are -- see that function's own
+    docstring for why (one clinical job produces at most one SEG object).
+    """
+    job_dir = jobs.job_root(settings) / job.job_id
+    dicom_seg_path = job_dir / "dicom_seg" / f"{job.case_id}.dcm"
+    dicom_seg_path.parent.mkdir(parents=True, exist_ok=True)
+    dicom_seg_path.write_bytes(content)
+    return dicom_seg_path
+
+
+def test_clinical_job_dicom_seg_cached_is_200_binary_download(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_dicom_seg(settings, job, b"fake dicom bytes")
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/dicom-seg")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/dicom"
+    assert response.content == b"fake dicom bytes"
+
+
+def test_clinical_job_dicom_seg_no_cached_object_is_404(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    # A done job that never produced a SEG object (export failed/refused, or
+    # this job predates the feature) -- nothing to serve for THIS job.
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/dicom-seg")
+    assert response.status_code == 404
+
+
+def test_clinical_job_dicom_seg_on_queued_job_is_409(client: TestClient) -> None:
+    created = _upload(client, _valid_study_zip()).json()
+    response = client.get(f"/api/clinical/jobs/{created['job_id']}/dicom-seg")
+    assert response.status_code == 409
+    assert "queued" in response.json()["detail"]
+
+
+def test_clinical_job_dicom_seg_unknown_job_is_404(client: TestClient) -> None:
+    response = client.get("/api/clinical/jobs/no-such-job/dicom-seg")
+    assert response.status_code == 404
+
+
+def _write_clinical_report(
+    settings: config.Settings,
+    job: clinical_jobs.ClinicalJob,
+    payload: dict | None = None,
+) -> Path:
+    """Writes a placeholder report JSON at the path `clinical_jobs._generate_report`
+    would have cached it at: `<job_dir>/report/<case_id>.json` -- mirroring
+    `_write_clinical_dicom_seg`'s own convention exactly.
+    """
+    job_dir = jobs.job_root(settings) / job.job_id
+    report_path = job_dir / "report" / f"{job.case_id}.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(payload if payload is not None else {"case_id": job.case_id}))
+    return report_path
+
+
+def test_clinical_job_report_cached_is_200_with_json_payload(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    payload = {
+        "case_id": job.case_id,
+        "report_version": 1,
+        "disclaimer": "research and educational decision-support artifact",
+    }
+    _write_clinical_report(settings, job, payload)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/report")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == payload
+
+
+def test_clinical_job_report_no_cached_report_is_404(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    # A done job that never produced a report (generation failed for this
+    # job, or it predates the feature) -- nothing to serve for THIS job.
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/report")
+    assert response.status_code == 404
+
+
+def test_clinical_job_report_on_queued_job_is_409(client: TestClient) -> None:
+    created = _upload(client, _valid_study_zip()).json()
+    response = client.get(f"/api/clinical/jobs/{created['job_id']}/report")
+    assert response.status_code == 409
+    assert "queued" in response.json()["detail"]
+
+
+def test_clinical_job_report_unknown_job_is_404(client: TestClient) -> None:
+    response = client.get("/api/clinical/jobs/no-such-job/report")
+    assert response.status_code == 404
+
+
 # --- pre-existing routes still answer ----------------------------------------
 
 
