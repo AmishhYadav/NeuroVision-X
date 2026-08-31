@@ -49,7 +49,14 @@ def _write_case(tmp_path: Path, label: np.ndarray | None = None) -> dict[str, st
 
 
 def _make_cfg(patch_size: tuple[int, int, int] = (16, 16, 16)) -> OmegaConf:
-    """A minimal cfg matching the real configs/data/brats.yaml key structure."""
+    """A minimal cfg matching the real configs/data/brats.yaml key structure.
+
+    The four new (heavier) augmentations default their `*_prob` keys to 0.0
+    so every pre-existing test in this file keeps exercising the exact same
+    no-augmentation-fired behaviour it always has; the range keys still need
+    real values because MONAI validates them at construction time even when
+    prob=0.0 means they never actually get sampled.
+    """
     return OmegaConf.create(
         {
             "data": {
@@ -64,6 +71,15 @@ def _make_cfg(patch_size: tuple[int, int, int] = (16, 16, 16)) -> OmegaConf:
                     "shift_intensity_offset": 0.1,
                     "noise_prob": 0.15,
                     "noise_std": 0.01,
+                    "rotate_prob": 0.0,
+                    "rotate_range_deg": 15.0,
+                    "gamma_prob": 0.0,
+                    "gamma_range": [0.7, 1.5],
+                    "bias_field_prob": 0.0,
+                    "bias_field_coeff_range": [0.0, 0.3],
+                    "elastic_prob": 0.0,
+                    "elastic_sigma_range": [5.0, 8.0],
+                    "elastic_magnitude_range": [50.0, 150.0],
                 },
             }
         }
@@ -203,6 +219,92 @@ def test_build_train_transforms_is_stochastic(tmp_path: Path):
     )
     assert any_different
     set_determinism(seed=None)
+
+
+# --- new heavier augmentations (rotation, elastic, gamma, bias field) ----
+#
+# Each test below forces exactly ONE new *_prob to 1.0 (the other two -- plus
+# the pre-existing flip/rot90/noise probs -- stay at _make_cfg()'s defaults),
+# so a failure points at one transform, not the pipeline as a whole.
+
+
+def test_build_train_transforms_rotation_preserves_label_binary_and_nesting(tmp_path: Path):
+    cfg = _make_cfg(patch_size=(16, 16, 16))
+    cfg.data.augment.rotate_prob = 1.0
+    data = _write_case(tmp_path)
+    out = build_train_transforms(cfg)(data)
+    for sample in out:
+        assert sample["image"].shape == (4, 16, 16, 16)
+        assert sample["label"].shape == (3, 16, 16, 16)
+        # RandRotated must use mode="nearest" for the label -- "bilinear"
+        # would blend neighbouring voxels and leave fractional values here.
+        uniques = torch.unique(sample["label"])
+        assert torch.all((uniques == 0.0) | (uniques == 1.0))
+        et, tc, wt = sample["label"][0], sample["label"][1], sample["label"][2]
+        assert torch.all(wt >= tc)
+        assert torch.all(tc >= et)
+
+
+def test_build_train_transforms_elastic_preserves_label_binary_and_nesting(tmp_path: Path):
+    cfg = _make_cfg(patch_size=(16, 16, 16))
+    cfg.data.augment.elastic_prob = 1.0
+    data = _write_case(tmp_path)
+    out = build_train_transforms(cfg)(data)
+    for sample in out:
+        assert sample["image"].shape == (4, 16, 16, 16)
+        assert sample["label"].shape == (3, 16, 16, 16)
+        # Same nearest-mode requirement as rotation: elastic warping must not
+        # turn the label into a fractional-valued mask.
+        uniques = torch.unique(sample["label"])
+        assert torch.all((uniques == 0.0) | (uniques == 1.0))
+        et, tc, wt = sample["label"][0], sample["label"][1], sample["label"][2]
+        assert torch.all(wt >= tc)
+        assert torch.all(tc >= et)
+
+
+def test_build_train_transforms_gamma_is_image_only(tmp_path: Path):
+    cfg = _make_cfg(patch_size=(16, 16, 16))
+    cfg.data.augment.gamma_prob = 1.0
+    data = _write_case(tmp_path)
+    out = build_train_transforms(cfg)(data)
+    for sample in out:
+        assert sample["image"].shape == (4, 16, 16, 16)
+        assert sample["image"].dtype == torch.float32
+        assert torch.isfinite(sample["image"]).all()
+        # Gamma/contrast is an image-only augmentation -- the label must come
+        # through exactly as ConvertToRegionsd produced it.
+        uniques = torch.unique(sample["label"])
+        assert torch.all((uniques == 0.0) | (uniques == 1.0))
+        et, tc, wt = sample["label"][0], sample["label"][1], sample["label"][2]
+        assert torch.all(wt >= tc)
+        assert torch.all(tc >= et)
+
+
+def test_build_train_transforms_bias_field_multichannel_shape_and_finite(tmp_path: Path):
+    # Guards against RandBiasFieldd silently touching only one of the 4 MRI
+    # modality channels: run the pipeline once with bias_field_prob=1.0 and
+    # once with it at 0.0 (everything else, and the MONAI global seed,
+    # identical), and require the resulting images to actually differ.
+    cfg_on = _make_cfg(patch_size=(16, 16, 16))
+    cfg_on.data.augment.bias_field_prob = 1.0
+    cfg_off = _make_cfg(patch_size=(16, 16, 16))  # bias_field_prob stays 0.0
+
+    data = _write_case(tmp_path)
+
+    set_determinism(seed=0)
+    out_on = build_train_transforms(cfg_on)(data)
+    set_determinism(seed=0)
+    out_off = build_train_transforms(cfg_off)(data)
+    set_determinism(seed=None)
+
+    for sample in out_on:
+        assert sample["image"].shape == (4, 16, 16, 16)  # all 4 channels present
+        assert torch.isfinite(sample["image"]).all()
+
+    any_different = any(
+        not torch.equal(a["image"], b["image"]) for a, b in zip(out_on, out_off, strict=True)
+    )
+    assert any_different
 
 
 # --- build_val_transforms -------------------------------------------------

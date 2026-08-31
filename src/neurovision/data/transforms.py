@@ -14,6 +14,7 @@ nothing here is hardcoded.
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Hashable, Mapping
 from typing import Any
 
@@ -25,10 +26,14 @@ from monai.transforms import (
     EnsureTyped,
     LoadImaged,
     MapTransform,
+    Rand3DElasticd,
+    RandAdjustContrastd,
+    RandBiasFieldd,
     RandCropByPosNegLabeld,
     RandFlipd,
     RandGaussianNoised,
     RandRotate90d,
+    RandRotated,
     RandScaleIntensityd,
     RandShiftIntensityd,
     SpatialPadd,
@@ -139,7 +144,26 @@ def build_train_transforms(cfg: Any) -> Compose:
     """Build the training-time MONAI transform pipeline.
 
     Reads `cfg.data.patch_size`, `cfg.data.pos_neg_ratio`,
-    `cfg.data.samples_per_volume`, and `cfg.data.augment.*`.
+    `cfg.data.samples_per_volume`, and `cfg.data.augment.*` -- including four
+    heavier augmentations (continuous-angle rotation, elastic deformation,
+    gamma/contrast, simulated bias field) added alongside the original light
+    recipe (flips, 90-degree rotation, intensity scale/shift/noise). Every
+    new augmentation is gated by its own `*_prob` key and is a no-op at
+    `prob=0.0`, so an experiment config that does not set the new keys keeps
+    training exactly as before -- with ONE accepted exception: because these
+    new `Rand*` transforms are inserted into the `Compose` list, each one
+    still draws from the pipeline's shared RNG stream on every call, even
+    when its own `prob` is 0.0 (checking "do I fire" consumes a random
+    number). This shifts the exact per-case crop/flip/noise realisation for
+    any experiment that gets freshly (re)trained after this change, relative
+    to before, even if it never turns the new augmentations on. This is not
+    fixable without dropping the no-op transforms from the list entirely
+    (which would defeat the point of a config-toggleable augmentation), it
+    does not retroactively change any already-published number since nothing
+    here re-scores a cached checkpoint's saved predictions, and bit-identical
+    reproducibility across training sessions was never guaranteed in this
+    project anyway (3D conv backward kernels are non-deterministic on CUDA
+    regardless of seed).
 
     Args:
         cfg: The full composed Hydra config.
@@ -196,12 +220,64 @@ def build_train_transforms(cfg: Any) -> Compose:
         RandFlipd(keys=["image", "label"], prob=augment.flip_prob, spatial_axis=1),
         RandFlipd(keys=["image", "label"], prob=augment.flip_prob, spatial_axis=2),
         RandRotate90d(keys=["image", "label"], prob=augment.rot90_prob, spatial_axes=(0, 1)),
+        # NEW: continuous small-angle rotation (as opposed to RandRotate90d's
+        # fixed 90-degree steps above). The config gives the angle in degrees
+        # for human readability; MONAI's range_x/y/z want radians.
+        # mode=("bilinear", "nearest") matches keys=("image", "label"):
+        # bilinear correctly blends the continuous-valued image, while
+        # nearest is what keeps the label's {0.0, 1.0} region mask binary
+        # after resampling -- bilinear on the label would leave fractional
+        # "half in this region" voxels, corrupting the training target
+        # silently (see docs/lessons.md on silent label corruption).
+        # padding_mode="zeros" is a valid "background"/"not in this region"
+        # fill for the label, and close enough to neutral for the z-scored
+        # image too.
+        RandRotated(
+            keys=["image", "label"],
+            range_x=math.radians(augment.rotate_range_deg),
+            range_y=math.radians(augment.rotate_range_deg),
+            range_z=math.radians(augment.rotate_range_deg),
+            prob=augment.rotate_prob,
+            mode=("bilinear", "nearest"),
+            padding_mode="zeros",
+        ),
+        # NEW: elastic deformation, warping the patch with a smooth random
+        # displacement field. Same bilinear/nearest + zeros reasoning as
+        # RandRotated above. spatial_size is left at its default (None),
+        # which falls back to the input array's own shape -- the patch is
+        # already fixed-size from the crop+pad above, so there is nothing to
+        # resize to.
+        Rand3DElasticd(
+            keys=["image", "label"],
+            sigma_range=tuple(augment.elastic_sigma_range),
+            magnitude_range=tuple(augment.elastic_magnitude_range),
+            prob=augment.elastic_prob,
+            mode=("bilinear", "nearest"),
+            padding_mode="zeros",
+        ),
         # Intensity augmentations below apply to "image" only, never
         # "label". The label is a binary region mask; running intensity
         # jitter on it would silently corrupt the training target.
         RandScaleIntensityd(keys=["image"], factors=augment.scale_intensity_factor, prob=1.0),
         RandShiftIntensityd(keys=["image"], offsets=augment.shift_intensity_offset, prob=1.0),
         RandGaussianNoised(keys=["image"], prob=augment.noise_prob, std=augment.noise_std),
+        # NEW: gamma/contrast jitter, image-only like the intensity
+        # transforms above.
+        RandAdjustContrastd(
+            keys=["image"], gamma=tuple(augment.gamma_range), prob=augment.gamma_prob
+        ),
+        # NEW: simulated MRI bias-field artifact, image-only. Checked by
+        # hand (see tests/test_transforms.py and the module docstring below)
+        # that MONAI's RandBiasField already samples ONE random field per
+        # call and multiplies every channel by that same field -- exactly
+        # the "one physical field per scan session, shared across the 4
+        # co-acquired modalities" behaviour we want, so no multi-channel
+        # wrapper is needed here.
+        RandBiasFieldd(
+            keys=["image"],
+            coeff_range=tuple(augment.bias_field_coeff_range),
+            prob=augment.bias_field_prob,
+        ),
     ]
     return Compose(transforms)
 

@@ -223,7 +223,7 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 
 | Phase | Item | Precondition |
 |---|---|---|
-| D | D1 multi-seed → D2 pooled multi-cohort → D3 fine-tune-on-SSA | GPU free after A7. D1 also unblocks B3 |
+| D | D0 heavier-augmentation ablation → D1 multi-seed → D2 pooled multi-cohort → D3 fine-tune-on-SSA | GPU free after A7. D0 pre-registered 2026-08-27 (`docs/research/preregistration_augmentation.md`); if it fires ADOPT, D1/D2/D3 inherit the augmentation change. D1 also unblocks B3 |
 | B3 | Deep-ensemble comparator, completing the uncertainty ladder | D1 seeds exist |
 | E | **E1–E6 built** (2026-08-24); E7 UI outstanding | See the Phase E board below |
 | F | IDH on UCSF-PDGM | Explicit go/no-go after Phase C. Costs a large download and a training run |
@@ -459,6 +459,7 @@ prior in the plan — the sub-Saharan literature replicates this result.
 
 | # | Run | Cost | Purpose |
 |---|---|---|---|
+| D0 | **Heavier augmentation ablation**: `neurovision_heavy_aug` (seed 42, 64³, 80 epochs, identical to the existing `neurovision` checkpoint except `data.augment` gains small-angle rotation, gamma, simulated bias field, elastic deformation) vs the existing checkpoint | ~23–30 GPU-h, one run | Attacks `dice_TC` −0.0333 pooled shift (note 30) without needing target-domain data. Pre-registered in `docs/research/preregistration_augmentation.md`, single-seed and explicitly flagged as underpowered — a cheap first probe, not a substitute for D2/D3 |
 | D1 | **Multi-seed**: 3 seeds × {`neurovision`, `baseline_unet3d`, `capacity_control_unet3d`} at 64³ | ~70 GPU-h | A noise floor for every number in the project; restores the lost capacity-control checkpoint; yields the deep ensemble for B3 |
 | D2 | **Pooled multi-cohort**: BraTS + SSA + PED, one seed, with a held-out slice of each external cohort | ~40 GPU-h | Attacks `dice_TC` −0.0333 directly. Needs a new `configs/data/splits_pooled.yaml`, **frozen before training** like every other split file |
 | D3 | **Fine-tune-on-SSA arm**: start from the BraTS checkpoint, fine-tune on the SSA training slice | ~8 GPU-h | The cheap, deployable answer; the literature says this recovers most of the gap |

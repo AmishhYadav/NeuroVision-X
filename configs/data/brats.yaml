@@ -33,6 +33,14 @@ samples_per_volume: 4
 # Deliberately mild and label-preserving. Brain MRI is co-registered and
 # roughly canonically oriented, so aggressive spatial warping mostly
 # manufactures anatomy that does not occur.
+#
+# The four keys below (rotate_*, gamma_*, bias_field_*, elastic_*) exist for
+# exactly one experiment: docs/research/preregistration_augmentation.md (D0),
+# testing whether simulating scanner/anatomy variation recovers some of the
+# measured SSA/PED generalisation gap. They default to prob 0.0 here -- a
+# complete no-op -- so every existing experiment config is unaffected.
+# configs/experiment/neurovision_heavy_aug.yaml is the only place that turns
+# them on, at the exact magnitudes fixed in that pre-registration.
 augment:
   flip_prob: 0.5 # applied independently on each of the 3 axes
   rot90_prob: 0.5
@@ -40,6 +48,15 @@ augment:
   shift_intensity_offset: 0.1 # additive, in z-scored units
   noise_prob: 0.15
   noise_std: 0.01
+  rotate_prob: 0.0 # off by default -- see note above
+  rotate_range_deg: 15.0
+  gamma_prob: 0.0
+  gamma_range: [0.7, 1.5]
+  bias_field_prob: 0.0
+  bias_field_coeff_range: [0.0, 0.3]
+  elastic_prob: 0.0
+  elastic_sigma_range: [5.0, 8.0]
+  elastic_magnitude_range: [50.0, 150.0]
 
 # --- Splits ---
 # Written once by make_splits() and then frozen. Regenerating changes which

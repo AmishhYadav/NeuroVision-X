@@ -1,0 +1,38 @@
+# @package _global_
+#
+# D0: does heavier training augmentation close part of the SSA/PED
+# generalisation gap? Pre-registered in
+# docs/research/preregistration_augmentation.md -- read that file before
+# changing anything below. Nothing here may be edited once the run starts.
+#
+#   python scripts/train.py +experiment=neurovision_heavy_aug data.root_dir=/path/to/prep
+#
+# Identical to configs/experiment/neurovision.yaml in every respect except
+# data.augment: same seed (42, via _baseline_common), same 64^3 patch, same
+# 80-epoch schedule. That is the whole point -- this is a single-variable
+# ablation against the existing neurovision checkpoint, not a new recipe.
+
+defaults:
+  - neurovision
+  - _self_
+
+experiment_name: neurovision_heavy_aug
+
+data:
+  augment:
+    rotate_prob: 0.3
+    rotate_range_deg: 15.0
+    gamma_prob: 0.3
+    gamma_range: [0.7, 1.5]
+    bias_field_prob: 0.3
+    bias_field_coeff_range: [0.0, 0.3]
+    elastic_prob: 0.2 # deliberately the most conservative of the four --
+    # see preregistration_augmentation.md for why: elastic warp is the
+    # transform most likely to distort a small ET lesion boundary, which is
+    # already the weakest region under shift.
+    elastic_sigma_range: [5.0, 8.0]
+    elastic_magnitude_range: [50.0, 150.0]
+
+wandb:
+  group: phase_d_generalisation
+  tags: [phase-d, d0, augmentation-ablation]
