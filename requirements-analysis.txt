@@ -16,6 +16,13 @@
 # Measured resolution of this file (uv pip compile, Python 3.11, 2026-08-23):
 #   numpy 2.2.6 · pandas 2.3.3 · scipy 1.17.1 · scikit-image 0.26.0
 #   connected-components-3d 3.29.0 (panoptica's instance labeller)
+# Re-measured after adding nnunetv2 (2026-08-31): identical resolution, every
+# pin above unchanged, torch stays 2.13.0. nnunetv2's own dependency tree
+# (acvl-utils, batchgenerators, dynamic-network-architectures, scikit-learn)
+# resolves alongside panoptica's without forcing anything -- checked with
+# `uv pip install --python <scratch venv> -r requirements-analysis.txt` before
+# adding the line below, specifically so this file's own numpy<2.3 trap (see
+# above) could not silently recur a third time.
 #
 # Build it with:
 #   uv venv --python 3.11 .venv-analysis
@@ -57,6 +64,17 @@ SimpleITK==2.5.6
 hydra-core==1.3.4
 tqdm==4.70.0
 matplotlib==3.11.1
+
+# --- Gate A: strong-baseline comparator (Phase A, A7) ----------------------
+# docs/research/preregistration_strong_baseline.md's `nnunet_v2_3dfullres`
+# arm. Used two ways: (1) here, on the Mac/CPU, for
+# scripts/export_nnunet_dataset.py -- pure dataset-format conversion plus its
+# CLI's `nnUNetv2_plan_and_preprocess` (also CPU); (2) inside the Kaggle
+# training kernel, `pip install`ed fresh there the same way every other
+# Kaggle-only package is (see docs/kaggle_workflow.md) -- it is NOT part of
+# requirements.txt and never touches a training session's environment.
+# `nnUNetv2_train`/`_predict` themselves need a GPU and do not run here.
+nnunetv2==2.8.1
 
 # --- Dev tooling ----------------------------------------------------------
 # The suite runs in this env too, so an additivity test can compare a
