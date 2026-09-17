@@ -619,3 +619,25 @@ Dice).
 
 See `docs/gpu_session_checklist.md` for the companion rule: only checkpoints
 and logs come back from a GPU box, never caches.
+
+### What was deleted on 2026-09-15, and why
+
+Second reclaim: **83 GB** (free space 36 GiB → 119 GiB; `outputs/` 128 GB → 23 GB).
+Every entry is a cache whose result is already a small CSV or a numbered note,
+and whose checkpoint (where one is needed to rebuild) still exists.
+
+| Deleted | Size | Why it was safe | Rebuild |
+|---|---|---|---|
+| `outputs/ambiguity_*/**/*.npz` (87 dirs) | 45 GB | Branch-disagreement analysis closed — notes 35, 37, 38 (Gate 1 partial, Gate 2 partial, P2 null). The `ambiguity_summary.csv` / `ambiguity_manifest.csv` per dir were **kept** | `scripts/extract_ambiguity_serial.py`, `neurovision` best.pt, ~94 s/case on the M4 |
+| `data/raw/brats2021_dl` | 12 GB | Re-downloaded 2026-09-01 only to feed the nnU-Net export; SHA-256 manifests in `docs/data_manifests/` | Re-download |
+| `outputs/nnunet_raw` | 10 GB | G1 export; GPU track parked | `scripts/export_nnunet_dataset.py` after the re-download, minutes |
+| `uncertainty/` under `eval_test_baseline_unet3d`, `baseline_unet3d_80ep_mc/eval_test`, `mc_ped`, `mc_ssa` | 9.6 GB | MC-dropout caches; note 39 settled that single-pass entropy is equivalent. `uncertainty_summary.csv` and `per_case_metrics.csv` **kept** | `scripts/evaluate.py inference.mc_dropout.enabled=true`, ~2.5 h per 189-case split on CPU |
+| `outputs/gates_*/**/*.npz`, `outputs/gatespred_*/**/*.npz` | 1.9 GB | Exploratory gate read-out (note 34). The `gate_*.csv` results **kept** | `scripts/extract_gates.py` |
+| `outputs/roi_sweep/neurovision_roi96/predictions` | 1.6 GB | Inference-ROI hypothesis refuted (note 36); CSVs kept | `scripts/evaluate.py` at ROI 96³, ~25 min |
+| `outputs/kaggle_kernels/d0-probe/kernel_output/{checkpoints,repo,wandb}`, `nnunet-probe/kernel_output/nnUNet_preprocessed` | 1.6 GB | 2-epoch probe checkpoints and nnU-Net's preprocessed cache; logs kept | Not needed |
+| `outputs/ablation_content_only_gate/.../epoch_0078.pt`, `epoch_0079.pt` | 0.8 GB | `last.pt` *is* epoch 79 (verified by loading); `best.pt` kept | — |
+| `outputs/kaggle_upload/` | 0 GB real | Hard-link tree of `data/preprocessed/brats` (same inodes), staged for the upload that already happened. `data/preprocessed/brats` untouched — 1,253 entries after deletion | — |
+
+**Kept on purpose:** all eight `logits/` directories (~19 GB — the re-scoring
+artifact from the table in `CLAUDE.md`), the three surviving checkpoints, the
+irreplaceable `outputs/eval_test/predictions`, and `outputs/conformal/*/curves.npz`.

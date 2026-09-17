@@ -1,6 +1,8 @@
 # Execution Plan — Milestone 3
 
-**Written:** 2026-08-19 · **Horizon:** ~6 weeks · **Status:** active
+> **SUPERSEDED 2026-08-23 by `master_plan.md`** (its sequencing and gates; the measurements and cost tables here remain valid and are cited from there). Status line below is historical. Do not plan from this file.
+
+**Written:** 2026-08-19 · **Horizon:** ~6 weeks · **Status:** superseded (see banner)
 
 **Relationship to other documents.** This supersedes the *sequencing and gates* of
 `docs/research/improvement_plan.md` wherever the two disagree; that document's

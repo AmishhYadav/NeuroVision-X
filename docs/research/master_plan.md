@@ -195,12 +195,27 @@ queue, because the next session trusts it.
 | B1 | `src/neurovision/uncertainty/conformal.py` + `scripts/conformal.py` | `[x]` | λ̂ fitted on val, applied frozen to test, realised risk ≤ α on test |
 | B2 | Apply the frozen λ̂ to SSA and PED; weighted/Mondrian variant | `[x]` (Mondrian arm deferred — registered as a counterfactual, see prereg) | A table of nominal α vs realised risk per cohort, with CIs |
 
-#### Track 2 — GPU. Starts the day the cluster is live. Runs in parallel with Track 1.
+#### Track 2 — GPU. **PARKED 2026-09-15** — see the box below. Resume from the recorded state, not from scratch.
+
+> **PARKED — author decision, 2026-09-15.** The model/paper track (everything GPU: G0, A7, Gate A,
+> D0–D3, B3, F) is paused so the remaining time goes into finishing the *tool* end to end. Rationale:
+> a complete clinical tool with a slightly weaker model is worth more than an incomplete tool with a
+> marginally better one. Nothing here is cancelled; the state below is exactly where each item stood
+> when it stopped, so a future session restarts without re-deriving it.
+>
+> | Item | State at parking | To resume |
+> |---|---|---|
+> | G0 — nnU-Net v2 timing probe | Ran on Kaggle T4 (`amishyadav123/neurovision-nnunet-probe`, COMPLETE, 2026-09-02). `nnUNetTrainer_5epochs` on a subset of `Dataset901_NeuroVisionXBraTS21`. Log lives in that kernel's output; the local pull broke on a `BrokenPipeError` and only `nnUNet_preprocessed` came back (since deleted as a cache) | `kaggle kernels output amishyadav123/neurovision-nnunet-probe`, read the *Extrapolated cost report* cell, write the number into `docs/experiments.md` before spending any A7 hours |
+> | G1 — nnU-Net export | Done (`b255c82`). `outputs/nnunet_raw` **deleted 2026-09-15** (10 GB cache); `data/raw/brats2021_dl` (12 GB, re-downloaded for it) also deleted | Re-download raw BraTS 2021 (SHA manifests in `docs/data_manifests/`), rerun `scripts/export_nnunet_dataset.py` — minutes |
+> | A7 / Gate A | Not started | Needs G0's cost number first — the 1000-epoch default is ~250k steps |
+> | **D0 — heavy-augmentation run** (`preregistration_augmentation.md`) | **Mid-flight, 2 of ~3 Kaggle sessions done.** s1 `neurovision-d0-s1` trained epochs 0–33 (best 29, health OK, ~998 s/epoch on T4, `GIT_REF=54c03a6`). s2 `neurovision-d0-s2` COMPLETE on Kaggle; its output pulled 2026-09-15 into `outputs/kaggle_kernels/d0-run2/kernel_output` (see that dir for the epoch reached). No s3 launched | Prepare `d0-run3` exactly as `d0-run2` was: `kernel_sources` = the s2 slug, `EXPECT_CKPT_EPOCH` = s2's final epoch, same `GIT_REF`. 80 epochs total. Then `scripts/evaluate.py` on test + SSA + PED and the pre-registered paired comparison |
+> | D1–D3, B3, F | Not started | Unchanged from the Phase D / F sections |
+
 
 | # | Item | State | Done when |
 |---|---|---|---|
 | G0 | 2-epoch timing probe on the new hardware | `[ ]` | Measured step time and peak VRAM in a log, and the probe **reached the failure condition**, not merely executed |
-| G1 | `scripts/export_nnunet_dataset.py` — our frozen split to nnU-Net layout | `[ ]` | `splits_final.json` contains exactly our 875 train cases; no val or test case appears in it |
+| G1 | `scripts/export_nnunet_dataset.py` — our frozen split to nnU-Net layout | `[x]` | `splits_final.json` contains exactly our 875 train cases; no val or test case appears in it |
 | A7 | nnU-Net v2 `3d_fullres` single fold + Auto3DSeg SegResNet single fold | `[ ]` | Both scored through **our** `scripts/evaluate.py` metric path on the same 189 test cases |
 | — | **GATE A** | `[ ]` | `docs/research/preregistration_strong_baseline.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
 
@@ -223,10 +238,10 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 
 | Phase | Item | Precondition |
 |---|---|---|
-| D | D0 heavier-augmentation ablation → D1 multi-seed → D2 pooled multi-cohort → D3 fine-tune-on-SSA | GPU free after A7. D0 pre-registered 2026-08-27 (`docs/research/preregistration_augmentation.md`); if it fires ADOPT, D1/D2/D3 inherit the augmentation change. D1 also unblocks B3 |
+| D | D0 heavier-augmentation ablation → D1 multi-seed → D2 pooled multi-cohort → D3 fine-tune-on-SSA | **PARKED 2026-09-15** with D0 mid-flight — see the Track 2 box. D0 pre-registered 2026-08-27 (`docs/research/preregistration_augmentation.md`); if it fires ADOPT, D1/D2/D3 inherit the augmentation change. D1 also unblocks B3 |
 | B3 | Deep-ensemble comparator, completing the uncertainty ladder | D1 seeds exist |
-| E | **E1–E6 built** (2026-08-24); E7 UI outstanding | See the Phase E board below |
-| F | IDH on UCSF-PDGM | Explicit go/no-go after Phase C. Costs a large download and a training run |
+| E | **E1–E7 built and wired** (2026-08-26/27) — the pipeline is reachable at `/clinical` | See the Phase E board below. What remains for Phase E is *tool completion*, to be scoped with the author in a tool-completion plan (next document to write, 2026-09-15) |
+| F | IDH on UCSF-PDGM | Explicit go/no-go after Phase C — decided **not yet** (2026-08-26); parked with the rest of the GPU track 2026-09-15 |
 | G | End-to-end error budget | Everything above that will actually ship |
 | H | Write-up and release | G |
 
@@ -241,7 +256,7 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 | E2 | `data/clinical_preprocess.py` — co-registration, SRI24, HD-BET, optional N4 | `[x]` built · `[ ]` **run on a real study** | Pure planning layer testable with no ANTs; needs an HD-BET weight download on first real run |
 | E3+E4 | `inference/input_qc.py` — 12 label-free checks, refusal with a named reason | `[x]` | E4 is one of E3's checks; splitting them would put one refusal rule in two places |
 | E5 | `inference/gatekeeper.py` — PROCEED / CAUTION / REFUSE | `[x]` **calibrated 2026-08-26** | `enabled_signals=[input_qc, predicted_dice, conformal_band]` (Gate C positive; `ood_score` stays disabled, no scorer built). `scripts/calibrate_gatekeeper.py model=segqc` run on n=187 val cases; `configs/clinical/default.yaml`'s `gatekeeper.thresholds` now points at `outputs/gatekeeper/thresholds.json` (gitignored — rerun that exact command after a fresh clone to regenerate it) |
-| E6 | `reporting/dicom_seg.py` — DICOM-SEG out | `[x]` module built and tested · **not wired into any live pipeline** | Validates geometry against the source series and refuses; does **not** resample from atlas space, so it will refuse on essentially every real post-E2 case until a resample-back-to-source-geometry step exists (unscoped, not yet a queue item) |
+| E6 | `reporting/dicom_seg.py` — DICOM-SEG out | `[x]` module built and tested · `[x]` **wired into live jobs 2026-08-27** (commit `54c03a6`, with entropy / conformal / Grad-CAM on live jobs) | Validates geometry against the source series and refuses; still does **not** resample from atlas space, so a real post-E2 case can still come back "export refused" — that is a reported outcome of the job, not a failure |
 | E7 | UI — bounded mask, QC estimate, refusal banner | `[x]` **done 2026-08-26** | 3D digital-twin viewer + landing page (found uncommitted, finished, committed); new `/clinical` page — upload, job status, `RefusalBanner` (neutrally worded, pulls REFUSE findings from whichever gate fired), `GatekeeperPanel` (the QC-model predicted-Dice / conformal-band detail, surfaced not just logged), `ClinicalStudyViewer` (reuses `ViewportGrid`/`SliceRibbon`/`Legend` unmodified). E2E harness extended (section 11), not replaced |
 | — | Wire E1–E5 into `app/backend/` | `[x]` **done 2026-08-26** — `clinical_jobs.py` (E1→E3→E2→E3→segment(neurovision, pinned)→QC/conformal signals→E5) + `/clinical/*` HTTP routes on `api.py` (upload, list/get/delete job, volume + mask fetch); `"refused"` a distinct job state from `"failed"`, surfaced as HTTP 200 not an error; full suite green (2004 passed, 15 skipped) | E6 deliberately excluded (see E6 row). Frontend wiring (a refusal banner, QC-estimate display) against these routes is the one remaining piece to make this reachable in the browser -- E7 |
 

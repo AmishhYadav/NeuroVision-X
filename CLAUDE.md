@@ -7,7 +7,7 @@ Project instructions for Claude Code. Read this before doing anything in this re
 | File | What it holds |
 |---|---|
 | `docs/research/master_plan.md` | **THE ACTIVE PLAN.** Read it before planning any work. Starting cold? Its §4 *Execution order* is the queue, the dependency arrows and the working agreement |
-| `docs/experiments.md` | Every run and every measured result, notes 1–39 |
+| `docs/experiments.md` | Every run and every measured result, notes 1–44 |
 | `docs/paper/claims_and_evidence.md` | The gate on what may be written. A claim not in that table does not go in the paper |
 | `docs/lessons.md` | The traps, with evidence. Each one already cost GPU hours, a wrong number, or a silent bug |
 | `docs/project_state.md` | The Milestone 1–3 build record, archived |
@@ -188,7 +188,7 @@ package's `__init__.py` for the decorator to run.
 
 ---
 
-## Current status — 2026-08-26
+## Current status — 2026-09-15
 
 **Phase: Milestone 4. Read `docs/research/master_plan.md` first.** It is the active plan and
 supersedes the sequencing and gates of `execution_plan.md` and `improvement_plan.md`.
@@ -220,18 +220,25 @@ registration/skull-stripping → input QC again → segmentation (always the dep
 checkpoint) → the QC model's and conformal risk control's signals → the refusal gate, out to
 PROCEED / PROCEED_WITH_CAUTION / REFUSE — reachable in the browser at `/clinical`
 (`app/backend/clinical_jobs.py`, `/api/clinical/*`, `app/frontend/src/pages/clinical/`). A `"refused"`
-job is a distinct, successful outcome, never conflated with a failure. E6 (DICOM-SEG export) is built
-and tested but deliberately not wired into this pipeline — see the master plan's Phase E row for why.
+job is a distinct, successful outcome, never conflated with a failure. E6 (DICOM-SEG export) plus
+entropy / conformal / Grad-CAM are wired into live jobs as of `54c03a6` (2026-08-27).
 2004+ tests passing, frontend build/tests clean, `scripts/smoke_test.py` clean.
 
-**What is next.** The CPU track (Phases A, B, C, and E1–E5+wiring) is done. What remains and is
-gated, per `docs/research/master_plan.md` §4.9: **Track 2 (GPU)** — a timing probe, then the
-strong-baseline gate (nnU-Net v2 on our frozen split), pre-registered in
-`docs/research/preregistration_strong_baseline.md` — starts only when cluster access exists, which is
-outside this document. **Phase F (IDH)** was explicitly decided **not gated in yet** (2026-08-26,
-after Gate C) — revisit later, not closed. Everything else that was CPU-buildable has been built;
-re-read `docs/research/master_plan.md` §4.2 ("how to tell what is already done") before assuming
-otherwise, since this file drifts and the filesystem is the ground truth.
+**What is next — direction changed 2026-09-15.** The CPU research track (Phases A, B, C, E) is
+done. **The GPU/model track is PARKED** (author decision, 2026-09-15): G0's nnU-Net probe ran but its
+number is unrecorded, A7/Gate A not started, and **D0 (heavy augmentation) is mid-flight on Kaggle —
+two of ~three sessions done, no third launched**. The exact resume state for each is in the PARKED
+box at the top of `docs/research/master_plan.md` §4.3 Track 2. Do not restart any of it from
+scratch, and do not start it at all without the author saying so.
+
+**The active work is finishing the tool** — the clinical pipeline as a complete, usable product
+rather than a better model. The reasoning: a complete tool with a slightly weaker model is a better
+outcome than an incomplete tool with a marginally better one. **The scope is
+`docs/research/tool_completion_plan.md` (approved 2026-09-18)** — queue T0–T7, dependency arrows,
+and a "Demo cut" section for the author's presentation on **2026-09-19 ~14:00**. Read it before
+building anything; on or before that date, work only the Demo cut tiers. Phase F (IDH) is T7
+there, gated on the author's go. Re-read `docs/research/master_plan.md` §4.2 before assuming
+anything is or is not done — the filesystem is the ground truth.
 
 **Data on disk.** `data/preprocessed/{brats,brats_ssa,brats_ped}` — `brats` is backed only by the live
 Kaggle dataset `amishyadav123/neurovision-brats-prep`, so **do not delete it**. Raw data was deleted
@@ -253,8 +260,9 @@ that `neurovision`'s live directories are nested one level deeper than the other
 | `ablation_content_only_gate` | — | — | — | — |
 | `capacity_control` | — | — | — | — |
 
-~17 GB in total, 79 GiB free. Both complete rows mean lesion-wise re-scoring and the whole conformal
-phase need **zero inference**. `ablation_content_only_gate` has no saved volume artifact at all but
+~19 GB in total; 119 GiB free after the 2026-09-15 reclaim (`docs/reproducibility.md` §11 lists
+exactly what went — every `ambiguity_*` and MC `uncertainty/` cache, `nnunet_raw`, `data/raw`). Both
+complete rows mean lesion-wise re-scoring and the whole conformal phase need **zero inference**. `ablation_content_only_gate` has no saved volume artifact at all but
 its checkpoint survives, so it costs one ~15 min CPU pass per split to bring back.
 
 Two traps in that table. `outputs/eval_test` is **not** `neurovision` — it is the superseded

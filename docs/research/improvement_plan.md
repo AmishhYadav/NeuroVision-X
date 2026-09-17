@@ -1,5 +1,7 @@
 # Improvement Plan — from "a model with nulls" to a contribution
 
+> **SUPERSEDED 2026-08-23 by `master_plan.md`.** Kept for its cost tables and the reasoning behind Milestone 4's cut list. Do not plan from this file.
+
 Written 2026-08-19. Supersedes nothing; read alongside `docs/experiments.md`
 notes 11–25 and `docs/research/contribution.md`.
 

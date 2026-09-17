@@ -1,5 +1,7 @@
 # NeuroVision-X — the interpretable pipeline direction
 
+> **SUPERSEDED — Milestone 3 plan, closed 2026-08-23.** Its phases are done or adjudicated in `master_plan.md` §3 (feature adjudication) and §6 (cut list). Kept as the record of why the report pipeline is shaped as it is. Do not plan from this file.
+
 Planning document for the project's second contribution attempt: an end-to-end,
 interpretable pipeline from scan to structured anatomical report.
 
