@@ -10,9 +10,11 @@ that step.
 
 from __future__ import annotations
 
+import dataclasses
 import io
 import json
 import logging
+import os
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -1964,3 +1966,105 @@ def test_delete_clinical_job_refuses_path_outside_job_root(tmp_path: Path) -> No
     clinical_jobs.jobs.job_root(settings)  # ensure the root itself exists
     with pytest.raises(ValueError, match="job_root"):
         clinical_jobs.delete_clinical_job(settings, "../escaped")
+
+
+# --- T0.5: job.json persistence and rehydration after a backend restart -----
+
+
+def test_create_clinical_job_writes_job_json(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+
+    job_json = clinical_jobs.jobs.job_root(settings) / job.job_id / "job.json"
+    assert job_json.is_file()
+    assert json.loads(job_json.read_text()) == dataclasses.asdict(job)
+
+
+def test_update_clinical_job_rewrites_job_json(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+    job_dir = clinical_jobs.jobs.job_root(settings) / job.job_id
+
+    clinical_jobs._update_clinical_job(settings, job, stage="x")
+
+    on_disk = json.loads((job_dir / "job.json").read_text())
+    assert on_disk["stage"] == "x"
+    assert not (job_dir / "job.json.tmp").exists()
+
+
+def test_rehydrate_restores_done_job_after_store_cleared(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+    clinical_jobs._update_clinical_job(settings, job, preprocess_warnings=("w1",))
+    clinical_jobs._update_clinical_job(settings, job, state="done", stage="done", progress=1.0)
+
+    clinical_jobs._CLINICAL_JOBS.clear()
+
+    assert clinical_jobs.rehydrate_clinical_jobs(settings) == 1
+
+    restored = clinical_jobs.get_clinical_job(job.job_id)
+    assert restored is not None
+    assert restored.state == "done"
+    assert restored.preprocess_warnings == ("w1",)
+    assert isinstance(restored.preprocess_warnings, tuple)
+    assert [j.job_id for j in clinical_jobs.list_clinical_jobs()] == [job.job_id]
+
+
+def test_rehydrate_marks_interrupted_running_job_failed(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+    clinical_jobs._update_clinical_job(settings, job, state="running", stage="segmenting")
+
+    clinical_jobs._CLINICAL_JOBS.clear()
+
+    assert clinical_jobs.rehydrate_clinical_jobs(settings) == 1
+
+    restored = clinical_jobs.get_clinical_job(job.job_id)
+    assert restored is not None
+    assert restored.state == "failed"
+    assert "restarted" in restored.error.lower()
+
+    job_json = clinical_jobs.jobs.job_root(settings) / job.job_id / "job.json"
+    assert json.loads(job_json.read_text())["state"] == "failed"
+
+
+def test_rehydrate_skips_corrupt_job_json(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    bad_job_dir = clinical_jobs.jobs.job_root(settings) / "bad-job"
+    bad_job_dir.mkdir(parents=True)
+    (bad_job_dir / "job.json").write_text("not valid json {{{")
+
+    assert clinical_jobs.rehydrate_clinical_jobs(settings) == 0
+    assert clinical_jobs.get_clinical_job("bad-job") is None
+
+
+def test_rehydrate_does_not_overwrite_in_memory_job(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+    # Diverge the in-memory copy from job.json (still "queued" on disk)
+    # without going through `_update_clinical_job`, so a rehydration that
+    # incorrectly re-read the file would visibly clobber this.
+    job.state = "done"
+
+    assert clinical_jobs.rehydrate_clinical_jobs(settings) == 0
+    restored = clinical_jobs.get_clinical_job(job.job_id)
+    assert restored is job
+    assert restored.state == "done"
+
+
+def test_persist_io_error_does_not_raise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    settings = _settings(tmp_path)
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+
+    def _raising_replace(*args: object, **kwargs: object) -> None:
+        raise OSError("sentinel: disk hiccup")
+
+    monkeypatch.setattr(os, "replace", _raising_replace)
+
+    with caplog.at_level(logging.ERROR, logger="app.backend.clinical_jobs"):
+        clinical_jobs._update_clinical_job(settings, job, stage="y")
+
+    assert job.stage == "y"
+    assert any(record.levelno == logging.ERROR for record in caplog.records)

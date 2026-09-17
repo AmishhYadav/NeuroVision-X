@@ -1034,6 +1034,17 @@ def create_app() -> FastAPI:
     # 2. Routes, under /api.
     app.include_router(router)
 
+    # 2b. Reload any clinical job whose job.json survived a prior process's
+    # restart (see clinical_jobs.py's module docstring, "Persistence").
+    # Wrapped in try/except: a bad job directory on disk must never stop the
+    # app from starting.
+    try:
+        n_rehydrated = clinical_jobs.rehydrate_clinical_jobs(get_settings())
+        if n_rehydrated:
+            logger.info("create_app: rehydrated %d clinical job(s) from disk", n_rehydrated)
+    except Exception:  # noqa: BLE001 - a bad job dir must never fail app creation
+        logger.error("create_app: failed to rehydrate clinical jobs", exc_info=True)
+
     # 3. Static frontend, LAST -- mounted at "/" it would otherwise shadow
     # /api if registered first. Optional: the API must work standalone with
     # no frontend built, e.g. while iterating on it from the docs or curl.

@@ -101,6 +101,22 @@ job id is not a real possibility) but under the SAME `jobs.job_root(settings)`
 parent directory, each in its own `<job_id>/` subdirectory with different
 internal layout (`raw_dicom/`, `ingest/`, `clinical_prep/`, `prep/`, `cache/`)
 than a `jobs.py` job's (`raw/`, `prep/`, `cache/`).
+
+**Persistence.** `_CLINICAL_JOBS` is forgotten on every backend restart, but
+every artifact a job writes under its `<job_id>/` directory survives one --
+so each job also mirrors its state to `<job_id>/job.json`, the exact same
+dict `GET /api/clinical/jobs/{id}` serves (`dataclasses.asdict(job)`),
+written atomically (`job.json.tmp` then `os.replace`) on every
+`_update_clinical_job` call and once at creation. `rehydrate_clinical_jobs`
+is called once, from `app.backend.api.create_app`, to repopulate
+`_CLINICAL_JOBS` from whatever `job.json` files it finds under
+`jobs.job_root(settings)` before the first request is served -- a job whose
+persisted state was still `"queued"` or `"running"` was interrupted mid-run
+by the restart, so it is rehydrated as `"failed"` rather than replayed
+(nothing here re-launches a job's background thread). Persistence is a
+best-effort convenience, never a correctness requirement: a write failure is
+logged and swallowed, and a corrupt `job.json` is skipped at rehydration
+time -- neither may ever crash a running job or a server startup.
 """
 
 from __future__ import annotations
@@ -115,10 +131,10 @@ import time
 import uuid
 import zipfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 import nibabel as nib
 import numpy as np
@@ -341,6 +357,8 @@ def create_clinical_job(settings: Settings, dicom_zip: bytes) -> ClinicalJob:
     )
     with _LOCK:
         _CLINICAL_JOBS[job_id] = job
+        snapshot = asdict(job)
+    _persist_clinical_job(settings, job_id, snapshot)
     logger.info("Queued clinical job %s (%d DICOM file(s))", job_id, len(members))
     return job
 
@@ -368,12 +386,155 @@ def list_clinical_jobs() -> list[ClinicalJob]:
         return sorted(_CLINICAL_JOBS.values(), key=lambda job: job.created_at, reverse=True)
 
 
-def _update_clinical_job(job: ClinicalJob, **fields: object) -> None:
-    """Mutates `job`'s fields in place and bumps `updated_at`, under the lock."""
+def _job_json_path(settings: Settings, job_id: str) -> Path:
+    """Where one clinical job's persisted state lives.
+
+    Args:
+        settings: Resolved backend settings, used only to locate
+            `jobs.job_root(settings)`.
+        job_id: A job id.
+
+    Returns:
+        `jobs.job_root(settings) / job_id / "job.json"`.
+    """
+    return jobs.job_root(settings) / job_id / "job.json"
+
+
+def _persist_clinical_job(settings: Settings, job_id: str, snapshot: dict[str, Any]) -> None:
+    """Writes one job's state snapshot to `job.json`, atomically, best-effort.
+
+    Takes the already-serialised snapshot dict (an `dataclasses.asdict(job)`
+    taken by the caller, typically under `_LOCK`) rather than the `job`
+    object itself, so this function never needs the lock and can safely run
+    after it has been released.
+
+    Written to `<job_id>/job.json.tmp` first, then moved into place with
+    `os.replace` -- a reader (this process rehydrating on the next
+    restart, or a human `cat`-ing the file) never observes a half-written
+    file, and no stray `.tmp` file is left behind on success.
+
+    Never raises: persistence is a convenience for surviving a restart, not
+    a correctness requirement, so any I/O failure (full disk, missing
+    directory, permission error) is logged at ERROR with a traceback and
+    swallowed -- a job must keep running even if its disk write fails.
+
+    Args:
+        settings: Resolved backend settings, used only to locate
+            `jobs.job_root(settings)`.
+        job_id: The job this snapshot belongs to.
+        snapshot: A JSON-native dict (every field of `ClinicalJob` is
+            already a plain type once `preprocess_warnings`'s tuple is
+            accepted by `json.dumps`, which serialises a tuple exactly like
+            a list).
+    """
+    path = _job_json_path(settings, job_id)
+    tmp_path = path.parent / f"{path.name}.tmp"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path.write_text(json.dumps(snapshot, indent=2))
+        os.replace(tmp_path, path)
+    except OSError:
+        logger.error(
+            "_persist_clinical_job: failed to write %s for job %s; continuing without "
+            "persisting this update",
+            path,
+            job_id,
+            exc_info=True,
+        )
+
+
+def _update_clinical_job(settings: Settings, job: ClinicalJob, **fields: object) -> None:
+    """Mutates `job`'s fields in place, bumps `updated_at`, and persists to `job.json`.
+
+    The mutation and the `asdict` snapshot happen under `_LOCK`; the disk
+    write happens after the lock is released, so a slow write never blocks
+    another thread's read of `job`'s in-memory state.
+
+    Args:
+        settings: Resolved backend settings, forwarded to
+            `_persist_clinical_job` for `jobs.job_root(settings)`
+            resolution.
+        job: The job to mutate. Must already be the instance held in
+            `_CLINICAL_JOBS` (same convention as before this change).
+        **fields: Field name -> new value, applied via `setattr`.
+    """
     with _LOCK:
         for key, value in fields.items():
             setattr(job, key, value)
         job.updated_at = time.time()
+        snapshot = asdict(job)
+    _persist_clinical_job(settings, job.job_id, snapshot)
+
+
+def rehydrate_clinical_jobs(settings: Settings) -> int:
+    """Repopulates `_CLINICAL_JOBS` from `job.json` files left by a prior process.
+
+    Called once, from `app.backend.api.create_app`, before the first
+    request is served. Scans `jobs.job_root(settings)` for
+    `<job_id>/job.json` files and loads each into `_CLINICAL_JOBS` -- unless
+    a job with that id is already in memory (e.g. this function is called
+    twice, or a job was somehow created between two calls), in which case
+    the in-memory copy wins and the file is left untouched.
+
+    A job whose persisted `state` was still `"queued"` or `"running"` was
+    interrupted mid-pipeline by the restart -- nothing here re-launches its
+    background thread, so it is rehydrated as `state="failed"` with a
+    named `error`, and that corrected state is written back to `job.json`
+    so a second rehydration (or a human reading the file) sees the same
+    answer.
+
+    A `job.json` that fails to parse, or whose `state` is not one of
+    `JobState`'s literal values, is logged at WARNING and skipped -- a
+    corrupt file from an old, incompatible version of this module must
+    never crash server startup.
+
+    Args:
+        settings: Resolved backend settings, used to locate
+            `jobs.job_root(settings)`.
+
+    Returns:
+        The number of jobs newly loaded into `_CLINICAL_JOBS` (0 if none,
+        or if every job on disk was already in memory).
+    """
+    valid_states = get_args(JobState)
+    loaded = 0
+    for job_dir in sorted(jobs.job_root(settings).iterdir()):
+        job_json = job_dir / "job.json"
+        if not job_json.is_file():
+            continue
+        job_id = job_dir.name
+
+        try:
+            data = json.loads(job_json.read_text())
+            warnings = data.get("preprocess_warnings")
+            data["preprocess_warnings"] = tuple(warnings) if warnings is not None else None
+            if data.get("state") not in valid_states:
+                raise ValueError(f"unknown state {data.get('state')!r}")
+            job = ClinicalJob(**data)
+        except Exception:  # noqa: BLE001 - a corrupt job.json must never crash startup
+            logger.warning(
+                "rehydrate_clinical_jobs: skipping unreadable %s", job_json, exc_info=True
+            )
+            continue
+
+        interrupted = job.state in ("queued", "running")
+        if interrupted:
+            job.state = "failed"
+            job.error = "Backend restarted while this job was running; upload the study again."
+            job.updated_at = time.time()
+
+        with _LOCK:
+            if job_id in _CLINICAL_JOBS:
+                continue
+            _CLINICAL_JOBS[job_id] = job
+
+        if interrupted:
+            _persist_clinical_job(settings, job_id, asdict(job))
+        loaded += 1
+
+    if loaded:
+        logger.info("rehydrate_clinical_jobs: loaded %d clinical job(s) from disk", loaded)
+    return loaded
 
 
 def delete_clinical_job(settings: Settings, job_id: str) -> bool:
@@ -1443,18 +1604,19 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
     raw_dicom_dir = job_dir / "raw_dicom"
 
     try:
-        _update_clinical_job(job, state="running", stage="ingest", progress=0.05)
+        _update_clinical_job(settings, job, state="running", stage="ingest", progress=0.05)
         cfg = _compose_clinical_cfg()
 
         # --- E1: DICOM ingest --------------------------------------------
         ingest_out_dir = job_dir / "ingest"
         ingest_result = ingest_study(cfg, raw_dicom_dir, ingest_out_dir)
         _update_clinical_job(
-            job, ingest_result=_ingest_result_to_dict(ingest_result), progress=0.15
+            settings, job, ingest_result=_ingest_result_to_dict(ingest_result), progress=0.15
         )
 
         if not ingest_result.paths:
             _update_clinical_job(
+                settings,
                 job,
                 state="refused",
                 stage="ingest",
@@ -1466,7 +1628,7 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
             return job
 
         # --- E3, pre-E2 ----------------------------------------------------
-        _update_clinical_job(job, stage="input_qc (pre-preprocessing)")
+        _update_clinical_job(settings, job, stage="input_qc (pre-preprocessing)")
         volumes, _brain_mask = load_volume_infos(ingest_result.paths)
         # Different modalities legitimately sit on different voxel grids
         # before E2 co-registers them -- stage="pre_registration" downgrades
@@ -1475,11 +1637,12 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         report_pre: InputQCReport = run_input_qc(
             cfg, volumes, brain_mask=None, stage="pre_registration"
         )
-        _update_clinical_job(job, input_qc_pre=report_pre.to_dict(), progress=0.2)
+        _update_clinical_job(settings, job, input_qc_pre=report_pre.to_dict(), progress=0.2)
 
         if report_pre.verdict is Severity.REFUSE:
             reasons = "; ".join(f.message for f in report_pre.refusals())
             _update_clinical_job(
+                settings,
                 job,
                 state="refused",
                 stage="input_qc (pre-preprocessing)",
@@ -1488,15 +1651,17 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
             return job
 
         # --- E2: clinical preprocessing --------------------------------------
-        _update_clinical_job(job, stage="clinical_preprocessing")
+        _update_clinical_job(settings, job, stage="clinical_preprocessing")
         clinical_prep_dir = job_dir / "clinical_prep"
         preprocess_result = preprocess_clinical_study(
             cfg, ingest_result.paths, out_dir=clinical_prep_dir
         )
-        _update_clinical_job(job, preprocess_warnings=preprocess_result.warnings, progress=0.5)
+        _update_clinical_job(
+            settings, job, preprocess_warnings=preprocess_result.warnings, progress=0.5
+        )
 
         # --- E3, post-E2 -----------------------------------------------------
-        _update_clinical_job(job, stage="input_qc (post-preprocessing)")
+        _update_clinical_job(settings, job, stage="input_qc (post-preprocessing)")
         paths_for_qc: dict[str, Path] = dict(preprocess_result.outputs)
         if preprocess_result.brain_mask.is_file():
             paths_for_qc[_BRAIN_MASK_ROLE_KEY] = preprocess_result.brain_mask
@@ -1504,11 +1669,12 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         report_post: InputQCReport = run_input_qc(
             cfg, volumes2, brain_mask=brain_mask_arr, stage="post_registration"
         )
-        _update_clinical_job(job, input_qc_post=report_post.to_dict(), progress=0.55)
+        _update_clinical_job(settings, job, input_qc_post=report_post.to_dict(), progress=0.55)
 
         if report_post.verdict is Severity.REFUSE:
             reasons = "; ".join(f.message for f in report_post.refusals())
             _update_clinical_job(
+                settings,
                 job,
                 state="refused",
                 stage="input_qc (post-preprocessing)",
@@ -1517,13 +1683,14 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
             return job
 
         # --- Research preprocessing (existing, unmodified path) --------------
-        _update_clinical_job(job, stage="research_preprocessing")
+        _update_clinical_job(settings, job, stage="research_preprocessing")
         missing_roles = [role for role in ROLES if role not in preprocess_result.outputs]
         if missing_roles:
             # E1/E3 should already have refused for this -- checked
             # defensively anyway, so a gap in an earlier gate surfaces as a
             # structured "refused", never a KeyError misreported as "failed".
             _update_clinical_job(
+                settings,
                 job,
                 state="refused",
                 stage="research_preprocessing",
@@ -1546,10 +1713,10 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         preprocess_case(
             case, job_prep_dir, label_convention="brats2021", target_axcodes=("L", "P", "S")
         )
-        _update_clinical_job(job, progress=0.6)
+        _update_clinical_job(settings, job, progress=0.6)
 
         # --- Segmentation (existing, unmodified path; ALWAYS neurovision) ----
-        _update_clinical_job(job, stage="segmenting")
+        _update_clinical_job(settings, job, stage="segmenting")
         job_cache_dir = job_dir / "cache"
         clinical_settings = clinical_segmentation_settings(job_prep_dir, job_cache_dir)
 
@@ -1568,13 +1735,16 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
 
         def _forward_progress(stage: str, fraction: float) -> None:
             _update_clinical_job(
-                job, stage=f"segmenting: {stage}", progress=min(0.6 + fraction * 0.25, 0.85)
+                settings,
+                job,
+                stage=f"segmenting: {stage}",
+                progress=min(0.6 + fraction * 0.25, 0.85),
             )
 
         segment_case(clinical_settings, job.case_id, save_logits=True, progress=_forward_progress)
 
         # --- Signals + gatekeeper --------------------------------------------
-        _update_clinical_job(job, stage="gatekeeper", progress=0.85)
+        _update_clinical_job(settings, job, stage="gatekeeper", progress=0.85)
 
         qc_checkpoint = Path(str(cfg.analysis.qc_validate.checkpoint))
         if not qc_checkpoint.is_absolute():
@@ -1622,12 +1792,16 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
             ood_score=None,
         )
         decision = run_gatekeeper(cfg, signals)
-        _update_clinical_job(job, gatekeeper_decision=decision.to_dict())
+        _update_clinical_job(settings, job, gatekeeper_decision=decision.to_dict())
 
         if decision.decision is Decision.REFUSE:
             reasons = "; ".join(f"{v.signal}: {v.message}" for v in decision.refusals())
             _update_clinical_job(
-                job, state="refused", stage="gatekeeper", error=f"Gatekeeper refused: {reasons}"
+                settings,
+                job,
+                state="refused",
+                stage="gatekeeper",
+                error=f"Gatekeeper refused: {reasons}",
             )
             return job
 
@@ -1642,7 +1816,7 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         # gracefully (see `center_patch_on_mask`'s own empty-mask fallback), so a
         # raise here means something more unusual happened -- worth logging loudly,
         # not worth losing the whole job over.
-        _update_clinical_job(job, stage="explaining", progress=0.9)
+        _update_clinical_job(settings, job, stage="explaining", progress=0.9)
         for region in ("WT", "TC"):
             try:
                 inference.explain_case(clinical_settings, job.case_id, region)
@@ -1672,7 +1846,7 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         # (this ERROR log with a traceback, vs. the routine WARNING
         # `_export_dicom_seg` logs for a genuine per-case refusal), not
         # FATAL -- this remains a supplementary artifact.
-        _update_clinical_job(job, stage="exporting_dicom_seg", progress=0.95)
+        _update_clinical_job(settings, job, stage="exporting_dicom_seg", progress=0.95)
         try:
             _validate_dicom_seg_cfg(cfg)
             dicom_seg_path = _export_dicom_seg(
@@ -1698,7 +1872,7 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         # (see its own docstring for why); this try/except is the ONLY
         # layer that keeps a report-generation failure from turning an
         # otherwise-good job into "failed".
-        _update_clinical_job(job, stage="generating_report", progress=0.98)
+        _update_clinical_job(settings, job, stage="generating_report", progress=0.98)
         try:
             report_path = _generate_report(job, clinical_settings, job_dir, cfg)
             logger.info(
@@ -1713,9 +1887,9 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
                 exc_info=True,
             )
 
-        _update_clinical_job(job, state="done", stage="done", progress=1.0)
+        _update_clinical_job(settings, job, state="done", stage="done", progress=1.0)
         return job
     except Exception as exc:  # noqa: BLE001 - a failed job must stay reportable, never crash
         logger.error("Clinical job %s failed at stage %r", job_id, job.stage, exc_info=True)
-        _update_clinical_job(job, state="failed", error=str(exc))
+        _update_clinical_job(settings, job, state="failed", error=str(exc))
         return job

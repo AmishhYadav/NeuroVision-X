@@ -164,9 +164,11 @@ def _fabricate_done_clinical_job(settings: config.Settings) -> clinical_jobs.Cli
     prediction[1:3, 1:3, 1:3] = 3
     np.save(pred_path, prediction)
 
-    job.state = "done"
-    job.stage = "done"
-    job.progress = 1.0
+    # Goes through `_update_clinical_job` rather than setting attributes
+    # directly so the fabricated job's `job.json` on disk matches its
+    # in-memory state -- needed by tests that clear `_CLINICAL_JOBS` and
+    # rehydrate from disk (see `test_clinical_jobs_survive_app_recreation`).
+    clinical_jobs._update_clinical_job(settings, job, state="done", stage="done", progress=1.0)
     return job
 
 
@@ -678,3 +680,26 @@ def test_preexisting_routes_still_answer(client: TestClient) -> None:
     cases = client.get("/api/cases")
     assert cases.status_code == 200
     assert cases.json() == {"cases": []}
+
+
+# --- T0.5: a clinical job's job.json survives a backend restart -------------
+
+
+def test_clinical_jobs_survive_app_recreation(client: TestClient, backend: Path) -> None:
+    """A done job's `job.json` outlives one `create_app()` process and is
+    reloaded by the next -- the demo scenario T0.5 exists for: reopen a
+    finished study after the backend restarts.
+    """
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+
+    # Simulate the restart: the in-process store is gone, only job.json
+    # (written by `_fabricate_done_clinical_job`'s `_update_clinical_job`
+    # call) survives on disk.
+    clinical_jobs._CLINICAL_JOBS.clear()
+
+    client2 = TestClient(api.create_app())
+    response = client2.get(f"/api/clinical/jobs/{job.job_id}")
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "done"
