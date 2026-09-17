@@ -4,13 +4,92 @@ import {
   ApiError,
   ApiUnreachableError,
   createClinicalJob,
+  fetchClinicalReport,
   getClinicalJob,
   getClinicalJobConformalBand,
+  getClinicalJobGeometry,
   getClinicalJobGradcam,
   getClinicalJobMask,
   getClinicalJobUncertainty,
   getClinicalJobVolume,
 } from "./api";
+import type { ReportResponse } from "./api";
+
+// A minimal but STRUCTURALLY COMPLETE report, satisfying validateReport's
+// required-field guard - copied from `lib/report.test.ts`'s `makeReport`
+// base object (not exported from there, and re-deriving an "invalid" fixture
+// by hand risks asserting the wrong thing about validateReport rather than
+// about fetchClinicalReport, which is what this file actually tests).
+const VALID_REPORT: ReportResponse = {
+  report_version: 1,
+  case_id: "BraTS2021_00002",
+  generated_utc: "2026-08-18T15:08:03.013692+00:00",
+  disclaimer:
+    "This report is a research and educational decision-support artifact. It is not a " +
+    "diagnostic tool.",
+  not_claimed: [
+    ["cell type", "MRI resolves millimetre-scale tissue, not individual cells."],
+    ["WHO grade", "WHO CNS5 grading needs histology and molecular markers."],
+  ],
+  burden: {
+    volumes: { vol_ET_mm3: 23651.0, vol_WT_mm3: 190594.0 },
+    fractions: { frac_enhancing_of_wt: 0.1241, ratio_edema_to_core: 4.4613 },
+    shape: { sphericity_ET: 0.3116, surface_area_ET_mm2: 12786.996 },
+    multifocality: { n_components_ET: 1, largest_component_frac_ET: 0.9999 },
+    laterality: { dominant_side_ET: "left", frac_left_ET: 0.9984 },
+    centroid: { centroid_i_ET: 87.1017 },
+    other: {},
+  },
+  anatomy: {
+    atlas: { name: "tzo116plus", version: "2.0" },
+    caveat:
+      "This atlas describes healthy-brain anatomy. A tumour physically displaces the " +
+      "tissue around it.",
+    coverage_line: "23 of 122 structures classified eloquent, 99 unclassified.",
+    region: "WT",
+    structures: [
+      {
+        region: "WT",
+        structure: "Caudate_L",
+        laterality: "L",
+        lobe: "deep",
+        eloquence: "eloquent",
+        matched_term: "basal ganglia",
+        n_voxels: 4864,
+        volume_mm3: 4864.0,
+        frac_of_tumour: 0.02552,
+        frac_of_structure: 0.98501,
+      },
+    ],
+    n_structures_involved: 46,
+    frac_unlabelled: 0.3097,
+  },
+  eloquence: {
+    classification: "Sawaya eloquence grading",
+    citation: "Sawaya R, et al. Neurosurgery. 1998.",
+    evidence: "Eloquent locations in the Sawaya study are the motor/sensory cortices.",
+    source_owns_claim:
+      "This eloquence classification is a lookup into a named, published source.",
+    involved: [
+      { structure: "Caudate_L", laterality: "L", frac_of_tumour: 0.02552, frac_of_structure: 0.98501 },
+    ],
+    distance_mm: 0.0,
+    near_eloquent_threshold_mm: 10.0,
+    near_eloquent: true,
+    coverage_gaps: ["internal capsule", "dentate nucleus"],
+  },
+  provenance: {
+    atlas_name: "tzo116plus",
+    atlas_version: "2.0",
+    atlas_source: "NITRC group_id=214",
+    atlas_licence: "CC-BY-SA",
+    knowledge_versions: { eloquence_map: 1, aal_lobes: 1 },
+    segmentation_source: "label",
+    segmentation_dir: "/data/preprocessed/brats",
+    code_revision: "b918b35-dirty",
+    generated_utc: "2026-08-18T15:08:03.013692+00:00",
+  },
+};
 
 /**
  * Minimal mocked-`fetch` coverage for the clinical-job client functions,
@@ -388,5 +467,124 @@ describe("getClinicalJobGradcam", () => {
     const err = await getClinicalJobGradcam("job1", "TC", [1, 1, 1]).catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(500);
+  });
+});
+
+describe("getClinicalJobGeometry", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hits the geometry route and returns the parsed CaseMeta on success", async () => {
+    const meta = {
+      case_id: "job1",
+      shape: [128, 128, 96],
+      original_shape: [240, 240, 155],
+      bbox: [10, 20, 30, 100, 110, 90],
+      spacing: [1.0, 1.0, 1.0],
+      has_label: false,
+      has_prediction: true,
+      has_logits: true,
+      planes: { sagittal: 128, coronal: 128, axial: 96 },
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => meta,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getClinicalJobGeometry("job1");
+    expect(result).toEqual(meta);
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/clinical/jobs/job1/geometry");
+  });
+
+  it("throws ApiError with status 409 when the job isn't done yet", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 409, statusText: "Conflict" }),
+    );
+
+    const err = await getClinicalJobGeometry("job1").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
+  });
+
+  it("throws ApiError with status 404 for an unknown job id", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 404, statusText: "Not Found" }),
+    );
+
+    const err = await getClinicalJobGeometry("nope").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(404);
+  });
+});
+
+describe("fetchClinicalReport", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hits the clinical report route and returns the validated report on success", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => VALID_REPORT,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchClinicalReport("job1");
+    expect(result).toEqual(VALID_REPORT);
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/clinical/jobs/job1/report");
+  });
+
+  it("reads the detail field off a 404 response and throws ApiError with it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        json: async () => ({ detail: "no report for job1" }),
+      }),
+    );
+
+    await expect(fetchClinicalReport("job1")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      message: "no report for job1",
+    });
+  });
+
+  it("treats a 502 from the dev proxy as unreachable, not a normal API error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 502, statusText: "Bad Gateway" }),
+    );
+
+    await expect(fetchClinicalReport("job1")).rejects.toBeInstanceOf(ApiUnreachableError);
+  });
+
+  it("throws whatever validateReport throws when the body is structurally invalid", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        // Missing every required field validateReport checks for.
+        json: async () => ({}),
+      }),
+    );
+
+    await expect(fetchClinicalReport("job1")).rejects.toThrow();
   });
 });

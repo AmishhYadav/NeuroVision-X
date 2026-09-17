@@ -354,7 +354,11 @@ export function getProfile(caseId: string, signal?: AbortSignal): Promise<CasePr
 }
 
 /**
- * Fetches one case's Phase 4 structured report and validates its shape.
+ * Fetches a structured report from `path` and validates its shape. Shared by
+ * `fetchReport` (the demo viewer's `/report/{case_id}`) and
+ * `fetchClinicalReport` (a live clinical job's `/clinical/jobs/{id}/report`)
+ * - both endpoints return the identical `ReportResponse` JSON shape, so the
+ * only difference between the two public functions is the path.
  *
  * Deliberately does not reuse `getJson`: on a 404 or 500 the backend's body
  * carries a `detail` message worth showing verbatim - e.g. the provenance
@@ -364,8 +368,7 @@ export function getProfile(caseId: string, signal?: AbortSignal): Promise<CasePr
  * generic "<status> <statusText> on <path>" message from the response line,
  * which would throw that detail away.
  */
-export async function fetchReport(caseId: string, signal?: AbortSignal): Promise<ReportResponse> {
-  const path = `/report/${encodeURIComponent(caseId)}`;
+async function fetchValidatedReport(path: string, signal?: AbortSignal): Promise<ReportResponse> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, { signal });
@@ -388,6 +391,11 @@ export async function fetchReport(caseId: string, signal?: AbortSignal): Promise
   }
   const raw = (await res.json()) as unknown;
   return validateReport(raw);
+}
+
+/** Fetches one case's Phase 4 structured report and validates its shape. See `fetchValidatedReport`. */
+export async function fetchReport(caseId: string, signal?: AbortSignal): Promise<ReportResponse> {
+  return fetchValidatedReport(`/report/${encodeURIComponent(caseId)}`, signal);
 }
 
 // --------------------------------------------------------------------- //
@@ -545,6 +553,31 @@ export async function createClinicalJob(
 
 export function getClinicalJob(jobId: string, signal?: AbortSignal): Promise<ClinicalJob> {
   return getJson<ClinicalJob>(`/clinical/jobs/${encodeURIComponent(jobId)}`, signal);
+}
+
+/**
+ * A `"done"` clinical job's case geometry - the one clinical route that
+ * carries voxel `spacing` and `bbox`. The backend returns exactly
+ * `volumes.CaseMeta.to_json()`, the same object `/cases/{id}` nests under
+ * `meta`, so the existing `CaseMeta` type is reused verbatim rather than
+ * declaring a parallel one. The 3D viewer needs `spacing` to convert voxel
+ * counts to physical units (mL, real-world geometry) - the binary routes'
+ * `X-Volume-Shape` response header carries only a voxel-count shape, never
+ * spacing, so this JSON route is the only way to get it.
+ */
+export function getClinicalJobGeometry(jobId: string, signal?: AbortSignal): Promise<CaseMeta> {
+  return getJson<CaseMeta>(`/clinical/jobs/${encodeURIComponent(jobId)}/geometry`, signal);
+}
+
+/**
+ * A `"done"` clinical job's Phase 4 structured report and validates its
+ * shape - identical semantics to `fetchReport`, just against
+ * `/clinical/jobs/{id}/report` instead of `/report/{case_id}`. See
+ * `fetchValidatedReport` for the shared error handling (404/500 `detail`
+ * message, 502/503/504 as `ApiUnreachableError`, then `validateReport`).
+ */
+export async function fetchClinicalReport(jobId: string, signal?: AbortSignal): Promise<ReportResponse> {
+  return fetchValidatedReport(`/clinical/jobs/${encodeURIComponent(jobId)}/report`, signal);
 }
 
 /**

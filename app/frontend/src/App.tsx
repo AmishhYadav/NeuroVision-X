@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ApiError,
   ApiUnreachableError,
   fetchReport,
   getCases,
@@ -11,6 +10,7 @@ import {
   type Plane,
   type ReportResponse,
 } from "./api";
+import { classifyReportError } from "./lib/reportStatus";
 import type { OverlayMode } from "./lib/render";
 import { useCaseData } from "./hooks/useCaseData";
 import { useResponsiveLayout } from "./hooks/useResponsiveLayout";
@@ -147,18 +147,9 @@ export default function App() {
       } catch (err) {
         if (controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === "AbortError") return;
-        if (err instanceof ApiUnreachableError) {
-          setReportStatus("unreachable");
-        } else if (err instanceof ApiError && err.status === 404) {
-          setReportErrorMessage(err.message);
-          setReportStatus("not_found");
-        } else if (err instanceof ApiError) {
-          setReportErrorMessage(err.message);
-          setReportStatus("server_error");
-        } else {
-          setReportErrorMessage(err instanceof Error ? err.message : "Failed to load report.");
-          setReportStatus("invalid");
-        }
+        const c = classifyReportError(err);
+        setReportErrorMessage(c.message);
+        setReportStatus(c.status);
       }
     })();
     return () => controller.abort();
