@@ -27,7 +27,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from app.backend import api, clinical_jobs, config, inference, jobs
+from app.backend import api, clinical_jobs, config, inference, jobs, volumes
 from fastapi.testclient import TestClient
 
 
@@ -595,6 +595,75 @@ def test_clinical_job_report_on_queued_job_is_409(client: TestClient) -> None:
 
 def test_clinical_job_report_unknown_job_is_404(client: TestClient) -> None:
     response = client.get("/api/clinical/jobs/no-such-job/report")
+    assert response.status_code == 404
+
+
+# --- GET /api/clinical/jobs/{job_id}/geometry --------------------------------
+
+
+def test_clinical_geometry_returns_meta_for_done_job(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/geometry")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["shape"] == [5, 6, 7]
+    assert body["spacing"] == [1.0, 1.0, 1.0]
+    assert body["bbox"] == [[0, 5], [0, 6], [0, 7]]
+    assert body["case_id"] == job.job_id
+    assert body["has_label"] is False
+    # Honest, not a bug: `clinical_segmentation_settings` caches a job's
+    # prediction under `cache_dir/<experiment>/<case_id>.npy`
+    # (`inference.cached_prediction_path`, what `/mask/prediction` reads),
+    # while `CaseMeta.has_prediction` checks the unrelated
+    # `eval_dir/"predictions"` path -- `eval_dir` is a harmless placeholder
+    # for a clinical job (see that function's docstring), so this is always
+    # False here even though a prediction IS cached for this job elsewhere.
+    assert body["has_prediction"] is False
+    assert body["planes"] == {"sagittal": 5, "coronal": 6, "axial": 7}
+
+
+def test_clinical_geometry_matches_cases_meta_shape(client: TestClient, backend: Path) -> None:
+    """Proves byte-compatibility: same key set as the `meta` block `/api/cases/{id}` nests."""
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/geometry")
+    assert response.status_code == 200
+
+    reference = volumes.CaseMeta(
+        case_id="x",
+        shape=(1, 2, 3),
+        original_shape=(1, 2, 3),
+        bbox=((0, 1), (0, 2), (0, 3)),
+        spacing=(1.0, 1.0, 1.0),
+        has_label=False,
+        has_prediction=False,
+        has_logits=False,
+    )
+    assert set(response.json().keys()) == set(reference.to_json().keys())
+
+
+def test_clinical_geometry_unknown_job_is_404(client: TestClient) -> None:
+    response = client.get("/api/clinical/jobs/no-such-job/geometry")
+    assert response.status_code == 404
+
+
+def test_clinical_geometry_not_done_job_is_409(client: TestClient) -> None:
+    created = _upload(client, _valid_study_zip()).json()
+    response = client.get(f"/api/clinical/jobs/{created['job_id']}/geometry")
+    assert response.status_code == 409
+    assert "queued" in response.json()["detail"]
+
+
+def test_clinical_geometry_done_job_without_meta_is_404(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    job_prep_dir = jobs.job_root(settings) / job.job_id / "prep"
+    (job_prep_dir / job.case_id / "meta.json").unlink()
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/geometry")
     assert response.status_code == 404
 
 

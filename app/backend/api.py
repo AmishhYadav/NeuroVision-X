@@ -711,6 +711,50 @@ def get_clinical_job_mask(job_id: str) -> Response:
     return _binary_response(data, meta.shape)
 
 
+@router.get("/clinical/jobs/{job_id}/geometry")
+def get_clinical_job_geometry(job_id: str) -> dict[str, Any]:
+    """Returns the clinical job's geometry -- `shape`, `spacing`, `bbox` and `planes`.
+
+    This exists because the 3D twin (the mesh/volume-in-mL view) needs
+    `shape`, `spacing` and `bbox` to build its geometry and convert voxel
+    counts to millilitres, and no clinical binary route carries that:
+    `_binary_response` (used by `/volume`, `/mask`, `/uncertainty`,
+    `/conformal-band`, `/gradcam`) only ever puts `shape` on the wire, via
+    the `X-Volume-Shape` header, and never `spacing` or `bbox` at all. This
+    is the one clinical route that serves geometry, and T3/T6 in
+    `docs/research/tool_completion_plan.md` both reuse it rather than each
+    growing their own copy of this lookup.
+
+    The response is exactly `CaseMeta.to_json()` -- the same dict shape
+    `GET /api/cases/{case_id}` nests under its own `"meta"` key -- returned
+    here at the top level instead, so a client that already knows how to
+    read `cases/{id}`'s `meta` block can read this response unchanged. Built
+    from the job's OWN cached case (via `_clinical_job_settings`, same as
+    every other `/clinical/jobs/{job_id}/...` route), so `case_id` in the
+    body is the job id. `has_label` is always `False` (a clinical job never
+    has a ground-truth label). `has_prediction` and `has_logits` are always
+    `False` too, even for a job that DOES have a cached prediction/logits --
+    `CaseMeta` checks `Settings.predictions_dir` / `logits_dir`
+    (`eval_dir/"predictions"`, `eval_dir/"logits"`), and
+    `clinical_segmentation_settings` points `eval_dir` at a harmless,
+    unused placeholder (see that function's docstring), never at where
+    `inference.cached_prediction_path` / `cached_logits_path` actually write.
+    That is honest, not a bug this route should paper over: use
+    `/mask/prediction` and `/uncertainty` returning 200 (rather than this
+    flag) to tell whether this job has a cached prediction or logits.
+    """
+    job = _require_done_clinical_job(job_id)
+    job_settings = _clinical_job_settings(get_settings(), job_id)
+    try:
+        meta = read_meta(job.case_id, job_settings)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"clinical job {job_id!r} is done but has no cached meta.json ({exc})",
+        ) from None
+    return meta.to_json()
+
+
 @router.get("/clinical/jobs/{job_id}/uncertainty")
 def get_clinical_job_uncertainty(job_id: str) -> Response:
     """Returns the clinical job's per-voxel predictive entropy, like `/cases/.../uncertainty`.
