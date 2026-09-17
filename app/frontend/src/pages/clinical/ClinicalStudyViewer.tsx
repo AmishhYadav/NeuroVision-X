@@ -70,8 +70,17 @@ type HeatOverlay = "none" | "entropy" | "band_wt" | "band_tc" | "gradcam_wt" | "
  * `X-Volume-Shape` header (see `getBinary` in `api.ts`).
  */
 export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProps) {
-  const { volumes, predictionMask, uncertainty, conformalBand, gradcam, geometry, loading, error } =
-    useClinicalJobVolumes(jobId, true);
+  const {
+    volumes,
+    predictionMask,
+    uncertainty,
+    conformalBand,
+    gradcam,
+    geometry,
+    loading,
+    error,
+    warnings,
+  } = useClinicalJobVolumes(jobId, true);
   const { layout } = useResponsiveLayout();
   // Only mounted for a `"done"` job (see ClinicalPage), so fetching the
   // report is always safe here - mirrors App.tsx's own report effect, which
@@ -306,6 +315,19 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
               <span className="font-condensed text-[11px] tracking-[0.12em] text-text-dim uppercase">
                 Loading segmentation…
               </span>
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <div
+              data-testid="clinical-layer-warnings"
+              role="status"
+              className="flex shrink-0 flex-col gap-0.5 border border-surface-seam bg-surface-panel px-3 py-1.5"
+            >
+              {warnings.map((warning) => (
+                <span key={warning} className="font-mono text-[11px] text-text-dim">
+                  Layer unavailable — {warning}
+                </span>
+              ))}
             </div>
           )}
           {view === "twin" ? (

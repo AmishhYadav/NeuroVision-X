@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ApiError,
   ApiUnreachableError,
   getClinicalJobConformalBand,
   getClinicalJobGeometry,
@@ -13,6 +12,7 @@ import {
   type UncertaintyBuffer,
   type VolumeBuffer,
 } from "../api";
+import { settleSupplementary } from "../lib/supplementaryFetch";
 
 const MODALITIES: Modality[] = ["t1", "t1ce", "t2", "flair"];
 
@@ -46,6 +46,14 @@ export interface ClinicalJobVolumesState {
   geometry: CaseMeta | null;
   loading: boolean;
   error: string | null;
+  /**
+   * Human-readable lines for supplementary artifacts that failed to load
+   * (anything other than an expected 404 - see the hook's doc comment for
+   * the core/supplementary split). Empty when nothing went wrong. Rendered
+   * by the caller as a small "Layer unavailable" strip; never blocks
+   * rendering of the slices, twin or report the way `error` does.
+   */
+  warnings: string[];
 }
 
 const EMPTY_STATE: ClinicalJobVolumesState = {
@@ -57,6 +65,7 @@ const EMPTY_STATE: ClinicalJobVolumesState = {
   geometry: null,
   loading: false,
   error: null,
+  warnings: [],
 };
 
 /**
@@ -65,33 +74,38 @@ const EMPTY_STATE: ClinicalJobVolumesState = {
  * regions (`WT`, `TC`), its Grad-CAM explainability heatmap for both
  * regions, and its case geometry, in parallel.
  *
- * Geometry (`shape`, `spacing`, `bbox`) is what the 3D digital twin needs to
- * build correctly scaled mesh geometry - it comes from
- * `/clinical/jobs/{id}/geometry`, the one clinical route that carries voxel
- * spacing (see `getClinicalJobGeometry`). A 404 there means a done job whose
- * `meta.json` is missing - the route defines that response but it should not
- * happen in practice - and is handled as a normal, non-fatal outcome
- * (`geometry` stays `null`) rather than failing every other fetch in this
- * batch; any other error from this route propagates like the rest.
+ * **Core vs. supplementary.** The four volumes and the prediction mask are
+ * the product - a done job with no error means at minimum those loaded, and
+ * a failure fetching any of them is a real, hook-level `error` (see below).
+ * Everything else - uncertainty, the conformal band (both regions), Grad-CAM
+ * (both regions), and geometry - is supplementary: extras layered on top,
+ * each capable of naming its own absence without taking the study down with
+ * it. Geometry is the one exception that cuts both ways - the 3D twin
+ * treats it as required to build scaled mesh geometry, but for fetch-failure
+ * purposes here it is classified as supplementary, same as the rest.
+ *
+ * This split exists because the batch is awaited together in one
+ * `Promise.all`: on the first real done clinical job, `/conformal-band/WT`
+ * 500'd (a backend bug), and without this split that one rejection took the
+ * whole batch down - the viewer rendered only its `error` line, with no
+ * slices, no twin and no report, even though everything else had already
+ * loaded successfully. Every supplementary fetch is routed through
+ * `settleSupplementary` (`src/lib/supplementaryFetch.ts`): a 404 (an
+ * expected absence - no cached logits yet, no fitted threshold, a job that
+ * predates a feature, an unrecognised region) resolves to `null` silently;
+ * any other error also resolves to `null` but appends a human-readable line
+ * to `warnings` instead of throwing; `ApiUnreachableError` (the API itself
+ * is down) still escalates to the hook-level `error`, since nothing else in
+ * the batch is going to succeed either. Core fetches keep their original,
+ * unwrapped behaviour - any error there is a hook-level `error`.
  *
  * Mirrors `useCaseData`'s shape (a per-switch `AbortController`, partial
  * state filled in as each fetch resolves, so viewports light up one at a
  * time rather than waiting for everything) but scoped to what a clinical job
  * actually has once done: no label, no slice profile - a live case has no
- * ground truth, and this pipeline saves no per-slice artifacts for it.
- * Uncertainty IS available (computed live from the job's segmentation
- * logits, same wire format as the demo viewer's `/cases/{id}/uncertainty`);
- * a `null` result just means no cached logits for this particular job, and
- * is a normal outcome, not an error - see `getClinicalJobUncertainty`. The
- * conformal band is fetched the same eager way, for both regions at once -
- * a `null` result there means no fitted threshold is available yet (or,
- * defensively, an unrecognised region), also a normal outcome, not an error.
- * The Grad-CAM heatmap is fetched the same way again, also per region - a
- * `null` result there means either the job predates this feature or that
- * region's Grad-CAM computation failed and was skipped, likewise a normal
- * outcome, not an error - see `getClinicalJobGradcam`. All of these are
- * fetched unconditionally on load; which one (if any) is actually displayed
- * is a UI-only decision made by the caller.
+ * ground truth, and this pipeline saves no per-slice artifacts for it. All
+ * of the above are fetched unconditionally on load; which one (if any) is
+ * actually displayed is a UI-only decision made by the caller.
  *
  * Only fetches while `ready` is true (the caller passes
  * `job?.state === "done"`) - fetching against a job that is still running,
@@ -119,7 +133,14 @@ export function useClinicalJobVolumes(
     setState({ ...EMPTY_STATE, loading: true });
 
     (async () => {
+      // Collected by every supplementary fetch below (via `settleSupplementary`)
+      // and written into state once as `warnings` after the batch settles -
+      // see the hook's doc comment for why these are never a hook-level `error`.
+      const warnings: string[] = [];
+
       try {
+        // Core: the four volumes and the prediction mask. Any error here
+        // propagates unwrapped to the outer catch below, same as before.
         const volumePromises = MODALITIES.map(async (modality) => {
           const vol = await getClinicalJobVolume(jobId, modality, FALLBACK_SHAPE, signal);
           if (signal.aborted) return;
@@ -131,15 +152,23 @@ export function useClinicalJobVolumes(
           setState((prev) => ({ ...prev, predictionMask: mask }));
         });
 
-        const uncertaintyPromise = getClinicalJobUncertainty(jobId, FALLBACK_SHAPE, signal).then(
-          (result) => {
-            if (signal.aborted) return;
-            setState((prev) => ({ ...prev, uncertainty: result }));
-          },
-        );
+        // Supplementary from here down: a non-404 failure resolves to `null`
+        // and appends a line to `warnings` instead of failing the batch.
+        const uncertaintyPromise = settleSupplementary(
+          "Uncertainty",
+          getClinicalJobUncertainty(jobId, FALLBACK_SHAPE, signal),
+          warnings,
+        ).then((result) => {
+          if (signal.aborted) return;
+          setState((prev) => ({ ...prev, uncertainty: result }));
+        });
 
         const conformalBandPromises = REGIONS.map(async (region) => {
-          const result = await getClinicalJobConformalBand(jobId, region, FALLBACK_SHAPE, signal);
+          const result = await settleSupplementary(
+            `Conformal band (${region})`,
+            getClinicalJobConformalBand(jobId, region, FALLBACK_SHAPE, signal),
+            warnings,
+          );
           if (signal.aborted) return;
           setState((prev) => ({
             ...prev,
@@ -148,7 +177,11 @@ export function useClinicalJobVolumes(
         });
 
         const gradcamPromises = REGIONS.map(async (region) => {
-          const result = await getClinicalJobGradcam(jobId, region, FALLBACK_SHAPE, signal);
+          const result = await settleSupplementary(
+            `Grad-CAM (${region})`,
+            getClinicalJobGradcam(jobId, region, FALLBACK_SHAPE, signal),
+            warnings,
+          );
           if (signal.aborted) return;
           setState((prev) => ({
             ...prev,
@@ -156,20 +189,16 @@ export function useClinicalJobVolumes(
           }));
         });
 
-        const geometryPromise = getClinicalJobGeometry(jobId, signal)
-          .then((geometry) => {
-            if (signal.aborted) return;
-            setState((prev) => ({ ...prev, geometry }));
-          })
-          .catch((err) => {
-            // A missing meta.json on an otherwise-done job should not
-            // happen, but the route defines a 404 for it - treat that one
-            // status as "no geometry yet" rather than failing the whole
-            // hook. Any other error (network, 5xx) rethrows and is caught
-            // by the outer try/catch like every other fetch here.
-            if (err instanceof ApiError && err.status === 404) return;
-            throw err;
-          });
+        // Geometry feeds the 3D twin, but a failure to fetch it is still
+        // classified as supplementary - it must not blank the slice viewer.
+        const geometryPromise = settleSupplementary(
+          "Geometry",
+          getClinicalJobGeometry(jobId, signal),
+          warnings,
+        ).then((geometry) => {
+          if (signal.aborted) return;
+          setState((prev) => ({ ...prev, geometry }));
+        });
 
         await Promise.all([
           ...volumePromises,
@@ -181,7 +210,7 @@ export function useClinicalJobVolumes(
         ]);
 
         if (!signal.aborted) {
-          setState((prev) => ({ ...prev, loading: false }));
+          setState((prev) => ({ ...prev, loading: false, warnings }));
         }
       } catch (err) {
         if (signal.aborted) return;
