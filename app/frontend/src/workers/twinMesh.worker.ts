@@ -4,7 +4,7 @@
 // (see useCaseData) - never from a fixed, hardcoded case. A ~3-4M-voxel
 // volume takes real time to surface; doing it here keeps the tab responsive
 // while it runs.
-import { surfaceNets } from "../lib/surfaceNets";
+import { extentCenter, meshVoxelField, normalToScene, voxelToScene } from "../lib/twinGeometry";
 
 export type ClassName = "necrotic" | "oedema" | "enhancing";
 
@@ -31,48 +31,17 @@ export interface TwinMeshResult {
 
 const CLASS_NAMES: Record<number, ClassName> = { 1: "necrotic", 2: "oedema", 3: "enhancing" };
 
-function toSceneTransform() {
-  // Same convention as slicing.ts documents and the offline extraction
-  // script used: d -> X (R<->L), w -> Y (I->S, up), h -> Z (A->P). Center
-  // and scale are established by the caller from the brain shell's own
-  // extent and reused for the tumour meshes so the two stay aligned.
-  return (positions: Float32Array, center: [number, number, number], scale: number) => {
-    const out = new Float32Array(positions.length);
-    for (let i = 0; i < positions.length; i += 3) {
-      const d = positions[i];
-      const h = positions[i + 1];
-      const w = positions[i + 2];
-      out[i] = (d - center[0]) * scale;
-      out[i + 1] = (w - center[2]) * scale;
-      out[i + 2] = (h - center[1]) * scale;
-    }
-    return out;
-  };
-}
-
-function extentCenter(positions: Float32Array): { center: [number, number, number]; scale: number } {
-  let minX = Infinity;
-  let minY = Infinity;
-  let minZ = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  let maxZ = -Infinity;
-  for (let i = 0; i < positions.length; i += 3) {
-    const x = positions[i];
-    const y = positions[i + 1];
-    const z = positions[i + 2];
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-    if (z < minZ) minZ = z;
-    if (z > maxZ) maxZ = z;
-  }
-  const center: [number, number, number] = [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2];
-  const extent = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1e-6);
-  return { center, scale: 1.8 / extent };
-}
-
+// Axis convention (see src/lib/twinGeometry.ts for the derivation and the
+// tests that pin it down): voxel (d,h,w) -> scene X = d (R->L, +X patient
+// LEFT), Y = w (+Y SUPERIOR), Z = -h (+Z ANTERIOR) - a right-handed
+// (Left, Superior, Anterior) frame, matching the radiological convention
+// slicing.ts uses for the 2D views. This REPLACES a previous mapping that
+// was wrong two ways at once: it called surfaceNets with dims [D,H,W] on a
+// w-fastest buffer, which reinterprets the strides (wrong whenever
+// D !== W, i.e. always, for a real case); and its scene mapping put
+// +Z = posterior, which is left-handed and mirrors the whole brain left
+// for right - a mirrored brain still looks like a brain, so neither bug
+// was visible without a numeric probe.
 self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
   const { requestId, caseId, shape, spacing, modalityVolumes, tumorMask, tumorSource } = e.data;
   const [D, H, W] = shape;
@@ -85,10 +54,10 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
     }
   }
 
-  const brainRaw = surfaceNets(brainField, [D, H, W], 0.5);
+  const brainRaw = meshVoxelField(brainField, [D, H, W], 0.5);
   const { center, scale } = extentCenter(brainRaw.positions);
-  const transform = toSceneTransform();
-  const brainScenePos = transform(brainRaw.positions, center, scale);
+  const brainScenePos = voxelToScene(brainRaw.positions, center, scale);
+  const brainSceneNorm = normalToScene(brainRaw.normals);
 
   // Split at the mid-sagittal plane (scene X = 0) into two hemisphere
   // sub-meshes, same rationale as the landing page's original build: an
@@ -129,8 +98,8 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
     };
   };
 
-  const brainLeft = splitMesh(brainScenePos, brainRaw.normals, brainRaw.indices, true);
-  const brainRight = splitMesh(brainScenePos, brainRaw.normals, brainRaw.indices, false);
+  const brainLeft = splitMesh(brainScenePos, brainSceneNorm, brainRaw.indices, true);
+  const brainRight = splitMesh(brainScenePos, brainSceneNorm, brainRaw.indices, false);
 
   const tumor: TwinMeshResult["tumor"] = {};
   const classVolumesMl: TwinMeshResult["classVolumesMl"] = {};
@@ -157,7 +126,7 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
     }
     if (count > 0) {
       const centroidVoxel = new Float32Array([sumD / count, sumH / count, sumW / count]);
-      const centroidScene = transform(centroidVoxel, center, scale);
+      const centroidScene = voxelToScene(centroidVoxel, center, scale);
       tumorCentroidScene = [centroidScene[0], centroidScene[1], centroidScene[2]];
     }
 
@@ -173,10 +142,11 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
       }
       classVolumesMl[name] = Math.round(voxelCount * voxelMl * 100) / 100;
       if (voxelCount < 20) continue; // too small to surface meaningfully
-      const raw = surfaceNets(field, [D, H, W], 0.5);
+      const raw = meshVoxelField(field, [D, H, W], 0.5);
       if (raw.positions.length === 0) continue;
-      const scenePos = transform(raw.positions, center, scale);
-      tumor[name] = { position: scenePos, normal: raw.normals, index: raw.indices };
+      const scenePos = voxelToScene(raw.positions, center, scale);
+      const sceneNorm = normalToScene(raw.normals);
+      tumor[name] = { position: scenePos, normal: sceneNorm, index: raw.indices };
     }
   }
 
