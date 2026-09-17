@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import nibabel as nib
 import numpy as np
@@ -64,6 +65,8 @@ def _make_cfg(tmp_path: Path, **preprocess_overrides: object) -> SimpleNamespace
         "atlas": "BRATS_SRI24",
         "n4_bias_correction": False,
         "brain_extraction": True,
+        "hd_bet_mode": "fast",
+        "hd_bet_tta": False,
         "defacing": False,
         "use_gpu": None,
         "keep_intermediate": True,
@@ -266,6 +269,57 @@ def test_build_plan_out_dir_with_existing_contents_warns(
     assert any("overwritten" in record.message for record in caplog.records)
 
 
+def test_build_plan_reads_hd_bet_mode_and_tta(tmp_path: Path) -> None:
+    inputs = _four_role_inputs(tmp_path)
+
+    cfg = _make_cfg(tmp_path, hd_bet_mode="accurate", hd_bet_tta=True)
+    plan = build_plan(cfg, inputs, out_dir=tmp_path / "out_accurate")
+    assert plan.hd_bet_mode == "accurate"
+    assert plan.hd_bet_tta is True
+
+    cfg_default = _make_cfg(tmp_path, hd_bet_mode="fast", hd_bet_tta=False)
+    plan_default = build_plan(cfg_default, inputs, out_dir=tmp_path / "out_fast")
+    assert plan_default.hd_bet_mode == "fast"
+    assert plan_default.hd_bet_tta is False
+
+
+def test_build_plan_rejects_unknown_hd_bet_mode(tmp_path: Path) -> None:
+    inputs = _four_role_inputs(tmp_path)
+    cfg = _make_cfg(tmp_path, hd_bet_mode="ultra")
+
+    with pytest.raises(ValueError, match="ultra") as excinfo:
+        build_plan(cfg, inputs, out_dir=tmp_path / "out")
+    message = str(excinfo.value)
+    assert "fast" in message
+    assert "accurate" in message
+
+
+def test_build_plan_missing_hd_bet_mode_key_raises(tmp_path: Path) -> None:
+    """`build_plan` must not invent a default for a config missing this key.
+
+    Built as a raw `SimpleNamespace` with the key genuinely absent (rather
+    than via `_make_cfg`, which always supplies it) -- same style as the
+    other required preprocess keys, none of which fall back silently either.
+    """
+    inputs = _four_role_inputs(tmp_path)
+    preprocess = SimpleNamespace(
+        center_modality="t1ce",
+        atlas="BRATS_SRI24",
+        n4_bias_correction=False,
+        brain_extraction=True,
+        hd_bet_tta=False,
+        # hd_bet_mode deliberately omitted.
+        defacing=False,
+        use_gpu=None,
+        keep_intermediate=True,
+        out_dir=str(tmp_path / "clinical_preprocess"),
+    )
+    cfg = SimpleNamespace(device="cpu", clinical=SimpleNamespace(preprocess=preprocess))
+
+    with pytest.raises(AttributeError):
+        build_plan(cfg, inputs, out_dir=tmp_path / "out")
+
+
 def test_build_plan_is_frozen_dataclass(tmp_path: Path) -> None:
     inputs = _four_role_inputs(tmp_path)
     cfg = _make_cfg(tmp_path, center_modality="t1ce")
@@ -311,6 +365,8 @@ def test_config_block_is_reachable_at_the_composed_path() -> None:
         "atlas",
         "n4_bias_correction",
         "brain_extraction",
+        "hd_bet_mode",
+        "hd_bet_tta",
         "defacing",
         "use_gpu",
         "keep_intermediate",
@@ -334,6 +390,65 @@ def test_atlas_member_names_match_the_dependency() -> None:
     from neurovision.data.clinical_preprocess import _ATLAS_NAMES
 
     assert _ATLAS_NAMES == tuple(member.name for member in Atlas)
+
+
+def test_make_brain_extractor_forwards_plan_mode_and_tta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The plan's `hd_bet_mode`/`hd_bet_tta` must reach `HDBetExtractor.extract`.
+
+    `HDBetExtractor.extract` (the base class, real package) is monkeypatched
+    to record its kwargs instead of running real HD-BET -- no weight
+    download, no network call. Same idiom `test_run_plan_raises_when_outputs
+    _are_missing` below already uses: import the real dependency under
+    `pytest.importorskip`, monkeypatch just the method that would otherwise
+    do heavy work.
+    """
+    pytest.importorskip("brainles_preprocessing")
+    from brainles_preprocessing.brain_extraction import HDBetExtractor
+
+    from neurovision.data.clinical_preprocess import _make_brain_extractor, build_plan
+
+    captured: dict[str, Any] = {}
+
+    def _fake_extract(
+        self: Any,
+        input_image_path: Any,
+        masked_image_path: Any,
+        brain_mask_path: Any,
+        mode: Any = None,
+        device: Any = 0,
+        do_tta: Any = None,
+        **kwargs: Any,
+    ) -> None:
+        captured["mode"] = mode
+        captured["do_tta"] = do_tta
+
+    monkeypatch.setattr(HDBetExtractor, "extract", _fake_extract)
+
+    inputs = {"t1ce": _write_tiny_nifti(tmp_path / "t1ce.nii.gz")}
+
+    # Plan says fast + no TTA: the extractor must default to that when the
+    # (fake) caller passes neither mode= nor do_tta=.
+    cfg = _make_cfg(tmp_path, hd_bet_mode="fast", hd_bet_tta=False)
+    plan = build_plan(cfg, inputs, out_dir=tmp_path / "out_fast")
+    extractor = _make_brain_extractor(plan)
+    extractor.extract("in.nii.gz", "masked.nii.gz", "mask.nii.gz")
+    assert captured["mode"] == "fast"
+    assert captured["do_tta"] is False
+
+    # An explicit mode=/do_tta= from a caller still wins over the plan.
+    extractor.extract("in.nii.gz", "masked.nii.gz", "mask.nii.gz", mode="accurate", do_tta=True)
+    assert captured["mode"] == "accurate"
+    assert captured["do_tta"] is True
+
+    # Plan says accurate + TTA: the extractor must default to that instead.
+    cfg_accurate = _make_cfg(tmp_path, hd_bet_mode="accurate", hd_bet_tta=True)
+    plan_accurate = build_plan(cfg_accurate, inputs, out_dir=tmp_path / "out_accurate")
+    extractor_accurate = _make_brain_extractor(plan_accurate)
+    extractor_accurate.extract("in.nii.gz", "masked.nii.gz", "mask.nii.gz")
+    assert captured["mode"] == "accurate"
+    assert captured["do_tta"] is True
 
 
 def test_run_plan_raises_when_outputs_are_missing(

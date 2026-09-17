@@ -44,6 +44,21 @@ in the dependency stops `use_gpu=True` being silently the default on a Mac
 with no CUDA build. `resolve_use_gpu` exists purely to make sure this
 module's caller can never inherit that default by omission (hard
 constraint 3: no CUDA-only assumptions, device resolved once from config).
+
+**A second dependency default this module exists to override.**
+`HDBetExtractor.extract`'s own signature defaults to `mode="accurate"`
+(a 5-fold ensemble) and `do_tta=True` (8 mirror passes) -- and
+`CenterModality.extract_brain_region` (the only brainles call site that
+reaches it) never passes either keyword, so those silent defaults are what
+actually runs: 40 full sliding-window network passes per study. Measured
+2026-09-18 on the first real DICOM study on this 16 GB Mac: 2 h 10 min
+wall, 16 GB resident, swapping, killed before finishing. HD-BET's own
+README documents `mode="fast"` with `do_tta=False` as the CPU setting (one
+fold, no mirroring, "only slightly worse"). `run_plan` wraps
+`HDBetExtractor` in `_ConfiguredHDBetExtractor` so `cfg.clinical.preprocess
+.hd_bet_mode` / `.hd_bet_tta` reach HD-BET the way brainles itself never
+forwards them, defaulting to the CPU-safe setting rather than the
+dependency's GPU-shaped one.
 """
 
 from __future__ import annotations
@@ -82,6 +97,12 @@ _ATLAS_NAMES: tuple[str, ...] = (
 # directory for, mapped to the keyword argument name `run_plan` passes it
 # under. Order matches the pipeline's own execution order (see that
 # method's docstring in brainles' source).
+# Valid values of `HDBetExtractor.extract`'s own `mode` parameter (see
+# brainles_preprocessing.brain_extraction.hd_bet.Mode). Kept as a plain
+# tuple, not imported, for the same reason `_ATLAS_NAMES` is: `build_plan`
+# must validate `hd_bet_mode` with no heavy import at module scope.
+_HD_BET_MODES: tuple[str, ...] = ("fast", "accurate")
+
 _SAVE_DIR_KWARG_BY_STAGE: dict[str, str] = {
     "coregistration": "save_dir_coregistration",
     "atlas_registration": "save_dir_atlas_registration",
@@ -105,6 +126,12 @@ class PreprocessPlan:
         use_gpu: Resolved GPU flag (see `resolve_use_gpu`).
         run_n4: Whether N4 bias correction runs.
         run_brain_extraction: Whether HD-BET skull-stripping runs.
+        hd_bet_mode: `"fast"` or `"accurate"`, forwarded to
+            `HDBetExtractor.extract`'s `mode` (see module docstring's
+            second dependency-default note). Only meaningful when
+            `run_brain_extraction` is True.
+        hd_bet_tta: Forwarded to `HDBetExtractor.extract`'s `do_tta`. Only
+            meaningful when `run_brain_extraction` is True.
         run_defacing: Whether defacing runs.
         out_dir: Root directory every output path below lives under.
         outputs: role -> final normalised volume path,
@@ -127,6 +154,8 @@ class PreprocessPlan:
     use_gpu: bool
     run_n4: bool
     run_brain_extraction: bool
+    hd_bet_mode: str
+    hd_bet_tta: bool
     run_defacing: bool
     out_dir: Path
     outputs: dict[str, Path]
@@ -357,6 +386,16 @@ def build_plan(
     use_gpu = resolve_use_gpu(cfg)
     run_n4 = bool(preprocess_cfg.n4_bias_correction)
     run_brain_extraction = bool(preprocess_cfg.brain_extraction)
+    # No `getattr(..., default)` here, deliberately: a config missing this
+    # key must raise the same way it already does for every other required
+    # preprocess key, not silently fall back to a Python-side default that
+    # config readers cannot see.
+    hd_bet_mode = str(preprocess_cfg.hd_bet_mode)
+    if hd_bet_mode not in _HD_BET_MODES:
+        raise ValueError(
+            f"build_plan: unknown hd_bet_mode {hd_bet_mode!r}; expected one of {_HD_BET_MODES}."
+        )
+    hd_bet_tta = bool(preprocess_cfg.hd_bet_tta)
     run_defacing = bool(preprocess_cfg.defacing)
     keep_intermediate = bool(preprocess_cfg.keep_intermediate)
 
@@ -388,6 +427,8 @@ def build_plan(
         use_gpu=use_gpu,
         run_n4=run_n4,
         run_brain_extraction=run_brain_extraction,
+        hd_bet_mode=hd_bet_mode,
+        hd_bet_tta=hd_bet_tta,
         run_defacing=run_defacing,
         out_dir=resolved_out_dir,
         outputs=outputs,
@@ -400,6 +441,64 @@ def build_plan(
         logger.warning(warning)
 
     return plan
+
+
+def _make_brain_extractor(plan: PreprocessPlan) -> Any:
+    """Build the `HDBetExtractor` HD-BET will actually run with.
+
+    `CenterModality.extract_brain_region` (brainles' only call site that
+    reaches `HDBetExtractor.extract`) never passes `mode=`/`do_tta=`, so
+    the extractor's own defaults (`"accurate"`, `True`) are what silently
+    runs unless this wrapper intercepts them -- see the module docstring's
+    second "dependency default this module exists to override" note.
+
+    Imports `brainles_preprocessing` inside this function's body, not at
+    module scope, matching the rest of this module's execution layer (see
+    the "central design constraint" in the module docstring).
+
+    Args:
+        plan: A `PreprocessPlan`; only `hd_bet_mode` and `hd_bet_tta` are
+            read.
+
+    Returns:
+        An `HDBetExtractor` subclass instance whose `extract` defaults to
+        `plan.hd_bet_mode` / `plan.hd_bet_tta` whenever a caller (i.e.
+        brainles itself) does not pass `mode=`/`do_tta=` explicitly. An
+        explicit `mode=`/`do_tta=` from a caller still wins.
+    """
+    from brainles_preprocessing.brain_extraction import HDBetExtractor
+
+    class _ConfiguredHDBetExtractor(HDBetExtractor):
+        """HDBetExtractor whose mode/TTA come from the plan.
+
+        Needed because brainles never forwards either setting itself.
+        """
+
+        def __init__(self, mode: str, do_tta: bool) -> None:
+            self._mode = mode
+            self._do_tta = do_tta
+
+        def extract(
+            self,
+            input_image_path: Any,
+            masked_image_path: Any,
+            brain_mask_path: Any,
+            mode: Any = None,
+            device: Any = 0,
+            do_tta: Any = None,
+            **kwargs: Any,
+        ) -> None:
+            return super().extract(
+                input_image_path,
+                masked_image_path,
+                brain_mask_path,
+                mode=self._mode if mode is None else mode,
+                device=device,
+                do_tta=self._do_tta if do_tta is None else do_tta,
+                **kwargs,
+            )
+
+    return _ConfiguredHDBetExtractor(mode=plan.hd_bet_mode, do_tta=plan.hd_bet_tta)
 
 
 def run_plan(plan: PreprocessPlan) -> PreprocessResult:
@@ -439,7 +538,6 @@ def run_plan(plan: PreprocessPlan) -> PreprocessResult:
             (or the brain mask, when `plan.run_brain_extraction` is True)
             is missing -- names every missing path.
     """
-    from brainles_preprocessing.brain_extraction import HDBetExtractor
     from brainles_preprocessing.constants import Atlas
     from brainles_preprocessing.modality import CenterModality, Modality
     from brainles_preprocessing.n4_bias_correction import SitkN4BiasCorrector
@@ -494,7 +592,16 @@ def run_plan(plan: PreprocessPlan) -> PreprocessResult:
         for role in plan.moving_roles
     ]
 
-    brain_extractor = HDBetExtractor() if plan.run_brain_extraction else None
+    brain_extractor = None
+    if plan.run_brain_extraction:
+        brain_extractor = _make_brain_extractor(plan)
+        # INFO, once: this is the number that mattered on 2026-09-18 -- the
+        # default (accurate + TTA) ran 2h10m on a 16GB Mac and was killed.
+        logger.info(
+            "HD-BET will run with mode=%r, do_tta=%r",
+            plan.hd_bet_mode,
+            plan.hd_bet_tta,
+        )
 
     preprocessor = AtlasCentricPreprocessor(
         center_modality=center_modality,

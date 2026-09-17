@@ -75,6 +75,16 @@ preprocess:
   # seen a skull.
   brain_extraction: true
 
+  # HD-BET inference settings. brainles' wrapper never forwards these, so
+  # its silent defaults are `accurate` (5-fold ensemble) + TTA (8 mirror
+  # passes) = 40 network passes per study. Measured 2026-09-18 on the
+  # 16 GB M4 Mac: 2 h 10 min wall, 16 GB resident, swapping, killed
+  # unfinished. `fast` + no TTA is HD-BET's own documented CPU setting
+  # (one fold, "only slightly worse" per its README). A GPU deployment can
+  # set accurate + true; the CPU floor cannot.
+  hd_bet_mode: fast # fast | accurate
+  hd_bet_tta: false
+
   # Off by default. Defacing changes voxels the model may read, and this
   # pipeline is not the right place to make an irreversible privacy decision
   # on the user's behalf.
