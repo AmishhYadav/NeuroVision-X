@@ -1,11 +1,14 @@
-import { Power } from "lucide-react";
-import { useEffect, useState } from "react";
-import type { Modality, Plane, UncertaintyBuffer } from "../../api";
+import { Box, FileText, Power } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { GateDecisionValue, Modality, Plane, UncertaintyBuffer } from "../../api";
+import { BrainTwinScene, type BrainTwinInput } from "../../components/BrainTwinScene";
 import { MODALITY_ORDER } from "../../components/ControlBar";
 import { Legend } from "../../components/Legend";
+import { ReportPanel } from "../../components/ReportPanel";
 import { SliceRibbon } from "../../components/SliceRibbon";
 import { ViewportGrid } from "../../components/ViewportGrid";
 import { useClinicalJobVolumes } from "../../hooks/useClinicalJobVolumes";
+import { useClinicalReport } from "../../hooks/useClinicalReport";
 import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
 import { sliceIndexer } from "../../lib/slicing";
 
@@ -22,6 +25,8 @@ const EMPTY_PROFILE: number[] = [];
 
 interface ClinicalStudyViewerProps {
   jobId: string;
+  /** The gatekeeper's verdict for this job, or `null` before it has one (still running, refused). */
+  decision: GateDecisionValue | null;
 }
 
 /** The six heat sources this viewer can show over the segmentation, one at a time. */
@@ -30,25 +35,36 @@ type HeatOverlay = "none" | "entropy" | "band_wt" | "band_tc" | "gradcam_wt" | "
 /**
  * The segmentation viewer for a `"done"` clinical job.
  *
- * Deliberately much smaller than `App.tsx`: no truth outline (no ground
- * truth exists for a live case), no report panel, no case list - just the
- * four modalities, the predicted mask, and an optional heat overlay,
- * scrollable per plane. The heat overlay is a single-choice selector between
- * predictive entropy, the fitted conformal band, and the Grad-CAM
- * explainability heatmap, each of the latter two further split by region
- * (WT, TC) - all six states reuse the same generic
- * `uncertainty`/`showUncertainty`/`uncertaintyOpacity` props on
- * `ViewportGrid` and `Legend`, which alpha-blend and label whatever buffer
- * is handed to them regardless of what it represents. `planeCounts` is
- * derived purely from `sliceIndexer(plane, shape).count` on whichever
+ * Two views, toggled by the button group in the bottom control bar:
+ * "Slices" (the default) shows the four modalities, the predicted mask, and
+ * an optional heat overlay, scrollable per plane; "3D twin" swaps that
+ * viewport for `BrainTwinScene` - the SAME digital-twin component the
+ * research viewer (`App.tsx`) uses, fed here by this job's `/geometry`
+ * response plus its four volumes and predicted mask, never forked. Unlike
+ * the research viewer there is no truth outline and no ground truth for the
+ * twin to draw (a live case has no label, so its `tumorSource` is always
+ * `"prediction"`), and no case list. A "Report" button opens the same
+ * `ReportPanel` drawer the research viewer uses, overlaying the viewport.
+ *
+ * The heat overlay is a single-choice selector between predictive entropy,
+ * the fitted conformal band, and the Grad-CAM explainability heatmap, each
+ * of the latter two further split by region (WT, TC) - all six states reuse
+ * the same generic `uncertainty`/`showUncertainty`/`uncertaintyOpacity`
+ * props on `ViewportGrid` and `Legend`, which alpha-blend and label whatever
+ * buffer is handed to them regardless of what it represents. `planeCounts`
+ * is derived purely from `sliceIndexer(plane, shape).count` on whichever
  * volume's shape has arrived first; no backend "meta" endpoint is needed for
  * that, since every one of a job's binary responses already carries its own
  * `X-Volume-Shape` header (see `getBinary` in `api.ts`).
  */
-export function ClinicalStudyViewer({ jobId }: ClinicalStudyViewerProps) {
-  const { volumes, predictionMask, uncertainty, conformalBand, gradcam, loading, error } =
+export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProps) {
+  const { volumes, predictionMask, uncertainty, conformalBand, gradcam, geometry, loading, error } =
     useClinicalJobVolumes(jobId, true);
   const { layout } = useResponsiveLayout();
+  // Only mounted for a `"done"` job (see ClinicalPage), so fetching the
+  // report is always safe here - mirrors App.tsx's own report effect, which
+  // only fires once its case detail has confirmed a report exists.
+  const reportState = useClinicalReport(jobId, true);
 
   const [modality, setModality] = useState<Modality>("t1ce");
   const [expandedPlane, setExpandedPlane] = useState<Plane | null>(null);
@@ -57,6 +73,8 @@ export function ClinicalStudyViewer({ jobId }: ClinicalStudyViewerProps) {
   const [sliceIndices, setSliceIndices] = useState<Record<Plane, number>>(ZERO_PLANES);
   const [overlayOpacity, setOverlayOpacity] = useState(0.55);
   const [heatOverlay, setHeatOverlay] = useState<HeatOverlay>("none");
+  const [view, setView] = useState<"slices" | "twin">("slices");
+  const [reportOpen, setReportOpen] = useState(false);
 
   // What actually feeds ViewportGrid/Legend's existing generic uncertainty
   // props - derived from the selector above plus whichever buffers are in.
@@ -116,6 +134,48 @@ export function ClinicalStudyViewer({ jobId }: ClinicalStudyViewerProps) {
       title: !gradcam.TC ? "No explainability heatmap available." : undefined,
     },
   ];
+
+  // Whether this job has everything BrainTwinScene needs: case geometry
+  // (for real-world mesh scale, from /geometry - the only clinical route
+  // that carries voxel spacing) plus all four modality volumes plus the
+  // predicted mask (there is never a label on this path). Tracked
+  // separately from `twinInput` below, which is deliberately null whenever
+  // the twin view isn't showing (a worker mesh pass is not free - same
+  // reasoning as App.tsx's `twinOpen` guard) - the "3D twin" button needs to
+  // know whether switching TO that view is possible before the user does.
+  const twinDataReady =
+    geometry != null &&
+    MODALITY_ORDER.every((m) => volumes[m]?.data != null) &&
+    predictionMask?.data != null;
+
+  // Built exactly as App.tsx's own `twinInput` memo, but from this hook's
+  // data. On the clinical path there is never a label, so `tumorSource` is
+  // always `"prediction"`.
+  const twinInput: BrainTwinInput | null = useMemo(() => {
+    if (view !== "twin" || !twinDataReady || !geometry) return null;
+    return {
+      caseId: jobId,
+      shape: geometry.shape,
+      spacing: geometry.spacing,
+      modalityVolumes: MODALITY_ORDER.map((m) => volumes[m]!.data),
+      tumorMask: predictionMask!.data,
+      tumorSource: "prediction",
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, twinDataReady, geometry, volumes, predictionMask, jobId]);
+
+  // The twin's badge mirrors the gatekeeper's decision for this job - the
+  // one piece of information from the pipeline that belongs on the 3D view
+  // even though it says nothing about the segmentation's shape.
+  let twinBadge: string | null = null;
+  let twinBadgeTone: "caution" | "neutral" = "neutral";
+  if (decision === "proceed_with_caution") {
+    twinBadge = "Proceed with caution";
+    twinBadgeTone = "caution";
+  } else if (decision === "proceed") {
+    twinBadge = "Proceed";
+    twinBadgeTone = "neutral";
+  }
 
   const shape =
     volumes.t1ce?.shape ??
@@ -190,6 +250,18 @@ export function ClinicalStudyViewer({ jobId }: ClinicalStudyViewerProps) {
         className={`relative flex min-h-0 flex-1 ${layout === "single" ? "flex-col" : "flex-row"}`}
       >
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
+          {decision === "proceed_with_caution" && (
+            <div
+              data-testid="clinical-caution-strip"
+              role="status"
+              className="flex shrink-0 items-center gap-2 border border-data-amber/60 bg-surface-panel px-3 py-1.5 text-data-amber"
+            >
+              <span className="font-condensed text-[11px] tracking-[0.12em] uppercase">
+                Gatekeeper: proceed with caution — read the report's not_claimed list before
+                relying on it
+              </span>
+            </div>
+          )}
           {loading && (
             <div
               className="flex shrink-0 items-center gap-2 border border-surface-seam bg-surface-panel px-3 py-1.5"
@@ -201,30 +273,36 @@ export function ClinicalStudyViewer({ jobId }: ClinicalStudyViewerProps) {
               </span>
             </div>
           )}
-          <div className="min-h-0 flex-1">
-            <ViewportGrid
-              layout={layout}
-              expandedPlane={expandedPlane}
-              onToggleExpand={(plane) =>
-                setExpandedPlane((prev) => (prev === plane ? null : plane))
-              }
-              singlePlane={singlePlane}
-              onChangeSinglePlane={setSinglePlane}
-              onFocusPlane={setFocusedPlane}
-              sliceIndices={sliceIndices}
-              planeCounts={planeCounts}
-              shape={shape}
-              image={volumes[modality]?.data ?? null}
-              predictionMask={predictionMask?.data ?? null}
-              labelMask={null}
-              uncertainty={heatBuffer?.data ?? null}
-              overlayMode="prediction"
-              overlayOpacity={overlayOpacity}
-              showTruthOutline={false}
-              showUncertainty={showHeat}
-              uncertaintyOpacity={showHeat ? UNCERTAINTY_OPACITY : 0}
-            />
-          </div>
+          {view === "twin" ? (
+            <div className="min-h-0 flex-1 border border-surface-seam bg-surface-panel">
+              <BrainTwinScene input={twinInput} badge={twinBadge} badgeTone={twinBadgeTone} />
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1">
+              <ViewportGrid
+                layout={layout}
+                expandedPlane={expandedPlane}
+                onToggleExpand={(plane) =>
+                  setExpandedPlane((prev) => (prev === plane ? null : plane))
+                }
+                singlePlane={singlePlane}
+                onChangeSinglePlane={setSinglePlane}
+                onFocusPlane={setFocusedPlane}
+                sliceIndices={sliceIndices}
+                planeCounts={planeCounts}
+                shape={shape}
+                image={volumes[modality]?.data ?? null}
+                predictionMask={predictionMask?.data ?? null}
+                labelMask={null}
+                uncertainty={heatBuffer?.data ?? null}
+                overlayMode="prediction"
+                overlayOpacity={overlayOpacity}
+                showTruthOutline={false}
+                showUncertainty={showHeat}
+                uncertaintyOpacity={showHeat ? UNCERTAINTY_OPACITY : 0}
+              />
+            </div>
+          )}
           <div className="shrink-0">
             <SliceRibbon
               planeLabel={ribbonLabel}
@@ -251,6 +329,16 @@ export function ClinicalStudyViewer({ jobId }: ClinicalStudyViewerProps) {
             uncertaintyKind={heatBuffer?.kind ?? null}
           />
         </div>
+
+        <ReportPanel
+          open={reportOpen}
+          onClose={() => setReportOpen(false)}
+          layout={layout}
+          caseId={jobId}
+          status={reportState.status}
+          report={reportState.report}
+          errorMessage={reportState.errorMessage}
+        />
       </div>
 
       <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-3 border-t border-surface-seam bg-surface-panel px-3 py-1.5">
@@ -271,6 +359,63 @@ export function ClinicalStudyViewer({ jobId }: ClinicalStudyViewerProps) {
             </button>
           ))}
         </div>
+
+        <div className="flex items-center gap-1" role="group" aria-label="View">
+          <button
+            type="button"
+            onClick={() => setView("slices")}
+            aria-pressed={view === "slices"}
+            className={`rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+              view === "slices"
+                ? "bg-surface-raised text-text-primary"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            Slices
+          </button>
+          <button
+            type="button"
+            data-testid="clinical-view-twin"
+            disabled={!twinDataReady}
+            onClick={() => setView("twin")}
+            aria-pressed={view === "twin"}
+            title={!twinDataReady ? "Waiting for all four volumes and the mask…" : undefined}
+            className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+              !twinDataReady
+                ? "cursor-not-allowed text-text-dim"
+                : view === "twin"
+                  ? "bg-surface-raised text-text-primary"
+                  : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <Box size={13} aria-hidden="true" />
+            3D twin
+          </button>
+        </div>
+
+        <button
+          type="button"
+          data-testid="clinical-report-toggle"
+          disabled={reportState.status === "not_found"}
+          onClick={() => setReportOpen((v) => !v)}
+          aria-pressed={reportOpen}
+          title={
+            reportState.status === "not_found"
+              ? "No report was generated for this job."
+              : undefined
+          }
+          className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+            reportState.status === "not_found"
+              ? "cursor-not-allowed text-text-dim"
+              : reportOpen
+                ? "bg-surface-raised text-text-primary"
+                : "text-text-secondary hover:text-text-primary"
+          }`}
+        >
+          <FileText size={13} aria-hidden="true" />
+          Report
+        </button>
+
         <div className="ml-auto flex items-center gap-2">
           <span className="eyebrow shrink-0">Opacity</span>
           <input

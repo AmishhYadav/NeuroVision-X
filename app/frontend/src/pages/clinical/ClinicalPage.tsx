@@ -88,7 +88,10 @@ export function ClinicalPage() {
 
         {isDone && job && (
           <div className="min-h-0 flex-1">
-            <ClinicalStudyViewer jobId={job.job_id} />
+            <ClinicalStudyViewer
+              jobId={job.job_id}
+              decision={job.gatekeeper_decision?.decision ?? null}
+            />
           </div>
         )}
       </div>
