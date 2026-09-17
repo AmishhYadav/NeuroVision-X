@@ -238,18 +238,19 @@ def _region_logits(probs: list[float], region_channel: int, num_channels: int = 
     return logits
 
 
-def test_clinical_conformal_band_mask_matches_hand_computed_values() -> None:
-    # 5 voxels at reference_threshold=0.5, fitted_threshold=0.2 (more
-    # permissive -- lower threshold flags MORE voxels):
-    #   0.90 -> in reference (>0.5) and in conservative (>0.2)      -> 255
-    #   0.60 -> in reference and in conservative                    -> 255
-    #   0.30 -> NOT in reference, but in conservative (>0.2)        -> 128
-    #   0.10 -> not in reference, not in conservative (<0.2)        -> 0
-    #   0.05 -> not in reference, not in conservative               -> 0
+def test_clinical_conformal_band_mask_permissive_side_is_s_minus_p() -> None:
+    # F5 (2026-09-18): fitted_threshold=0.3 <= reference_threshold=0.5, so
+    # this is the PERMISSIVE side -- S (prob >= 0.3) is a superset of P
+    # (prob > 0.5), and the "band" (128) voxels are exactly S \ P.
+    #   0.90 -> in P and in S           -> 255 (intersection)
+    #   0.60 -> in P and in S           -> 255
+    #   0.30 -> NOT in P, in S (>=0.3)  -> 128 (S \ P)
+    #   0.10 -> not in P, not in S      -> 0
+    #   0.05 -> not in P, not in S      -> 0
     logits = _region_logits([0.90, 0.60, 0.30, 0.10, 0.05], region_channel=1)
 
     band = clinical_jobs.clinical_conformal_band_mask(
-        logits, region_channel=1, fitted_threshold=0.2, reference_threshold=0.5
+        logits, region_channel=1, fitted_threshold=0.3, reference_threshold=0.5
     )
 
     assert band.dtype == np.uint8
@@ -257,21 +258,50 @@ def test_clinical_conformal_band_mask_matches_hand_computed_values() -> None:
     np.testing.assert_array_equal(band[0, 0, :], np.array([255, 255, 128, 0, 0], dtype=np.uint8))
 
 
-def test_clinical_conformal_band_mask_raises_on_invariant_violation() -> None:
-    # fitted_threshold (0.8) is on the WRONG side of reference_threshold
-    # (0.5) for this project's conformal loss: a voxel at prob=0.6 is inside
-    # the reference mask (0.6 > 0.5) but NOT inside the "conservative" mask
-    # (0.6 is not > 0.8) -- the nesting the function promises is violated.
-    logits = _region_logits([0.9, 0.6, 0.3], region_channel=2)  # WT channel
+def test_clinical_conformal_band_mask_restrictive_side_is_p_minus_s() -> None:
+    # F5 (2026-09-18): fitted_threshold=0.7 > reference_threshold=0.5 -- the
+    # RESTRICTIVE side, the one the deployed alpha=0.10 fit actually uses for
+    # both WT and TC. Now S (prob >= 0.7) is a SUBSET of P (prob > 0.5), and
+    # the "band" (128) voxels are exactly P \ S.
+    #   0.90 -> in P and in S            -> 255 (intersection)
+    #   0.60 -> in P, NOT in S (<0.7)    -> 128 (P \ S)
+    #   0.55 -> in P, NOT in S           -> 128 (P \ S)
+    #   0.30 -> not in P, not in S       -> 0
+    #   0.05 -> not in P, not in S       -> 0
+    logits = _region_logits([0.90, 0.60, 0.55, 0.30, 0.05], region_channel=2)  # WT channel
 
-    with pytest.raises(ValueError) as exc_info:
-        clinical_jobs.clinical_conformal_band_mask(
-            logits, region_channel=2, fitted_threshold=0.8, reference_threshold=0.5
-        )
-    message = str(exc_info.value)
-    assert "WT" in message
-    assert "0.8" in message
-    assert "0.5" in message
+    band = clinical_jobs.clinical_conformal_band_mask(
+        logits, region_channel=2, fitted_threshold=0.7, reference_threshold=0.5
+    )
+
+    assert band.dtype == np.uint8
+    assert band.shape == (1, 1, 5)
+    np.testing.assert_array_equal(band[0, 0, :], np.array([255, 128, 128, 0, 0], dtype=np.uint8))
+
+
+def test_clinical_conformal_band_mask_equal_threshold_has_no_band_voxels() -> None:
+    # fitted_threshold == reference_threshold == 0.5: S (prob >= 0.5) and P
+    # (prob > 0.5) differ only at exactly prob=0.5, so probabilities here
+    # deliberately avoid landing on 0.5 -- every voxel falls cleanly on one
+    # side, and P and S agree everywhere, leaving no 128 voxels at all.
+    logits = _region_logits([0.9, 0.6, 0.4, 0.1], region_channel=0)  # ET channel
+
+    band = clinical_jobs.clinical_conformal_band_mask(
+        logits, region_channel=0, fitted_threshold=0.5, reference_threshold=0.5
+    )
+
+    assert band.dtype == np.uint8
+    np.testing.assert_array_equal(band[0, 0, :], np.array([255, 255, 0, 0], dtype=np.uint8))
+
+
+def test_conformal_band_side_permissive() -> None:
+    assert clinical_jobs.conformal_band_side(0.3, reference_threshold=0.5) == "permissive"
+    # Equal is treated as permissive (fitted <= reference).
+    assert clinical_jobs.conformal_band_side(0.5, reference_threshold=0.5) == "permissive"
+
+
+def test_conformal_band_side_restrictive() -> None:
+    assert clinical_jobs.conformal_band_side(0.725, reference_threshold=0.5) == "restrictive"
 
 
 # --- load_clinical_uncertainty ------------------------------------------------

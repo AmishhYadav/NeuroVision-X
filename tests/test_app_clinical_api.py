@@ -409,6 +409,38 @@ def test_clinical_job_conformal_band_valid_region_with_threshold_is_200(
     assert response.headers["x-uncertainty-kind"] == "conformal-band"
     assert response.headers["x-volume-shape"] == "5,6,7"
     assert len(response.content) == 5 * 6 * 7
+    # fitted_threshold=0.3 <= reference_threshold=0.5 -> permissive side.
+    assert response.headers["x-conformal-threshold"] == "0.3000"
+    assert response.headers["x-conformal-reference"] == "0.5"
+    assert response.headers["x-conformal-side"] == "permissive"
+    assert response.headers["x-conformal-alpha"] == "0.1"
+
+
+def test_clinical_job_conformal_band_restrictive_side_is_200(
+    client: TestClient, backend: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # F5 (2026-09-18): the deployed alpha=0.10 fit puts WT/TC on the
+    # RESTRICTIVE side (fitted > 0.5) -- this used to 500 with an
+    # "invariant violated" ValueError; it must now serve a 200 with
+    # X-Conformal-Side: restrictive.
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    shape = (5, 6, 7)
+    _write_clinical_logits(settings, job, np.zeros((3, *shape), dtype=np.float32))
+
+    fit_path = tmp_path / "fit.json"
+    fit_path.write_text(json.dumps({"WT__alpha_0.1": {"threshold": 0.725}}))
+    monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/conformal-band/WT")
+    assert response.status_code == 200
+    assert response.headers["x-uncertainty-kind"] == "conformal-band"
+    assert response.headers["x-volume-shape"] == "5,6,7"
+    assert len(response.content) == 5 * 6 * 7
+    assert response.headers["x-conformal-threshold"] == "0.7250"
+    assert response.headers["x-conformal-reference"] == "0.5"
+    assert response.headers["x-conformal-side"] == "restrictive"
+    assert response.headers["x-conformal-alpha"] == "0.1"
 
 
 def test_clinical_job_conformal_band_invalid_region_is_404(

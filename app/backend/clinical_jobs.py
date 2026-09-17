@@ -813,6 +813,41 @@ def _live_conformal_band_width(
     return fitted_voxels / ref_voxels
 
 
+def conformal_band_side(
+    fitted_threshold: float, reference_threshold: float = 0.5
+) -> Literal["permissive", "restrictive"]:
+    """Which side of the reference threshold a fitted conformal threshold falls on.
+
+    F5 (2026-09-18): at the deployed operating point (`conformal_alpha=0.10`),
+    `outputs/conformal/neurovision/fit.json` fits WT=0.725 and TC=0.6, both
+    ABOVE the 0.5 reference threshold -- i.e. RESTRICTIVE, not permissive.
+    `clinical_conformal_band_mask` used to assume every fitted threshold was
+    permissive (fitted <= reference, so its mask could only be bigger than
+    the reference mask) and raised on any case where that was not true. That
+    assumption was never a property of the conformal calibration -- it
+    depends on which alpha and region the fit lands on -- so it was refusing
+    to serve the band at the exact operating point this project actually
+    deploys. This function names the side so the caller can encode either
+    one honestly instead of asserting one of them can't happen.
+
+    Args:
+        fitted_threshold: The region's fitted conformal threshold.
+        reference_threshold: The ordinary segmentation threshold being
+            compared against. Default `0.5`, this project's standard
+            operating point.
+
+    Returns:
+        `"permissive"` if `fitted_threshold <= reference_threshold` (a lower
+        threshold flags MORE voxels, so the fitted mask can only be a
+        superset of the reference mask); `"restrictive"` otherwise (a higher
+        threshold flags FEWER voxels, so the fitted mask can only be a
+        subset of the reference mask).
+    """
+    if fitted_threshold <= reference_threshold:
+        return "permissive"
+    return "restrictive"
+
+
 def clinical_conformal_band_mask(
     logits: np.ndarray,
     region_channel: int,
@@ -827,6 +862,16 @@ def clinical_conformal_band_mask(
     one is for drawing an overlay, at the SAME two thresholds on the SAME
     two masks).
 
+    F5 (2026-09-18): this used to assume the fitted conformal threshold was
+    always PERMISSIVE (`fitted_threshold <= reference_threshold`, so its mask
+    could only be a superset of the reference mask) and raised `ValueError`
+    otherwise. That assumption is false at the deployed operating point --
+    `outputs/conformal/neurovision/fit.json` at `alpha=0.10` fits WT=0.725
+    and TC=0.6, both RESTRICTIVE -- so the band could never be shown at the
+    operating point this project actually deploys. See `conformal_band_side`.
+    Both sides are now handled honestly: only the MEANING of the "band"
+    voxels (encoded 128) changes with the side, not whether a band exists.
+
     Args:
         logits: `(3, D, H, W)` raw model logits, channel order (ET, TC, WT).
         region_channel: Which region channel to read (0=ET, 1=TC, 2=WT).
@@ -834,53 +879,56 @@ def clinical_conformal_band_mask(
         reference_threshold: The ordinary segmentation threshold, default 0.5.
 
     Returns:
-        `(D, H, W)` uint8 array:
-          - 0   = outside the conservative (fitted-threshold) mask entirely
-          - 128 = inside the conservative mask but outside the reference
-                  (0.5) mask -- the "uncertain band": voxels only the
-                  distribution-free guarantee covers, not the point estimate
-          - 255 = inside the reference (0.5) mask (and therefore, by the
-                  masks' nesting, inside the conservative mask too, since a
-                  lower/more permissive threshold can only add voxels, never
-                  remove them -- asserted below rather than assumed, since a
-                  mis-fitted threshold on the wrong side of 0.5 would
-                  silently produce a nonsensical band otherwise)
+        `(D, H, W)` uint8 array. Let `P = prob > reference_threshold` (the
+        ordinary point-estimate mask) and `S = prob >= fitted_threshold` (the
+        conformal set):
+          - 0   = in neither mask
+          - 255 = in both masks
+          - 128 = in exactly one of the two masks. Which one depends on
+                  `conformal_band_side(fitted_threshold, reference_threshold)`:
+                  - permissive (fitted <= reference): the 128 voxels are
+                    `S \\ P` -- the guaranteed-coverage margin BEYOND the
+                    point estimate (voxels only the distribution-free
+                    guarantee covers, not the point estimate).
+                  - restrictive (fitted > reference): the 128 voxels are
+                    `P \\ S` -- voxels the point estimate flags that fall
+                    OUTSIDE the guaranteed-coverage set (the point estimate
+                    is less conservative than the guarantee here).
+                  Monotone thresholding of the SAME probability array means
+                  only one of `S \\ P`, `P \\ S` can be non-empty for any
+                  threshold pair, so this encoding is unambiguous -- asserted
+                  below, not merely assumed.
 
     Raises:
-        ValueError: If `fitted_threshold` is on the wrong side of
-            `reference_threshold` for this data -- i.e. some voxel is inside
-            the reference (0.5) mask but NOT inside the conservative
-            (fitted-threshold) mask. This should never happen for a validly
-            fitted conformal threshold under this project's
-            false-negative-rate loss (see the module docstring's conformal
-            section), so it is treated as a data problem worth surfacing
-            loudly rather than a buffer that would look plausible while
-            encoding a violated invariant.
+        ValueError: If BOTH `S \\ P` and `P \\ S` are non-empty. For two
+            thresholds applied to the same probability array this cannot
+            happen (thresholding is monotone), so it would mean `S` and `P`
+            were not, in fact, thresholds of the same underlying array --
+            a real data inconsistency worth surfacing loudly rather than
+            silently picking a side to encode.
     """
     prob = expit(logits[region_channel].astype(np.float64))
-    reference_mask = prob > reference_threshold
-    conservative_mask = prob > fitted_threshold
+    point_mask = prob > reference_threshold  # P
+    conformal_set = prob >= fitted_threshold  # S
 
-    # Voxels the reference mask claims but the "conservative" mask does not
-    # -- if any exist, fitted_threshold is not actually more permissive than
-    # reference_threshold, and the nesting this function's Returns section
-    # promises does not hold.
-    violation = reference_mask & ~conservative_mask
-    if violation.any():
+    band_beyond_point = conformal_set & ~point_mask  # S \ P
+    point_beyond_band = point_mask & ~conformal_set  # P \ S
+
+    if band_beyond_point.any() and point_beyond_band.any():
         region_name = REGION_NAMES[region_channel]
         raise ValueError(
             f"clinical_conformal_band_mask: invariant violated for region {region_name!r} "
-            f"(region_channel={region_channel}) -- fitted_threshold={fitted_threshold} "
-            f"produced a conservative mask SMALLER than the reference mask at "
-            f"reference_threshold={reference_threshold} ({int(violation.sum())} voxel(s) "
-            "affected). A validly-fitted conformal threshold must sit on the permissive side "
-            "of the reference threshold; refusing to return a band buffer that would encode "
-            "this violated invariant."
+            f"(region_channel={region_channel}) -- at fitted_threshold={fitted_threshold}, "
+            f"reference_threshold={reference_threshold}, both S\\P "
+            f"({int(band_beyond_point.sum())} voxel(s)) and P\\S "
+            f"({int(point_beyond_band.sum())} voxel(s)) are non-empty. Two thresholds on the "
+            "same probability array can only disagree in one direction; this means S and P "
+            "were not thresholds of the same underlying array."
         )
 
     band = np.zeros(prob.shape, dtype=np.uint8)
-    band[conservative_mask] = 128
-    band[reference_mask] = 255  # overwrites 128 wherever both masks agree
+    band[band_beyond_point | point_beyond_band] = 128
+    band[point_mask & conformal_set] = 255  # in both
     return band
 
 

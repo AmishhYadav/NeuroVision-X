@@ -923,10 +923,24 @@ def get_clinical_job_conformal_band(job_id: str, region: str) -> Response:
     a region with no fitted conformal threshold are all 404s, since each
     means there is nothing to serve for THIS job, not a server-side fault.
     A `ValueError` from `clinical_jobs.clinical_conformal_band_mask` (the
-    invariant-violation case -- see that function's docstring) propagates to
-    the global `ValueError` handler as a 500: it means the fitted threshold
-    itself is on the wrong side of the reference threshold, a data problem
-    this route cannot resolve by re-asking.
+    "not thresholds of the same array" invariant -- see that function's
+    docstring) propagates to the global `ValueError` handler as a 500: a
+    real data inconsistency this route cannot resolve by re-asking. Unlike
+    before F5 (2026-09-18), a fitted threshold on the RESTRICTIVE side of the
+    reference threshold (as the deployed `conformal_alpha=0.10` fit actually
+    is for both WT and TC -- see `outputs/conformal/neurovision/fit.json`) is
+    no longer treated as that invariant violation; it is a normal, expected
+    side, distinguished for the caller via `X-Conformal-Side`.
+
+    Four extra headers describe the two thresholds the returned band was
+    built from, since the byte encoding alone (see
+    `clinical_jobs.clinical_conformal_band_mask`'s Returns section) cannot
+    say which side of `reference_threshold` `fitted_threshold` fell on:
+    `X-Conformal-Threshold` (the fitted threshold, 4 decimal places),
+    `X-Conformal-Reference` (always `"0.5"`, this project's standard
+    operating point), `X-Conformal-Side` (`"permissive"` or `"restrictive"`,
+    from `clinical_jobs.conformal_band_side`), and `X-Conformal-Alpha` (the
+    alpha the fitted threshold was calibrated at).
     """
     job = _require_done_clinical_job(job_id)
     cfg = clinical_jobs._compose_clinical_cfg()
@@ -956,11 +970,22 @@ def get_clinical_job_conformal_band(job_id: str, region: str) -> Response:
             detail=f"no fitted conformal threshold for region {region!r} (alpha={alpha})",
         )
 
+    fitted_threshold = fitted[region]
+    reference_threshold = 0.5
     data = clinical_jobs.clinical_conformal_band_mask(
-        logits, REGION_NAMES.index(region), fitted[region]
+        logits,
+        REGION_NAMES.index(region),
+        fitted_threshold,
+        reference_threshold=reference_threshold,
     )
     response = _binary_response(np.ascontiguousarray(data, dtype=np.uint8).tobytes(), meta.shape)
     response.headers["X-Uncertainty-Kind"] = "conformal-band"
+    response.headers["X-Conformal-Threshold"] = f"{fitted_threshold:.4f}"
+    response.headers["X-Conformal-Reference"] = f"{reference_threshold}"
+    response.headers["X-Conformal-Side"] = clinical_jobs.conformal_band_side(
+        fitted_threshold, reference_threshold
+    )
+    response.headers["X-Conformal-Alpha"] = f"{alpha}"
     return response
 
 
