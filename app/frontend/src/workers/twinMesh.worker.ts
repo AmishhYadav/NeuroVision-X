@@ -5,6 +5,8 @@
 // volume takes real time to surface; doing it here keeps the tab responsive
 // while it runs.
 import { extentCenter, meshVoxelField, normalToScene, voxelToScene } from "../lib/twinGeometry";
+import { sampleLayersForClasses } from "../lib/twinLayers";
+import type { VertexLayerKind } from "../lib/vertexColors";
 
 export type ClassName = "necrotic" | "oedema" | "enhancing";
 
@@ -16,9 +18,14 @@ export interface TwinMeshRequest {
   modalityVolumes: Uint8Array[]; // whichever modalities loaded, OR'd for the brain mask
   tumorMask: Uint8Array | null; // label (preferred) or prediction, {0,1,2,3}
   tumorSource: "label" | "prediction" | null;
+  /** Optional per-voxel uint8 scalar volumes in the same (D,H,W) layout as tumorMask, keyed by the backend's X-Uncertainty-Kind value. */
+  scalarLayers?: Partial<Record<VertexLayerKind, Uint8Array>>;
+  /** Keep each surfaced tumour class's (d,h,w) voxel positions/normals in the result even with no scalarLayers, so a later "sample" message can add a layer without re-meshing. Implied by a non-empty scalarLayers. */
+  keepVoxelGeometry?: boolean;
 }
 
 export interface TwinMeshResult {
+  kind?: "mesh";
   requestId: number;
   caseId: string;
   brainLeft: { position: Float32Array; normal: Float32Array; index: Uint32Array };
@@ -27,6 +34,32 @@ export interface TwinMeshResult {
   tumorSource: "label" | "prediction" | null;
   tumorCentroidScene: [number, number, number] | null;
   classVolumesMl: Partial<Record<ClassName, number>>;
+  /** Per tumour class, vertex positions in (d,h,w) voxel space and outward normals (d,h,w) - kept so a NEW layer can be sampled later without re-meshing. Present only when the request carried scalarLayers or `keepVoxelGeometry: true`. */
+  voxelGeometry?: Partial<Record<ClassName, { positions: Float32Array; normals: Float32Array }>>;
+  /** layerScalars[kind][class] = Float32Array (N) in [0,1], sampled one voxel inward. Present only when the request carried scalarLayers. */
+  layerScalars?: Partial<Record<VertexLayerKind, Partial<Record<ClassName, Float32Array>>>>;
+}
+
+// A second message the worker understands: resample an ALREADY-MESHED case
+// with a new (or additional) scalar layer, using the voxel geometry a prior
+// mesh request returned (see TwinMeshResult.voxelGeometry) - avoids paying
+// for surface-nets again just to switch which uncertainty layer is shown.
+// Discriminated from TwinMeshRequest by the `kind` field: a mesh request has
+// none, so `"kind" in e.data` is false for it.
+export interface TwinSampleRequest {
+  kind: "sample";
+  requestId: number;
+  caseId: string;
+  shape: [number, number, number]; // (D, H, W)
+  layers: Partial<Record<VertexLayerKind, Uint8Array>>;
+  voxelGeometry: Partial<Record<ClassName, { positions: Float32Array; normals: Float32Array }>>;
+}
+
+export interface TwinSampleResult {
+  kind: "sample";
+  requestId: number;
+  caseId: string;
+  layerScalars: Partial<Record<VertexLayerKind, Partial<Record<ClassName, Float32Array>>>>;
 }
 
 const CLASS_NAMES: Record<number, ClassName> = { 1: "necrotic", 2: "oedema", 3: "enhancing" };
@@ -42,8 +75,24 @@ const CLASS_NAMES: Record<number, ClassName> = { 1: "necrotic", 2: "oedema", 3: 
 // +Z = posterior, which is left-handed and mirrors the whole brain left
 // for right - a mirrored brain still looks like a brain, so neither bug
 // was visible without a numeric probe.
-self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
-  const { requestId, caseId, shape, spacing, modalityVolumes, tumorMask, tumorSource } = e.data;
+self.onmessage = (e: MessageEvent<TwinMeshRequest | TwinSampleRequest>) => {
+  const data = e.data;
+  // A mesh request carries no `kind` field at all (see TwinSampleRequest's
+  // docstring) - this keeps the existing App.tsx demo path, which only ever
+  // sends TwinMeshRequest, completely untouched. TwinMeshRequest does not
+  // declare `kind`, so the cast below is only needed because TS cannot
+  // prove the negative case from a plain `in` check on a non-discriminated
+  // field; the runtime check itself is exact.
+  if ("kind" in data && data.kind === "sample") {
+    handleSampleRequest(data);
+    return;
+  }
+  handleMeshRequest(data as TwinMeshRequest);
+};
+
+function handleMeshRequest(request: TwinMeshRequest) {
+  const { requestId, caseId, shape, spacing, modalityVolumes, tumorMask, tumorSource, scalarLayers, keepVoxelGeometry } =
+    request;
   const [D, H, W] = shape;
   const n = D * H * W;
 
@@ -105,6 +154,11 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
   const classVolumesMl: TwinMeshResult["classVolumesMl"] = {};
   const voxelMl = (spacing[0] * spacing[1] * spacing[2]) / 1000;
   let tumorCentroidScene: [number, number, number] | null = null;
+  // A non-empty scalarLayers always needs the raw voxel geometry to sample
+  // it against; keepVoxelGeometry lets a caller ask for it up front too, so
+  // a LATER layer-only "sample" message never has to re-mesh.
+  const keepGeometry = Boolean(keepVoxelGeometry) || Boolean(scalarLayers && Object.keys(scalarLayers).length > 0);
+  const voxelGeometry: NonNullable<TwinMeshResult["voxelGeometry"]> = {};
 
   if (tumorMask) {
     let sumD = 0;
@@ -147,8 +201,15 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
       const scenePos = voxelToScene(raw.positions, center, scale);
       const sceneNorm = normalToScene(raw.normals);
       tumor[name] = { position: scenePos, normal: sceneNorm, index: raw.indices };
+      // Keep the PRE-voxelToScene positions/normals - scalar layers are
+      // sampled in voxel space (see twinLayers.ts), not scene space.
+      if (keepGeometry) {
+        voxelGeometry[name] = { positions: raw.positions, normals: raw.normals };
+      }
     }
   }
+
+  const layerScalars = scalarLayers ? sampleLayersForClasses(scalarLayers, shape, voxelGeometry) : undefined;
 
   const result: TwinMeshResult = {
     requestId,
@@ -159,6 +220,8 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
     tumorSource,
     tumorCentroidScene,
     classVolumesMl,
+    ...(keepGeometry ? { voxelGeometry } : {}),
+    ...(layerScalars ? { layerScalars } : {}),
   };
 
   const transferables: Transferable[] = [
@@ -172,5 +235,37 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest>) => {
   for (const m of Object.values(tumor)) {
     if (m) transferables.push(m.position.buffer, m.normal.buffer, m.index.buffer);
   }
+  if (keepGeometry) {
+    for (const g of Object.values(voxelGeometry)) {
+      if (g) transferables.push(g.positions.buffer, g.normals.buffer);
+    }
+  }
+  if (layerScalars) {
+    for (const perClass of Object.values(layerScalars)) {
+      if (!perClass) continue;
+      for (const arr of Object.values(perClass)) {
+        if (arr) transferables.push(arr.buffer);
+      }
+    }
+  }
   (self as unknown as Worker).postMessage(result, transferables);
-};
+}
+
+// Resamples ALREADY-MESHED voxel geometry (from a prior TwinMeshResult's
+// voxelGeometry) against one or more new/changed scalar layers, with no
+// surface-nets work at all - the whole point of this message type.
+function handleSampleRequest(request: TwinSampleRequest) {
+  const { requestId, caseId, shape, layers, voxelGeometry } = request;
+  const layerScalars = sampleLayersForClasses(layers, shape, voxelGeometry);
+
+  const result: TwinSampleResult = { kind: "sample", requestId, caseId, layerScalars };
+
+  const transferables: Transferable[] = [];
+  for (const perClass of Object.values(layerScalars)) {
+    if (!perClass) continue;
+    for (const arr of Object.values(perClass)) {
+      if (arr) transferables.push(arr.buffer);
+    }
+  }
+  (self as unknown as Worker).postMessage(result, transferables);
+}
