@@ -12,6 +12,7 @@ import {
   getClinicalJobMask,
   getClinicalJobUncertainty,
   getClinicalJobVolume,
+  listClinicalJobs,
 } from "./api";
 import type { ReportResponse } from "./api";
 
@@ -201,6 +202,52 @@ describe("getClinicalJob", () => {
     const err = await getClinicalJob("nope").catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(404);
+  });
+});
+
+describe("listClinicalJobs", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hits /api/clinical/jobs and returns the list on success", async () => {
+    const jobs = [
+      {
+        job_id: "abc123",
+        state: "done",
+        stage: "done",
+        progress: 1,
+        case_id: "abc123",
+        error: null,
+        ingest_result: null,
+        input_qc_pre: null,
+        input_qc_post: null,
+        preprocess_warnings: null,
+        gatekeeper_decision: null,
+        created_at: 0,
+        updated_at: 0,
+      },
+    ];
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ jobs }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await listClinicalJobs();
+    expect(result).toEqual({ jobs });
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/clinical/jobs");
+  });
+
+  it("treats a 502 from the dev proxy as unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 502, statusText: "Bad Gateway" }),
+    );
+
+    await expect(listClinicalJobs()).rejects.toBeInstanceOf(ApiUnreachableError);
   });
 });
 

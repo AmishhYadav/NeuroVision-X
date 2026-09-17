@@ -1,10 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useClinicalJob } from "../../hooks/useClinicalJob";
 import { ClinicalJobStatus } from "./ClinicalJobStatus";
 import { ClinicalStudyViewer } from "./ClinicalStudyViewer";
 import { ClinicalUploadPanel } from "./ClinicalUploadPanel";
 import { GatekeeperPanel } from "./GatekeeperPanel";
+import { PreviousStudies } from "./PreviousStudies";
 import { RefusalBanner } from "./RefusalBanner";
+
+/**
+ * Reads `?job=<id>` off the current URL, once, for the initial `jobId`
+ * state - so a link to a finished study (copied from the address bar,
+ * shared in the moments before a demo) reopens straight into it rather than
+ * the upload panel. Read directly from `window.location.search` rather than
+ * a router: this file already does its own `pushState`-based navigation
+ * (see `goToLanding`), so a second navigation mechanism would just be two
+ * sources of truth for the same URL.
+ */
+function jobIdFromUrl(): string | null {
+  return new URLSearchParams(window.location.search).get("job");
+}
 
 // "/app" (main.tsx) remains the separate viewer for PRECOMPUTED evaluation
 // cases - this page is a second, independent entry point that puts a REAL
@@ -28,10 +42,21 @@ function goToLanding() {
  * reclaims it.
  */
 export function ClinicalPage() {
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(jobIdFromUrl);
   const { job, error } = useClinicalJob(jobId);
 
   const isDone = job?.state === "done";
+
+  // replaceState, not pushState: switching jobs (including back to null) is
+  // not a navigation the user expects "back" to step through - it just keeps
+  // the address bar's ?job= in sync with whatever is on screen.
+  useEffect(() => {
+    window.history.replaceState(
+      {},
+      "",
+      jobId ? `?job=${encodeURIComponent(jobId)}` : window.location.pathname,
+    );
+  }, [jobId]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-text-primary">
@@ -67,6 +92,8 @@ export function ClinicalPage() {
           }`}
         >
           {!jobId && <ClinicalUploadPanel onJobCreated={setJobId} />}
+          {/* Mounts only while jobId === null, so "New upload" remounts it and refetches. */}
+          {!jobId && <PreviousStudies onOpen={setJobId} />}
 
           {error && <p className="font-mono text-xs text-text-secondary">{error}</p>}
 

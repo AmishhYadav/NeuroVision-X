@@ -556,6 +556,18 @@ export function getClinicalJob(jobId: string, signal?: AbortSignal): Promise<Cli
 }
 
 /**
+ * Every clinical job the backend has on disk (`job.json` per job, rehydrated
+ * at startup - see `app/backend/clinical_jobs.py`), newest first as the
+ * server already orders them. This is what lets a finished study be reopened
+ * after a reload: the page only ever learns a job's id from the upload that
+ * created it, so without this list there is no way back to a job once its
+ * id falls out of memory.
+ */
+export function listClinicalJobs(signal?: AbortSignal): Promise<{ jobs: ClinicalJob[] }> {
+  return getJson<{ jobs: ClinicalJob[] }>("/clinical/jobs", signal);
+}
+
+/**
  * A `"done"` clinical job's case geometry - the one clinical route that
  * carries voxel `spacing` and `bbox`. The backend returns exactly
  * `volumes.CaseMeta.to_json()`, the same object `/cases/{id}` nests under
