@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ApiError,
   ApiUnreachableError,
   getClinicalJobConformalBand,
+  getClinicalJobGeometry,
   getClinicalJobGradcam,
   getClinicalJobMask,
   getClinicalJobUncertainty,
   getClinicalJobVolume,
+  type CaseMeta,
   type Modality,
   type UncertaintyBuffer,
   type VolumeBuffer,
@@ -31,6 +34,16 @@ export interface ClinicalJobVolumesState {
   uncertainty: UncertaintyBuffer | null;
   conformalBand: Partial<Record<"WT" | "TC", UncertaintyBuffer | null>>;
   gradcam: Partial<Record<"WT" | "TC", UncertaintyBuffer | null>>;
+  /**
+   * Case geometry (`shape`, `spacing`, `bbox`) - what the 3D digital twin
+   * needs to build real-world-scaled mesh geometry. Served by
+   * `/clinical/jobs/{id}/geometry`, the one clinical route that carries
+   * voxel spacing; the binary volume/mask routes' `X-Volume-Shape` header
+   * gives only a voxel-count shape. `null` while loading, or if this job's
+   * `meta.json` is missing (see the 404 handling below) - a normal outcome,
+   * not an error.
+   */
+  geometry: CaseMeta | null;
   loading: boolean;
   error: string | null;
 }
@@ -41,6 +54,7 @@ const EMPTY_STATE: ClinicalJobVolumesState = {
   uncertainty: null,
   conformalBand: {},
   gradcam: {},
+  geometry: null,
   loading: false,
   error: null,
 };
@@ -48,8 +62,17 @@ const EMPTY_STATE: ClinicalJobVolumesState = {
 /**
  * Loads a `"done"` clinical job's four modality volumes, its prediction
  * mask, its live-computed entropy map, its fitted conformal band for both
- * regions (`WT`, `TC`), and its Grad-CAM explainability heatmap for both
- * regions, in parallel.
+ * regions (`WT`, `TC`), its Grad-CAM explainability heatmap for both
+ * regions, and its case geometry, in parallel.
+ *
+ * Geometry (`shape`, `spacing`, `bbox`) is what the 3D digital twin needs to
+ * build correctly scaled mesh geometry - it comes from
+ * `/clinical/jobs/{id}/geometry`, the one clinical route that carries voxel
+ * spacing (see `getClinicalJobGeometry`). A 404 there means a done job whose
+ * `meta.json` is missing - the route defines that response but it should not
+ * happen in practice - and is handled as a normal, non-fatal outcome
+ * (`geometry` stays `null`) rather than failing every other fetch in this
+ * batch; any other error from this route propagates like the rest.
  *
  * Mirrors `useCaseData`'s shape (a per-switch `AbortController`, partial
  * state filled in as each fetch resolves, so viewports light up one at a
@@ -133,12 +156,28 @@ export function useClinicalJobVolumes(
           }));
         });
 
+        const geometryPromise = getClinicalJobGeometry(jobId, signal)
+          .then((geometry) => {
+            if (signal.aborted) return;
+            setState((prev) => ({ ...prev, geometry }));
+          })
+          .catch((err) => {
+            // A missing meta.json on an otherwise-done job should not
+            // happen, but the route defines a 404 for it - treat that one
+            // status as "no geometry yet" rather than failing the whole
+            // hook. Any other error (network, 5xx) rethrows and is caught
+            // by the outer try/catch like every other fetch here.
+            if (err instanceof ApiError && err.status === 404) return;
+            throw err;
+          });
+
         await Promise.all([
           ...volumePromises,
           maskPromise,
           uncertaintyPromise,
           ...conformalBandPromises,
           ...gradcamPromises,
+          geometryPromise,
         ]);
 
         if (!signal.aborted) {

@@ -105,6 +105,11 @@ function useTwinMesh(input: BrainTwinInput | null): {
       requestId: requestIdRef.current,
       caseId: input.caseId,
       shape: input.shape,
+      // The worker uses `spacing` only to convert voxel counts to mL for
+      // `classVolumesMl` - the mesh geometry itself assumes every case sits
+      // on the 1 mm SRI24 grid, which holds for both the research (`/cases`)
+      // and clinical (`/clinical/jobs`) paths, so spacing never rescales the
+      // isosurface itself.
       spacing: input.spacing,
       modalityVolumes: input.modalityVolumes,
       tumorMask: input.tumorMask,
@@ -251,7 +256,15 @@ function CameraDolly({
 
 const DEFAULT_TARGET = new THREE.Vector3(0, 0, 0);
 
-export function BrainTwinScene({ input }: { input: BrainTwinInput | null }) {
+export interface BrainTwinSceneProps {
+  input: BrainTwinInput | null;
+  /** Short text rendered top-left over the canvas (e.g. "PROCEED WITH CAUTION"). Absent → nothing rendered. */
+  badge?: string | null;
+  /** Visual tone of the badge. */
+  badgeTone?: "caution" | "neutral";
+}
+
+export function BrainTwinScene({ input, badge, badgeTone = "neutral" }: BrainTwinSceneProps) {
   const { result, geometries, computing } = useTwinMesh(input);
   const [separated, setSeparated] = useState(false);
   const [selected, setSelected] = useState<ClassName | null>(null);
@@ -278,6 +291,13 @@ export function BrainTwinScene({ input }: { input: BrainTwinInput | null }) {
         camera={{ position: [0, 0.3, 2.6], fov: 42 }}
         onPointerMissed={() => setSelected(null)}
         dpr={[1, 2]}
+        // `preserveDrawingBuffer` keeps the rendered frame in the backbuffer
+        // after compositing, instead of the default WebGL clear - required
+        // for `canvas.toDataURL()` to return the actual picture rather than
+        // black (both the E2E harness's pixel assertions and T6's export
+        // snapshot read the canvas this way). Costs one extra buffer copy
+        // per frame, which is acceptable at this scene's size.
+        gl={{ preserveDrawingBuffer: true }}
       >
         <ambientLight intensity={0.55} />
         <directionalLight position={[2, 3, 4]} intensity={1.1} />
@@ -306,6 +326,20 @@ export function BrainTwinScene({ input }: { input: BrainTwinInput | null }) {
           zoomSpeed={0.7}
         />
       </Canvas>
+
+      {badge && (
+        <div
+          data-testid="twin-badge"
+          role="status"
+          className={`liquid-glass pointer-events-none absolute top-3 left-3 rounded-md border px-2.5 py-1 font-condensed text-[11px] font-semibold tracking-[0.12em] uppercase ${
+            badgeTone === "caution"
+              ? "border-data-amber/60 text-data-amber"
+              : "border-surface-seam text-text-secondary"
+          }`}
+        >
+          {badge}
+        </div>
+      )}
 
       {!geometries && (
         <div className="absolute inset-0 flex items-center justify-center">
