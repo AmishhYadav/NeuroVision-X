@@ -1468,7 +1468,13 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         # --- E3, pre-E2 ----------------------------------------------------
         _update_clinical_job(job, stage="input_qc (pre-preprocessing)")
         volumes, _brain_mask = load_volume_infos(ingest_result.paths)
-        report_pre: InputQCReport = run_input_qc(cfg, volumes, brain_mask=None)
+        # Different modalities legitimately sit on different voxel grids
+        # before E2 co-registers them -- stage="pre_registration" downgrades
+        # that expected geometry mismatch from REFUSE to WARN so this pass
+        # does not block every real study before E2 has run.
+        report_pre: InputQCReport = run_input_qc(
+            cfg, volumes, brain_mask=None, stage="pre_registration"
+        )
         _update_clinical_job(job, input_qc_pre=report_pre.to_dict(), progress=0.2)
 
         if report_pre.verdict is Severity.REFUSE:
@@ -1495,7 +1501,9 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
         if preprocess_result.brain_mask.is_file():
             paths_for_qc[_BRAIN_MASK_ROLE_KEY] = preprocess_result.brain_mask
         volumes2, brain_mask_arr = load_volume_infos(paths_for_qc)
-        report_post: InputQCReport = run_input_qc(cfg, volumes2, brain_mask=brain_mask_arr)
+        report_post: InputQCReport = run_input_qc(
+            cfg, volumes2, brain_mask=brain_mask_arr, stage="post_registration"
+        )
         _update_clinical_job(job, input_qc_post=report_post.to_dict(), progress=0.55)
 
         if report_post.verdict is Severity.REFUSE:

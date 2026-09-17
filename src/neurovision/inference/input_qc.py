@@ -64,7 +64,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import nibabel as nib
 import numpy as np
@@ -959,11 +959,16 @@ def check_brain_mask(
     return (volume_finding, fraction_finding, skull_finding)
 
 
+_Stage = Literal["pre_registration", "post_registration"]
+_VALID_STAGES: frozenset[str] = frozenset({"pre_registration", "post_registration"})
+
+
 def run_input_qc(
     cfg: Any,
     volumes: Mapping[str, VolumeInfo],
     *,
     brain_mask: np.ndarray | None = None,
+    stage: _Stage = "post_registration",
 ) -> InputQCReport:
     """Run every check and compose one `InputQCReport`.
 
@@ -979,6 +984,25 @@ def run_input_qc(
     `geometry_consistency` finding to learn everything about geometry
     disagreement in the study.
 
+    **Why `stage` exists.** `run_input_qc` is called twice per clinical job
+    (`app/backend/clinical_jobs.py`): once on the raw, just-ingested
+    modalities, and once again after clinical preprocessing (E2) has
+    co-registered every modality onto a common grid. A real study's four
+    series legitimately arrive on four DIFFERENT voxel grids -- different
+    in-plane resolution, different slice count, even a different
+    acquisition plane (axial vs. sagittal) -- because that is how they were
+    scanned; co-registration is the step that fixes this, not a precondition
+    for it. Run at the default `stage="post_registration"`, a geometry
+    mismatch is a real bug (registration failed or was skipped) and must
+    REFUSE. Run with `stage="pre_registration"`, that same mismatch is
+    EXPECTED, so it is downgraded to a WARN rather than blocking the study
+    before E2 has had a chance to fix it; `check_geometry_consistency`
+    itself does not know which call this is, so the downgrade happens here,
+    after it returns. A brain mask shape disagreement folded into this same
+    finding (see above) is NOT downgraded at either stage -- a caller has no
+    business passing a brain mask before registration, so that combination
+    staying REFUSE is a deliberate trip-wire, not an oversight.
+
     Args:
         cfg: The root config (or anything exposing `cfg.clinical.input_qc`
             with the fields `configs/clinical/default.yaml` documents).
@@ -986,11 +1010,27 @@ def run_input_qc(
         brain_mask: The brain mask array, if available. `None` -> the
             brain-mask-dependent checks are skipped, visibly (see
             `check_brain_mask`).
+        stage: Which pass this is. `"post_registration"` (default) leaves
+            every check exactly as it was before `stage` existed. Existing
+            callers that never pass `stage` are unaffected.
+            `"pre_registration"` downgrades a REFUSE-severity
+            `geometry_consistency` finding (caused by mismatched
+            modality grids, not by a mismatched brain mask) to WARN.
 
     Returns:
         The composed report. `verdict` is REFUSE if any finding refused,
         else WARN if any warned, else OK.
+
+    Raises:
+        ValueError: If `stage` is not one of `"pre_registration"` or
+            `"post_registration"`.
     """
+    if stage not in _VALID_STAGES:
+        raise ValueError(
+            "run_input_qc: stage must be one of 'pre_registration' or "
+            f"'post_registration', got {stage!r}"
+        )
+
     qc_cfg = cfg.clinical.input_qc
 
     findings: list[Finding] = [check_sequence_completeness(volumes.keys(), qc_cfg.required_roles)]
@@ -1015,6 +1055,31 @@ def run_input_qc(
                     ),
                     detail={**old.detail, "brain_mask_shape": list(mask_shape)},
                 )
+
+    # Pre-registration: a plain modality-vs-modality geometry mismatch (not
+    # the brain-mask fold-in above, which stays REFUSE regardless of stage --
+    # see this function's docstring) is EXPECTED before E2 co-registers
+    # everything onto one grid, so it is downgraded to WARN rather than
+    # blocking the study. "brain_mask_shape" in `detail` is exactly the
+    # marker the fold-in above adds, so it is the one signal available here
+    # to tell the two REFUSE causes apart.
+    if stage == "pre_registration":
+        index = next(
+            i for i, f in enumerate(geometry_findings) if f.check == "geometry_consistency"
+        )
+        old = geometry_findings[index]
+        if old.severity is Severity.REFUSE and "brain_mask_shape" not in old.detail:
+            geometry_findings[index] = Finding(
+                check="geometry_consistency",
+                severity=Severity.WARN,
+                message=(
+                    f"{old.message} Expected before co-registration: clinical "
+                    "preprocessing (E2) will co-register every modality to the centre "
+                    "modality; this check is re-run at REFUSE severity afterwards."
+                ),
+                detail={**old.detail, "downgraded_from": "refuse", "stage": "pre_registration"},
+            )
+
     findings.extend(geometry_findings)
 
     findings.extend(check_finite_values(volumes))
@@ -1029,12 +1094,13 @@ def run_input_qc(
     verdict = _worst_severity(f.severity for f in findings)
     if verdict is Severity.REFUSE:
         logger.warning(
-            "run_input_qc: REFUSE (%d refusal finding(s)): %s",
+            "run_input_qc: stage=%s REFUSE (%d refusal finding(s)): %s",
+            stage,
             sum(1 for f in findings if f.severity is Severity.REFUSE),
             "; ".join(f"{f.check}: {f.message}" for f in findings if f.severity is Severity.REFUSE),
         )
     else:
-        logger.debug("run_input_qc: verdict=%s", verdict.value)
+        logger.debug("run_input_qc: stage=%s verdict=%s", stage, verdict.value)
 
     return InputQCReport(verdict=verdict, findings=tuple(findings))
 

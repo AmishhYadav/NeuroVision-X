@@ -448,7 +448,7 @@ def _fake_load_volume_infos(paths):
     return None, None
 
 
-def _fake_run_input_qc(cfg, volumes, brain_mask=None):
+def _fake_run_input_qc(cfg, volumes, brain_mask=None, stage="post_registration"):
     """A fake E3 that always passes -- reaches past both input-QC refusal points."""
     return InputQCReport(verdict=Severity.OK, findings=())
 

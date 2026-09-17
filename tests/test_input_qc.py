@@ -593,3 +593,73 @@ def test_load_volume_infos_reads_real_niftis_and_splits_out_the_mask(tmp_path: P
     assert isinstance(volumes["t1"], VolumeInfo)
     assert mask is not None
     assert mask.shape == SHAPE
+
+
+# ---------------------------------------------------------------------------
+# 23. `stage`: pre-registration downgrades an expected geometry mismatch
+# ---------------------------------------------------------------------------
+
+
+def test_run_input_qc_pre_registration_downgrades_geometry_mismatch_to_warn() -> None:
+    # Two modalities on genuinely different grids -- exactly what a real
+    # study looks like before E2 co-registers everything, per the bug report
+    # this spec fixes.
+    cfg = _make_cfg(required_roles=["t1", "t2"])
+    volumes = {
+        "t1": _make_volume_info("t1", shape=(8, 8, 8)),
+        "t2": _make_volume_info("t2", shape=(6, 6, 6)),
+    }
+
+    report_default = run_input_qc(cfg, volumes, brain_mask=None)
+    geometry_default = _finding_by_check(report_default.findings, "geometry_consistency")
+    assert geometry_default.severity is Severity.REFUSE
+    assert report_default.verdict is Severity.REFUSE
+
+    report_pre = run_input_qc(cfg, volumes, brain_mask=None, stage="pre_registration")
+    geometry_pre = _finding_by_check(report_pre.findings, "geometry_consistency")
+    assert geometry_pre.severity is Severity.WARN
+    assert geometry_pre.detail["downgraded_from"] == "refuse"
+    assert report_pre.verdict is not Severity.REFUSE
+
+
+def test_run_input_qc_pre_registration_leaves_consistent_geometry_ok() -> None:
+    cfg = _make_cfg()
+    mask = _brain_mask()
+    volumes = _four_role_volumes(brain_mask=mask)
+
+    report_default = run_input_qc(cfg, volumes, brain_mask=mask)
+    report_pre = run_input_qc(cfg, volumes, brain_mask=mask, stage="pre_registration")
+
+    geometry_default = _finding_by_check(report_default.findings, "geometry_consistency")
+    geometry_pre = _finding_by_check(report_pre.findings, "geometry_consistency")
+    assert geometry_default.severity is Severity.OK
+    assert geometry_pre.severity is Severity.OK
+    assert geometry_pre.detail == geometry_default.detail
+
+
+def test_run_input_qc_pre_registration_keeps_brain_mask_shape_refusal() -> None:
+    cfg = _make_cfg()
+    volumes = _four_role_volumes(brain_mask=_brain_mask())
+    mismatched_mask = np.ones((4, 4, 4), dtype=np.uint8)
+
+    report_pre = run_input_qc(cfg, volumes, brain_mask=mismatched_mask, stage="pre_registration")
+    geometry_pre = _finding_by_check(report_pre.findings, "geometry_consistency")
+    assert geometry_pre.severity is Severity.REFUSE
+    assert report_pre.verdict is Severity.REFUSE
+
+
+def test_run_input_qc_rejects_unknown_stage() -> None:
+    cfg = _make_cfg()
+    volumes = _four_role_volumes()
+    with pytest.raises(ValueError, match="pre_registration"):
+        run_input_qc(cfg, volumes, brain_mask=None, stage="mid_registration")  # type: ignore[arg-type]
+
+
+def test_run_input_qc_default_stage_unchanged() -> None:
+    cfg = _make_cfg()
+    mask = _brain_mask()
+    volumes = _four_role_volumes(brain_mask=mask)
+
+    report_default = run_input_qc(cfg, volumes, brain_mask=mask)
+    report_explicit = run_input_qc(cfg, volumes, brain_mask=mask, stage="post_registration")
+    assert report_default.to_dict() == report_explicit.to_dict()
