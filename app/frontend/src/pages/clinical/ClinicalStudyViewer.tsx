@@ -1,7 +1,19 @@
 import { Box, FileText, Power } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { GateDecisionValue, Modality, Plane, UncertaintyBuffer } from "../../api";
-import { BrainTwinScene, type BrainTwinInput } from "../../components/BrainTwinScene";
+import {
+  CONFORMAL_BAND,
+  GRADCAM,
+  PREDICTIVE_ENTROPY_SINGLE_PASS,
+  type GateDecisionValue,
+  type Modality,
+  type Plane,
+  type UncertaintyBuffer,
+} from "../../api";
+import {
+  BrainTwinScene,
+  type BrainTwinInput,
+  type TwinActiveLayer,
+} from "../../components/BrainTwinScene";
 import { MODALITY_ORDER } from "../../components/ControlBar";
 import { Legend } from "../../components/Legend";
 import { ReportPanel } from "../../components/ReportPanel";
@@ -94,6 +106,29 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
               ? (gradcam.TC ?? null)
               : null;
   const showHeat = heatOverlay !== "none" && heatBuffer !== null;
+
+  // What feeds BrainTwinScene's tumour-mesh painting - the SAME selected
+  // buffer the 2D view is heat-overlaying, never a second, independent
+  // choice. `key` is `heatOverlay` itself (e.g. "band_wt" vs "band_tc")
+  // rather than `heatBuffer.kind` ("conformal-band" for both): those two
+  // buffers share a `kind`, so keying the scene's scalar cache on `kind`
+  // alone would let switching WT<->TC silently reuse the wrong region's
+  // stale scalars (see TwinActiveLayer's docstring). `kind` is read off the
+  // buffer itself, never hardcoded, and is validated against the three
+  // kinds scalarsToColors actually knows how to paint - an unrecognised or
+  // missing header degrades to "no layer" rather than mislabelling one.
+  const activeLayer: TwinActiveLayer | null = useMemo(() => {
+    if (heatOverlay === "none" || !heatBuffer) return null;
+    const kind = heatBuffer.kind;
+    if (
+      kind !== PREDICTIVE_ENTROPY_SINGLE_PASS &&
+      kind !== CONFORMAL_BAND &&
+      kind !== GRADCAM
+    ) {
+      return null;
+    }
+    return { key: heatOverlay, kind, data: heatBuffer.data };
+  }, [heatOverlay, heatBuffer]);
 
   // Drives the button group below. "None" is never disabled; the other
   // five are disabled exactly when their backing buffer is unavailable -
@@ -275,7 +310,12 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
           )}
           {view === "twin" ? (
             <div className="min-h-0 flex-1 border border-surface-seam bg-surface-panel">
-              <BrainTwinScene input={twinInput} badge={twinBadge} badgeTone={twinBadgeTone} />
+              <BrainTwinScene
+                input={twinInput}
+                badge={twinBadge}
+                badgeTone={twinBadgeTone}
+                activeLayer={activeLayer}
+              />
             </div>
           ) : (
             <div className="min-h-0 flex-1">

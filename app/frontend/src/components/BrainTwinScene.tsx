@@ -8,6 +8,17 @@
 // selection produces a genuinely different tumour, sized and shaped as it
 // really is.
 //
+// The twin can also be PAINTED with the same per-voxel layers the 2D slice
+// view shows (predictive entropy, the conformal band, Grad-CAM) - each
+// tumour class's mesh vertices are coloured by that layer's value sampled
+// one voxel inward from the surface (see lib/vertexScalars.ts for why: a
+// vertex sits exactly on the class boundary, where an entropy-like quantity
+// is maximal by construction, so sampling AT the surface would paint every
+// tumour uniformly "maximally uncertain" and say nothing). Switching which
+// layer is active never re-runs the surface-nets mesh pass - only a cheap
+// resample against geometry the worker already computed - because the mesh
+// shape does not depend on which layer is being displayed.
+//
 // Interaction: drag to orbit, scroll/pinch to zoom (drei OrbitControls),
 // click a hemisphere to slide the brain apart, click a tumour
 // sub-structure to dolly in and read its real volume for this case.
@@ -16,7 +27,14 @@ import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { hexToRgb } from "../lib/colors";
-import type { TwinMeshRequest, TwinMeshResult } from "../workers/twinMesh.worker";
+import { scalarsToColors, type VertexLayerKind } from "../lib/vertexColors";
+import type {
+  TwinMeshRequest,
+  TwinMeshResult,
+  TwinSampleRequest,
+  TwinSampleResult,
+} from "../workers/twinMesh.worker";
+import { Legend } from "./Legend";
 
 export type ClassName = "necrotic" | "oedema" | "enhancing";
 
@@ -59,41 +77,131 @@ export interface BrainTwinInput {
   tumorSource: "label" | "prediction" | null;
 }
 
-/** Owns the worker, dispatches one mesh job per case, and caches results by case id. */
-function useTwinMesh(input: BrainTwinInput | null): {
+/**
+ * The one scalar layer currently selected to paint the tumour meshes.
+ * `kind` is the exact backend `X-Uncertainty-Kind` value and decides how
+ * `scalarsToColors` colours it. `key` is a separate cache key because two
+ * buffers can share a `kind` (the conformal band and Grad-CAM are each
+ * fetched for both the WT and TC regions) - keying the scene's scalar cache
+ * by `kind` alone would let switching WT<->TC silently reuse the wrong
+ * region's stale scalars, so the caller (ClinicalStudyViewer) passes its own
+ * selector value (e.g. `"band_wt"`) as `key` to force a fresh sample on
+ * every region switch.
+ */
+export interface TwinActiveLayer {
+  key: string;
+  kind: VertexLayerKind;
+  data: Uint8Array;
+}
+
+interface TwinGeometries {
+  brainLeft: THREE.BufferGeometry;
+  brainRight: THREE.BufferGeometry;
+  tumor: Partial<Record<ClassName, THREE.BufferGeometry>>;
+}
+
+/**
+ * Owns the worker, dispatches one mesh job per case, and caches results by
+ * case id. Also resolves `activeLayer`'s scalars for the current case: if
+ * they were not already included in the case's mesh response (e.g. the
+ * layer was picked after the mesh finished), it sends a cheap "sample"
+ * message that reuses the mesh's own voxel geometry instead of re-meshing.
+ */
+function useTwinMesh(
+  input: BrainTwinInput | null,
+  activeLayer: TwinActiveLayer | null,
+): {
   result: TwinMeshResult | null;
-  geometries: {
-    brainLeft: THREE.BufferGeometry;
-    brainRight: THREE.BufferGeometry;
-    tumor: Partial<Record<ClassName, THREE.BufferGeometry>>;
-  } | null;
+  geometries: TwinGeometries | null;
   computing: boolean;
+  /** activeLayer's per-class scalars for the CURRENT case, or null if there is no active layer or its scalars have not arrived yet. */
+  activeLayerScalars: Partial<Record<ClassName, Float32Array>> | null;
 } {
   const workerRef = useRef<Worker | null>(null);
-  const cacheRef = useRef<Map<string, TwinMeshResult>>(new Map());
+  // Base mesh geometry per case - independent of which layer is active, so
+  // switching layers never touches this cache.
+  const meshCacheRef = useRef<Map<string, TwinMeshResult>>(new Map());
+  // Sampled scalars per case, then per the caller's `key` (see
+  // TwinActiveLayer's docstring on why `key` and not `kind`).
+  const layerCacheRef = useRef<Map<string, Map<string, Partial<Record<ClassName, Float32Array>>>>>(
+    new Map(),
+  );
   const requestIdRef = useRef(0);
+  const pendingRef = useRef<{ type: "mesh" | "sample"; caseId: string; key?: string } | null>(null);
+  // Read inside the mesh-request effect without adding activeLayer as a
+  // dependency - that effect must stay keyed on caseId alone (a case switch
+  // is the only thing that should trigger a re-mesh).
+  const activeLayerRef = useRef(activeLayer);
   const [result, setResult] = useState<TwinMeshResult | null>(null);
   const [computing, setComputing] = useState(false);
+  // layerCacheRef is a plain ref (mutated off the React render cycle by the
+  // worker's onmessage), so bump this to force activeLayerScalars to
+  // recompute after a sample response lands.
+  const [layerVersion, setLayerVersion] = useState(0);
+
+  useEffect(() => {
+    activeLayerRef.current = activeLayer;
+  }, [activeLayer]);
 
   useEffect(() => {
     workerRef.current = new Worker(new URL("../workers/twinMesh.worker.ts", import.meta.url), {
       type: "module",
     });
-    workerRef.current.onmessage = (e: MessageEvent<TwinMeshResult>) => {
-      if (e.data.requestId !== requestIdRef.current) return; // stale response from a superseded case
-      cacheRef.current.set(e.data.caseId, e.data);
-      setResult(e.data);
+    workerRef.current.onmessage = (e: MessageEvent<TwinMeshResult | TwinSampleResult>) => {
+      const data = e.data;
+      if (data.requestId !== requestIdRef.current) return; // stale response from a superseded request
+      const pending = pendingRef.current;
+
+      if ("kind" in data && data.kind === "sample") {
+        // A sample request only ever carries ONE layer, so its single
+        // entry is the one being resolved.
+        const perClass = Object.values(data.layerScalars)[0];
+        if (perClass && pending?.type === "sample" && pending.key) {
+          let caseLayers = layerCacheRef.current.get(data.caseId);
+          if (!caseLayers) {
+            caseLayers = new Map();
+            layerCacheRef.current.set(data.caseId, caseLayers);
+          }
+          caseLayers.set(pending.key, perClass);
+          setLayerVersion((v) => v + 1);
+        }
+        setComputing(false);
+        return;
+      }
+
+      meshCacheRef.current.set(data.caseId, data);
+      // The mesh request may itself have carried the active layer (see the
+      // request-building effect below) - fold its result into the same
+      // per-key cache a later "sample" response would use, so the two paths
+      // are indistinguishable to activeLayerScalars.
+      if (data.layerScalars && pending?.type === "mesh" && pending.key) {
+        const perClass = Object.values(data.layerScalars)[0];
+        if (perClass) {
+          let caseLayers = layerCacheRef.current.get(data.caseId);
+          if (!caseLayers) {
+            caseLayers = new Map();
+            layerCacheRef.current.set(data.caseId, caseLayers);
+          }
+          caseLayers.set(pending.key, perClass);
+        }
+      }
+      setResult(data);
       setComputing(false);
     };
     return () => workerRef.current?.terminate();
   }, []);
 
+  // Mesh request: fires only on a case switch. Always asks the worker to
+  // keep voxel geometry (`keepVoxelGeometry: true`) so a later layer switch
+  // can be served by a "sample" message instead of a re-mesh, and includes
+  // whichever layer is active right now so the common case (a layer is
+  // already selected when a new case loads) costs zero extra round trips.
   useEffect(() => {
     if (!input) {
       setResult(null);
       return;
     }
-    const cached = cacheRef.current.get(input.caseId);
+    const cached = meshCacheRef.current.get(input.caseId);
     if (cached) {
       setResult(cached);
       setComputing(false);
@@ -101,6 +209,8 @@ function useTwinMesh(input: BrainTwinInput | null): {
     }
     requestIdRef.current += 1;
     setComputing(true);
+    const layer = activeLayerRef.current;
+    pendingRef.current = { type: "mesh", caseId: input.caseId, key: layer?.key };
     const request: TwinMeshRequest = {
       requestId: requestIdRef.current,
       caseId: input.caseId,
@@ -114,6 +224,8 @@ function useTwinMesh(input: BrainTwinInput | null): {
       modalityVolumes: input.modalityVolumes,
       tumorMask: input.tumorMask,
       tumorSource: input.tumorSource,
+      scalarLayers: layer ? { [layer.kind]: layer.data } : undefined,
+      keepVoxelGeometry: true,
     };
     // Deliberately NOT transferred: these are the SAME ArrayBuffers
     // useCaseData handed to the 2D viewport (Viewport.tsx / SliceRibbon.tsx
@@ -125,7 +237,30 @@ function useTwinMesh(input: BrainTwinInput | null): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input?.caseId]);
 
-  const geometries = useMemo(() => {
+  // Layer request: fires whenever the active layer changes (or a cached
+  // case turns out not to have this layer's scalars yet) - never re-meshes,
+  // only resamples the case's already-computed voxel geometry.
+  useEffect(() => {
+    if (!input || !activeLayer) return;
+    const cachedMesh = meshCacheRef.current.get(input.caseId);
+    if (!cachedMesh || !cachedMesh.voxelGeometry) return; // mesh not ready yet; the mesh effect above will carry this layer once it lands
+    const caseLayers = layerCacheRef.current.get(input.caseId);
+    if (caseLayers?.has(activeLayer.key)) return; // already sampled
+
+    requestIdRef.current += 1;
+    pendingRef.current = { type: "sample", caseId: input.caseId, key: activeLayer.key };
+    const request: TwinSampleRequest = {
+      kind: "sample",
+      requestId: requestIdRef.current,
+      caseId: input.caseId,
+      shape: input.shape,
+      layers: { [activeLayer.kind]: activeLayer.data },
+      voxelGeometry: cachedMesh.voxelGeometry,
+    };
+    workerRef.current?.postMessage(request);
+  }, [input, activeLayer, result]);
+
+  const geometries = useMemo<TwinGeometries | null>(() => {
     if (!result) return null;
     const tumor: Partial<Record<ClassName, THREE.BufferGeometry>> = {};
     for (const [name, buf] of Object.entries(result.tumor)) {
@@ -138,7 +273,13 @@ function useTwinMesh(input: BrainTwinInput | null): {
     };
   }, [result]);
 
-  return { result, geometries, computing };
+  const activeLayerScalars = useMemo(() => {
+    if (!input || !activeLayer) return null;
+    return layerCacheRef.current.get(input.caseId)?.get(activeLayer.key) ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input?.caseId, activeLayer, layerVersion, result]);
+
+  return { result, geometries, computing, activeLayerScalars };
 }
 
 interface TwinModelProps {
@@ -147,11 +288,25 @@ interface TwinModelProps {
   onToggleSeparate: () => void;
   selected: ClassName | null;
   onSelect: (c: ClassName | null) => void;
+  /** Per-class vertex RGB from scalarsToColors, or absent/no-entry -> that class keeps its flat class colour. */
+  colorsByClass: Partial<Record<ClassName, Float32Array>> | null;
 }
 
 const HEMISPHERE_GAP = 0.55;
+// Selection highlight when a class is vertex-painted: white rather than the
+// class hue, so the glow reads as "selected" without fighting the layer's
+// own colour ramp (which the class hue would, since it's what painting
+// replaces).
+const PAINTED_EMISSIVE = new THREE.Color(0xffffff);
 
-function TwinModel({ geometries, separated, onToggleSeparate, selected, onSelect }: TwinModelProps) {
+function TwinModel({
+  geometries,
+  separated,
+  onToggleSeparate,
+  selected,
+  onSelect,
+  colorsByClass,
+}: TwinModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const leftRef = useRef<THREE.Group>(null);
   const rightRef = useRef<THREE.Group>(null);
@@ -186,6 +341,27 @@ function TwinModel({ geometries, separated, onToggleSeparate, selected, onSelect
 
   const tumorClasses = Object.keys(geometries.tumor) as ClassName[];
 
+  // Imperative, not a JSX attribute prop: BufferGeometry attributes are
+  // mutated directly (same pattern toGeometry already uses for
+  // position/normal/index), and this needs to re-run whenever EITHER the
+  // mesh geometry OR the active layer's colours change, independently of
+  // each other. `deleteAttribute` (rather than leaving stale colours
+  // attached) is what lets a class fall back to its flat colour the moment
+  // no layer is active, or the moment this class has no scalars for the
+  // active layer.
+  useEffect(() => {
+    for (const cls of Object.keys(geometries.tumor) as ClassName[]) {
+      const geom = geometries.tumor[cls];
+      if (!geom) continue;
+      const colors = colorsByClass?.[cls];
+      if (colors) {
+        geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      } else if (geom.hasAttribute("color")) {
+        geom.deleteAttribute("color");
+      }
+    }
+  }, [geometries, colorsByClass]);
+
   return (
     <group
       ref={groupRef}
@@ -214,24 +390,35 @@ function TwinModel({ geometries, separated, onToggleSeparate, selected, onSelect
         />
       </group>
 
-      {tumorClasses.map((cls) => (
-        <mesh
-          key={cls}
-          geometry={geometries.tumor[cls]}
-          onClick={(e: ThreeEvent<MouseEvent>) => {
-            e.stopPropagation();
-            onSelect(selected === cls ? null : cls);
-          }}
-        >
-          <meshStandardMaterial
-            color={rgbToThreeColor(CLASS_HEX[cls])}
-            roughness={0.35}
-            metalness={0.05}
-            emissive={rgbToThreeColor(CLASS_HEX[cls])}
-            emissiveIntensity={selected === cls ? 0.35 : 0.08}
-          />
-        </mesh>
-      ))}
+      {tumorClasses.map((cls) => {
+        const painted = Boolean(colorsByClass?.[cls]);
+        return (
+          <mesh
+            // `painted` in the key forces React to remount the material
+            // when painting toggles on/off, rather than mutating an
+            // existing THREE.MeshStandardMaterial's `vertexColors` in
+            // place - `vertexColors` changes the compiled shader
+            // (USE_COLOR), which three.js only picks up on a fresh
+            // material, not via a prop update flagged `needsUpdate`-free by
+            // r3f's usual reconciliation.
+            key={`${cls}-${painted}`}
+            geometry={geometries.tumor[cls]}
+            onClick={(e: ThreeEvent<MouseEvent>) => {
+              e.stopPropagation();
+              onSelect(selected === cls ? null : cls);
+            }}
+          >
+            <meshStandardMaterial
+              vertexColors={painted}
+              color={painted ? 0xffffff : rgbToThreeColor(CLASS_HEX[cls])}
+              roughness={0.35}
+              metalness={0.05}
+              emissive={painted ? PAINTED_EMISSIVE : rgbToThreeColor(CLASS_HEX[cls])}
+              emissiveIntensity={selected === cls ? 0.35 : 0.08}
+            />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
@@ -262,10 +449,17 @@ export interface BrainTwinSceneProps {
   badge?: string | null;
   /** Visual tone of the badge. */
   badgeTone?: "caution" | "neutral";
+  /** The scalar layer currently painting the tumour meshes, or null/absent -> flat class colours (today's look). */
+  activeLayer?: TwinActiveLayer | null;
 }
 
-export function BrainTwinScene({ input, badge, badgeTone = "neutral" }: BrainTwinSceneProps) {
-  const { result, geometries, computing } = useTwinMesh(input);
+export function BrainTwinScene({
+  input,
+  badge,
+  badgeTone = "neutral",
+  activeLayer = null,
+}: BrainTwinSceneProps) {
+  const { result, geometries, computing, activeLayerScalars } = useTwinMesh(input, activeLayer);
   const [separated, setSeparated] = useState(false);
   const [selected, setSelected] = useState<ClassName | null>(null);
   const controlsRef = useRef<import("three-stdlib").OrbitControls | null>(null);
@@ -284,6 +478,27 @@ export function BrainTwinScene({ input, badge, badgeTone = "neutral" }: BrainTwi
     }
     return DEFAULT_TARGET;
   }, [selected, result]);
+
+  // scalarsToColors throws on an unrecognised kind (by design - see
+  // vertexColors.ts), so this only ever runs it against a real,
+  // caller-provided kind; a class with no scalars for this layer (too small
+  // to have been sampled, or not yet resampled) is simply absent from the
+  // result and keeps its flat colour (see TwinModel's colorsByClass usage).
+  const colorsByClass = useMemo(() => {
+    if (!activeLayer || !activeLayerScalars) return null;
+    const out: Partial<Record<ClassName, Float32Array>> = {};
+    for (const cls of Object.keys(activeLayerScalars) as ClassName[]) {
+      const scalars = activeLayerScalars[cls];
+      if (scalars) out[cls] = scalarsToColors(scalars, activeLayer.kind);
+    }
+    return out;
+  }, [activeLayer, activeLayerScalars]);
+
+  // Geometric mean, not a claim about accuracy - see the detail card below.
+  const selectedLayerMean =
+    selected && activeLayer && activeLayerScalars?.[selected]
+      ? activeLayerScalars[selected]!.reduce((sum, v) => sum + v, 0) / activeLayerScalars[selected]!.length
+      : null;
 
   return (
     <div className="relative h-full w-full">
@@ -311,6 +526,7 @@ export function BrainTwinScene({ input, badge, badgeTone = "neutral" }: BrainTwi
                 onToggleSeparate={() => setSeparated((v) => !v)}
                 selected={selected}
                 onSelect={setSelected}
+                colorsByClass={colorsByClass}
               />
               <CameraDolly controlsRef={controlsRef} target={dollyTarget} />
             </>
@@ -380,6 +596,23 @@ export function BrainTwinScene({ input, badge, badgeTone = "neutral" }: BrainTwi
             {result.tumorSource === "label" ? "Real ground-truth label" : "Real saved model prediction"},{" "}
             {result.caseId}.
           </p>
+          {selectedLayerMean !== null && (
+            <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
+              mean {activeLayer!.kind} at surface−1 voxel: {selectedLayerMean.toFixed(2)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Label the layer ONLY by the header value passed in via activeLayer.kind
+          - never an invented string - so the twin can never show a name for a
+          quantity the backend did not actually send. */}
+      {activeLayer && (
+        <div
+          data-testid="twin-layer-legend"
+          className="liquid-glass absolute right-3 bottom-3 w-48 rounded-md border border-surface-seam"
+        >
+          <Legend overlayMode="prediction" showUncertainty hasLabel={false} uncertaintyKind={activeLayer.kind} />
         </div>
       )}
     </div>
