@@ -47,6 +47,7 @@ from .config import REPO_ROOT, Settings, get_settings
 from .volumes import (
     MODALITIES,
     REGION_NAMES,
+    CaseMeta,
     case_metrics,
     list_cases,
     load_clinical_uncertainty,
@@ -90,6 +91,106 @@ def _binary_response(data: bytes, shape: tuple[int, int, int]) -> Response:
 
 
 router = APIRouter(prefix="/api")
+
+
+@lru_cache(maxsize=1)
+def _atlas_bundle() -> tuple[Any, np.ndarray, list[dict[str, Any]]]:
+    """Loads and caches the SRI24 atlas, its structure-index volume, and its structure table.
+
+    Composes the SAME CPU-only clinical config `_generate_report` uses
+    (`clinical_jobs._compose_clinical_cfg`) and loads the atlas and knowledge
+    base the same way it does (`load_atlas(cfg.anatomy)`,
+    `load_knowledge(cfg.analysis.localize.eloquence_map,
+    cfg.analysis.localize.lobe_map, atlas)`) -- so the structures this route
+    serves to the twin can never silently drift from the ones a clinical
+    report names.
+
+    `lru_cache(maxsize=1)`: `structure_index_volume` collapses the full
+    240x240x155 raw parcellation into one `uint8` volume (~9 MB) exactly
+    once per process, rather than on every request -- it is pure, read-only
+    array/table arithmetic derived entirely from the atlas on disk, so
+    caching it costs nothing a request could observe.
+
+    Imports of `neurovision.anatomy.*` are local to this function rather
+    than at module scope, matching this file's own convention (see the
+    module docstring): unlike `clinical_jobs`, which imports torch eagerly,
+    `api.py` itself imports nothing from the deep-learning stack at import
+    time.
+
+    Returns:
+        `(atlas, index_volume, table)` -- the loaded `Atlas`, its
+        `(D, H, W)` `uint8` structure-index volume in ORIGINAL (uncropped)
+        geometry, and its `structure_table` rows.
+    """
+    from neurovision.anatomy.atlas import load_atlas
+    from neurovision.anatomy.atlas_export import structure_index_volume, structure_table
+    from neurovision.anatomy.localize import load_knowledge
+
+    cfg = clinical_jobs._compose_clinical_cfg()
+    atlas = load_atlas(cfg.anatomy)
+    knowledge = load_knowledge(
+        cfg.analysis.localize.eloquence_map, cfg.analysis.localize.lobe_map, atlas
+    )
+    index_volume = structure_index_volume(atlas)
+    table = structure_table(atlas, knowledge)
+    return atlas, index_volume, table
+
+
+@router.get("/atlas/structures")
+def get_atlas_structures() -> dict[str, Any]:
+    """Returns the atlas's structure table -- name, laterality, lobe, eloquence, per index.
+
+    The `"index"` field of each row is the 1-based value that structure
+    carries in the `uint8` volume served by `/clinical/jobs/{job_id}/atlas`
+    and `/cases/{case_id}/atlas`, so the twin can label a shell it picks off
+    that volume without a second lookup call.
+    """
+    atlas, _, table = _atlas_bundle()
+    return {
+        "atlas": atlas.name,
+        "version": atlas.version,
+        "n_structures": len(table),
+        "structures": table,
+    }
+
+
+def _atlas_volume_response(meta: CaseMeta) -> Response:
+    """Crops the cached atlas structure-index volume to one case's own bbox and wraps it.
+
+    The cached volume from `_atlas_bundle` is in ORIGINAL (uncropped)
+    geometry -- the same frame `atlas.parcellation` and a saved
+    `scripts/evaluate.py` prediction are in -- while every volume this demo
+    and clinical pipeline actually SERVES (`/volume`, `/mask`,
+    `/uncertainty`, ...) is that case's own bounding-box crop, per its own
+    `meta.json`. Cropping the atlas with a DIFFERENT bbox than the one that
+    produced the served volumes would not fail loudly: it would silently
+    shift every structure by the crop offset and still produce a plausible,
+    entirely wrong picture -- the same trap `atlas_for_case` guards against
+    in the batch report path, applied here to the live viewer.
+
+    Args:
+        meta: The case's own `CaseMeta`, carrying its `bbox` and `shape`.
+
+    Returns:
+        A `_binary_response` wrapping the cropped `uint8` volume, with
+        `X-Uncertainty-Kind: atlas-structure-index`.
+
+    Raises:
+        ValueError: The crop produced a shape other than `meta.shape` --
+            `meta.bbox` does not match the atlas volume's own geometry.
+    """
+    _, index_volume, _ = _atlas_bundle()
+    (d0, d1), (h0, h1), (w0, w1) = meta.bbox
+    cropped = index_volume[d0:d1, h0:h1, w0:w1]
+    if cropped.shape != meta.shape:
+        raise ValueError(
+            f"atlas crop produced {cropped.shape}, expected {meta.shape} -- meta.bbox does not "
+            "match the atlas structure-index volume's own geometry"
+        )
+    data = np.ascontiguousarray(cropped, dtype=np.uint8).tobytes()
+    response = _binary_response(data, meta.shape)
+    response.headers["X-Uncertainty-Kind"] = "atlas-structure-index"
+    return response
 
 
 def _report_json_path(case_id: str, settings: Settings) -> Path:
@@ -337,6 +438,20 @@ def get_case_uncertainty(case_id: str) -> Response:
     # uncertainty sources never being interchanged.
     response.headers["X-Uncertainty-Kind"] = "predictive-entropy-single-pass"
     return response
+
+
+@router.get("/cases/{case_id}/atlas")
+def get_case_atlas(case_id: str) -> Response:
+    """Returns this demo case's atlas structure-index volume, cropped to its own bbox.
+
+    Same 404-on-unknown-case behaviour as `/cases/{case_id}/volume/{modality}`
+    (`read_meta` raises `FileNotFoundError`, handled globally): there is
+    nothing case-specific about the atlas itself, only about the crop that
+    aligns it to this case's own geometry -- see `_atlas_volume_response`.
+    """
+    settings = get_settings()
+    meta = read_meta(case_id, settings)
+    return _atlas_volume_response(meta)
 
 
 @lru_cache(maxsize=32)
@@ -753,6 +868,25 @@ def get_clinical_job_geometry(job_id: str) -> dict[str, Any]:
             detail=f"clinical job {job_id!r} is done but has no cached meta.json ({exc})",
         ) from None
     return meta.to_json()
+
+
+@router.get("/clinical/jobs/{job_id}/atlas")
+def get_clinical_job_atlas(job_id: str) -> Response:
+    """Returns this clinical job's atlas structure-index volume, cropped to its own bbox.
+
+    Reads `meta.bbox`/`meta.shape` from the job's own cached `meta.json`
+    (`_clinical_job_settings`, same as `/geometry`) and crops the cached
+    atlas volume with it -- see `_atlas_volume_response`'s docstring for why
+    that crop must use THIS job's own bbox: after E2 the study is
+    co-registered onto the SRI24 grid and the volumes this route's siblings
+    serve are that grid cropped by the job's bbox, so the atlas has to be
+    cropped identically or every structure shifts by the crop offset, a
+    plausible, wrong picture.
+    """
+    job = _require_done_clinical_job(job_id)
+    job_settings = _clinical_job_settings(get_settings(), job_id)
+    meta = read_meta(job.case_id, job_settings)
+    return _atlas_volume_response(meta)
 
 
 @router.get("/clinical/jobs/{job_id}/uncertainty")

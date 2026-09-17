@@ -24,6 +24,7 @@ import io
 import json
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -703,3 +704,128 @@ def test_clinical_jobs_survive_app_recreation(client: TestClient, backend: Path)
 
     assert response.status_code == 200
     assert response.json()["state"] == "done"
+
+
+# --- GET /api/atlas/structures and GET /api/clinical/jobs/{job_id}/atlas ----
+#
+# `_atlas_bundle` is monkeypatched wholesale in every test below -- it is the
+# one seam T3.2's spec calls out precisely so these tests never load the real
+# SRI24 atlas or knowledge YAML files. `fake_atlas` only needs `.name` and
+# `.version`, since that is all `get_atlas_structures` reads off it.
+
+
+def _fake_atlas_bundle(
+    index_volume: np.ndarray, table: list[dict] | None = None
+) -> tuple[SimpleNamespace, np.ndarray, list[dict]]:
+    """Builds a `(fake_atlas, fake_index_volume, fake_table)` triple for monkeypatching."""
+    fake_atlas = SimpleNamespace(name="SRI24/TZO", version="1.0")
+    fake_table = (
+        table
+        if table is not None
+        else [
+            {
+                "index": 1,
+                "name": "Insula_L",
+                "laterality": "L",
+                "lobe": "Insula",
+                "eloquence": "eloquent",
+                "matched_term": "insula",
+            },
+            {
+                "index": 2,
+                "name": "Insula_R",
+                "laterality": "R",
+                "lobe": "Insula",
+                "eloquence": "eloquent",
+                "matched_term": "insula",
+            },
+        ]
+    )
+    return fake_atlas, index_volume, fake_table
+
+
+def test_atlas_structures_returns_table(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    index_volume = (np.arange(5 * 6 * 7).reshape(5, 6, 7) % 3).astype(np.uint8)
+    bundle = _fake_atlas_bundle(index_volume)
+    monkeypatch.setattr(api, "_atlas_bundle", lambda: bundle)
+
+    response = client.get("/api/atlas/structures")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["atlas"] == "SRI24/TZO"
+    assert body["version"] == "1.0"
+    assert body["n_structures"] == 2
+    assert body["structures"] == bundle[2]
+
+
+def test_clinical_job_atlas_done_job_is_200(
+    client: TestClient, backend: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A whole-volume bbox (as `_fabricate_done_clinical_job` writes): the crop is a no-op."""
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+
+    shape = (5, 6, 7)
+    fake_volume = (np.arange(5 * 6 * 7).reshape(shape) % 3).astype(np.uint8)
+    bundle = _fake_atlas_bundle(fake_volume)
+    monkeypatch.setattr(api, "_atlas_bundle", lambda: bundle)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/atlas")
+    assert response.status_code == 200
+    assert response.headers["x-volume-shape"] == "5,6,7"
+    assert response.headers["x-uncertainty-kind"] == "atlas-structure-index"
+    assert response.content == fake_volume.tobytes()
+
+
+def test_clinical_job_atlas_unknown_job_is_404(client: TestClient) -> None:
+    response = client.get("/api/clinical/jobs/no-such-job/atlas")
+    assert response.status_code == 404
+
+
+def test_clinical_job_atlas_not_done_job_is_409(client: TestClient) -> None:
+    created = _upload(client, _valid_study_zip()).json()
+    response = client.get(f"/api/clinical/jobs/{created['job_id']}/atlas")
+    assert response.status_code == 409
+
+
+def test_clinical_job_atlas_applies_job_bbox_crop_offset(
+    client: TestClient, backend: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A strict sub-box bbox proves the crop offset is applied, not just the shape."""
+    settings = config.get_settings()
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+
+    job_prep_dir = jobs.job_root(settings) / job.job_id / "prep"
+    job_cache_dir = jobs.job_root(settings) / job.job_id / "cache"
+    clinical_settings = clinical_jobs.clinical_segmentation_settings(job_prep_dir, job_cache_dir)
+
+    case_dir = job_prep_dir / job.case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    cropped_shape = (3, 3, 3)
+    image = np.zeros((4, *cropped_shape), dtype=np.float16)
+    np.save(case_dir / "image.npy", image)
+    meta = {
+        "cropped_shape": list(cropped_shape),
+        "original_shape": [8, 8, 8],
+        "bbox": [[1, 4], [2, 5], [3, 6]],
+        "spacing": [1.0, 1.0, 1.0],
+    }
+    (case_dir / "meta.json").write_text(json.dumps(meta))
+
+    pred_path = inference.cached_prediction_path(clinical_settings, job.case_id)
+    pred_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(pred_path, np.zeros(cropped_shape, dtype=np.uint8))
+
+    clinical_jobs._update_clinical_job(settings, job, state="done", stage="done", progress=1.0)
+
+    fake_volume = (np.arange(8 * 8 * 8).reshape(8, 8, 8) % 256).astype(np.uint8)
+    bundle = _fake_atlas_bundle(fake_volume)
+    monkeypatch.setattr(api, "_atlas_bundle", lambda: bundle)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/atlas")
+    assert response.status_code == 200
+    assert response.headers["x-volume-shape"] == "3,3,3"
+    expected = fake_volume[1:4, 2:5, 3:6]
+    assert response.content == expected.tobytes()

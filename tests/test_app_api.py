@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -608,3 +609,38 @@ def test_health_has_reports_false_then_true(
     )
     after = client.get("/api/health").json()
     assert after["has_reports"] is True
+
+
+# --- /api/cases/{case_id}/atlas ---------------------------------------------
+
+
+def test_case_atlas_ok_crops_by_case_bbox(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_atlas_bundle` is monkeypatched wholesale, same seam T3.2's spec calls out for the
+    clinical route -- these tests never load the real SRI24 atlas or knowledge YAML files.
+    """
+    fake_atlas = SimpleNamespace(name="SRI24/TZO", version="1.0")
+    # ORIGINAL_SHAPE (12, 13, 14) -- the atlas volume `_atlas_bundle` caches
+    # is always in ORIGINAL (uncropped) geometry, matching `atlas.parcellation`.
+    fake_volume = (np.arange(12 * 13 * 14).reshape(12, 13, 14) % 251).astype(np.uint8)
+    monkeypatch.setattr(api, "_atlas_bundle", lambda: (fake_atlas, fake_volume, []))
+
+    response = client.get("/api/cases/CaseHigh/atlas")
+    assert response.status_code == 200
+    assert response.headers["x-volume-shape"] == "8,9,10"
+    assert response.headers["x-uncertainty-kind"] == "atlas-structure-index"
+    (d0, d1), (h0, h1), (w0, w1) = BBOX
+    expected = fake_volume[d0:d1, h0:h1, w0:w1]
+    assert response.content == expected.tobytes()
+
+
+def test_case_atlas_unknown_case_is_404(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_atlas = SimpleNamespace(name="SRI24/TZO", version="1.0")
+    fake_volume = np.zeros((12, 13, 14), dtype=np.uint8)
+    monkeypatch.setattr(api, "_atlas_bundle", lambda: (fake_atlas, fake_volume, []))
+
+    response = client.get("/api/cases/does-not-exist/atlas")
+    assert response.status_code == 404
