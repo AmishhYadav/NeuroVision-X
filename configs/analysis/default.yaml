@@ -647,3 +647,54 @@ qc_validate:
 
   # Caps cases per cohort. null = all. A subsetting knob for a smoke run.
   max_cases: null
+
+error_budget:
+  # Phase G -- the end-to-end error budget. Every definition here is fixed by
+  # docs/research/error_budget_protocol.md BEFORE any number was produced; do
+  # not change a bar, a quantile or the alpha after seeing a table. Consumed by
+  # scripts/error_budget.py, computed by analysis/error_budget.py. Reads the
+  # deployed gate's frozen thresholds from clinical.gatekeeper.thresholds, the
+  # conformal fit from clinical.gatekeeper.conformal_dir at
+  # clinical.gatekeeper.conformal_alpha, and the QC checkpoint from
+  # analysis.qc_validate.checkpoint -- nothing is refitted here.
+  out_dir: outputs/error_budget
+
+  # The three cohorts with ground truth. Same trio as qc_validate above; the
+  # conformal curves are the ones scripts/conformal.py already extracted for
+  # each cohort (B2), so no inference runs.
+  cohorts:
+    - name: test
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+      conformal_curves: outputs/conformal/neurovision/eval_test/curves.npz
+    - name: ssa
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+      conformal_curves: outputs/conformal/neurovision/eval_ssa_neurovision/curves.npz
+    - name: ped
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+      conformal_curves: outputs/conformal/neurovision/eval_ped_neurovision/curves.npz
+
+  # "Usable" = dice_<R> >= usable_bar for every region here. 0.7 is
+  # qc_validate.bad_dice_threshold reused, not tuned. ET is deliberately not
+  # in the bar (undefined on the 2.6% of cases with no enhancing tumour).
+  usable_regions: [WT, TC]
+  usable_bar: 0.7
+  # Sensitivity sweep, reported so the reader can see how much the headline
+  # depends on the bar.
+  bar_sweep: [0.5, 0.6, 0.7, 0.8, 0.9]
+
+  # G3 coverage/accuracy curve: the gate's quantile thresholds re-fitted on the
+  # FROZEN val calibration table at each refuse quantile, caution held at the
+  # deployed value (or equal to the refuse quantile where it would be lower).
+  # A description of the operating point, not a new calibration.
+  calibration_table: outputs/gatekeeper/calibration_table.csv
+  refuse_quantiles: [0.0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.50]
+
+  n_boot: 10000
+  ci: 0.95
+  seed: ${seed}
+
+  # Caps cases per cohort. null = all. A subsetting knob for a smoke run.
+  max_cases: null
