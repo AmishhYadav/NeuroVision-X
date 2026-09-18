@@ -27,6 +27,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 import pytest
 from app.backend import api, clinical_jobs, config, inference, jobs, volumes
 from fastapi.testclient import TestClient
@@ -871,6 +872,118 @@ def test_clinical_job_report_on_queued_job_is_409(client: TestClient) -> None:
 
 def test_clinical_job_report_unknown_job_is_404(client: TestClient) -> None:
     response = client.get("/api/clinical/jobs/no-such-job/report")
+    assert response.status_code == 404
+
+
+# --- T6.1: GET /api/clinical/jobs/{job_id}/report/markdown -----------------
+#
+# `render_markdown` (unlike the JSON route, which just reads-and-merges a
+# dict) indexes required top-level blocks -- `burden`, `anatomy`,
+# `eloquence`, `disclaimer`, `not_claimed`, `provenance` -- directly, so the
+# minimal placeholder payloads the JSON-route tests above use (e.g.
+# `_write_clinical_report_with_empty_molecular`'s `{case_id, report_version,
+# molecular}`) would raise a `KeyError` here. `_full_clinical_report` below
+# builds a real `build_report` output instead -- with an empty anatomy table
+# (valid input, per that function's own docstring) so it stays small -- put
+# through the same `json_safe` pass `write_report` applies before caching,
+# so it matches what a real clinical job would have on disk.
+
+
+def _full_clinical_report(case_id: str, *, molecular: dict | None = None) -> dict:
+    """Builds a complete, `render_markdown`-safe report dict for a fabricated case."""
+    from neurovision.reporting import report as report_module
+
+    provenance = report_module.Provenance(
+        atlas_name="SRI24/TZO",
+        atlas_version="1.0",
+        atlas_source="https://nitrc.org/sri24",
+        atlas_licence="CC-BY-SA",
+        knowledge_versions={"eloquence_map": 1, "aal_lobes": 1},
+        segmentation_source="prediction",
+        segmentation_dir="/outputs/eval_test/predictions",
+        code_revision="abc1234",
+        generated_utc="2026-08-17T00:00:00Z",
+    )
+    report = report_module.build_report(
+        case_id=case_id,
+        burden={"vol_WT_mm3": 5400.0, "vol_ET_mm3": 800.0},
+        anatomy_table=pd.DataFrame(),
+        anatomy_summary={},
+        provenance=provenance,
+        evidence="Sawaya's eloquent set: motor/sensory cortices, visual center, speech center.",
+        citation="Sawaya et al. 1998, PMID 9433896",
+        classification_name="Sawaya eloquence grading",
+        coverage_line="23 of 122 structures classified eloquent, 99 unclassified",
+        coverage_gaps=["internal capsule"],
+        near_eloquent_mm=10.0,
+        molecular=molecular,
+    )
+    return report_module.json_safe(report)
+
+
+def test_clinical_job_report_markdown_ok(client: TestClient, backend: Path) -> None:
+    from neurovision.reporting.report import render_markdown
+
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report(settings, job, _full_clinical_report(job.case_id))
+
+    json_response = client.get(f"/api/clinical/jobs/{job.job_id}/report")
+    assert json_response.status_code == 200
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/report/markdown")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert job.case_id in response.text
+    assert "## Tumour Burden Profile" in response.text
+    assert response.text == render_markdown(json_response.json())
+
+
+def test_clinical_job_report_markdown_reflects_entered_pathology(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    knowledge = _real_molecular_knowledge()
+    report_path = _write_clinical_report(
+        settings,
+        job,
+        _full_clinical_report(job.case_id, molecular=empty_molecular_block(knowledge)),
+    )
+    report_bytes_before = report_path.read_bytes()
+
+    put_response = client.put(
+        f"/api/clinical/jobs/{job.job_id}/pathology",
+        json={"IDH": "Wildtype", "histology": "Glioblastoma pattern"},
+    )
+    assert put_response.status_code == 200
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/report/markdown")
+    assert response.status_code == 200
+    assert "## Confirmed pathology (entered by user)" in response.text
+    assert "Wildtype" in response.text
+
+    # Same "reads never write" guarantee as the JSON route's own test.
+    assert report_path.read_bytes() == report_bytes_before
+
+
+def test_clinical_job_report_markdown_no_cached_report_is_404(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/report/markdown")
+    assert response.status_code == 404
+
+
+def test_clinical_job_report_markdown_on_queued_job_is_409(client: TestClient) -> None:
+    created = _upload(client, _valid_study_zip()).json()
+    response = client.get(f"/api/clinical/jobs/{created['job_id']}/report/markdown")
+    assert response.status_code == 409
+
+
+def test_clinical_job_report_markdown_unknown_job_is_404(client: TestClient) -> None:
+    response = client.get("/api/clinical/jobs/no-such-job/report/markdown")
     assert response.status_code == 404
 
 

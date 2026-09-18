@@ -1086,22 +1086,20 @@ def _clinical_report_path(settings: Settings, job: clinical_jobs.ClinicalJob) ->
     return jobs.job_root(settings) / job.job_id / "report" / f"{job.case_id}.json"
 
 
-@router.get("/clinical/jobs/{job_id}/report")
-def get_clinical_job_report(job_id: str) -> dict[str, Any]:
-    """Returns the clinical job's structured anatomical report (Phase 4), as JSON.
+def _load_merged_clinical_report(job_id: str) -> dict[str, Any]:
+    """Loads a clinical job's cached report JSON, merged with any entered pathology (T5.5).
 
     Mirrors the demo's `/report/{case_id}` route: the cached JSON file is
-    read and parsed, then returned as a plain dict (FastAPI re-serialises
-    it), rather than streamed back as a raw file -- unlike the DICOM-SEG
-    route, which serves an opaque binary `.dcm` via `FileResponse`. Unlike
-    `/report/{case_id}`, this route does NOT run `_load_verified_report`'s
-    provenance cross-check: that guard exists because a demo-viewer
-    `NVX_REPORT_DIR` could point at a report generated from a DIFFERENT
-    segmentation than the one `predictions_dir` is currently serving. A
-    clinical job's report has no equivalent configuration seam -- its path
-    is derived entirely from `job_id`, and `clinical_jobs._generate_report`
-    always computes it from THIS job's own cached prediction -- so there is
-    nothing to cross-check.
+    read and parsed, then returned as a plain dict, rather than streamed
+    back as a raw file -- unlike the DICOM-SEG route, which serves an opaque
+    binary `.dcm` via `FileResponse`. Unlike `/report/{case_id}`, this does
+    NOT run `_load_verified_report`'s provenance cross-check: that guard
+    exists because a demo-viewer `NVX_REPORT_DIR` could point at a report
+    generated from a DIFFERENT segmentation than the one `predictions_dir`
+    is currently serving. A clinical job's report has no equivalent
+    configuration seam -- its path is derived entirely from `job_id`, and
+    `clinical_jobs._generate_report` always computes it from THIS job's own
+    cached prediction -- so there is nothing to cross-check.
 
     404 if the job is unknown or not done yet is wrong -- see
     `_require_done_clinical_job`: unknown is 404, not-done is 409, matching
@@ -1114,13 +1112,13 @@ def get_clinical_job_report(job_id: str) -> dict[str, Any]:
     T5.5 read-time merge: if `<job_dir>/pathology.json` exists AND the
     cached report has a `"molecular"` block, that block is replaced with
     `merge_pathology(report["molecular"], entered, knowledge)` before the
-    response is returned -- the cached JSON FILE on disk is never rewritten,
-    only the dict this one response carries. This is why `PUT
-    .../pathology` never has to touch the report file: every correction
-    made there is visible here on the very next read. A report with no
-    `"molecular"` key at all (a job that predates T5.4) is returned
-    untouched -- there is nothing to merge into. A corrupt or
-    failed-validation `pathology.json` (see `_load_pathology_or_none`) is
+    result is returned -- the cached JSON FILE on disk is never rewritten,
+    only the dict this call returns. This is why `PUT .../pathology` never
+    has to touch the report file: every correction made there is visible
+    here on the very next read (JSON or Markdown, both call this same
+    helper). A report with no `"molecular"` key at all (a job that predates
+    T5.4) is returned untouched -- there is nothing to merge into. A corrupt
+    or failed-validation `pathology.json` (see `_load_pathology_or_none`) is
     logged at WARNING and the report is returned unmerged: a bad side file
     must never turn a working report read into a 500.
     """
@@ -1143,6 +1141,37 @@ def get_clinical_job_report(job_id: str) -> dict[str, Any]:
         if entered is not None:
             report["molecular"] = merge_pathology(report["molecular"], entered, knowledge)
     return report
+
+
+@router.get("/clinical/jobs/{job_id}/report")
+def get_clinical_job_report(job_id: str) -> dict[str, Any]:
+    """Returns the clinical job's structured anatomical report (Phase 4), as JSON.
+
+    See `_load_merged_clinical_report` for the lookup, 404/409 rules and the
+    T5.5 pathology merge -- this route just returns its result as-is.
+    """
+    return _load_merged_clinical_report(job_id)
+
+
+@router.get("/clinical/jobs/{job_id}/report/markdown")
+def get_clinical_job_report_markdown(job_id: str) -> Response:
+    """Returns the clinical job's report rendered as Markdown, from the same merged dict.
+
+    Rendered on the fly, via `render_markdown`, from the SAME dict
+    `_load_merged_clinical_report` gives the JSON route -- so any pathology
+    entered through `PUT .../pathology` shows up here immediately too, and,
+    like the JSON route, no `.md` file is ever written or cached under the
+    job directory: this route's only output is the HTTP response body.
+    Error codes (404 unknown job / no cached report, 409 not done) are
+    exactly the JSON route's, since they come from the same helper.
+    """
+    from neurovision.reporting.report import render_markdown
+
+    report = _load_merged_clinical_report(job_id)
+    return Response(
+        content=render_markdown(report),
+        media_type="text/markdown; charset=utf-8",
+    )
 
 
 @lru_cache(maxsize=1)
