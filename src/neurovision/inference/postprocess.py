@@ -43,6 +43,7 @@ __all__ = [
     "enforce_nesting",
     "remove_small_components",
     "keep_largest_component",
+    "zero_small_et",
     "regions_to_classes",
     "uncrop_to_original",
     "postprocess_logits",
@@ -374,7 +375,7 @@ def uncrop_to_original(
     return out
 
 
-def _zero_small_et(regions: Tensor, et_min_volume: float) -> Tensor:
+def zero_small_et(regions: Tensor, et_min_volume: float) -> Tensor:
     """Zeros the ET channel for any batch element whose ET voxel count is too low.
 
     Per-case (per-batch-element), not across the whole batch: one case's ET
@@ -450,7 +451,7 @@ def postprocess_logits(logits: Tensor, cfg: Any) -> Tensor:
         )
 
     if pp_cfg.et_min_volume > 0:
-        regions = _zero_small_et(regions, pp_cfg.et_min_volume)
+        regions = zero_small_et(regions, pp_cfg.et_min_volume)
         applied.append(f"et_min_volume({pp_cfg.et_min_volume})")
 
     if pp_cfg.enforce_nesting:

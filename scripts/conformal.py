@@ -125,6 +125,7 @@ from neurovision.uncertainty.conformal import (
     band_inflation,
     case_loss_curve,
     fit_threshold,
+    load_curves_npz,
     realised_risk,
 )
 from neurovision.utils.io import ensure_dir, read_json, write_json
@@ -475,30 +476,6 @@ def _write_curves_npz(
     np.savez_compressed(path, **payload)
 
 
-def _load_curves_npz(path: Path, regions: Sequence[str]) -> dict[str, list[CaseLossCurve]]:
-    """Reloads `_write_curves_npz`'s output back into `CaseLossCurve` objects."""
-    data = np.load(path)
-    thresholds = tuple(float(t) for t in data["thresholds"])
-    curves: dict[str, list[CaseLossCurve]] = {}
-    for region in regions:
-        case_ids = data[f"{region}__case_ids"]
-        gt = data[f"{region}__gt_voxels"]
-        fn = data[f"{region}__fn_voxels"]
-        mask = data[f"{region}__mask_voxels"]
-        curves[region] = [
-            CaseLossCurve(
-                case_id=str(case_ids[i]),
-                region=region,
-                gt_voxels=int(gt[i]),
-                thresholds=thresholds,
-                fn_voxels=tuple(int(v) for v in fn[i]),
-                mask_voxels=tuple(int(v) for v in mask[i]),
-            )
-            for i in range(len(case_ids))
-        ]
-    return curves
-
-
 def extract_curves(
     eval_dir: Path,
     prep_dir: Path,
@@ -542,7 +519,7 @@ def extract_curves(
                 "regions and thresholds).",
                 npz_path,
             )
-            return _load_curves_npz(npz_path, regions)
+            return load_curves_npz(npz_path, regions)
         logger.info(
             "extract: cached manifest at %s does not match this request (eval_dir, prep_dir, "
             "regions or thresholds changed); re-extracting rather than reusing a mismatched "

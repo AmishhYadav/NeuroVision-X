@@ -62,6 +62,7 @@ from neurovision.inference.postprocess import (
     enforce_nesting,
     keep_largest_component,
     remove_small_components,
+    zero_small_et,
 )
 from neurovision.metrics.segmentation import classes_to_regions, compute_case_metrics
 from neurovision.utils.io import read_json, read_yaml
@@ -211,22 +212,6 @@ def _binarize_regions(logits: Tensor, threshold: float | Sequence[float]) -> Ten
     return (probs >= thresh).to(dtype=torch.float32)
 
 
-def _zero_small_et(regions: Tensor, et_min_volume: float) -> Tensor:
-    """Zeros the ET channel (index 0) if its predicted voxel count is below `et_min_volume`.
-
-    Mirrors `neurovision.inference.postprocess`'s private, single-case
-    `_zero_small_et` step exactly (that helper is not exported, and this
-    module calls the individual post-processing steps directly rather than
-    through `postprocess_logits` -- see the module docstring). `regions` here
-    is always a single case (`(1, 3, D, H, W)`), so the per-batch-element
-    branching the original needs does not apply.
-    """
-    regions = regions.clone()
-    if regions[:, 0].sum() < et_min_volume:
-        regions[:, 0] = 0.0
-    return regions
-
-
 def _apply_postprocess_steps(regions: Tensor, pp_cfg: Mapping[str, Any]) -> Tensor:
     """Runs the non-threshold post-processing steps, in `postprocess_logits`'s fixed order.
 
@@ -249,7 +234,7 @@ def _apply_postprocess_steps(regions: Tensor, pp_cfg: Mapping[str, Any]) -> Tens
 
     et_min_volume = float(pp_cfg.get("et_min_volume", 0))
     if et_min_volume > 0:
-        regions = _zero_small_et(regions, et_min_volume)
+        regions = zero_small_et(regions, et_min_volume)
 
     if pp_cfg.get("enforce_nesting", True):
         regions = enforce_nesting(regions)

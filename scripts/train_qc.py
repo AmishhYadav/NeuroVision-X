@@ -154,6 +154,7 @@ from scipy.stats import spearmanr
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset, Sampler
 
+from neurovision.analysis.qc_inference import entropy_from_logits
 from neurovision.data.qc_pairs import DEFAULT_SPECS, DegradationSpec, generate_one_pair
 from neurovision.data.transforms import REGION_NAMES
 from neurovision.inference.postprocess import postprocess_logits
@@ -365,43 +366,6 @@ def split_case_ids(
     select_ids = sorted(unique_ids[pos] for pos in select_positions)
     fit_ids = sorted(unique_ids[pos] for pos in fit_positions)
     return fit_ids, select_ids
-
-
-# ---------------------------------------------------------------------------
-# Entropy, in nats, from raw logits
-# ---------------------------------------------------------------------------
-
-
-def entropy_from_logits(logits: Tensor) -> Tensor:
-    """Per-voxel Bernoulli predictive entropy, in NATS, computed from logits.
-
-    `H(p) = p * softplus(-z) + (1 - p) * softplus(z)`, where `p =
-    sigmoid(z)`. Computed from LOGITS, never from a clamped probability: an
-    `eps` clamp sized for fp32 (`p.clamp(eps, 1 - eps)` with `eps=1e-6`) is a
-    complete no-op in fp16, whose own epsilon is ~9.8e-4 -- `1.0 - 1e-6`
-    rounds to exactly `1.0`, so `log(1 - p)` becomes `log(0)` -> `-inf`, and
-    `0 * -inf` is `NaN`. That exact bug cost this project 10.5 GPU-hours on a
-    real training run (see CLAUDE.md's traps list, `docs/lessons.md`, and
-    `neurovision.models.fusion.adaptive_fusion.BranchAmbiguity`, whose fix
-    this mirrors). `softplus` is finite for any finite input, so a saturated
-    logit gives `0 * finite = 0` -- the correct entropy of a certain
-    prediction -- instead of `NaN`.
-
-    Deliberately left in NATS here, NOT normalised to `[0, 1]` by `ln 2` the
-    way `neurovision.analysis.detection._entropy_from_logits` and
-    `BranchAmbiguity` do: this entropy is only ever a model INPUT feature in
-    this script, never a bounded quantity reported in a table, so there is
-    no reason to rescale it.
-
-    Args:
-        logits: Raw (pre-sigmoid) logits, any shape.
-
-    Returns:
-        Entropy in nats, same shape as `logits`, finite everywhere a finite
-        logit was given.
-    """
-    p = torch.sigmoid(logits)
-    return p * F.softplus(-logits) + (1.0 - p) * F.softplus(logits)
 
 
 # ---------------------------------------------------------------------------
