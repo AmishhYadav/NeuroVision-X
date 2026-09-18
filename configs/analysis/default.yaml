@@ -690,7 +690,9 @@ error_budget:
   # deployed value (or equal to the refuse quantile where it would be lower).
   # A description of the operating point, not a new calibration.
   calibration_table: outputs/gatekeeper/calibration_table.csv
-  refuse_quantiles: [0.0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.50]
+  # 0.0 is not a fittable quantile (calibrate_thresholds requires 0 < q < 1);
+  # the coverage=1 point of the curve is the no-gate rate p_usable in summary.csv.
+  refuse_quantiles: [0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.50]
 
   n_boot: 10000
   ci: 0.95

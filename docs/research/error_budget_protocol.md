@@ -67,8 +67,10 @@ study once E2 has succeeded.
   rate `P(usable)`. Both with 95% bootstrap CIs (percentile, case-resampled, seeded).
 - **Coverage / accuracy trade-off (G3).** Re-fit the gate's quantile thresholds on the frozen val
   calibration table (`outputs/gatekeeper/calibration_table.csv`) at refuse quantiles
-  {0.0, 0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.50}, caution quantile held at the deployed
-  0.10 (or equal to the refuse quantile where it would be lower), apply each to each cohort, and
+  {0.01, 0.02, 0.05, 0.10, 0.15, 0.20, 0.30, 0.50} (0.0 is not a fittable quantile; the
+  coverage = 1 point is the no-gate rate `P(usable)`), caution quantile held at the deployed
+  0.10 (or `q + 0.01` where `q ≥ 0.10`, purely to satisfy the fitter's strict `refuse < caution`
+  rule — caution never changes coverage, since cautioned cases are accepted), apply each to each cohort, and
   report coverage (fraction accepted) against `P(usable | accepted)` and mean `dice_TC` among
   accepted. This is the pipeline-level risk–coverage curve of the deployed gate; it is a
   *description* of the operating point, not a new calibration.
