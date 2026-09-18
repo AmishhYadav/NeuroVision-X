@@ -344,7 +344,18 @@ between sessions instead of Kaggle chaining outputs for you automatically.
 kaggle kernels push -p <notebook-folder>
 kaggle kernels status <username>/<notebook-slug>
 kaggle kernels output <username>/<notebook-slug> -p ./kaggle_output
+kaggle kernels logs <username>/<notebook-slug>          # the run log ONLY, no output files
+kaggle kernels logs -f <username>/<notebook-slug>       # stream a RUNNING session's log
 ```
+
+`kaggle kernels logs` is the one to reach for first. `kernels output` downloads
+every file the session wrote -- for the nnU-Net probe that was 10 GB of
+`nnUNet_preprocessed`, the pull broke on a `BrokenPipeError`, and the one number
+the probe existed to produce sat unread for sixteen days (note 46). The log is
+70 KB and holds every printed line, `NVX_HEALTH` included. Fetch it, save it
+next to the kernel folder, and only then decide whether the files are needed.
+`-f` tails a running session, which is how a resume line (`RESUME: ... from
+epoch N`) gets checked in the first minutes instead of after the session ends.
 
 `kaggle kernels push` submits a notebook version from local files —
 described by `kernel-metadata.json` in that folder, which `kaggle kernels
