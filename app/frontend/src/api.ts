@@ -259,6 +259,51 @@ export interface ReportProvenance {
   generated_utc: string;
 }
 
+/**
+ * One marker of `ReportMolecular.markers` (IDH, 1p/19q, MGMT, ATRX, TP53,
+ * TERT, EGFR, CDKN2A/B) - mirrors `neurovision.reporting.molecular
+ * .empty_molecular_block`'s per-marker dict field-for-field. `label`,
+ * `meaning` and `cns5_role` are the source-derived copy from
+ * `knowledge/molecular_markers.yaml`; a reader must render them verbatim,
+ * never re-typed. `ai_estimate` is `null` for every marker no model was
+ * ever trained to predict, and a fixed `{status: "not available - model
+ * not trained"}` for IDH specifically (see that module's docstring) - it is
+ * never a real prediction.
+ */
+export interface MolecularMarkerEntry {
+  label: string;
+  meaning: string;
+  cns5_role: string;
+  allowed_values: string[];
+  confirmed_pathology: string;
+  ai_estimate: { status: string } | null;
+}
+
+/**
+ * The optional "Confirmed pathology (entered by user)" block - mirrors
+ * `neurovision.reporting.molecular.empty_molecular_block` / `merge_pathology`
+ * field-for-field. NOTHING in this block is derived from imaging: every
+ * `confirmed_pathology` value is either `"Not entered"` or something a user
+ * typed in via `PUT /clinical/jobs/{id}/pathology`, and `cns5.name` is
+ * computed only from those entered values (see `cns5.source`).
+ *
+ * `molecular` is OPTIONAL on `ReportResponse` because this block was added
+ * in T5.3/T5.4, after the report schema already shipped: a demo/batch report
+ * built without the clinical pipeline, or a clinical job report generated
+ * before that change, has no `"molecular"` key at all - `validateReport`
+ * must not require it, and every consumer must null-check it, same
+ * precedent as `geometry` and `involvement` above.
+ */
+export interface ReportMolecular {
+  caveat: string;
+  citation: string;
+  scope: string;
+  histology: { confirmed_pathology: string; allowed_values: string[] };
+  /** Keyed by marker name, in the server's own declared order - a reader must iterate `Object.keys` rather than sort, to match `knowledge/molecular_markers.yaml`'s order. */
+  markers: Record<string, MolecularMarkerEntry>;
+  cns5: { label: string; name: string | null; requires: string[]; source: string | null };
+}
+
 export interface ReportResponse {
   report_version: number;
   case_id: string;
@@ -272,6 +317,8 @@ export interface ReportResponse {
   geometry?: ReportGeometry;
   /** Present only on reports built from 2026-08-19 on - see `ReportInvolvement`. */
   involvement?: ReportInvolvement;
+  /** Present only on clinical job reports built from T5.4 on - see `ReportMolecular`. */
+  molecular?: ReportMolecular;
   eloquence: ReportEloquence;
   provenance: ReportProvenance;
 }
@@ -734,6 +781,71 @@ export async function deleteClinicalJob(
     throw responseError(res, path);
   }
   return (await res.json()) as { job_id: string; deleted: boolean };
+}
+
+/** The response body of `putClinicalPathology` / `PUT .../pathology`. */
+export interface PathologyPutResponse {
+  job_id: string;
+  /** The full merged `{marker_or_"histology": value}` mapping after this write - not just the keys this call sent. */
+  pathology: Record<string, string>;
+  cns5: { name: string | null; requires: string[]; source: string | null };
+}
+
+/**
+ * Records entered pathology for a `"done"` clinical job (T5.5's one
+ * mutating job route). `entered` is a PARTIAL `{marker_or_"histology":
+ * value}` object - keys not sent are left at whatever they already were.
+ *
+ * Modelled on `deleteClinicalJob`: a small, one-off `fetch`, not built on
+ * `getJson` (GET-only). Unlike `deleteClinicalJob`, a non-2xx response's
+ * body is read for a `detail` string first, same as `createClinicalJob` -
+ * the server's own 400 message already names the offending key or the
+ * allowed values for an out-of-vocabulary entry, and that is exactly what
+ * the panel needs to show, not a generic status line.
+ */
+export async function putClinicalPathology(
+  jobId: string,
+  entered: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<PathologyPutResponse> {
+  const path = `/clinical/jobs/${encodeURIComponent(jobId)}/pathology`;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entered),
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (!res.ok) {
+    if (GATEWAY_DOWN.has(res.status)) throw new ApiUnreachableError();
+    let detail: string | undefined;
+    try {
+      const body = (await res.json()) as unknown;
+      if (body && typeof body === "object" && typeof (body as { detail?: unknown }).detail === "string") {
+        detail = (body as { detail: string }).detail;
+      }
+    } catch {
+      // Body wasn't JSON (or was empty) - fall through to the generic message.
+    }
+    throw new ApiError(res.status, detail ?? `${res.status} ${res.statusText} on ${path}`);
+  }
+  return (await res.json()) as PathologyPutResponse;
+}
+
+/** A clinical job's currently entered pathology values (`{}` if none yet) - used to reload the panel's own state, e.g. after a page refresh. */
+export function getClinicalPathology(
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<{ job_id: string; pathology: Record<string, string> }> {
+  return getJson<{ job_id: string; pathology: Record<string, string> }>(
+    `/clinical/jobs/${encodeURIComponent(jobId)}/pathology`,
+    signal,
+  );
 }
 
 /**

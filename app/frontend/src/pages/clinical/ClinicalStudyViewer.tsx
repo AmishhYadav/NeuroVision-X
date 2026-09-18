@@ -472,6 +472,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
           status={reportState.status}
           report={reportState.report}
           errorMessage={reportState.errorMessage}
+          pathologyJobId={jobId}
           // The report drawer overlays the viewport, but highlightedStructure
           // is lifted to this component and fed to BrainTwinScene regardless
           // of which view is showing - so hovering a row here still lights

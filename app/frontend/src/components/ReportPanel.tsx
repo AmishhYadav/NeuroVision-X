@@ -20,6 +20,7 @@ import {
   type InterpretedSection,
   interpretReport,
 } from "../lib/reportInterpretation";
+import { MolecularPanel } from "../pages/clinical/MolecularPanel";
 
 export type ReportPanelStatus =
   | "loading"
@@ -48,6 +49,15 @@ interface ReportPanelProps {
   onHoverStructure?: (name: string | null) => void;
   /** The structure name to highlight in the table, or null/absent for none - set by the caller from whichever atlas index the twin currently has highlighted. */
   highlightedStructureName?: string | null;
+  /**
+   * The clinical job id this report belongs to, if any - passed straight
+   * through to `MolecularPanel` so it knows which job's pathology to
+   * PUT/GET. Absent on the demo path (`App.tsx`, no clinical job), where
+   * `report.molecular` is also always absent - see that field's doc comment
+   * in `api.ts`. Both conditions gate the panel below, so neither one alone
+   * is enough to render it.
+   */
+  pathologyJobId?: string | null;
 }
 
 function CenteredMessage({ children }: { children: ReactNode }) {
@@ -345,6 +355,7 @@ export function ReportPanel({
   errorMessage,
   onHoverStructure,
   highlightedStructureName,
+  pathologyJobId,
 }: ReportPanelProps) {
   const interpreted = useMemo(() => (report ? interpretReport(report) : null), [report]);
 
@@ -513,6 +524,13 @@ export function ReportPanel({
                   )}
                 </div>
               ))}
+
+              {/* --- Confirmed pathology (T5.6) ---------------------------- */}
+              {report.molecular && pathologyJobId && (
+                <div className="border-t border-surface-seam px-4 py-6">
+                  <MolecularPanel jobId={pathologyJobId} molecular={report.molecular} />
+                </div>
+              )}
 
               {/* --- Full technical data ---------------------------------- */}
               <TechnicalData report={report} />

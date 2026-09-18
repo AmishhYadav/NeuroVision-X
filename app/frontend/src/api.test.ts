@@ -15,7 +15,9 @@ import {
   getClinicalJobMask,
   getClinicalJobUncertainty,
   getClinicalJobVolume,
+  getClinicalPathology,
   listClinicalJobs,
+  putClinicalPathology,
 } from "./api";
 import type { AtlasStructuresResponse, ReportResponse } from "./api";
 
@@ -767,5 +769,94 @@ describe("getClinicalJobAtlas / getCaseAtlas", () => {
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/cases/case1/atlas");
+  });
+});
+
+// T5.6: the pathology PUT/GET pair `MolecularPanel` is built on. Same
+// mocked-fetch, "what should the caller DO about it" framing as
+// `createClinicalJob`'s describe block above - `putClinicalPathology` reuses
+// that function's detail-reading pattern on a non-2xx body, so the 400 case
+// is the one worth asserting in detail here.
+describe("putClinicalPathology", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("sends a PUT with a JSON body and returns the parsed response on success", async () => {
+    const body = {
+      job_id: "job1",
+      pathology: { IDH: "Wildtype" },
+      cns5: { name: null, requires: ["histology"], source: null },
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => body,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await putClinicalPathology("job1", { IDH: "Wildtype" });
+    expect(result).toEqual(body);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/clinical/jobs/job1/pathology");
+    expect(init.method).toBe("PUT");
+    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    expect(init.body).toBe(JSON.stringify({ IDH: "Wildtype" }));
+  });
+
+  it("reads the detail field off a 400 response and throws ApiError with it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        json: async () => ({
+          detail: "validate_entered: 'IDH' was set to 'Positive', which is not in its allowed values ['Mutant', 'Wildtype', 'Not tested', 'Not entered'].",
+        }),
+      }),
+    );
+
+    const err = await putClinicalPathology("job1", { IDH: "Positive" }).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(400);
+    expect((err as ApiError).message).toContain("Mutant");
+    expect((err as ApiError).message).toContain("Wildtype");
+  });
+
+  it("treats a 502 from the dev proxy as unreachable, not a normal API error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 502, statusText: "Bad Gateway" }),
+    );
+
+    await expect(putClinicalPathology("job1", { IDH: "Wildtype" })).rejects.toBeInstanceOf(
+      ApiUnreachableError,
+    );
+  });
+});
+
+describe("getClinicalPathology", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hits the pathology route and returns the currently entered values on success", async () => {
+    const body = { job_id: "job1", pathology: { IDH: "Mutant" } };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => body,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getClinicalPathology("job1");
+    expect(result).toEqual(body);
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/clinical/jobs/job1/pathology");
   });
 });
