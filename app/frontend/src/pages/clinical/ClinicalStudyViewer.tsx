@@ -1,7 +1,8 @@
-import { Box, FileText, Power } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Box, Download, FileText, Power } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CONFORMAL_BAND,
+  exportClinicalJob,
   GRADCAM,
   PREDICTIVE_ENTROPY_SINGLE_PASS,
   type GateDecisionValue,
@@ -28,8 +29,10 @@ import {
   structureIndexForName,
   structureRow,
 } from "../../lib/atlasSelection";
+import { triggerBlobDownload } from "../../lib/download";
 import { sliceIndexer } from "../../lib/slicing";
 import { reportRowForStructure } from "../../lib/structureDetail";
+import { captureCanvas, findTwinCanvas, snapshotFilename } from "../../lib/twinSnapshot";
 
 const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 };
 // Fixed, not a slider - matches App.tsx's own choice exactly (same constant
@@ -105,6 +108,17 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
   const [heatOverlay, setHeatOverlay] = useState<HeatOverlay>("none");
   const [view, setView] = useState<"slices" | "twin">("slices");
   const [reportOpen, setReportOpen] = useState(false);
+  // T6.4 export: whether a bundle download is in flight, and the last
+  // failure to show next to the button. Both are local to this component -
+  // the export itself carries no state on the server (see exportClinicalJob's
+  // docstring), so there is nothing to lift or persist across a reload.
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  // Points at the wrapper div around BrainTwinScene (only mounted while
+  // view === "twin") so the export handler can find its live <canvas> via
+  // findTwinCanvas - the same DOM query twinSnapshot.ts already centralises
+  // in one place, reused rather than re-querying document here.
+  const twinHostRef = useRef<HTMLDivElement>(null);
   // The atlas structure currently highlighted in the twin - lifted here (per
   // T3.5/T3.6) because both BrainTwinScene (a shell click/hover) and
   // ReportPanel (a table row hover/click) need to read AND write it, so
@@ -272,6 +286,46 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
     );
   }
 
+  // T6.4: downloads this job's full export bundle (report.json, report.md,
+  // dicom-seg.dcm, job.json and, when possible, one twin snapshot).
+  //
+  // A failed snapshot capture must never block the rest of the bundle - the
+  // report and DICOM-SEG are the export's whole point, and a blank or
+  // zero-size canvas (the twin hasn't finished its first paint yet, or the
+  // browser dropped the WebGL context) is a real possibility captureCanvas
+  // already guards against by throwing. So a capture failure here is caught,
+  // logged, and treated as "zero snapshots", never surfaced as an export
+  // error to the user.
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const snapshots: { blob: Blob; filename: string }[] = [];
+      if (view === "twin" && twinHostRef.current) {
+        const canvas = findTwinCanvas(twinHostRef.current);
+        if (canvas) {
+          try {
+            snapshots.push({ blob: captureCanvas(canvas), filename: snapshotFilename(jobId, "twin") });
+          } catch (captureErr) {
+            console.warn(
+              "export: twin snapshot capture failed, bundling without one",
+              captureErr,
+            );
+          }
+        }
+      }
+      // view === "slices": the 2D viewport draws to several plane canvases,
+      // not one twin canvas - snapshotting those is out of scope for this
+      // first version of export, so the bundle simply carries no snapshot.
+      const { blob, filename } = await exportClinicalJob(jobId, snapshots);
+      triggerBlobDownload(blob, filename);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // The twin's badge mirrors the gatekeeper's decision for this job - the
   // one piece of information from the pipeline that belongs on the 3D view
   // even though it says nothing about the segmentation's shape.
@@ -395,7 +449,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
             </div>
           )}
           {view === "twin" ? (
-            <div className="min-h-0 flex-1 border border-surface-seam bg-surface-panel">
+            <div ref={twinHostRef} className="min-h-0 flex-1 border border-surface-seam bg-surface-panel">
               <BrainTwinScene
                 input={twinInput}
                 badge={twinBadge}
@@ -612,6 +666,27 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
           <FileText size={13} aria-hidden="true" />
           Report
         </button>
+
+        <button
+          type="button"
+          data-testid="clinical-export"
+          disabled={exporting}
+          onClick={handleExport}
+          title="Download report.json, report.md, DICOM-SEG and a twin snapshot as one zip"
+          className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+            exporting
+              ? "cursor-not-allowed text-text-dim"
+              : "text-text-secondary hover:text-text-primary"
+          }`}
+        >
+          <Download size={13} aria-hidden="true" />
+          {exporting ? "Exporting…" : "Export"}
+        </button>
+        {exportError && (
+          <span role="alert" className="font-mono text-[11px] text-data-amber">
+            {exportError}
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           <span className="eyebrow shrink-0">Opacity</span>

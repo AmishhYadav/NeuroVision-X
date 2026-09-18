@@ -10,6 +10,7 @@
 // `ReportResponse` (and friends) from this file as a `type`, which is erased
 // at compile time - so this is not a runtime circular dependency.
 import { validateReport } from "./lib/report";
+import { filenameFromContentDisposition } from "./lib/download";
 
 export type Modality = "t1" | "t1ce" | "t2" | "flair";
 export type MaskSource = "prediction" | "label";
@@ -954,4 +955,66 @@ export function getClinicalJobAtlas(
     fallbackShape,
     signal,
   );
+}
+
+/**
+ * Downloads a `"done"` clinical job's full export bundle (T6.3's
+ * `report.json` / `report.md` / `dicom-seg.dcm` / `job.json` / `snapshots/`
+ * zip). `snapshots` is uploaded as `multipart/form-data`, one part per entry
+ * under the repeated field name `"snapshots"` - the same field name the
+ * server's `export_clinical_job` reads, and the same "let `FormData` set its
+ * own multipart boundary" reasoning as `createClinicalJob` (a manual
+ * `Content-Type` header here would omit the boundary and the server could
+ * not parse the body).
+ *
+ * Error handling mirrors `createClinicalJob` exactly: 502/503/504 (the dev
+ * proxy answering for a dead backend) become `ApiUnreachableError`; any other
+ * non-2xx reads `detail` off the JSON body when present (e.g. a snapshot over
+ * the server's size cap, or an unknown/not-yet-done job) and throws
+ * `ApiError` with it, falling back to the generic status-line message
+ * otherwise.
+ *
+ * On success the response body is the zip bytes; `filename` is read off
+ * `Content-Disposition` via `filenameFromContentDisposition`, falling back to
+ * `neurovision-<jobId>.zip` (the exact name the server sends) so a stripped
+ * header - e.g. behind a proxy that drops it - still produces a sane
+ * downloaded filename rather than a blank one.
+ */
+export async function exportClinicalJob(
+  jobId: string,
+  snapshots: { blob: Blob; filename: string }[],
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  const path = `/clinical/jobs/${encodeURIComponent(jobId)}/export`;
+  const formData = new FormData();
+  for (const { blob, filename } of snapshots) {
+    formData.append("snapshots", blob, filename);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { method: "POST", body: formData, signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (!res.ok) {
+    if (GATEWAY_DOWN.has(res.status)) throw new ApiUnreachableError();
+    let detail: string | undefined;
+    try {
+      const body = (await res.json()) as unknown;
+      if (body && typeof body === "object" && typeof (body as { detail?: unknown }).detail === "string") {
+        detail = (body as { detail: string }).detail;
+      }
+    } catch {
+      // Body wasn't JSON (or was empty) - fall through to the generic message.
+    }
+    throw new ApiError(res.status, detail ?? `${res.status} ${res.statusText} on ${path}`);
+  }
+  const blob = await res.blob();
+  const filename = filenameFromContentDisposition(
+    res.headers.get("Content-Disposition"),
+    `neurovision-${jobId}.zip`,
+  );
+  return { blob, filename };
 }

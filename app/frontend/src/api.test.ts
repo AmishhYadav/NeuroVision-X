@@ -4,6 +4,7 @@ import {
   ApiError,
   ApiUnreachableError,
   createClinicalJob,
+  exportClinicalJob,
   fetchClinicalReport,
   getAtlasStructures,
   getCaseAtlas,
@@ -858,5 +859,69 @@ describe("getClinicalPathology", () => {
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/clinical/jobs/job1/pathology");
+  });
+});
+
+describe("exportClinicalJob", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("posts multipart form data with one snapshot part and returns the zip named off Content-Disposition", async () => {
+    const zipBlob = new Blob(["fake zip bytes"], { type: "application/zip" });
+    const headers = new Map([["Content-Disposition", 'attachment; filename="neurovision-job1.zip"']]);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: { get: (k: string) => headers.get(k) ?? null },
+      blob: async () => zipBlob,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const snapshot = { blob: new Blob(["png bytes"]), filename: "twin.png" };
+    const result = await exportClinicalJob("job1", [snapshot]);
+
+    expect(result.blob).toBe(zipBlob);
+    expect(result.filename).toBe("neurovision-job1.zip");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/clinical/jobs/job1/export");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    // The browser must set its own multipart boundary - same reasoning as
+    // createClinicalJob - and the one snapshot must ride under the field
+    // name the server's export_clinical_job actually reads.
+    expect(init.headers).toBeUndefined();
+    const body = init.body as FormData;
+    const parts = body.getAll("snapshots");
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toBeInstanceOf(Blob);
+  });
+
+  it("throws ApiError with status 409 and the server's detail when the job isn't done yet", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        statusText: "Conflict",
+        json: async () => ({ detail: "job1 is not done yet" }),
+      }),
+    );
+
+    const err = await exportClinicalJob("job1", []).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
+    expect((err as ApiError).message).toBe("job1 is not done yet");
+  });
+
+  it("treats a 502 from the dev proxy as unreachable, not a normal API error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 502, statusText: "Bad Gateway" }),
+    );
+
+    await expect(exportClinicalJob("job1", [])).rejects.toBeInstanceOf(ApiUnreachableError);
   });
 });
