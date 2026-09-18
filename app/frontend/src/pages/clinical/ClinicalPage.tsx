@@ -114,7 +114,12 @@ export function ClinicalPage() {
         </div>
 
         {isDone && job && (
-          <div className="min-h-0 flex-1">
+          // `flex flex-col` here is what lets the viewer's own `flex-1`
+          // root actually fill this slot: a flex-1 child of a plain block
+          // parent only ever gets its content height, which squashed the
+          // twin canvas to ~150 px on a 1050 px window (seen 2026-09-18 in
+          // the e2e screenshot, e2e/out/twin-*.png).
+          <div className="flex min-h-0 flex-1 flex-col">
             <ClinicalStudyViewer
               jobId={job.job_id}
               decision={job.gatekeeper_decision?.decision ?? null}
