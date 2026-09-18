@@ -1,6 +1,6 @@
 # Tool-completion log — status board for the autonomous run
 
-**Paused 2026-09-18 13:25 by the author ("wrap up"). Remaining: T5.6, T6.1, T6.3, T6.4, T1.7, T3 L/R eyeball, final demo checks + runbook. Started 2026-09-18 00:10 (author away; demo 2026-09-19 ~14:00).** The plan is
+**Paused 2026-09-18 ~15:10 by the author ("wrap up"). Remaining: T5.6, T6.4, T1.7 (smoke sections 2a/10 rewritten for the new viewer flow, section 12 not started), T3 L/R eyeball, final demo checks + runbook.** Previous pause 13:25. Between the two pauses, at the author's direct request (chat, not the plan): landing hero without tumour; 3D twin default view + scan-view switch; collapsible case list; `/report/<case_id>` plain-language page; twin meshing ~4x faster (see F8). Plus T6.1 and T6.3. Started 2026-09-18 00:10 (author away; demo 2026-09-19 ~14:00).** The plan is
 `tool_completion_plan.md`; this file is the mutable board — one line per unit, newest finding on top
 of the Findings section. A session picking up cold: read this, then the plan, then continue the first
 `[ ]` / `[~]` unit in order. T7 is never started.
@@ -27,10 +27,16 @@ Tier 1 (baseline, no code): `[x]` pytest 2058 pass / 32 skip · smoke 0 · vites
 - `[x]` T3.1 (00c0726) · `[x]` T3.2 (d268daa) · `[x]` T3.3 (9ae01a2) · `[x]` T3.4 (5730e9e) · `[x]` T3.5 scene (d3bb8b7) · `[x]` T3.5 viewer + T3.6 (02d44a7) · **`[ ]` T3 verify-by-eye L/R on a done job (trap 3) — NOT YET DONE, do before the demo**
 - `[x]` T4.1 (2018e9e) · `[x]` T4.2 (6fa6d8d) · `[x]` T4.3 clinical (599993a) · `[x]` T4.3 batch flag (0681523; verified flag-off byte-identical on 3 cases) · `[x]` T4.4
 - `[x]` T5.1 `knowledge/molecular_markers.yaml` · `[x]` T5.2 (24b448a) · `[x]` T5.3 (20a9e1a) · `[x]` T5.4 (ffe4194) · `[x]` T5.5 (63bbd33) · `[ ]` T5.6 MolecularPanel + api.ts putClinicalPathology
-- `[ ]` T6.1 markdown route · `[x]` T6.2 (ac4ec54) · `[ ]` T6.3 export zip route · `[ ]` T6.4 Export button
-- `[ ]` T1.7 e2e section 12
+- `[x]` T6.1 markdown route (a32e9c4) · `[x]` T6.2 (ac4ec54) · `[x]` T6.3 export zip route (d0d70d3) · `[ ]` T6.4 Export button (spec written, agent stopped by the author before it edited anything)
+- `[~]` T1.7 e2e — sections 1/2a/10 of `e2e/smoke.mjs` rewritten for twin-default + report page (uncommitted if the run at 15:10 did not go green; see F8); section 12 (clinical job, SwiftShader) not started
+
+### Author-requested viewer work (2026-09-18 afternoon, outside the plan)
+- `[x]` hero brain shell only (d86bc73) · `[x]` surfaceNets perf (fb44b7d) · `[x]` worker bbox crop + timing log (a2a469e) · `[x]` twin default + scan switch + collapsible cases + `?case=` URL (171b753) · `[x]` `lib/reportInterpretation.ts` (d767c75) · `[x]` `/report/<case_id>` page (72d9650). Reviewer: no findings. **Not yet eyeballed in a browser by anyone** — first thing tomorrow: open `/app`, pick a case, twin should appear within ~1 s of the load bar finishing; click Report.
 
 ## Findings (newest first)
+
+- **F8 (15:00) — the slow case render was the twin mesher, not the network.** All seven per-case artifacts serve in ~0.4 s total (curl-timed). `surfaceNets` allocated a `Float32Array(8)` and destructured tuples per cell over 3.4 M cells (~282 ms/pass), and ran 4 full-volume passes per case (brain + 3 tumour classes) plus a `Map`-based hemisphere split. Now: allocation-free loops (~70 ms/pass, bit-identical by golden checksum), tumour classes meshed inside their bounding boxes via `meshStructure`, typed-array split. The worker logs `[twin] mesh <case>: brain N ms, tumour N ms, total N ms` — that line is the verification; nobody has read it from a real browser yet (Chrome extension was disconnected all afternoon). The e2e smoke's new section 2a captures it.
+- **Smoke assumption (15:00):** `e2e/smoke.mjs` section 1 hardcoded `/baseline_unet3d/` as the experiment name; it now reads `/api/health`. Backend was serving `neurovision` at the time.
 
 - **F7 (08:05) — UPENN-GBM-00001 is refused reproducibly; the `done` study is 00002.** The prior session's run 4 (job `a37fcaad`, PROCEED) was on `UPENN-GBM-00002`; runs 3 (`29bb17`) and the T0.2 verification run (`f4a4a754`) were both on `00001` and both REFUSED on `predicted_dice` WT (0.66 twice; TC 0.69). Checked before concluding: ANTs rigid registration of 00001 to SRI24 lands in the same basin across four probe runs, seeded or not (translations within 0.2 mm), so this is not registration nondeterminism. 00001's FLAIR is 3 mm-slice (61 slices) — the most out-of-distribution input of the three fixtures. For the demo: **00002 is the PROCEED study, 00001 is the REFUSE study**; both are on disk as done jobs. Fixtures 00001–00003 are all zipped under `data/fixtures/dicom/` with manifests.
 - **F6 (07:50) — a script's faked test cannot reach a real-run failure (trap 9, again).** `run_clinical_study.py` was green on a fully faked pipeline and failed twice on the fixture: `@hydra.main` leaves `GlobalHydra` initialised, so the backend's per-job `initialize_config_dir` raised; and `dcm2niix` lives in `.venv-clinical/bin`, which is not on `PATH` unless the venv is activated. Fixed: `release_hydra()` after the script reads its two keys; the interpreter's own bin dir is prepended to `PATH`. Rule stands: a script that drives a real pipeline is verified by running it on the real fixture, not by its unit tests.
