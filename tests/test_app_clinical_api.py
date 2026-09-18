@@ -31,6 +31,8 @@ import pytest
 from app.backend import api, clinical_jobs, config, inference, jobs, volumes
 from fastapi.testclient import TestClient
 
+from neurovision.reporting.molecular import empty_molecular_block, load_molecular_knowledge
+
 
 def _zip_bytes(files: dict[str, bytes]) -> bytes:
     """Builds a small in-memory zip archive from filename -> content bytes."""
@@ -171,6 +173,245 @@ def _fabricate_done_clinical_job(settings: config.Settings) -> clinical_jobs.Cli
     # rehydrate from disk (see `test_clinical_jobs_survive_app_recreation`).
     clinical_jobs._update_clinical_job(settings, job, state="done", stage="done", progress=1.0)
     return job
+
+
+def _fabricate_running_clinical_job(settings: config.Settings) -> clinical_jobs.ClinicalJob:
+    """Creates a clinical job and drives it directly to state `"running"`.
+
+    Same "create then hand-mutate the dataclass in place" approach as
+    `_fabricate_refused_clinical_job` -- `get_clinical_job` always returns
+    the SAME in-memory instance, so setting `.state` here is visible to any
+    route the test exercises next. Used only to prove `PUT .../pathology`
+    409s on a not-yet-`"done"` job, same as every other clinical job route.
+    """
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+    job.state = "running"
+    job.stage = "segmentation"
+    return job
+
+
+# --- T5.5: PUT/GET /api/clinical/jobs/{job_id}/pathology, GET /report merge -
+#
+# These tests load the REAL, committed `knowledge/molecular_markers.yaml`
+# (via `load_molecular_knowledge`, unmocked) rather than monkeypatching a
+# fake bundle the way the atlas tests above do -- T5.5's spec calls for
+# exercising the real CNS5 lookup rows, not a stand-in vocabulary.
+
+
+def _real_molecular_knowledge():
+    """Loads the real, committed molecular-marker knowledge base.
+
+    The same file `api._molecular_knowledge()` composes onto in production
+    (`cfg.analysis.report.molecular_markers`, which
+    `configs/analysis/default.yaml` points at
+    `knowledge/molecular_markers.yaml`) -- read directly here, by path, so
+    these tests need no Hydra composition or monkeypatch of their own.
+    """
+    return load_molecular_knowledge(config.REPO_ROOT / "knowledge" / "molecular_markers.yaml")
+
+
+def _write_clinical_report_with_empty_molecular(
+    settings: config.Settings, job: clinical_jobs.ClinicalJob
+) -> tuple[Path, dict]:
+    """Writes a minimal cached report JSON carrying an empty molecular block.
+
+    Mirrors `_write_clinical_report`'s own path convention
+    (`<job_dir>/report/<case_id>.json`); returns both the path written and
+    the payload, so a test can compare bytes before/after a PUT that must
+    never touch this file.
+    """
+    knowledge = _real_molecular_knowledge()
+    payload = {
+        "case_id": job.case_id,
+        "report_version": 1,
+        "molecular": empty_molecular_block(knowledge),
+    }
+    path = _write_clinical_report(settings, job, payload)
+    return path, payload
+
+
+def test_put_pathology_valid_sets_cns5_and_never_rewrites_report_file(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    report_path, _ = _write_clinical_report_with_empty_molecular(settings, job)
+    report_bytes_before = report_path.read_bytes()
+
+    response = client.put(
+        f"/api/clinical/jobs/{job.job_id}/pathology",
+        json={"IDH": "Wildtype", "histology": "Glioblastoma pattern"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["job_id"] == job.job_id
+    assert body["pathology"] == {"IDH": "Wildtype", "histology": "Glioblastoma pattern"}
+    assert body["cns5"]["name"] == "Glioblastoma, IDH-wildtype"
+
+    # The cached report JSON on disk is never touched by PUT -- the merge
+    # happens only at GET /report read time.
+    assert report_path.read_bytes() == report_bytes_before
+
+    report_response = client.get(f"/api/clinical/jobs/{job.job_id}/report")
+    assert report_response.status_code == 200
+    molecular = report_response.json()["molecular"]
+    assert molecular["markers"]["IDH"]["confirmed_pathology"] == "Wildtype"
+    assert molecular["cns5"]["name"] == "Glioblastoma, IDH-wildtype"
+
+    # Still byte-identical after the GET too -- reads never write.
+    assert report_path.read_bytes() == report_bytes_before
+
+
+def test_put_pathology_second_put_retains_previous_keys(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report_with_empty_molecular(settings, job)
+
+    first = client.put(
+        f"/api/clinical/jobs/{job.job_id}/pathology",
+        json={"IDH": "Wildtype", "histology": "Glioblastoma pattern"},
+    )
+    assert first.status_code == 200
+
+    second = client.put(
+        f"/api/clinical/jobs/{job.job_id}/pathology",
+        json={"MGMT": "Methylated"},
+    )
+    assert second.status_code == 200
+    body = second.json()
+    # Partial merge: the new key is added, the earlier two keys survive.
+    assert body["pathology"] == {
+        "IDH": "Wildtype",
+        "histology": "Glioblastoma pattern",
+        "MGMT": "Methylated",
+    }
+    assert body["cns5"]["name"] == "Glioblastoma, IDH-wildtype"
+
+
+def test_put_pathology_unknown_marker_is_400(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report_with_empty_molecular(settings, job)
+
+    response = client.put(f"/api/clinical/jobs/{job.job_id}/pathology", json={"BRAF": "Mutant"})
+    assert response.status_code == 400
+    assert "BRAF" in response.json()["detail"]
+
+
+def test_put_pathology_out_of_vocabulary_value_is_400_naming_allowed_values(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report_with_empty_molecular(settings, job)
+
+    response = client.put(f"/api/clinical/jobs/{job.job_id}/pathology", json={"IDH": "Positive"})
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "Mutant" in detail
+    assert "Wildtype" in detail
+
+
+def test_put_pathology_unknown_job_is_404(client: TestClient) -> None:
+    response = client.put("/api/clinical/jobs/no-such-job/pathology", json={"IDH": "Wildtype"})
+    assert response.status_code == 404
+
+
+def test_put_pathology_not_done_job_is_409(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_running_clinical_job(settings)
+
+    response = client.put(f"/api/clinical/jobs/{job.job_id}/pathology", json={"IDH": "Wildtype"})
+    assert response.status_code == 409
+    assert "running" in response.json()["detail"]
+
+
+def test_get_pathology_round_trip(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report_with_empty_molecular(settings, job)
+
+    empty = client.get(f"/api/clinical/jobs/{job.job_id}/pathology")
+    assert empty.status_code == 200
+    assert empty.json() == {"job_id": job.job_id, "pathology": {}}
+
+    put_response = client.put(
+        f"/api/clinical/jobs/{job.job_id}/pathology",
+        json={"IDH": "Mutant", "1p/19q": "Codeleted", "histology": "Oligodendroglial"},
+    )
+    assert put_response.status_code == 200
+
+    after = client.get(f"/api/clinical/jobs/{job.job_id}/pathology")
+    assert after.status_code == 200
+    assert after.json() == {
+        "job_id": job.job_id,
+        "pathology": {
+            "IDH": "Mutant",
+            "1p/19q": "Codeleted",
+            "histology": "Oligodendroglial",
+        },
+    }
+
+
+def test_get_pathology_unknown_job_is_404(client: TestClient) -> None:
+    response = client.get("/api/clinical/jobs/no-such-job/pathology")
+    assert response.status_code == 404
+
+
+def test_get_pathology_not_done_job_is_409(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_running_clinical_job(settings)
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/pathology")
+    assert response.status_code == 409
+
+
+def test_get_report_without_molecular_block_is_unaffected_by_pathology_file(
+    client: TestClient, backend: Path
+) -> None:
+    """A report predating T5.4 (no "molecular" key) is returned untouched."""
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    payload = {"case_id": job.case_id, "report_version": 1}
+    _write_clinical_report(settings, job, payload)
+
+    put_response = client.put(
+        f"/api/clinical/jobs/{job.job_id}/pathology", json={"IDH": "Wildtype"}
+    )
+    assert put_response.status_code == 200
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/report")
+    assert response.status_code == 200
+    assert response.json() == payload
+    assert "molecular" not in response.json()
+
+
+def test_get_report_corrupt_pathology_file_returns_report_unmerged(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    report_path, payload = _write_clinical_report_with_empty_molecular(settings, job)
+
+    pathology_path = jobs.job_root(settings) / job.job_id / "pathology.json"
+    pathology_path.write_text("not valid json {")
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/report")
+    assert response.status_code == 200
+    assert response.json()["molecular"] == payload["molecular"]
+
+
+def test_get_pathology_corrupt_file_returns_empty_block(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report_with_empty_molecular(settings, job)
+
+    pathology_path = jobs.job_root(settings) / job.job_id / "pathology.json"
+    pathology_path.parent.mkdir(parents=True, exist_ok=True)
+    pathology_path.write_text("not valid json {")
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/pathology")
+    assert response.status_code == 200
+    assert response.json() == {"job_id": job.job_id, "pathology": {}}
 
 
 # --- POST /api/clinical/upload, happy path ----------------------------------

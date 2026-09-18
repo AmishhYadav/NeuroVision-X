@@ -1110,15 +1110,231 @@ def get_clinical_job_report(job_id: str) -> dict[str, Any]:
     `run_clinical_job`'s failure-isolation handling -- or the job predates
     this feature): either way there is nothing to serve for THIS job, not a
     server-side fault.
+
+    T5.5 read-time merge: if `<job_dir>/pathology.json` exists AND the
+    cached report has a `"molecular"` block, that block is replaced with
+    `merge_pathology(report["molecular"], entered, knowledge)` before the
+    response is returned -- the cached JSON FILE on disk is never rewritten,
+    only the dict this one response carries. This is why `PUT
+    .../pathology` never has to touch the report file: every correction
+    made there is visible here on the very next read. A report with no
+    `"molecular"` key at all (a job that predates T5.4) is returned
+    untouched -- there is nothing to merge into. A corrupt or
+    failed-validation `pathology.json` (see `_load_pathology_or_none`) is
+    logged at WARNING and the report is returned unmerged: a bad side file
+    must never turn a working report read into a 500.
     """
     job = _require_done_clinical_job(job_id)
-    report_path = _clinical_report_path(get_settings(), job)
+    settings = get_settings()
+    report_path = _clinical_report_path(settings, job)
     if not report_path.is_file():
         raise HTTPException(
             status_code=404,
             detail=f"clinical job {job_id!r} has no cached report at {report_path}",
         )
-    return json.loads(report_path.read_text(encoding="utf-8"))
+    report: dict[str, Any] = json.loads(report_path.read_text(encoding="utf-8"))
+
+    pathology_path = _clinical_pathology_path(settings, job)
+    if pathology_path.is_file() and report.get("molecular") is not None:
+        from neurovision.reporting.molecular import merge_pathology
+
+        knowledge = _molecular_knowledge()
+        entered = _load_pathology_or_none(pathology_path, knowledge)
+        if entered is not None:
+            report["molecular"] = merge_pathology(report["molecular"], entered, knowledge)
+    return report
+
+
+@lru_cache(maxsize=1)
+def _molecular_knowledge() -> Any:
+    """Loads and caches `knowledge/molecular_markers.yaml` (T5.5).
+
+    Composes the SAME CPU-only clinical config `clinical_jobs._generate_report`
+    composes (`clinical_jobs._compose_clinical_cfg`) and reads
+    `cfg.analysis.report.molecular_markers` -- the same key a live clinical
+    report's "Confirmed pathology" block is built from -- so the vocabulary
+    this route validates an entered value against can never silently drift
+    from the one a report was assembled with. `cfg.analysis.report
+    .molecular_markers` is a repo-relative path string
+    (`"knowledge/molecular_markers.yaml"`), resolved against `REPO_ROOT`
+    exactly like `config._path_env` resolves every other repo-relative path
+    in this backend -- never a bare relative path left to the process's
+    current working directory.
+
+    `lru_cache(maxsize=1)`: `load_molecular_knowledge` parses and validates
+    one small YAML file -- pure, read-only, the same file for every request
+    in this process -- so caching it costs nothing a request could observe.
+    Same reasoning `_atlas_bundle` already uses for the atlas.
+
+    Import of `neurovision.reporting.molecular` is local to this function,
+    matching this file's own convention for `neurovision.*` imports (see the
+    module docstring and `_atlas_bundle`).
+
+    Returns:
+        The loaded `neurovision.reporting.molecular.MolecularKnowledge`.
+    """
+    from neurovision.reporting.molecular import load_molecular_knowledge
+
+    cfg = clinical_jobs._compose_clinical_cfg()
+    path = REPO_ROOT / str(cfg.analysis.report.molecular_markers)
+    return load_molecular_knowledge(path)
+
+
+def _clinical_pathology_path(settings: Settings, job: clinical_jobs.ClinicalJob) -> Path:
+    """Where a clinical job's user-entered pathology values are persisted.
+
+    `<job_dir>/pathology.json` -- a sibling of `_clinical_report_path`'s
+    `<job_dir>/report/<case_id>.json` and `_clinical_dicom_seg_path`'s
+    `<job_dir>/dicom_seg/<case_id>.dcm`, but not namespaced under its own
+    subdirectory: there is exactly one pathology file per job, written
+    interactively after the job finishes (by `PUT .../pathology`), never
+    produced by the pipeline run itself.
+    """
+    return jobs.job_root(settings) / job.job_id / "pathology.json"
+
+
+def _load_pathology_or_none(path: Path, knowledge: Any) -> dict[str, str] | None:
+    """Reads and validates `<job_dir>/pathology.json`, or `None` if it is corrupt.
+
+    Two distinct fault kinds are folded into the same `None` outcome, both
+    logged at WARNING rather than raised: the file is not valid JSON (or not
+    a JSON object), or it parses but names an unknown marker / an
+    out-of-vocabulary value (`ValueError` from `validate_entered` -- e.g. a
+    marker's `allowed_values` changed in a newer
+    `knowledge/molecular_markers.yaml` than the one that wrote this file).
+    Either way this is a corrupt SIDE file, never the report or the job
+    itself, so a caller must never 500 a read because of it -- see
+    `get_clinical_job_report`'s docstring for where this matters most.
+
+    Args:
+        path: `<job_dir>/pathology.json`. Caller checks existence first.
+        knowledge: The loaded `MolecularKnowledge` to validate against.
+
+    Returns:
+        The validated `{marker_or_"histology": value}` dict (possibly empty,
+        if the file legitimately contains `{}`), or `None` if the file could
+        not be read as valid, in-vocabulary pathology.
+    """
+    from neurovision.reporting.molecular import validate_entered
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        logger.warning("ignoring corrupt pathology file %s: not valid JSON (%s)", path, exc)
+        return None
+    if not isinstance(raw, dict):
+        logger.warning("ignoring corrupt pathology file %s: not a JSON object", path)
+        return None
+    try:
+        return validate_entered(knowledge, raw)
+    except ValueError as exc:
+        logger.warning("ignoring corrupt pathology file %s: %s", path, exc)
+        return None
+
+
+def _write_clinical_pathology(path: Path, pathology: dict[str, str]) -> None:
+    """Writes `<job_dir>/pathology.json` atomically: a temp file, then `os.replace`.
+
+    Same pattern `clinical_jobs._persist_clinical_job` uses for `job.json` --
+    a reader (`GET .../pathology`, or `GET .../report`'s merge step) must
+    never observe a half-written file. Unlike that function this one is
+    allowed to raise: writing pathology IS the point of `PUT .../pathology`,
+    so an I/O failure here is a real 500, not something to swallow.
+
+    Args:
+        path: `<job_dir>/pathology.json`.
+        pathology: The full, already-validated `{marker_or_"histology":
+            value}` mapping to write (the merged result, not just the newly
+            entered keys).
+    """
+    tmp_path = path.parent / f"{path.name}.tmp"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path.write_text(json.dumps(pathology, indent=2))
+    os.replace(tmp_path, path)
+
+
+@router.put("/clinical/jobs/{job_id}/pathology")
+def put_clinical_job_pathology(job_id: str, pathology: dict[str, str]) -> dict[str, Any]:
+    """Records entered pathology for a clinical job (T5.5) -- the one mutating job route.
+
+    The body is a partial `{marker_or_"histology": value}` object -- keys not
+    sent are left at whatever they already were, so a caller can enter IDH
+    today and MGMT next week without re-sending IDH. Every key/value is
+    checked with `neurovision.reporting.molecular.validate_entered` against
+    the same knowledge base `_molecular_knowledge` caches; an unknown key or
+    an out-of-vocabulary value is a 400 with `validate_entered`'s own
+    message, which already names the allowed values.
+
+    The merged result is written to `<job_dir>/pathology.json`
+    (`_write_clinical_pathology`, atomic). The cached report JSON at
+    `_clinical_report_path` is NEVER rewritten here -- `GET .../report`
+    merges the two live, on every read (see that route's docstring), so a
+    correction made here is visible on the very next report fetch without
+    this route needing to know anything about report structure.
+
+    Args:
+        job_id: The clinical job to record pathology for.
+        pathology: The partial entered-values mapping, as JSON.
+
+    Returns:
+        `{"job_id", "pathology": <merged dict>, "cns5": <cns5_lookup
+        result>}` -- `cns5` is computed from the FULL merged set (not just
+        the newly entered keys), same as `merge_pathology` does internally.
+
+    Raises:
+        HTTPException: 404 unknown job, 409 not done
+            (`_require_done_clinical_job`), 400 if `pathology` fails
+            `validate_entered`.
+    """
+    from neurovision.reporting.molecular import cns5_lookup, validate_entered
+
+    job = _require_done_clinical_job(job_id)
+    knowledge = _molecular_knowledge()
+    try:
+        checked = validate_entered(knowledge, pathology)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    settings = get_settings()
+    path = _clinical_pathology_path(settings, job)
+    # No file yet (this job's first PUT) reads as "nothing entered" -- same
+    # as a corrupt existing file, which also degrades to "nothing entered"
+    # (logged at WARNING inside the helper) rather than blocking this write.
+    # The caller is actively correcting the record right now, and refusing
+    # that because of an unrelated earlier corruption would be the more
+    # harmful failure mode.
+    existing = _load_pathology_or_none(path, knowledge) if path.is_file() else {}
+    merged = {**(existing or {}), **checked}
+    _write_clinical_pathology(path, merged)
+
+    return {"job_id": job_id, "pathology": merged, "cns5": cns5_lookup(knowledge, merged)}
+
+
+@router.get("/clinical/jobs/{job_id}/pathology")
+def get_clinical_job_pathology(job_id: str) -> dict[str, Any]:
+    """Returns a clinical job's currently entered pathology values.
+
+    Used by the pathology panel to reload its own state (e.g. after a page
+    refresh). A missing or corrupt `pathology.json` both read as "nothing
+    entered yet" (`{}`) -- see `_load_pathology_or_none` -- rather than 404
+    or 500, since "no pathology entered" is a normal state for a job, not an
+    error.
+
+    Returns:
+        `{"job_id", "pathology": <dict>}`.
+
+    Raises:
+        HTTPException: 404 unknown job, 409 not done
+            (`_require_done_clinical_job`).
+    """
+    job = _require_done_clinical_job(job_id)
+    settings = get_settings()
+    path = _clinical_pathology_path(settings, job)
+    pathology: dict[str, str] = {}
+    if path.is_file():
+        knowledge = _molecular_knowledge()
+        pathology = _load_pathology_or_none(path, knowledge) or {}
+    return {"job_id": job_id, "pathology": pathology}
 
 
 def _register_exception_handlers(app: FastAPI) -> None:
@@ -1176,9 +1392,10 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=origins,
         # POST/DELETE cover the upload/job routes added alongside the
-        # read-only GET routes above; a cross-origin browser client would
-        # otherwise fail CORS preflight on those two methods.
-        allow_methods=["GET", "POST", "DELETE"],
+        # read-only GET routes above; PUT covers T5.5's one mutating route,
+        # PUT /clinical/jobs/{job_id}/pathology -- a cross-origin browser
+        # client would otherwise fail CORS preflight on these methods.
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
         # Without this, a cross-origin fetch() in the Vite dev server can see
         # the response body but not these headers -- and the frontend cannot
