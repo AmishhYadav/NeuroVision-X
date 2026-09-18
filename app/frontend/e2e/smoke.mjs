@@ -54,7 +54,15 @@ const chrome = spawn(CHROME, [
   "--window-size=1680,1050",
   "--force-device-scale-factor=1",
   "--no-first-run",
-  "--disable-gpu",
+  // The 3D twin (section 2a) needs a real WebGL context - "--disable-gpu"
+  // (the old headless-Chrome recipe) killed that outright, which crashed
+  // BrainTwinScene's <Canvas> on mount and, with it, the worker that logs
+  // the "[twin] mesh" line this file polls for. SwiftShader gives headless
+  // Chrome a software WebGL implementation instead; recent Chrome disables
+  // it by default as "unsafe" unless asked for explicitly.
+  "--use-gl=swiftshader",
+  "--enable-unsafe-swiftshader",
+  "--ignore-gpu-blocklist",
   "about:blank",
 ]);
 chrome.stderr.on("data", () => {});
@@ -79,6 +87,11 @@ await new Promise((r) => (ws.onopen = r));
 let nextId = 1;
 const pending = new Map();
 const consoleErrors = [];
+// Every debug/log line the page prints, in order - this is how section 2a
+// below recovers the twin worker's `[twin] mesh ...` timing line without the
+// harness having to poll the DOM (the worker logs to the console, not to
+// anything visible on screen).
+const consoleMessages = [];
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
   if (m.id && pending.has(m.id)) {
@@ -87,6 +100,9 @@ ws.onmessage = (e) => {
   }
   if (m.method === "Runtime.consoleAPICalled" && ["error", "assert"].includes(m.params.type)) {
     consoleErrors.push((m.params.args ?? []).map((a) => a.value ?? a.description ?? "").join(" "));
+  }
+  if (m.method === "Runtime.consoleAPICalled" && ["debug", "log"].includes(m.params.type)) {
+    consoleMessages.push((m.params.args ?? []).map((a) => a.value ?? a.description ?? "").join(" "));
   }
   if (m.method === "Runtime.exceptionThrown") {
     consoleErrors.push(m.params.exceptionDetails?.exception?.description ?? "exception");
@@ -155,7 +171,12 @@ await sleep(3000);
 
 console.log("\n1. Startup and case list");
 const health = await js(bodyText);
-check("header shows the experiment name", /baseline_unet3d/.test(health));
+// Which experiment the server was started on is a config choice, not
+// something this harness may assume - read it from the real API response
+// instead of hardcoding a name, the same discipline the rest of this file
+// already applies to every other expected value.
+const healthJson = await js(`fetch('/api/health').then(r=>r.json())`);
+check("header shows the experiment name", health.includes(healthJson.experiment), healthJson.experiment);
 check("header shows a split label", /(test|val) split/.test(health), health.split("\n")[0]);
 check("header does NOT mislabel test as val", !/val split/.test(health) || !/eval_test/.test(await js(`fetch('/api/health').then(r=>r.json()).then(h=>h.eval_dir)`)));
 check("empty state invites an action", /Pick a case to begin/.test(health));
@@ -167,6 +188,44 @@ check("case list is populated", caseCount > 100, `${caseCount} cases`);
 console.log("\n2. Load a case and confirm pixels actually render");
 await js(clickText.length ? `(function(){[...document.querySelectorAll('button')].find(e=>e.textContent.includes('BraTS2021_00156')).click();return 'ok';})()` : "");
 await sleep(9000);
+
+console.log("\n2a. 3D twin is the default view");
+// The twin worker meshes brain + tumour off the main thread and logs one
+// [twin] mesh line per case when it finishes - poll for it (up to 40s)
+// rather than a fixed sleep, since mesh time depends on the machine and this
+// is also how the author verifies the surfaceNets perf work: printing the
+// line surfaces the actual timing numbers in the run output below.
+let twinMeshLine = null;
+for (let i = 0; i < 40; i++) {
+  twinMeshLine = consoleMessages.find((m) => /\[twin\] mesh BraTS2021_00156:/.test(m));
+  if (twinMeshLine) break;
+  await sleep(1000);
+}
+check("twin worker meshed the selected case", !!twinMeshLine, twinMeshLine ?? "no [twin] mesh line seen");
+if (twinMeshLine) console.log("     " + twinMeshLine);
+
+const twinPressed = await js(
+  `(function(){const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('3D twin'));return b ? b.getAttribute('aria-pressed') : null;})()`,
+);
+check("3D twin button is pressed by default", twinPressed === "true", String(twinPressed));
+
+const twinCanvasPresent = await js(
+  `(function(){return [...document.querySelectorAll('canvas')].some(c=>{const r=c.getBoundingClientRect();return r.width>100 && r.height>100;});})()`,
+);
+check("a WebGL canvas is present with non-zero size", twinCanvasPresent === true, String(twinCanvasPresent));
+
+// Switch to the flat scan view for the rest of this section and sections
+// 3-8 below, which all assert on canvas pixels in the three-viewport grid -
+// the twin is a single WebGL canvas with none of that structure. The
+// choice persists across case switches (App.tsx keeps twinOpen out of the
+// per-case reset effect), so this one click carries through the rest of
+// the file.
+check("Scan view button switches the active view", (await js(clickText("Scan view"))) === "ok");
+await sleep(3000);
+
+// Section 2's own canvas checks assume the flat scan view (three viewports
+// plus the ribbon) - switched to just above in 2a, since the 3D twin is now
+// what a case click opens by default.
 const canvasCount = await js(`document.querySelectorAll('canvas').length`);
 check("three viewports plus the ribbon are present", canvasCount >= 4, `${canvasCount} canvases`);
 
@@ -287,149 +346,145 @@ console.log("\n9. Console hygiene");
 check("no console errors or uncaught exceptions", consoleErrors.length === 0,
   consoleErrors.slice(0, 3).join(" | "));
 
-console.log("\n10. Structured report panel");
+console.log("\n10. Plain-language report page");
 // Load a known case explicitly rather than relying on whatever section 8
 // left active, so this section's expectations are self-contained. The
 // expected values are read from the REAL API response, never hardcoded -
-// a stale fixture would otherwise let this pass against a panel that
-// silently drifted from what report.py actually produces.
+// a stale fixture would otherwise let this pass against a page that
+// silently drifted from what report.py / reportInterpretation.ts actually
+// produce.
 const REPORT_CASE = "BraTS2021_00156";
 await js(
   `(function(){[...document.querySelectorAll('button')].find(e=>e.textContent.includes(${JSON.stringify(REPORT_CASE)})).click();return 'ok';})()`,
 );
-// Case-detail (which the Report toggle's enabled state depends on) is a
+// Case-detail (which the Report button's enabled state depends on) is a
 // separate fetch from the click itself and a fixed sleep proved racy this
 // deep into the suite, with many prior fetches behind it - poll instead of
 // guessing a sleep long enough for the slowest run.
-let reportToggleResult = "DISABLED";
+let reportButtonResult = "DISABLED";
 for (let i = 0; i < 20; i++) {
-  reportToggleResult = await js(clickText("Report"));
-  if (reportToggleResult === "ok") break;
+  reportButtonResult = await js(clickText("Report"));
+  if (reportButtonResult === "ok") break;
   await sleep(1000);
 }
 const apiReport = await (await fetch(`http://localhost:8000/api/report/${REPORT_CASE}`)).json();
 
 // Tracked separately from section 9's check (which already ran, and so
 // cannot see errors this section's own interactions might introduce) -
-// this is the check that actually covers the report panel's interactions.
-const consoleErrorsBeforePanel = consoleErrors.length;
+// this is the check that actually covers the report page's interactions.
+const consoleErrorsBeforeReport = consoleErrors.length;
 
 check(
-  "Report toggle is present and enabled for a case with a report",
-  reportToggleResult === "ok",
-  reportToggleResult,
+  "Report button is present and enabled for a case with a report",
+  reportButtonResult === "ok",
+  reportButtonResult,
 );
+// The button now navigates (pushState to /report/<caseId>) instead of
+// opening a side panel - give the new page's own effect (its own fetch of
+// the same report, plus render) a moment to settle before reading the DOM.
 await sleep(2500);
 
-const panelRect = await js(
-  `(function(){const p=document.querySelector('[aria-label="Structured report"]');if(!p)return null;const r=p.getBoundingClientRect();return {w:r.width,h:r.height};})()`,
-);
-check(
-  "opening the toggle reveals the panel at measured, non-zero geometry",
-  !!panelRect && panelRect.w > 100 && panelRect.h > 100,
-  JSON.stringify(panelRect),
-);
+const reportPath = await js(`location.pathname`);
+check("Report opens on its own route", reportPath === `/report/${REPORT_CASE}`, reportPath);
 
-const panelText = await js(
-  `(function(){const p=document.querySelector('[aria-label="Structured report"]');return p ? p.innerText : '';})()`,
-);
-check("panel text includes the case id", panelText.includes(REPORT_CASE));
-check(
-  "panel text includes the non-diagnostic disclaimer",
-  panelText.includes("not a diagnostic tool"),
-);
-check("panel text includes the atlas name", panelText.includes(apiReport.anatomy.atlas.name));
-check(
-  "panel text includes the eloquence classification name",
-  panelText.includes(apiReport.eloquence.classification),
-);
+const pageText = await js(bodyText);
+check("report page shows the case id", pageText.includes(REPORT_CASE));
+check("at-a-glance section present", /At a glance/.test(pageText));
 
-// Scoped to the badge element itself (`span.bg-surface-raised` is unique
-// inside the panel - the only other `bg-surface-raised` is the disclaimer
-// `div`), not the whole panel's text: the "Not claimed" section legitimately
-// contains the phrase "ground truth" in its midline-shift caveat, so a
-// panel-wide substring match would false-positive on prose that has nothing
-// to do with which segmentation the report describes. Case-insensitive
-// because the badge carries Tailwind's `uppercase`, which Chrome's innerText
-// reflects (unlike textContent).
-const badgeText = await js(
-  `(function(){const b=document.querySelector('[aria-label="Structured report"] span.bg-surface-raised');return b ? b.innerText : null;})()`,
-);
-check(
-  "badge says Model prediction, never Ground truth, for a prediction-sourced report",
-  !!badgeText && /model prediction/i.test(badgeText) && !/ground truth/i.test(badgeText),
-  JSON.stringify(badgeText),
-);
+// Every category section's title, in the order ReportPage renders them.
+// "Ventricles, white matter and tissue type" is the one optional section
+// (buildSurroundings in reportInterpretation.ts returns null when the
+// report carries no `involvement` block) - allow it to be absent only in
+// that case, so this check still catches a genuinely missing section.
+const CATEGORY_TITLES = [
+  "How big it is",
+  "What it is made of",
+  "Where it is",
+  "Which brain regions it touches",
+  "Its shape",
+  "One mass or several",
+  "Ventricles, white matter and tissue type",
+  "Nearness to 'eloquent' regions",
+  "What this report does not say",
+];
+const missingTitles = CATEGORY_TITLES.filter((title) => {
+  if (title === "Ventricles, white matter and tissue type" && apiReport.involvement === undefined) {
+    return false;
+  }
+  return !pageText.includes(title);
+});
+check("every category section present", missingTitles.length === 0, JSON.stringify(missingTitles));
 
-// The structure table's row order is the SERVER's (frac_of_structure
-// descending) - re-sorted client-side, it would bury exactly the row
-// report.py's own docstring calls out: a structure holding a small share
-// of the tumour but mostly destroyed itself.
-const renderedStructureOrder = await js(
-  `(function(){const t=document.querySelectorAll('[aria-label="Structured report"] table')[0];if(!t)return [];return [...t.querySelectorAll('tbody tr')].map(tr=>tr.querySelector('td').textContent.trim());})()`,
-);
-const expectedStructureOrder = apiReport.anatomy.structures.map((s) => s.structure);
-check(
-  "structure table renders rows in the API's own order",
-  JSON.stringify(renderedStructureOrder) === JSON.stringify(expectedStructureOrder),
-  `${JSON.stringify(renderedStructureOrder)} vs ${JSON.stringify(expectedStructureOrder)}`,
-);
+// formatVolumeMl's exact rendering (see lib/report.ts): mm3 -> mL at one
+// decimal. Read from the real API response rather than reformatted here a
+// second way, so this check catches a real formatting drift instead of
+// agreeing with itself.
+const expectedWtMl = `${(apiReport.burden.volumes.vol_WT_mm3 / 1000).toFixed(1)} mL`;
+check("whole-tumour volume from the API appears on the page", pageText.includes(expectedWtMl), expectedWtMl);
 
 const notClaimedCount = await js(
-  `document.querySelectorAll('[aria-label="Structured report"] li').length`,
+  `document.querySelectorAll('#section-limits ol > li').length`,
 );
 check(
-  "Not Claimed section renders every entry the API returned",
+  "Not Claimed list renders every entry the API returned",
   notClaimedCount === apiReport.not_claimed.length,
   `${notClaimedCount} rendered vs ${apiReport.not_claimed.length} from the API`,
 );
 
-// Close and confirm the viewport underneath is still alive, the same
-// pixel-level discipline the rest of this file uses throughout.
-const closeResult = await js(
-  `(function(){const b=document.querySelector('[aria-label="Close report"]');if(!b)return 'MISSING';b.click();return 'ok';})()`,
-);
-check("close button is present and closes the panel", closeResult === "ok", closeResult);
-await sleep(1000);
-const panelAfterClose = await js(
-  `document.querySelector('[aria-label="Structured report"]') !== null`,
-);
-check("panel is gone from the DOM after closing", panelAfterClose === false);
-const afterCloseFp = await js(`${FINGERPRINT}(0)`);
+// A real safety property, not a rendering check: the limits section is
+// deliberately ALLOWED to use these words (it exists to say what is NOT
+// claimed), and the collapsed "Full technical data" <details> is raw
+// provenance keys rather than prose - strip both, then assert nothing else
+// on the page strays into a grade/prognosis claim this pipeline has no
+// basis for.
+const claimFreeText = await js(`(function(){
+  const clone = document.body.cloneNode(true);
+  const limits = clone.querySelector('#section-limits');
+  if (limits) limits.remove();
+  for (const d of clone.querySelectorAll('details')) d.remove();
+  return clone.innerText;
+})()`);
 check(
-  "viewport still renders non-blank pixels after closing the report panel",
-  afterCloseFp && afterCloseFp.nonBlack > 1000,
-  JSON.stringify(afterCloseFp),
+  "report page makes no grade/prognosis claim outside the limits section",
+  !/\bgrade\b|prognos|malignan|aggressiv/i.test(claimFreeText),
 );
 
-// Reopen for this case, then switch to a different case while the panel is
-// open - the same stale-data hazard section 8 already covers for volumes,
-// here for the report panel. It must never go on describing the case that
-// is no longer on screen.
-await js(clickText("Report"));
-await sleep(2000);
-const OTHER_CASE = "BraTS2021_00412";
-await js(
-  `(function(){[...document.querySelectorAll('button')].find(e=>e.textContent.includes(${JSON.stringify(OTHER_CASE)})).click();return 'ok';})()`,
+const backClickResult = await js(
+  `(function(){const a=[...document.querySelectorAll('a')].find(a=>a.textContent.includes('Back to viewer'));if(!a)return 'MISSING';a.click();return 'ok';})()`,
 );
-await sleep(4000);
-const panelAfterSwitch = await js(
-  `(function(){const p=document.querySelector('[aria-label="Structured report"]');return p ? p.innerText : null;})()`,
-);
-const strandedOnOldCase =
-  panelAfterSwitch !== null &&
-  panelAfterSwitch.includes(REPORT_CASE) &&
-  !panelAfterSwitch.includes(OTHER_CASE);
+check("back-to-viewer link is present and clickable", backClickResult === "ok", backClickResult);
+await sleep(3000);
+
+const afterBackPath = await js(`location.pathname`);
+const afterBackSearch = await js(`location.search`);
 check(
-  "switching cases with the panel open never leaves it showing the previous case's report",
-  !strandedOnOldCase,
-  panelAfterSwitch === null ? "panel closed on switch" : panelAfterSwitch.slice(0, 160),
+  "back link returns to the viewer on the same case",
+  afterBackPath === "/app" && afterBackSearch === `?case=${REPORT_CASE}`,
+  `${afterBackPath}${afterBackSearch}`,
 );
 
+// App remounts fresh on this navigation (see main.tsx's no-router Root) and
+// re-fetches the case list before it can mark this case selected - poll for
+// aria-current rather than a fixed sleep, same rationale as the Report
+// button's enabled state above.
+let caseSelectedAfterBack = false;
+for (let i = 0; i < 10; i++) {
+  caseSelectedAfterBack = await js(
+    `(function(){const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes(${JSON.stringify(REPORT_CASE)}));return b ? b.getAttribute('aria-current') === 'true' : false;})()`,
+  );
+  if (caseSelectedAfterBack) break;
+  await sleep(1000);
+}
+check("the case is selected after coming back", caseSelectedAfterBack === true, String(caseSelectedAfterBack));
+
+// Note: the twin is the active view again here (twinOpen resets to its
+// default on this fresh mount, and the scan-view choice made back in 2a was
+// component state, lost on navigation) - no scan-view pixel checks belong
+// after this point.
 check(
-  "no console errors from the report panel's interactions",
-  consoleErrors.length === consoleErrorsBeforePanel,
-  consoleErrors.slice(consoleErrorsBeforePanel).join(" | "),
+  "no console errors from the report page's interactions",
+  consoleErrors.length === consoleErrorsBeforeReport,
+  consoleErrors.slice(consoleErrorsBeforeReport).join(" | "),
 );
 
 console.log("\n11. Clinical upload page - refusal path");

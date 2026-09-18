@@ -445,7 +445,30 @@ function TwinModel({
     }
   });
 
-  const shellMaterial = useMemo(
+  // Two-pass transparency: rendering the shell with DoubleSide in a single
+  // pass causes near-parallel triangles to overlap additively at glancing
+  // angles, producing bright streaks (the white ray artifacts). Splitting
+  // into a BackSide pass (drawn first, the far wall) and a FrontSide pass
+  // (drawn second, the near wall) eliminates self-overlap because each pass
+  // only draws one face per triangle. polygonOffset on the back pass pushes
+  // it slightly behind, preventing z-fighting at shallow angles.
+  const shellBackMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: 0xe7eaee,
+        transparent: true,
+        opacity: 0.12,
+        roughness: 0.6,
+        metalness: 0,
+        side: THREE.BackSide,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      }),
+    [],
+  );
+  const shellFrontMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
         color: 0xe7eaee,
@@ -453,9 +476,20 @@ function TwinModel({
         opacity: 0.16,
         roughness: 0.6,
         metalness: 0,
-        side: THREE.DoubleSide,
+        side: THREE.FrontSide,
         depthWrite: false,
       }),
+    [],
+  );
+
+  // Clipping plane at the mid-sagittal plane (scene X = 0): when the brain
+  // is separated, this clips the tumour meshes so the cross-section of all
+  // three classes is visible through the gap. The plane normal points +X,
+  // removing the +X half of each tumour mesh, which exposes the interior
+  // from the left-hemisphere gap (the camera's natural viewing angle when
+  // orbiting a separated brain). When not separated, no clipping is applied.
+  const tumorClipPlanes = useMemo(
+    () => [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0)],
     [],
   );
 
@@ -550,9 +584,16 @@ function TwinModel({
       }}
     >
       <group ref={leftRef}>
+        {/* Back-side pass first (far wall), then front-side (near wall). */}
         <mesh
           geometry={geometries.brainLeft}
-          material={shellMaterial}
+          material={shellBackMaterial}
+          renderOrder={0}
+        />
+        <mesh
+          geometry={geometries.brainLeft}
+          material={shellFrontMaterial}
+          renderOrder={1}
           onClick={(e: ThreeEvent<MouseEvent>) => {
             e.stopPropagation();
             onToggleSeparate();
@@ -563,7 +604,13 @@ function TwinModel({
       <group ref={rightRef}>
         <mesh
           geometry={geometries.brainRight}
-          material={shellMaterial}
+          material={shellBackMaterial}
+          renderOrder={0}
+        />
+        <mesh
+          geometry={geometries.brainRight}
+          material={shellFrontMaterial}
+          renderOrder={1}
           onClick={(e: ThreeEvent<MouseEvent>) => {
             e.stopPropagation();
             onToggleSeparate();
@@ -579,14 +626,13 @@ function TwinModel({
         const painted = Boolean(colorsByClass?.[cls]);
         return (
           <mesh
-            // `painted` in the key forces React to remount the material
-            // when painting toggles on/off, rather than mutating an
-            // existing THREE.MeshStandardMaterial's `vertexColors` in
-            // place - `vertexColors` changes the compiled shader
-            // (USE_COLOR), which three.js only picks up on a fresh
-            // material, not via a prop update flagged `needsUpdate`-free by
-            // r3f's usual reconciliation.
-            key={`${cls}-${painted}`}
+            // `painted` and `separated` in the key force React to remount
+            // the material when painting or clipping toggles, rather than
+            // mutating an existing THREE.MeshStandardMaterial in place -
+            // `vertexColors` changes the compiled shader (USE_COLOR) and
+            // `clippingPlanes` is not reactive, so both need a fresh
+            // material via remount.
+            key={`${cls}-${painted}-${separated}`}
             geometry={geometries.tumor[cls]}
             onClick={(e: ThreeEvent<MouseEvent>) => {
               e.stopPropagation();
@@ -600,6 +646,8 @@ function TwinModel({
               metalness={0.05}
               emissive={painted ? PAINTED_EMISSIVE : rgbToThreeColor(CLASS_HEX[cls])}
               emissiveIntensity={selected === cls ? 0.35 : 0.08}
+              side={separated ? THREE.DoubleSide : THREE.FrontSide}
+              clippingPlanes={separated ? tumorClipPlanes : []}
             />
           </mesh>
         );
@@ -716,7 +764,7 @@ export function BrainTwinScene({
         // black (both the E2E harness's pixel assertions and T6's export
         // snapshot read the canvas this way). Costs one extra buffer copy
         // per frame, which is acceptable at this scene's size.
-        gl={{ preserveDrawingBuffer: true }}
+        gl={{ preserveDrawingBuffer: true, localClippingEnabled: true }}
       >
         <ambientLight intensity={0.55} />
         <directionalLight position={[2, 3, 4]} intensity={1.1} />

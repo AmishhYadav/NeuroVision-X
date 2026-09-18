@@ -168,6 +168,7 @@ function handleMeshRequest(request: TwinMeshRequest) {
     normals: Float32Array,
     indices: Uint32Array,
     keepLeft: boolean,
+    maxEdgeLenSq: number,
   ) => {
     const nTris = indices.length / 3;
     const nVerts = positions.length / 3;
@@ -185,6 +186,19 @@ function handleMeshRequest(request: TwinMeshRequest) {
       const c = indices[t * 3 + 2];
       const meanX = (positions[a * 3] + positions[b * 3] + positions[c * 3]) / 3;
       if ((meanX < 0) !== keepLeft) continue;
+      // Skip spike triangles: thin projections in the brain mask
+      // (brainstem remnants, noise) produce long, thin triangles that
+      // appear as a cone artifact. Legitimate Surface-Nets edges are at
+      // most ~2 voxels; the threshold is set at 12 voxels in scene space,
+      // so this only catches genuine spikes (50+ voxels typically).
+      const ax = positions[a * 3], ay = positions[a * 3 + 1], az = positions[a * 3 + 2];
+      const bx = positions[b * 3], by = positions[b * 3 + 1], bz = positions[b * 3 + 2];
+      const cx = positions[c * 3], cy = positions[c * 3 + 1], cz = positions[c * 3 + 2];
+      if (
+        (bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az) > maxEdgeLenSq ||
+        (cx - bx) * (cx - bx) + (cy - by) * (cy - by) + (cz - bz) * (cz - bz) > maxEdgeLenSq ||
+        (ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) + (az - cz) * (az - cz) > maxEdgeLenSq
+      ) continue;
       triCount++;
       if (remap[a] === -1) remap[a] = vertCount++;
       if (remap[b] === -1) remap[b] = vertCount++;
@@ -222,6 +236,16 @@ function handleMeshRequest(request: TwinMeshRequest) {
       const c = indices[t * 3 + 2];
       const meanX = (positions[a * 3] + positions[b * 3] + positions[c * 3]) / 3;
       if ((meanX < 0) !== keepLeft) continue;
+      // Same spike-triangle check as the counting pass above — both passes
+      // must skip exactly the same triangles.
+      const ax = positions[a * 3], ay = positions[a * 3 + 1], az = positions[a * 3 + 2];
+      const bx = positions[b * 3], by = positions[b * 3 + 1], bz = positions[b * 3 + 2];
+      const cx = positions[c * 3], cy = positions[c * 3 + 1], cz = positions[c * 3 + 2];
+      if (
+        (bx - ax) * (bx - ax) + (by - ay) * (by - ay) + (bz - az) * (bz - az) > maxEdgeLenSq ||
+        (cx - bx) * (cx - bx) + (cy - by) * (cy - by) + (cz - bz) * (cz - bz) > maxEdgeLenSq ||
+        (ax - cx) * (ax - cx) + (ay - cy) * (ay - cy) + (az - cz) * (az - cz) > maxEdgeLenSq
+      ) continue;
       outIdx[triOut * 3] = remap[a];
       outIdx[triOut * 3 + 1] = remap[b];
       outIdx[triOut * 3 + 2] = remap[c];
@@ -231,8 +255,14 @@ function handleMeshRequest(request: TwinMeshRequest) {
     return { position: outPos, normal: outNorm, index: outIdx };
   };
 
-  const brainLeft = splitMesh(brainScenePos, brainSceneNorm, brainRaw.indices, true);
-  const brainRight = splitMesh(brainScenePos, brainSceneNorm, brainRaw.indices, false);
+  // 12 voxels in scene space: far longer than any legitimate Surface-Nets
+  // edge (~2 voxels) but well short of the spike artifacts from thin
+  // projections in the brain mask (typically 50+ voxels).
+  const maxEdgeScene = 12 * scale;
+  const maxEdgeLenSq = maxEdgeScene * maxEdgeScene;
+
+  const brainLeft = splitMesh(brainScenePos, brainSceneNorm, brainRaw.indices, true, maxEdgeLenSq);
+  const brainRight = splitMesh(brainScenePos, brainSceneNorm, brainRaw.indices, false, maxEdgeLenSq);
   const tBrainDone = performance.now();
 
   const tumor: TwinMeshResult["tumor"] = {};

@@ -1,22 +1,25 @@
-import type { ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import { X } from "lucide-react";
 import type { LayoutMode } from "./ViewportGrid";
 import type {
   AnatomyStructureRow,
-  EloquenceInvolvedRow,
-  ReportBurden,
-  ReportGeometry,
+  BurdenBlock,
+  ReportProvenance,
   ReportResponse,
 } from "../api";
 import {
   burdenLabel,
   formatBurdenValue,
-  formatDistanceMm,
   formatGeometryValue,
   formatPercent,
   geometryLabel,
   segmentationLabel,
 } from "../lib/report";
+import {
+  type InterpretedFact,
+  type InterpretedSection,
+  interpretReport,
+} from "../lib/reportInterpretation";
 
 export type ReportPanelStatus =
   | "loading"
@@ -47,106 +50,195 @@ interface ReportPanelProps {
   highlightedStructureName?: string | null;
 }
 
-// Rendering order for the burden sub-blocks - deliberately NOT the same order
-// report.py uses for its own Markdown (volumes, fractions, shape,
-// multifocality, laterality, centroid, other): this panel leads with
-// multifocality and laterality ahead of shape, per the panel spec, because
-// those two read as the more clinically load-bearing numbers at a glance.
-const BURDEN_BLOCK_ORDER: (keyof ReportBurden)[] = [
-  "volumes",
-  "fractions",
-  "multifocality",
-  "laterality",
-  "shape",
-  "centroid",
-  "other",
-];
-
-const BURDEN_BLOCK_TITLES: Record<keyof ReportBurden, string> = {
-  volumes: "Volumes",
-  fractions: "Composition",
-  multifocality: "Multifocality",
-  laterality: "Laterality",
-  shape: "Shape",
-  centroid: "Centroid (voxel index)",
-  other: "Other",
-};
-
-// Rendering order and titles for the optional geometry sub-blocks -
-// mirrors report.py's `_GEOMETRY_BLOCKS` / `_GEOMETRY_BLOCK_TITLES` exactly,
-// so a reader sees the same grouping and headings in this panel and in the
-// Markdown report.
-const GEOMETRY_BLOCK_ORDER: (keyof Omit<ReportGeometry, "caveat">)[] = [
-  "shape",
-  "extent",
-  "rim",
-  "other",
-];
-
-const GEOMETRY_BLOCK_TITLES: Record<keyof Omit<ReportGeometry, "caveat">, string> = {
-  shape: "Principal-axis shape",
-  extent: "Bounding extent",
-  rim: "Enhancing rim thickness",
-  other: "Other",
-};
-
-// `BurdenBlock`'s `format` prop is typed against `unknown` (it is also used
-// with `formatBurdenValue`, whose values can be strings/booleans, e.g.
-// `dominant_side_ET`); `geometry` values are always `number | string | boolean
-// | null` per `BurdenBlock` (the wire type, see api.ts), and in practice
-// always numeric or null for every key `_format_geometry_value` recognises -
-// this thin wrapper is the one cast site, rather than loosening
-// `formatGeometryValue`'s own signature to `unknown` and re-deriving the
-// missing-value checks it already gets from `formatNumber`/`formatDistanceMm`.
-function formatGeometryValueUnknown(key: string, value: unknown): string {
-  return formatGeometryValue(key, value as number | null | undefined);
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function CenteredMessage({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 border-t border-surface-seam px-4 py-4">
-      <div className="eyebrow">{title}</div>
-      {children}
+    <div className="flex flex-1 items-center justify-center px-6 text-center">
+      <p className="font-mono text-xs text-text-secondary">{children}</p>
     </div>
   );
 }
 
-/**
- * One labelled sub-block of key/value rows, sorted by key. Generalised
- * (T4.4) to take `label`/`format` functions rather than being hardwired to
- * `burdenLabel`/`formatBurdenValue` - the geometry block (`GeometryBlock`
- * below) reuses this same component with `geometryLabel`/
- * `formatGeometryValue` instead of copy-pasting the markup. Defaults keep
- * every existing call site (the burden blocks) working unchanged.
- *
- * Renders nothing for an empty block, in either use - a sub-block with no
- * keys (e.g. `geometry.other` when nothing landed there) must not print a
- * bare title over an empty list.
- */
-function BurdenBlock({
-  title,
-  block,
-  label = burdenLabel,
-  format = formatBurdenValue,
-}: {
-  title: string;
-  block: Record<string, unknown>;
-  label?: (key: string) => string;
-  format?: (key: string, value: unknown) => string;
-}) {
-  const keys = Object.keys(block).sort();
-  if (keys.length === 0) return null;
+function FactsGrid({ facts }: { facts: InterpretedFact[] }) {
+  if (facts.length === 0) return null;
   return (
-    <div>
-      <div className="mb-1 font-condensed text-[11px] font-semibold tracking-[0.08em] text-text-secondary uppercase">
+    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-2">
+      {facts.map((f, i) => (
+        <Fragment key={i}>
+          <dt className="text-sm text-text-primary">
+            {f.label}
+            {f.note && <div className="mt-0.5 text-xs text-text-dim">{f.note}</div>}
+          </dt>
+          <dd className="tabular text-right font-mono text-sm text-text-primary">{f.value}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+}
+
+function CompositionBar({ fractions }: { fractions: BurdenBlock }) {
+  const segments: { key: string; value: unknown; color: string; label: string }[] = [
+    { key: "edema", value: fractions.frac_edema_of_wt, color: "bg-data-oedema", label: "Swelling" },
+    {
+      key: "enhancing",
+      value: fractions.frac_enhancing_of_wt,
+      color: "bg-data-enhancing",
+      label: "Enhancing",
+    },
+    {
+      key: "necrotic",
+      value: fractions.frac_necrotic_of_wt,
+      color: "bg-data-necrotic",
+      label: "Necrotic",
+    },
+  ];
+  const allFinite = segments.every((s) => typeof s.value === "number" && Number.isFinite(s.value));
+  if (!allFinite) return null;
+
+  return (
+    <div className="mb-4">
+      <div className="flex h-3 w-full overflow-hidden rounded-sm">
+        {segments.map((s) => (
+          <div
+            key={s.key}
+            className={s.color}
+            style={{ width: `${(s.value as number) * 100}%` }}
+            title={`${s.label}: ${formatPercent(s.value as number)}`}
+          />
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+        {segments.map((s) => (
+          <div key={s.key} className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-text-secondary">
+            <span className={`inline-block h-2 w-2 rounded-sm ${s.color}`} />
+            {s.label} {formatPercent(s.value as number)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RegionsFacts({
+  facts,
+  structures,
+  onHoverStructure,
+  highlightedStructureName,
+}: {
+  facts: InterpretedFact[];
+  structures: AnatomyStructureRow[];
+  onHoverStructure?: (name: string | null) => void;
+  highlightedStructureName?: string | null;
+}) {
+  const summaryFacts = facts.slice(0, 2);
+  const rowFacts = facts.slice(2);
+  const n = Math.min(rowFacts.length, structures.length);
+
+  return (
+    <>
+      <FactsGrid facts={summaryFacts} />
+      <div className="mt-4 flex flex-col gap-1">
+        {Array.from({ length: n }, (_, i) => {
+          const fact = rowFacts[i];
+          const structure = structures[i];
+          const rawWidth =
+            typeof structure.frac_of_structure === "number" ? structure.frac_of_structure * 100 : 0;
+          const width = Math.min(100, Math.max(0, rawWidth));
+          const isHighlighted = structure.structure === highlightedStructureName;
+          
+          return (
+            <div 
+              key={i}
+              onMouseEnter={() => onHoverStructure?.(structure.structure)}
+              onMouseLeave={() => onHoverStructure?.(null)}
+              onClick={() => onHoverStructure?.(structure.structure)}
+              className={`-mx-3 cursor-default rounded-sm p-3 transition-colors ${
+                isHighlighted ? "bg-surface-raised" : "hover:bg-surface-raised/50"
+              }`}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm text-text-primary">{fact.label}</span>
+                <span className="font-mono text-xs text-text-dim">
+                  {formatPercent(structure.frac_of_structure)} of region &middot;{" "}
+                  {formatPercent(structure.frac_of_tumour)} of tumour
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-sm bg-surface-seam">
+                <div className="h-1.5 bg-text-secondary" style={{ width: `${width}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function LimitsFacts({ facts }: { facts: InterpretedFact[] }) {
+  if (facts.length === 0) return null;
+  return (
+    <ol className="flex flex-col gap-3">
+      {facts.map((f, i) => (
+        <li key={i} className="text-sm leading-relaxed text-text-primary">
+          <strong>{f.label}</strong>
+          {f.note && <div className="mt-1 text-text-secondary">{f.note}</div>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function SectionFacts({ 
+  section, 
+  report, 
+  onHoverStructure, 
+  highlightedStructureName 
+}: { 
+  section: InterpretedSection; 
+  report: ReportResponse;
+  onHoverStructure?: (name: string | null) => void;
+  highlightedStructureName?: string | null;
+}) {
+  if (section.id === "composition") {
+    return (
+      <>
+        <CompositionBar fractions={report.burden.fractions} />
+        <FactsGrid facts={section.facts} />
+      </>
+    );
+  }
+  if (section.id === "regions") {
+    return (
+      <RegionsFacts 
+        facts={section.facts} 
+        structures={report.anatomy.structures} 
+        onHoverStructure={onHoverStructure}
+        highlightedStructureName={highlightedStructureName}
+      />
+    );
+  }
+  if (section.id === "limits") {
+    return <LimitsFacts facts={section.facts} />;
+  }
+  return <FactsGrid facts={section.facts} />;
+}
+
+function isEmptyBlock(block: BurdenBlock | undefined): block is undefined {
+  return !block || Object.keys(block).length === 0;
+}
+
+function BurdenBlockDl({ title, block }: { title: string; block: BurdenBlock | undefined }) {
+  if (isEmptyBlock(block)) return null;
+  return (
+    <div className="mt-4">
+      <div className="font-condensed text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
         {title}
       </div>
-      <dl className="flex flex-col gap-0.5">
-        {keys.map((key) => (
-          <div key={key} className="flex items-baseline justify-between gap-3">
-            <dt className="font-mono text-xs text-text-secondary">{label(key)}</dt>
-            <dd className="tabular shrink-0 font-mono text-xs text-text-primary">
-              {format(key, block[key])}
+      <dl className="mt-1 flex flex-col gap-0.5">
+        {Object.entries(block).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-3">
+            <dt className="font-mono text-xs text-text-secondary">{burdenLabel(k)}</dt>
+            <dd className="tabular shrink-0 text-right font-mono text-xs text-text-primary">
+              {formatBurdenValue(k, v)}
             </dd>
           </div>
         ))}
@@ -155,111 +247,91 @@ function BurdenBlock({
   );
 }
 
-function StructureTable({
-  rows,
-  onHoverStructure,
-  highlightedStructureName,
-}: {
-  rows: AnatomyStructureRow[];
-  onHoverStructure?: (name: string | null) => void;
-  highlightedStructureName?: string | null;
-}) {
-  if (rows.length === 0) {
-    return <p className="font-mono text-xs text-text-dim">No structures recorded.</p>;
-  }
+function GeometryBlockDl({ title, block }: { title: string; block: BurdenBlock | undefined }) {
+  if (isEmptyBlock(block)) return null;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[520px] border-collapse font-mono text-xs">
-        <thead>
-          <tr className="text-left text-text-dim">
-            <th className="py-1 pr-2 font-normal">Structure</th>
-            <th className="py-1 pr-2 font-normal">Lat.</th>
-            <th className="py-1 pr-2 font-normal">Lobe</th>
-            <th className="py-1 pr-2 font-normal">Eloquence</th>
-            <th className="py-1 pr-2 text-right font-normal">% of tumour</th>
-            <th className="py-1 text-right font-normal">% of structure</th>
-          </tr>
-        </thead>
-        <tbody>
-          {/* Order and truncation are the server's - frac_of_structure
-              descending, top_n rows. Re-sorting here would bury exactly the
-              row report.py's docstring calls out: a structure that holds a
-              small share of the tumour but has itself been mostly destroyed. */}
-          {rows.map((row, i) => (
-            <tr
-              key={`${row.structure}-${i}`}
-              // onClick mirrors onMouseEnter so a touch device (which never
-              // fires hover events) can still light the twin's shell - see
-              // the caller's structureDetail.ts / structureIndexForName
-              // wiring, which turns this name back into an atlas index.
-              onMouseEnter={() => onHoverStructure?.(row.structure)}
-              onMouseLeave={() => onHoverStructure?.(null)}
-              onClick={() => onHoverStructure?.(row.structure)}
-              className={`cursor-default border-t border-surface-seam ${
-                row.structure === highlightedStructureName ? "bg-surface-raised" : ""
-              }`}
-            >
-              <td className="py-1 pr-2 text-text-primary">{row.structure}</td>
-              <td className="py-1 pr-2 text-text-secondary">{row.laterality ?? "—"}</td>
-              <td className="py-1 pr-2 text-text-secondary">{row.lobe ?? "—"}</td>
-              <td className="py-1 pr-2 text-text-secondary">{row.eloquence ?? "—"}</td>
-              <td className="tabular py-1 pr-2 text-right text-text-primary">
-                {formatPercent(row.frac_of_tumour)}
-              </td>
-              <td className="tabular py-1 text-right text-text-primary">
-                {formatPercent(row.frac_of_structure)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="mt-4">
+      <div className="font-condensed text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+        {title}
+      </div>
+      <dl className="mt-1 flex flex-col gap-0.5">
+        {Object.entries(block).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-3">
+            <dt className="font-mono text-xs text-text-secondary">{geometryLabel(k)}</dt>
+            <dd className="tabular shrink-0 text-right font-mono text-xs text-text-primary">
+              {formatGeometryValue(k, typeof v === "number" ? v : null)}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
 
-function InvolvedTable({ rows }: { rows: EloquenceInvolvedRow[] }) {
-  if (rows.length === 0) {
-    return (
-      <p className="font-mono text-xs text-text-dim">
-        No structure from this classification overlaps the reported region.
-      </p>
-    );
+function flattenProvenanceValue(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "object") {
+    return Object.entries(v as Record<string, unknown>)
+      .map(([k, val]) => `${k}=${String(val)}`)
+      .join(", ");
   }
+  return String(v);
+}
+
+function ProvenanceDl({ provenance }: { provenance: ReportProvenance }) {
+  const entries = Object.entries(provenance as unknown as Record<string, unknown>);
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[420px] border-collapse font-mono text-xs">
-        <thead>
-          <tr className="text-left text-text-dim">
-            <th className="py-1 pr-2 font-normal">Structure</th>
-            <th className="py-1 pr-2 font-normal">Lat.</th>
-            <th className="py-1 pr-2 text-right font-normal">% of tumour</th>
-            <th className="py-1 text-right font-normal">% of structure</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={`${row.structure}-${i}`} className="border-t border-surface-seam">
-              <td className="py-1 pr-2 text-text-primary">{row.structure}</td>
-              <td className="py-1 pr-2 text-text-secondary">{row.laterality ?? "—"}</td>
-              <td className="tabular py-1 pr-2 text-right text-text-primary">
-                {formatPercent(row.frac_of_tumour)}
-              </td>
-              <td className="tabular py-1 text-right text-text-primary">
-                {formatPercent(row.frac_of_structure)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="mt-4">
+      <div className="font-condensed text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+        Provenance
+      </div>
+      <dl className="mt-1 flex flex-col gap-0.5">
+        {entries.sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-3">
+            <dt className="shrink-0 font-mono text-xs text-text-secondary">{k}</dt>
+            <dd className="tabular text-right font-mono text-xs break-all text-text-primary">
+              {flattenProvenanceValue(v)}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
 
-function CenteredMessage({ children }: { children: ReactNode }) {
+function TechnicalData({ report }: { report: ReportResponse }) {
   return (
-    <div className="flex flex-1 items-center justify-center px-6 text-center">
-      <p className="font-mono text-xs text-text-secondary">{children}</p>
-    </div>
+    <details className="border-t border-surface-seam px-4 py-4 mb-4">
+      <summary className="eyebrow cursor-pointer select-none">
+        Full technical data
+      </summary>
+      <div className="mt-2 flex flex-col gap-2">
+        <BurdenBlockDl title="Volumes" block={report.burden.volumes} />
+        <BurdenBlockDl title="Fractions" block={report.burden.fractions} />
+        <BurdenBlockDl title="Shape" block={report.burden.shape} />
+        <BurdenBlockDl title="Multifocality" block={report.burden.multifocality} />
+        <BurdenBlockDl title="Laterality" block={report.burden.laterality} />
+        <BurdenBlockDl title="Centroid" block={report.burden.centroid} />
+        <BurdenBlockDl title="Other (burden)" block={report.burden.other} />
+        {report.geometry && (
+          <>
+            <GeometryBlockDl title="Shape (geometric)" block={report.geometry.shape} />
+            <GeometryBlockDl title="Extent" block={report.geometry.extent} />
+            <GeometryBlockDl title="Rim" block={report.geometry.rim} />
+            <GeometryBlockDl title="Other (geometry)" block={report.geometry.other} />
+          </>
+        )}
+        <div className="mt-4">
+          <div className="font-condensed text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
+            Eloquence citation
+          </div>
+          <p className="mt-1 font-mono text-[11px] leading-relaxed text-text-dim">
+            {report.eloquence.citation}
+          </p>
+        </div>
+        <ProvenanceDl provenance={report.provenance} />
+      </div>
+    </details>
   );
 }
 
@@ -274,6 +346,8 @@ export function ReportPanel({
   onHoverStructure,
   highlightedStructureName,
 }: ReportPanelProps) {
+  const interpreted = useMemo(() => (report ? interpretReport(report) : null), [report]);
+
   if (!open) return null;
 
   const widthClass = layout === "single" ? "w-full" : "w-[420px]";
@@ -294,6 +368,9 @@ export function ReportPanel({
       };
     }
   }
+
+  const overview = interpreted?.sections.find((s) => s.id === "overview") ?? null;
+  const remainingSections = interpreted?.sections.filter((s) => s.id !== "overview") ?? [];
 
   return (
     <>
@@ -354,7 +431,7 @@ export function ReportPanel({
             </CenteredMessage>
           )}
 
-          {status === "loaded" && report && segBadge && (
+          {status === "loaded" && report && interpreted && segBadge && (
             <>
               {/* --- Header ------------------------------------------------ */}
               <div className="flex flex-col gap-1.5 px-4 py-4">
@@ -362,10 +439,6 @@ export function ReportPanel({
                   <span className="truncate font-mono text-sm text-text-primary">
                     {report.case_id}
                   </span>
-                  {/* Deliberately no data colour here (index.css: "Data
-                      colours - never used for chrome") - the distinction is
-                      carried by the text itself, not by colour coding that
-                      could be read as matching a tissue-class swatch. */}
                   <span className="shrink-0 rounded-sm border border-surface-seam bg-surface-raised px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-text-primary uppercase">
                     {segBadge.text}
                   </span>
@@ -376,156 +449,73 @@ export function ReportPanel({
               </div>
 
               {/* --- Disclaimer --------------------------------------------- */}
-              <div className="mx-4 mb-1 border border-surface-seam bg-surface-raised px-3 py-2.5">
+              <div className="mx-4 mb-4 border border-surface-seam bg-surface-raised px-3 py-2.5">
                 <p className="font-mono text-xs leading-relaxed text-text-primary">
                   {report.disclaimer}
                 </p>
               </div>
 
-              {/* --- Burden --------------------------------------------------- */}
-              <Section title="Tumour burden profile">
-                <div className="flex flex-col gap-3">
-                  {BURDEN_BLOCK_ORDER.map((blockKey) => (
-                    <BurdenBlock
-                      key={blockKey}
-                      title={BURDEN_BLOCK_TITLES[blockKey]}
-                      block={report.burden[blockKey]}
-                    />
-                  ))}
-                </div>
-              </Section>
-
-              {/* --- Anatomy ---------------------------------------------------- */}
-              <Section title="Anatomical involvement">
-                <p className="font-mono text-xs text-text-secondary">
-                  Atlas: <span className="text-text-primary">{report.anatomy.atlas.name}</span>{" "}
-                  {report.anatomy.atlas.version}
-                </p>
-                <p className="font-mono text-[11px] leading-relaxed text-text-dim">
-                  {report.anatomy.caveat}
-                </p>
-                <p className="font-mono text-[11px] leading-relaxed text-text-dim">
-                  {report.anatomy.coverage_line}
-                </p>
-                <p className="font-mono text-xs text-text-secondary">
-                  Structures involved:{" "}
-                  <span className="text-text-primary">
-                    {report.anatomy.n_structures_involved ?? "—"}
-                  </span>
-                  {" · "}Unlabelled fraction:{" "}
-                  <span className="text-text-primary">
-                    {formatPercent(report.anatomy.frac_unlabelled)}
-                  </span>
-                </p>
-                <StructureTable
-                  rows={report.anatomy.structures}
-                  onHoverStructure={onHoverStructure}
-                  highlightedStructureName={highlightedStructureName}
-                />
-                <p className="font-mono text-[10px] leading-relaxed text-text-dim">
-                  % of tumour is this structure's share of the whole tumour; % of structure is how
-                  much of THIS structure the tumour has overtaken. A lesion can hold a small share
-                  of the tumour while destroying nearly all of one structure — the table is sorted
-                  by the second column.
-                </p>
-              </Section>
-
-              {/* --- Geometry (optional, T4.2/T4.4) ------------------------------ */}
-              {(() => {
-                const geometry = report.geometry;
-                if (!geometry) return null;
-                return (
-                  <Section title="Shape and extent (geometric)">
-                    <p className="font-mono text-[11px] leading-relaxed text-text-dim">
-                      {geometry.caveat}
-                    </p>
-                    <div className="flex flex-col gap-3">
-                      {GEOMETRY_BLOCK_ORDER.map((blockKey) => (
-                        <BurdenBlock
-                          key={blockKey}
-                          title={GEOMETRY_BLOCK_TITLES[blockKey]}
-                          block={geometry[blockKey]}
-                          label={geometryLabel}
-                          format={formatGeometryValueUnknown}
-                        />
-                      ))}
-                    </div>
-                  </Section>
-                );
-              })()}
-
-              {/* --- Eloquence -------------------------------------------------- */}
-              <Section title="Eloquence reference">
-                <p className="font-mono text-xs text-text-secondary">
-                  Classification:{" "}
-                  <span className="text-text-primary">{report.eloquence.classification}</span>
-                </p>
-                <p className="font-mono text-xs text-text-secondary">
-                  Distance to nearest listed structure:{" "}
-                  <span className="text-text-primary">
-                    {formatDistanceMm(report.eloquence.distance_mm)}
-                  </span>
-                </p>
-                <p className="font-mono text-xs text-text-secondary">
-                  Within {formatDistanceMm(report.eloquence.near_eloquent_threshold_mm)} of an
-                  eloquent structure:{" "}
-                  <span className="text-text-primary">
-                    {report.eloquence.near_eloquent ? "yes" : "no"}
-                  </span>
-                </p>
-                <blockquote className="border-l-2 border-surface-seam pl-3 font-mono text-xs leading-relaxed text-text-primary italic">
-                  {report.eloquence.evidence}
-                </blockquote>
-                <p className="font-mono text-[11px] leading-relaxed text-text-dim">
-                  Source: {report.eloquence.citation}
-                </p>
-                <p className="font-mono text-[11px] leading-relaxed text-text-dim">
-                  {report.eloquence.source_owns_claim}
-                </p>
-                <InvolvedTable rows={report.eloquence.involved} />
-                {report.eloquence.coverage_gaps.length > 0 && (
-                  <p className="font-mono text-[11px] leading-relaxed text-text-dim">
-                    Coverage gaps (source terms with no matching structure here):{" "}
-                    {report.eloquence.coverage_gaps.join(", ")}
+              {/* --- Overview --------------------------------------------- */}
+              {overview && (
+                <div className="border-t border-surface-seam px-4 py-6">
+                  <p className="text-sm leading-relaxed text-text-primary">
+                    {overview.headline}
                   </p>
-                )}
-              </Section>
-
-              {/* --- Not claimed -------------------------------------------------- */}
-              <Section title="Not claimed">
-                <ul className="flex flex-col gap-2">
-                  {report.not_claimed.map(([what, why]) => (
-                    <li key={what} className="font-mono text-xs leading-relaxed text-text-secondary">
-                      <span className="text-text-primary">{what}</span>: {why}
-                    </li>
-                  ))}
-                </ul>
-              </Section>
-
-              {/* --- Provenance ----------------------------------------------------- */}
-              <div className="border-t border-surface-seam px-4 py-4">
-                <details>
-                  <summary className="eyebrow cursor-pointer select-none">Provenance</summary>
-                  <dl className="mt-2 flex flex-col gap-0.5">
-                    {Object.entries(report.provenance)
-                      .sort(([a], [b]) => a.localeCompare(b))
-                      .map(([key, value]) => (
-                        <div key={key} className="flex items-baseline justify-between gap-3">
-                          <dt className="shrink-0 font-mono text-xs text-text-secondary">{key}</dt>
-                          <dd className="tabular text-right font-mono text-xs break-all text-text-primary">
-                            {value === null || value === undefined
-                              ? "—"
-                              : typeof value === "object"
-                                ? Object.entries(value as Record<string, unknown>)
-                                    .map(([k, v]) => `${k}=${v}`)
-                                    .join(", ") || "—"
-                                : String(value)}
-                          </dd>
+                  {overview.facts.length > 0 && (
+                    <div className="mt-6 grid grid-cols-2 gap-4">
+                      {overview.facts.map((f, i) => (
+                        <div key={i}>
+                          <div className="font-mono text-[10px] uppercase tracking-wide text-text-secondary">
+                            {f.label}
+                          </div>
+                          <div className="tabular font-condensed text-xl text-text-primary mt-0.5">
+                            {f.value}
+                          </div>
                         </div>
                       ))}
-                  </dl>
-                </details>
-              </div>
+                    </div>
+                  )}
+                  <p className="mt-5 text-xs text-text-secondary leading-relaxed">
+                    {overview.explanation}
+                  </p>
+                </div>
+              )}
+
+              {/* --- Remaining Sections ----------------------------------- */}
+              {remainingSections.map((section) => (
+                <div key={section.id} className="border-t border-surface-seam px-4 py-6">
+                  <h3 className="font-condensed text-xl text-text-primary">
+                    {section.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-text-primary">
+                    {section.headline}
+                  </p>
+                  <p className="mt-2 mb-5 text-xs leading-relaxed text-text-secondary">
+                    {section.explanation}
+                  </p>
+                  
+                  <SectionFacts 
+                    section={section} 
+                    report={report}
+                    onHoverStructure={onHoverStructure}
+                    highlightedStructureName={highlightedStructureName}
+                  />
+
+                  {section.caveat && (
+                    <div className="mt-5 border-l-2 border-surface-seam pl-3 text-xs leading-relaxed text-text-dim">
+                      <div className="font-mono text-[10px] uppercase tracking-wide mb-1">Caveat</div>
+                      {section.caveat.split("\n").map((line, i) => (
+                        <p key={i} className={i > 0 ? "mt-1" : ""}>
+                          {line}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* --- Full technical data ---------------------------------- */}
+              <TechnicalData report={report} />
             </>
           )}
         </div>
