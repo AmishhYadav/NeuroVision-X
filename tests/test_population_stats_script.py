@@ -22,11 +22,8 @@ straight into `neurovision.visualization.figures`.
 
 from __future__ import annotations
 
-import importlib.util
 import logging
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import matplotlib
@@ -39,13 +36,9 @@ import yaml  # noqa: E402
 from omegaconf import OmegaConf  # noqa: E402
 
 from neurovision.utils.io import read_yaml  # noqa: E402
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "population_stats.py"
-_spec = importlib.util.spec_from_file_location("population_stats_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-population_stats_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["population_stats_script"] = population_stats_script
-_spec.loader.exec_module(population_stats_script)
+population_stats_script = load_script("population_stats")
 
 load_localize_runs = population_stats_script.load_localize_runs
 run_population_stats = population_stats_script.run_population_stats

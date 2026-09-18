@@ -29,10 +29,7 @@ target regions.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import numpy as np
 import pandas as pd
@@ -42,13 +39,9 @@ from omegaconf import OmegaConf
 
 from neurovision.metrics.segmentation import classes_to_regions, compute_case_metrics
 from neurovision.utils.io import read_json, write_json, write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "rebuild_predictions.py"
-_spec = importlib.util.spec_from_file_location("rebuild_predictions_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-rebuild_predictions_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["rebuild_predictions_script"] = rebuild_predictions_script
-_spec.loader.exec_module(rebuild_predictions_script)
+rebuild_predictions_script = load_script("rebuild_predictions")
 
 rebuild_predictions = rebuild_predictions_script.rebuild_predictions
 run_rebuild = rebuild_predictions_script.run_rebuild

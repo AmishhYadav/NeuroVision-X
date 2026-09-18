@@ -16,24 +16,17 @@ up and writes what it claims to.
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import pandas as pd
 import pytest
 from omegaconf import OmegaConf
 
 from neurovision.inference.gatekeeper import Thresholds, calibrate_thresholds
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "calibrate_gatekeeper.py"
-_spec = importlib.util.spec_from_file_location("calibrate_gatekeeper_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-calibrate_gatekeeper_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["calibrate_gatekeeper_script"] = calibrate_gatekeeper_script
-_spec.loader.exec_module(calibrate_gatekeeper_script)
+calibrate_gatekeeper_script = load_script("calibrate_gatekeeper")
 
 run_calibration = calibrate_gatekeeper_script.run_calibration
 

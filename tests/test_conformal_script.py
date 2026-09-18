@@ -15,12 +15,9 @@ that does not explicitly set it.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import logging
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
@@ -35,14 +32,11 @@ from neurovision.utils.io import write_json
 # hardcoded absolute path -- so the "reachable at the composed path" test
 # below composes the PROJECT's actual config, not a hand-built stand-in.
 # Same pattern as tests/test_calibrate_script.py's _CONFIG_DIR.
+from tests.script_loader import load_script
+
 _CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "conformal.py"
-_spec = importlib.util.spec_from_file_location("conformal_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-conformal_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["conformal_script"] = conformal_script
-_spec.loader.exec_module(conformal_script)
+conformal_script = load_script("conformal")
 
 extract_curves = conformal_script.extract_curves
 resolve_dirs = conformal_script.resolve_dirs

@@ -6,24 +6,15 @@ driver -- scripts/ is not a package.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
-from pathlib import Path
-from types import ModuleType
-
 import numpy as np
 import pandas as pd
 import pytest
 from omegaconf import OmegaConf
 
 from neurovision.analysis.statistics import paired_bootstrap_ci
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "gate2_localisation.py"
-_spec = importlib.util.spec_from_file_location("gate2_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-gate2_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["gate2_script"] = gate2_script
-_spec.loader.exec_module(gate2_script)
+gate2_script = load_script("gate2_localisation")
 
 build_verdict = gate2_script.build_verdict
 fit_both_arms = gate2_script.fit_both_arms

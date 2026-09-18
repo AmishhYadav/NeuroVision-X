@@ -13,12 +13,9 @@ written under `tmp_path`, mirroring `scripts/preprocess.py`'s output shape.
 
 from __future__ import annotations
 
-import importlib.util
 import logging
-import sys
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import numpy as np
 import pandas as pd
@@ -30,13 +27,9 @@ from torch import Tensor, nn
 from neurovision.models import baseline  # noqa: F401 -- registers "unet3d"
 from neurovision.training.checkpoint import save_checkpoint
 from neurovision.utils.io import write_json, write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "extract_gates.py"
-_spec = importlib.util.spec_from_file_location("extract_gates_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-extract_gates_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["extract_gates_script"] = extract_gates_script
-_spec.loader.exec_module(extract_gates_script)
+extract_gates_script = load_script("extract_gates")
 
 select_cases = extract_gates_script.select_cases
 tumor_centroid = extract_gates_script.tumor_centroid

@@ -13,11 +13,8 @@ real BraTS data, and every test runs well under a second.
 
 from __future__ import annotations
 
-import importlib.util
 import inspect
-import sys
 from pathlib import Path
-from types import ModuleType
 from unittest.mock import patch
 
 import hydra
@@ -27,13 +24,9 @@ import pytest
 from omegaconf import OmegaConf
 
 from neurovision.utils.io import ensure_dir, read_json, write_json, write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "validate_atlas.py"
-_spec = importlib.util.spec_from_file_location("validate_atlas_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-validate_atlas_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["validate_atlas_script"] = validate_atlas_script
-_spec.loader.exec_module(validate_atlas_script)
+validate_atlas_script = load_script("validate_atlas")
 
 CaseSample = validate_atlas_script.CaseSample
 sample_cases = validate_atlas_script.sample_cases

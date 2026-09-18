@@ -16,10 +16,7 @@ the label on disk between two runs.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import numpy as np
 import pandas as pd
@@ -27,13 +24,9 @@ import pytest
 from omegaconf import OmegaConf
 
 from neurovision.utils.io import write_json
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "detection_stats.py"
-_spec = importlib.util.spec_from_file_location("detection_stats_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-detection_stats: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["detection_stats_script"] = detection_stats
-_spec.loader.exec_module(detection_stats)
+detection_stats = load_script("detection_stats")
 
 load_cohort = detection_stats.load_cohort
 entropy_table = detection_stats.entropy_table

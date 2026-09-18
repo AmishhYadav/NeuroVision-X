@@ -10,10 +10,8 @@ seconds.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import hydra
 import numpy as np
@@ -25,14 +23,10 @@ from torch import Tensor, nn
 
 from neurovision.training.checkpoint import save_checkpoint
 from neurovision.utils.io import write_json, write_yaml
+from tests.script_loader import load_script
 
 _CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "score_confidence.py"
-_spec = importlib.util.spec_from_file_location("score_confidence_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-score_confidence_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["score_confidence_script"] = score_confidence_script
-_spec.loader.exec_module(score_confidence_script)
+score_confidence_script = load_script("score_confidence")
 
 _ConfidenceWrapper = score_confidence_script._ConfidenceWrapper
 label_free_sample_mask = score_confidence_script.label_free_sample_mask

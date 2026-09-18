@@ -14,11 +14,8 @@ C statistics themselves (already covered by tests/test_qc_validate.py).
 
 from __future__ import annotations
 
-import importlib.util
 import logging
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
@@ -35,14 +32,11 @@ from neurovision.training.checkpoint import save_checkpoint
 # Real configs/ directory, resolved relative to this file -- so the
 # "reachable at the composed path" test composes the PROJECT's actual
 # config, not a hand-built stand-in.
+from tests.script_loader import load_script
+
 _CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "validate_qc.py"
-_spec = importlib.util.spec_from_file_location("validate_qc_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-validate_qc_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["validate_qc_script"] = validate_qc_script
-_spec.loader.exec_module(validate_qc_script)
+validate_qc_script = load_script("validate_qc")
 
 run_validation = validate_qc_script.run_validation
 resolve_checkpoint = validate_qc_script.resolve_checkpoint

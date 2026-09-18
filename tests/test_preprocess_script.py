@@ -14,17 +14,11 @@ never hardcoded, so this works regardless of where the repo is checked out.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "preprocess.py"
-_spec = importlib.util.spec_from_file_location("preprocess_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-preprocess_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["preprocess_script"] = preprocess_script
-_spec.loader.exec_module(preprocess_script)
+from tests.script_loader import load_script
+
+preprocess_script = load_script("preprocess")
 
 directory_size_bytes = preprocess_script.directory_size_bytes
 format_size = preprocess_script.format_size

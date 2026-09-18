@@ -29,23 +29,16 @@ other assertion in that test matches the spec as written.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import nibabel as nib
 import numpy as np
 import pytest
 
 from neurovision.utils.io import read_json, write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "export_nnunet_dataset.py"
-_spec = importlib.util.spec_from_file_location("export_nnunet_dataset_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-export_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["export_nnunet_dataset_script"] = export_script
-_spec.loader.exec_module(export_script)
+export_script = load_script("export_nnunet_dataset")
 
 build_arg_parser = export_script.build_arg_parser
 run = export_script.run

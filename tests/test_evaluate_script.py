@@ -19,9 +19,7 @@ model.
 from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import numpy as np
 import pandas as pd
@@ -36,13 +34,9 @@ from neurovision.models import baseline  # noqa: F401 -- registers "unet3d"
 from neurovision.models.registry import build_model
 from neurovision.training.checkpoint import save_checkpoint
 from neurovision.utils.io import write_json, write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "evaluate.py"
-_spec = importlib.util.spec_from_file_location("evaluate_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-evaluate_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["evaluate_script"] = evaluate_script
-_spec.loader.exec_module(evaluate_script)
+evaluate_script = load_script("evaluate")
 
 build_eval_dataloader = evaluate_script.build_eval_dataloader
 resolve_checkpoint = evaluate_script.resolve_checkpoint

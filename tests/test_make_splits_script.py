@@ -14,23 +14,16 @@ anything under the real `data/` directory.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
 import pytest
 
 from neurovision.data.dataset import load_splits
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "make_splits.py"
-_spec = importlib.util.spec_from_file_location("make_splits_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-make_splits_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["make_splits_script"] = make_splits_script
-_spec.loader.exec_module(make_splits_script)
+make_splits_script = load_script("make_splits")
 
 discover_case_ids = make_splits_script.discover_case_ids
 run_make_splits = make_splits_script.run_make_splits

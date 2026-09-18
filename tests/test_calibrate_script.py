@@ -13,13 +13,10 @@ directly.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import logging
-import sys
 import zlib
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
@@ -28,12 +25,9 @@ import pytest
 import torch
 from omegaconf import OmegaConf
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "calibrate.py"
-_spec = importlib.util.spec_from_file_location("calibrate_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-calibrate_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["calibrate_script"] = calibrate_script
-_spec.loader.exec_module(calibrate_script)
+from tests.script_loader import load_script
+
+calibrate_script = load_script("calibrate")
 
 resolve_eval_dirs = calibrate_script.resolve_eval_dirs
 resolve_prep_dirs = calibrate_script.resolve_prep_dirs

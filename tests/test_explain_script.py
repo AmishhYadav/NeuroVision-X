@@ -15,10 +15,7 @@ Integrated Gradients/Grad-CAM/faithfulness configs use tiny values
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import numpy as np
 import pandas as pd
@@ -30,13 +27,9 @@ from torch import Tensor, nn
 from neurovision.models import baseline  # noqa: F401 -- registers "unet3d"
 from neurovision.training.checkpoint import save_checkpoint
 from neurovision.utils.io import write_json, write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "explain.py"
-_spec = importlib.util.spec_from_file_location("explain_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-explain_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["explain_script"] = explain_script
-_spec.loader.exec_module(explain_script)
+explain_script = load_script("explain")
 
 select_cases = explain_script.select_cases
 run_explanation = explain_script.run_explanation

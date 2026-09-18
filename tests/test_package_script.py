@@ -13,23 +13,16 @@ this works regardless of where the repo is checked out.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import logging
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 from neurovision.utils.io import write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "package_for_kaggle.py"
-_spec = importlib.util.spec_from_file_location("package_for_kaggle_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-package_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["package_for_kaggle_script"] = package_script
-_spec.loader.exec_module(package_script)
+package_script = load_script("package_for_kaggle")
 
 build_arg_parser = package_script.build_arg_parser
 run = package_script.run

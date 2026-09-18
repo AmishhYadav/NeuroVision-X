@@ -14,10 +14,7 @@ No case here uses real BraTS data: synthetic `.npy` + `meta.json` trees are writ
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
@@ -36,14 +33,10 @@ from neurovision.models.heads.multitask import MultiTaskHead
 from neurovision.models.neurovision import NeuroVisionX
 from neurovision.training.checkpoint import save_checkpoint
 from neurovision.utils.io import write_json, write_yaml
+from tests.script_loader import load_script
 
 _CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "ambiguity_intervention.py"
-_spec = importlib.util.spec_from_file_location("ambiguity_intervention_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-ambiguity_intervention_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["ambiguity_intervention_script"] = ambiguity_intervention_script
-_spec.loader.exec_module(ambiguity_intervention_script)
+ambiguity_intervention_script = load_script("ambiguity_intervention")
 
 run_intervention = ambiguity_intervention_script.run_intervention
 _CONDITIONS = ambiguity_intervention_script._CONDITIONS

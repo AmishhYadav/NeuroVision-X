@@ -17,11 +17,8 @@ test is well under a second.
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
@@ -31,13 +28,9 @@ import yaml
 from omegaconf import OmegaConf
 
 from neurovision.utils.io import ensure_dir, write_json, write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "report.py"
-_spec = importlib.util.spec_from_file_location("report_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-report_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["report_script"] = report_script
-_spec.loader.exec_module(report_script)
+report_script = load_script("report")
 
 load_inputs = report_script.load_inputs
 resolve_cases = report_script.resolve_cases

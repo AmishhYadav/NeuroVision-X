@@ -19,10 +19,7 @@ production 10000 except the reproducibility test, which needs a nonzero
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import pandas as pd
@@ -30,13 +27,9 @@ import pytest
 from omegaconf import OmegaConf
 
 from neurovision.reporting.report import Provenance, build_report, write_report
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "report_agreement.py"
-_spec = importlib.util.spec_from_file_location("report_agreement_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-report_agreement_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["report_agreement_script"] = report_agreement_script
-_spec.loader.exec_module(report_agreement_script)
+report_agreement_script = load_script("report_agreement")
 
 resolve_pred_dirs = report_agreement_script.resolve_pred_dirs
 summarize = report_agreement_script.summarize

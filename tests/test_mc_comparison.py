@@ -2,21 +2,15 @@
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import numpy as np
 import pandas as pd
 from omegaconf import OmegaConf
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "mc_comparison.py"
-_spec = importlib.util.spec_from_file_location("mc_comparison_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-mc_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["mc_comparison_script"] = mc_script
-_spec.loader.exec_module(mc_script)
+from tests.script_loader import load_script
+
+mc_script = load_script("mc_comparison")
 
 load_mc_map = mc_script.load_mc_map
 compare = mc_script.compare

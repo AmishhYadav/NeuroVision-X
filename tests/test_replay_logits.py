@@ -21,9 +21,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import logging
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import numpy as np
 import pandas as pd
@@ -32,13 +30,9 @@ from omegaconf import OmegaConf
 
 from neurovision.analysis.replay import per_case_replay
 from neurovision.utils.io import write_json
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "replay_logits.py"
-_spec = importlib.util.spec_from_file_location("replay_logits_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-replay_logits_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["replay_logits_script"] = replay_logits_script
-_spec.loader.exec_module(replay_logits_script)
+replay_logits_script = load_script("replay_logits")
 
 run_replay = replay_logits_script.run_replay
 _resolve_out_dir = replay_logits_script._resolve_out_dir

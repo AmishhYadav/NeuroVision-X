@@ -14,12 +14,9 @@ CPU only, and the whole file runs in a few seconds.
 
 from __future__ import annotations
 
-import importlib.util
 import inspect
-import sys
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
@@ -38,14 +35,10 @@ from neurovision.models.heads.multitask import MultiTaskHead
 from neurovision.models.neurovision import NeuroVisionX
 from neurovision.training.checkpoint import save_checkpoint
 from neurovision.utils.io import write_json, write_yaml
+from tests.script_loader import load_script
 
 _CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "extract_ambiguity.py"
-_spec = importlib.util.spec_from_file_location("extract_ambiguity_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-extract_ambiguity_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["extract_ambiguity_script"] = extract_ambiguity_script
-_spec.loader.exec_module(extract_ambiguity_script)
+extract_ambiguity_script = load_script("extract_ambiguity")
 
 _AmbiguityAtLevel = extract_ambiguity_script._AmbiguityAtLevel
 summarize_case_ambiguity = extract_ambiguity_script.summarize_case_ambiguity

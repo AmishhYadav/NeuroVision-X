@@ -13,11 +13,8 @@ tree.
 
 from __future__ import annotations
 
-import importlib.util
 import logging
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
@@ -26,13 +23,9 @@ import pytest
 
 from neurovision.anatomy.burden import CaseGeometry, burden_profile
 from neurovision.utils.io import ensure_dir, read_yaml, write_json, write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "burden.py"
-_spec = importlib.util.spec_from_file_location("burden_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-burden_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["burden_script"] = burden_script
-_spec.loader.exec_module(burden_script)
+burden_script = load_script("burden")
 
 BurdenSource = burden_script.BurdenSource
 resolve_sources = burden_script.resolve_sources

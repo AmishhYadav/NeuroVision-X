@@ -11,10 +11,7 @@ are tag-prefixed so a train/held-out pair can safely share one prep_dir.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType
 
 import hydra
 import numpy as np
@@ -30,14 +27,11 @@ from neurovision.data.transforms import REGION_NAMES
 # "reachable at the composed path" test composes the PROJECT's actual
 # config, not a hand-built stand-in. Same pattern as
 # tests/test_conformal_script.py's _CONFIG_DIR.
+from tests.script_loader import load_script
+
 _CONFIG_DIR = str(Path(__file__).resolve().parents[1] / "configs")
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "train_qc.py"
-_spec = importlib.util.spec_from_file_location("train_qc_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-train_qc_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["train_qc_script"] = train_qc_script
-_spec.loader.exec_module(train_qc_script)
+train_qc_script = load_script("train_qc")
 
 QCPairsDataset = train_qc_script.QCPairsDataset
 CaseGroupedSampler = train_qc_script.CaseGroupedSampler

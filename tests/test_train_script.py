@@ -15,11 +15,9 @@ regardless of where the repo is checked out.
 
 from __future__ import annotations
 
-import importlib.util
 import logging
 import sys
 from pathlib import Path
-from types import ModuleType
 
 import numpy as np
 import torch
@@ -27,13 +25,9 @@ from omegaconf import OmegaConf
 
 from neurovision.training.checkpoint import LAST_CHECKPOINT_NAME, save_checkpoint
 from neurovision.utils.io import write_yaml
+from tests.script_loader import load_script
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "train.py"
-_spec = importlib.util.spec_from_file_location("train_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-train_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["train_script"] = train_script
-_spec.loader.exec_module(train_script)
+train_script = load_script("train")
 
 build_dataloaders = train_script.build_dataloaders
 init_wandb = train_script.init_wandb

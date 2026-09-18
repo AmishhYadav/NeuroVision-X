@@ -19,19 +19,14 @@ in-flight ablation configs) may not exist when this script runs.
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 
-_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "run_ablation_grid.py"
-_spec = importlib.util.spec_from_file_location("run_ablation_grid_script", _SCRIPT_PATH)
-assert _spec is not None and _spec.loader is not None
-grid_script: ModuleType = importlib.util.module_from_spec(_spec)
-sys.modules["run_ablation_grid_script"] = grid_script
-_spec.loader.exec_module(grid_script)
+from tests.script_loader import load_script
+
+grid_script = load_script("run_ablation_grid")
 
 GRID_VARIANTS = grid_script.GRID_VARIANTS
 CostEstimate = grid_script.CostEstimate
