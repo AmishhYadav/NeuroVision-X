@@ -16,6 +16,11 @@ import pytest
 
 from neurovision.anatomy.shape_descriptors import shape_profile_keys
 from neurovision.reporting import report as report_module
+from neurovision.reporting.molecular import (
+    empty_molecular_block,
+    load_molecular_knowledge,
+    merge_pathology,
+)
 from neurovision.reporting.report import (
     DISCLAIMER,
     INVOLVEMENT_CAVEAT,
@@ -29,6 +34,8 @@ from neurovision.reporting.report import (
     render_markdown,
     write_report,
 )
+
+_MOLECULAR_KNOWLEDGE_PATH = Path(__file__).resolve().parents[1] / "knowledge/molecular_markers.yaml"
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -260,11 +267,11 @@ def test_disclaimer_present_and_nonempty_in_dict_and_markdown() -> None:
 
 
 def test_not_claimed_covers_six_items_with_reasons() -> None:
-    # Was 6, then 7 -- now 8. The optional `geometry` block (T4.2) requires
-    # appending a "tumour growth pattern or invasiveness" entry to
-    # NOT_CLAIMED (see the geometry tests below), which necessarily moves
-    # this count again, same reasoning as the mass-effect entry before it.
-    assert len(NOT_CLAIMED) == 8
+    # Was 6, then 7, then 8 -- now 9. The optional `molecular` block (T5.3)
+    # requires appending "a molecular subtype inferred from imaging" to
+    # NOT_CLAIMED (see the molecular tests below), which necessarily moves
+    # this count again, same reasoning as the geometry entry before it.
+    assert len(NOT_CLAIMED) == 9
     report = _build()
     assert report["not_claimed"] == NOT_CLAIMED
     for what, why in NOT_CLAIMED:
@@ -938,3 +945,143 @@ def test_report_version_still_one() -> None:
     assert REPORT_VERSION == 1
     report = _build()
     assert report["report_version"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# 20. Optional `molecular` block (T5.3)
+# --------------------------------------------------------------------------- #
+
+
+def _molecular() -> dict[str, object]:
+    """A representative `empty_molecular_block` output, nothing entered yet."""
+    knowledge = load_molecular_knowledge(_MOLECULAR_KNOWLEDGE_PATH)
+    return empty_molecular_block(knowledge)
+
+
+def _molecular_merged() -> dict[str, object]:
+    """The same block with IDH-wildtype/glioblastoma-pattern pathology entered."""
+    knowledge = load_molecular_knowledge(_MOLECULAR_KNOWLEDGE_PATH)
+    block = empty_molecular_block(knowledge)
+    merged = merge_pathology(
+        block, {"IDH": "Wildtype", "histology": "Glioblastoma pattern"}, knowledge
+    )
+    assert merged["cns5"]["name"] == "Glioblastoma, IDH-wildtype"
+    return merged
+
+
+def test_molecular_none_by_default_leaves_report_unchanged() -> None:
+    report = _build()
+    assert "molecular" not in report
+    assert list(report.keys()) == [
+        "report_version",
+        "case_id",
+        "generated_utc",
+        "disclaimer",
+        "not_claimed",
+        "burden",
+        "anatomy",
+        "eloquence",
+        "provenance",
+    ]
+
+
+@pytest.mark.parametrize(
+    "extra_kwargs",
+    [
+        {},
+        {"involvement": _involvement()},
+        {"geometry": _geometry()},
+        {"involvement": _involvement(), "geometry": _geometry()},
+    ],
+    ids=["none", "involvement_only", "geometry_only", "both"],
+)
+def test_molecular_key_positioned_after_geometry_involvement_anatomy(
+    extra_kwargs: dict[str, object],
+) -> None:
+    report = _build(molecular=_molecular(), **extra_kwargs)
+    keys = list(report.keys())
+    assert keys.index("anatomy") < keys.index("molecular") < keys.index("eloquence")
+    if "involvement" in report:
+        assert keys.index("involvement") < keys.index("molecular")
+    if "geometry" in report:
+        assert keys.index("geometry") < keys.index("molecular")
+
+
+def test_build_molecular_block_raises_on_missing_cns5() -> None:
+    block = _molecular()
+    del block["cns5"]
+    with pytest.raises(ValueError, match="cns5"):
+        _build(molecular=block)
+
+
+def test_forbidden_substrings_only_appear_inside_not_claimed_with_molecular_markdown() -> None:
+    report = _build(molecular=_molecular_merged())
+    md = render_markdown(report)
+    not_claimed_text, rest = _not_claimed_text_from_markdown(md)
+
+    assert _scan_for_forbidden(not_claimed_text)
+    hits = _scan_for_forbidden(rest)
+    assert hits == [], f"forbidden words leaked outside not_claimed: {hits}"
+
+
+def test_forbidden_substrings_only_appear_inside_not_claimed_with_molecular_json() -> None:
+    report = _build(molecular=_molecular_merged())
+    safe = json_safe(report)
+    rest = {k: v for k, v in safe.items() if k != "not_claimed"}
+    text = json.dumps(rest)
+    hits = _scan_for_forbidden(text)
+    assert hits == [], f"forbidden words leaked outside not_claimed: {hits}"
+
+
+def test_molecular_markdown_renders_marker_table_and_idh_unavailable() -> None:
+    report = _build(molecular=_molecular())
+    md = render_markdown(report)
+    assert "## Confirmed pathology (entered by user)" in md
+    assert "not available — model not trained" in md
+
+
+def test_molecular_markdown_merged_variant_shows_cns5_name_and_source() -> None:
+    report = _build(molecular=_molecular_merged())
+    md = render_markdown(report)
+    assert "Glioblastoma, IDH-wildtype" in md
+    assert "from entered pathology" in md
+
+
+def test_molecular_markdown_empty_variant_shows_not_determined_and_no_name() -> None:
+    report = _build(molecular=_molecular())
+    md = render_markdown(report)
+    assert "not determined" in md
+    assert "Glioblastoma" not in md
+
+
+def test_molecular_markdown_absent_when_not_given() -> None:
+    report = _build()
+    md = render_markdown(report)
+    assert "## Confirmed pathology (entered by user)" not in md
+
+
+def test_molecular_block_json_round_trips_strict() -> None:
+    report = _build(molecular=_molecular_merged())
+    safe = json_safe(report)
+    text = json.dumps(safe, allow_nan=False)
+    restored = json.loads(text)
+    assert restored["molecular"]["cns5"]["name"] == "Glioblastoma, IDH-wildtype"
+    assert (
+        restored["molecular"]["markers"]["IDH"]["ai_estimate"]["status"]
+        == "not available — model not trained"
+    )
+
+
+def test_new_not_claimed_entry_about_molecular_subtype_renders() -> None:
+    report = _build()
+    md = render_markdown(report)
+    assert "a molecular subtype inferred from imaging" in md
+    not_claimed_text, _ = _not_claimed_text_from_markdown(md)
+    assert "a molecular subtype inferred from imaging" in not_claimed_text
+
+    what_values = [what for what, _ in NOT_CLAIMED]
+    assert "a molecular subtype inferred from imaging" in what_values
+
+
+def test_not_claimed_count_is_nine_after_molecular_block() -> None:
+    assert len(NOT_CLAIMED) == 9

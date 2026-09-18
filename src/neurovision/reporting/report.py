@@ -42,6 +42,7 @@ reasoning as `neurovision.visualization.tables`; see
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -110,15 +111,16 @@ _SOURCE_OWNS_CLAIM: str = (
     "claim about this patient's anatomy or function."
 )
 
-# (what we refuse to say, why) -- eight items. Six are one per row of
-# `docs/research/interpretable_pipeline_plan.md` section 2's "Explicitly NOT
-# in scope" table, minus the diagnostic-use item (that is what DISCLAIMER
-# covers); a seventh (mass effect) and an eighth (growth pattern /
-# invasiveness) were appended later, alongside the optional `involvement` and
-# `geometry` blocks respectively, for the same reason -- each new geometric or
-# referential claim this module can render needs its own explicit refusal of
-# the clinical claim a reader might mistake it for. Every reason below is
-# allowed to use the forbidden vocabulary -- this IS the block the
+# (what we refuse to say, why) -- eight items, now nine. Six are one per row
+# of `docs/research/interpretable_pipeline_plan.md` section 2's "Explicitly
+# NOT in scope" table, minus the diagnostic-use item (that is what DISCLAIMER
+# covers); a seventh (mass effect), an eighth (growth pattern / invasiveness),
+# and a ninth (a molecular subtype inferred from imaging) were appended
+# later, alongside the optional `involvement`, `geometry`, and `molecular`
+# blocks respectively, for the same reason -- each new geometric, referential,
+# or entered-pathology claim this module can render needs its own explicit
+# refusal of the clinical claim a reader might mistake it for. Every reason
+# below is allowed to use the forbidden vocabulary -- this IS the block the
 # forbidden-substring scan excludes -- and nowhere else in this module or its
 # rendered output may.
 NOT_CLAIMED: tuple[tuple[str, str], ...] = (
@@ -163,6 +165,13 @@ NOT_CLAIMED: tuple[tuple[str, str], ...] = (
         "tumour growth pattern or invasiveness",
         "A single time point on a segmented mask gives shape, not change over time, and "
         "infiltration beyond the visible outline is not something a segmentation mask can show.",
+    ),
+    (
+        "a molecular subtype inferred from imaging",
+        "No imaging-to-molecular model is trained or validated in this project; every "
+        "molecular value in this report is entered by a user from a pathology result and "
+        'labelled as such, and the IDH slot reads "not available" until such a model exists '
+        "and passes its own pre-registered gate.",
     ),
 )
 
@@ -492,6 +501,43 @@ def _build_geometry_block(geometry: Mapping[str, object]) -> dict[str, object]:
 
 
 # --------------------------------------------------------------------------- #
+# Molecular pathology (optional block; see `_build_molecular_block`)
+# --------------------------------------------------------------------------- #
+
+_MOLECULAR_REQUIRED_KEYS: tuple[str, ...] = ("caveat", "markers", "histology", "cns5")
+
+
+def _build_molecular_block(molecular: Mapping[str, object]) -> dict[str, object]:
+    """Copies the caller-supplied molecular pathology block through unchanged.
+
+    Unlike `burden`/`involvement`/`geometry`, this block arrives already
+    structured -- `neurovision.reporting.molecular.empty_molecular_block` /
+    `.merge_pathology` own its schema (marker vocabulary, the CNS5 lookup,
+    every string a reader sees). Regrouping it here the way `_group_burden`
+    etc. do would create a second, competing schema for the same data, so
+    this function does nothing but check the four keys the rest of this
+    module (and `render_markdown`) depend on, then hand back an independent
+    copy so a caller mutating their own `molecular` mapping afterwards cannot
+    reach back into an already-built report.
+
+    Args:
+        molecular: A `neurovision.reporting.molecular.empty_molecular_block`
+            or `.merge_pathology` output (or an equivalent mapping).
+
+    Returns:
+        A deep copy of `molecular`.
+
+    Raises:
+        ValueError: If `molecular` is missing `"caveat"`, `"markers"`,
+            `"histology"`, or `"cns5"`.
+    """
+    for key in _MOLECULAR_REQUIRED_KEYS:
+        if key not in molecular:
+            raise ValueError(f"build_report: molecular block is missing required key '{key}'.")
+    return copy.deepcopy(dict(molecular))
+
+
+# --------------------------------------------------------------------------- #
 # Eloquence proximity (purely geometric, from distance + threshold -- no
 # verdict is derived from these; the classification NAME is a caller-supplied
 # string identifying the published source, see `classification_name` below)
@@ -541,6 +587,7 @@ def build_report(
     involvement: Mapping[str, object] | None = None,
     involvement_caveats: Sequence[str] = (),
     geometry: Mapping[str, object] | None = None,
+    molecular: Mapping[str, object] | None = None,
 ) -> dict:
     """Assembles one case's report dict from already-computed artifacts.
 
@@ -591,19 +638,34 @@ def build_report(
             before this parameter existed. When given, a `"geometry"` block
             is inserted immediately after `"involvement"` (if present) or
             after `"anatomy"` (if not), and before `"eloquence"` either way.
+        molecular: An optional `neurovision.reporting.molecular.
+            empty_molecular_block` / `.merge_pathology` output (or an
+            equivalent mapping carrying `"caveat"`, `"markers"`,
+            `"histology"`, and `"cns5"`). When `None` (the default), the
+            returned dict has no `"molecular"` key at all -- byte-for-byte
+            the same shape this function produced before this parameter
+            existed. When given, a `"molecular"` block is inserted
+            immediately after `"geometry"` (if present), else `"involvement"`
+            (if present), else `"anatomy"`, and before `"eloquence"` either
+            way. Stored through unchanged (see `_build_molecular_block`) --
+            this module does not import `neurovision.reporting.molecular`,
+            same no-deep-learning-stack reasoning as `involvement`/`geometry`.
 
     Returns:
         A plain dict, field order `report_version, case_id, generated_utc,
         disclaimer, not_claimed, burden, anatomy, [involvement,] [geometry,]
-        eloquence, provenance` -- `involvement` present only when the
-        `involvement` argument is given, `geometry` present only when the
-        `geometry` argument is given. Values may still include numpy-like
-        scalars and non-finite floats pulled from `anatomy_table` / `burden`
-        -- pass the result through `json_safe` before serialising.
+        [molecular,] eloquence, provenance` -- `involvement` present only
+        when the `involvement` argument is given, `geometry` present only
+        when the `geometry` argument is given, `molecular` present only when
+        the `molecular` argument is given. Values may still include
+        numpy-like scalars and non-finite floats pulled from `anatomy_table`
+        / `burden` -- pass the result through `json_safe` before serialising.
 
     Raises:
         ValueError: If `case_id`, `evidence`, `citation`,
-            `classification_name`, or `coverage_line` is empty.
+            `classification_name`, or `coverage_line` is empty, or if
+            `molecular` is given but missing a required key (see
+            `_build_molecular_block`).
     """
     if not case_id:
         raise ValueError("build_report: case_id must be non-empty.")
@@ -680,6 +742,8 @@ def build_report(
         result["involvement"] = _build_involvement_block(involvement, involvement_caveats)
     if geometry is not None:
         result["geometry"] = _build_geometry_block(geometry)
+    if molecular is not None:
+        result["molecular"] = _build_molecular_block(molecular)
     result["eloquence"] = eloquence_block
     result["provenance"] = asdict(provenance)
     return result
@@ -849,8 +913,11 @@ def render_markdown(report: Mapping) -> str:
     when `report["involvement"]` is present -- absent entirely otherwise),
     an optional "Shape and Extent (Geometric)" section (shape/extent/rim,
     rendered only when `report["geometry"]` is present -- absent entirely
-    otherwise), the eloquence reference (verbatim evidence as a blockquote,
-    plus citation), what this report refuses to claim, and provenance last.
+    otherwise), an optional "Confirmed pathology (entered by user)" section
+    (a marker table plus the CNS5 integrated-classification line, rendered
+    only when `report["molecular"]` is present -- absent entirely otherwise),
+    the eloquence reference (verbatim evidence as a blockquote, plus
+    citation), what this report refuses to claim, and provenance last.
 
     The "Involvement Profile" heading is deliberately distinct from the
     "Anatomical Involvement" heading above it: the latter is the
@@ -976,6 +1043,65 @@ def render_markdown(report: Mapping) -> str:
             for key in sorted(block):
                 lines.append(f"- **{key}**: {_format_geometry_value(key, block[key])}")
             lines.append("")
+
+    # --- Molecular pathology (optional) ----------------------------------- #
+    molecular = report.get("molecular")
+    if molecular is not None:
+        lines.append("## Confirmed pathology (entered by user)")
+        lines.append("")
+        lines.append(str(molecular["caveat"]))
+        lines.append("")
+        scope = molecular.get("scope")
+        if scope:
+            lines.append(str(scope))
+            lines.append("")
+        headers = ["Marker", "Confirmed pathology (entered)", "AI estimate"]
+        rows = []
+        for entry in molecular["markers"].values():
+            ai_estimate = entry.get("ai_estimate")
+            # `None` (no model was ever trained for this marker) -> "n/a"
+            # dash; a `{"status": ...}` dict (today, only IDH's fixed
+            # unavailability string -- see `neurovision.reporting.molecular`)
+            # -> that status verbatim; anything else falls back to the
+            # generic cell renderer rather than being dropped silently.
+            if ai_estimate is None:
+                ai_cell = "—"
+            elif isinstance(ai_estimate, Mapping) and "status" in ai_estimate:
+                ai_cell = str(ai_estimate["status"])
+            else:
+                ai_cell = _cell(json_safe(ai_estimate))
+            rows.append(
+                [
+                    _cell(entry.get("label")),
+                    _cell(entry.get("confirmed_pathology")),
+                    ai_cell,
+                ]
+            )
+        lines.append(_pipe_table(headers, rows))
+        lines.append("")
+        lines.append(
+            "Histological pattern (entered): "
+            f"{_cell(molecular['histology'].get('confirmed_pathology'))}"
+        )
+        lines.append("")
+        cns5 = molecular["cns5"]
+        if cns5.get("name") is not None:
+            source = cns5.get("source")
+            # Use the block's own `source` string when it is a non-empty
+            # string, rather than hardcoding "from entered pathology" --
+            # this line quotes whatever `neurovision.reporting.molecular`
+            # actually put there instead of assuming it never changes.
+            source_text = source if isinstance(source, str) and source else "from entered pathology"
+            lines.append(f"**CNS5 integrated classification:** {cns5['name']} — {source_text}")
+        else:
+            line = "CNS5 integrated classification: not determined"
+            requires = cns5.get("requires") or []
+            if requires:
+                line += f" (needs: {', '.join(str(r) for r in requires)})"
+            lines.append(line)
+        lines.append("")
+        lines.append(str(molecular["citation"]))
+        lines.append("")
 
     # --- Eloquence ------------------------------------------------------- #
     eloquence = report["eloquence"]
