@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from neurovision.anatomy.shape_descriptors import shape_profile_keys
 from neurovision.reporting import report as report_module
 from neurovision.reporting.report import (
     DISCLAIMER,
@@ -21,6 +22,7 @@ from neurovision.reporting.report import (
     MASS_EFFECT_CAVEAT,
     NOT_CLAIMED,
     NOT_VASARI,
+    REPORT_VERSION,
     Provenance,
     build_report,
     json_safe,
@@ -258,12 +260,11 @@ def test_disclaimer_present_and_nonempty_in_dict_and_markdown() -> None:
 
 
 def test_not_claimed_covers_six_items_with_reasons() -> None:
-    # Was 6 -- now 7. The new module keyword task requires appending a
-    # mass-effect/midline-shift/ventricular-compression entry to NOT_CLAIMED
-    # (see the involvement tests below), which necessarily moves this count.
-    # This is the one line in the existing suite that has to change as a
-    # direct consequence of that required addition.
-    assert len(NOT_CLAIMED) == 7
+    # Was 6, then 7 -- now 8. The optional `geometry` block (T4.2) requires
+    # appending a "tumour growth pattern or invasiveness" entry to
+    # NOT_CLAIMED (see the geometry tests below), which necessarily moves
+    # this count again, same reasoning as the mass-effect entry before it.
+    assert len(NOT_CLAIMED) == 8
     report = _build()
     assert report["not_claimed"] == NOT_CLAIMED
     for what, why in NOT_CLAIMED:
@@ -690,6 +691,7 @@ def _involvement_caveats() -> list[str]:
 def test_involvement_none_by_default_leaves_dict_and_key_order_unchanged() -> None:
     report = _build()
     assert "involvement" not in report
+    assert "geometry" not in report
     assert list(report.keys()) == [
         "report_version",
         "case_id",
@@ -802,3 +804,137 @@ def test_involvement_block_json_round_trips_with_nan() -> None:
     restored = json.loads(text)
     assert restored["involvement"]["groups"]["deep_wm_frac_of_group"] is None
     assert restored["involvement"]["epicentre"]["epicentre_structure"] == "Precentral_L"
+
+
+# --------------------------------------------------------------------------- #
+# 19. Optional `geometry` block (T4.2)
+# --------------------------------------------------------------------------- #
+
+
+def _geometry() -> dict[str, object]:
+    """A representative `shape_profile` output -- every key `shape_profile_keys()` names.
+
+    Built generically from the key name pattern so it stays correct if
+    `shape_descriptors.py` ever adds another region to `REGION_ORDER`,
+    with one NaN (`flatness_TC`) to exercise the missing-value path.
+    """
+    values: dict[str, object] = {}
+    for key in shape_profile_keys():
+        if key.startswith("elongation_"):
+            values[key] = 1.8
+        elif key.startswith("flatness_"):
+            values[key] = 0.6
+        elif key.startswith("extent_"):
+            values[key] = 42.5
+        elif key.startswith("principal_axis_"):
+            values[key] = 0.577
+        elif key.startswith("n_voxels_"):
+            values[key] = 1200.0
+        elif key == "rim_thickness_ET_has_core":
+            values[key] = 1.0
+        elif key.startswith("rim_thickness_"):
+            values[key] = 3.2
+        else:  # pragma: no cover -- no key falls here today, kept as a safety net
+            values[key] = 0.0
+    values["flatness_TC"] = float("nan")
+    return values
+
+
+def test_geometry_none_by_default_leaves_report_unchanged() -> None:
+    report = _build()
+    assert "geometry" not in report
+
+
+def test_geometry_key_positioned_after_anatomy_before_eloquence() -> None:
+    report = _build(geometry=_geometry())
+    keys = list(report.keys())
+    assert keys.index("anatomy") < keys.index("geometry") < keys.index("eloquence")
+    assert "involvement" not in report
+
+
+def test_geometry_key_positioned_after_involvement_before_eloquence() -> None:
+    report = _build(involvement=_involvement(), geometry=_geometry())
+    keys = list(report.keys())
+    assert keys.index("involvement") < keys.index("geometry") < keys.index("eloquence")
+
+
+def test_geometry_block_regroups_with_no_field_lost() -> None:
+    geometry = _geometry()
+    report = _build(geometry=geometry)
+    block = report["geometry"]
+
+    leaf_keys: set[str] = set()
+    for sub_block_name in ("shape", "extent", "rim", "other"):
+        leaf_keys.update(block[sub_block_name].keys())
+    assert leaf_keys == set(geometry.keys())
+
+    assert block["shape"]["elongation_ET"] == 1.8
+    assert math.isnan(block["shape"]["flatness_TC"])
+    assert block["extent"]["extent_WT_i_mm"] == 42.5
+    assert block["rim"]["rim_thickness_ET_median_mm"] == 3.2
+    assert block["rim"]["rim_thickness_ET_has_core"] == 1.0
+    assert block["other"]["n_voxels_WT"] == 1200.0
+
+
+def test_geometry_caveat_present_and_nonempty() -> None:
+    report = _build(geometry=_geometry())
+    assert report["geometry"]["caveat"].strip()
+    md = render_markdown(report)
+    assert report["geometry"]["caveat"] in md
+
+
+def test_geometry_markdown_renders_when_present_and_absent_when_not() -> None:
+    report_with = _build(geometry=_geometry())
+    md_with = render_markdown(report_with)
+    assert "## Shape and Extent (Geometric)" in md_with
+    assert "rim_thickness_ET_median_mm" in md_with
+    assert "3.2 mm" in md_with
+
+    report_without = _build()
+    md_without = render_markdown(report_without)
+    assert "## Shape and Extent (Geometric)" not in md_without
+
+
+def test_forbidden_substrings_only_appear_inside_not_claimed_with_geometry_markdown() -> None:
+    report = _build(involvement=_involvement(), geometry=_geometry())
+    md = render_markdown(report)
+    not_claimed_text, rest = _not_claimed_text_from_markdown(md)
+
+    assert _scan_for_forbidden(not_claimed_text)
+    hits = _scan_for_forbidden(rest)
+    assert hits == [], f"forbidden words leaked outside not_claimed: {hits}"
+
+
+def test_forbidden_substrings_only_appear_inside_not_claimed_with_geometry_json() -> None:
+    report = _build(involvement=_involvement(), geometry=_geometry())
+    safe = json_safe(report)
+    rest = {k: v for k, v in safe.items() if k != "not_claimed"}
+    text = json.dumps(rest)
+    hits = _scan_for_forbidden(text)
+    assert hits == [], f"forbidden words leaked outside not_claimed: {hits}"
+
+
+def test_geometry_block_json_round_trips_with_nan() -> None:
+    report = _build(geometry=_geometry())
+    safe = json_safe(report)
+    text = json.dumps(safe, allow_nan=False)
+    restored = json.loads(text)
+    assert restored["geometry"]["shape"]["flatness_TC"] is None
+    assert restored["geometry"]["shape"]["elongation_ET"] == 1.8
+
+
+def test_new_not_claimed_entry_about_growth_pattern_renders() -> None:
+    report = _build()
+    md = render_markdown(report)
+    assert "tumour growth pattern or invasiveness" in md
+    not_claimed_text, _ = _not_claimed_text_from_markdown(md)
+    assert "tumour growth pattern or invasiveness" in not_claimed_text
+
+    what_values = [what for what, _ in NOT_CLAIMED]
+    assert "tumour growth pattern or invasiveness" in what_values
+
+
+def test_report_version_still_one() -> None:
+    assert REPORT_VERSION == 1
+    report = _build()
+    assert report["report_version"] == 1

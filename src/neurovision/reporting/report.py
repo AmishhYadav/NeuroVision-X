@@ -110,12 +110,17 @@ _SOURCE_OWNS_CLAIM: str = (
     "claim about this patient's anatomy or function."
 )
 
-# (what we refuse to say, why) -- six items, one per row of
+# (what we refuse to say, why) -- eight items. Six are one per row of
 # `docs/research/interpretable_pipeline_plan.md` section 2's "Explicitly NOT
 # in scope" table, minus the diagnostic-use item (that is what DISCLAIMER
-# covers). Every reason below is allowed to use the forbidden vocabulary --
-# this IS the block the forbidden-substring scan excludes -- and nowhere else
-# in this module or its rendered output may.
+# covers); a seventh (mass effect) and an eighth (growth pattern /
+# invasiveness) were appended later, alongside the optional `involvement` and
+# `geometry` blocks respectively, for the same reason -- each new geometric or
+# referential claim this module can render needs its own explicit refusal of
+# the clinical claim a reader might mistake it for. Every reason below is
+# allowed to use the forbidden vocabulary -- this IS the block the
+# forbidden-substring scan excludes -- and nowhere else in this module or its
+# rendered output may.
 NOT_CLAIMED: tuple[tuple[str, str], ...] = (
     (
         "cell type",
@@ -153,6 +158,11 @@ NOT_CLAIMED: tuple[tuple[str, str], ...] = (
         "The atlas encodes where a healthy midline and healthy ventricles sit, not where this "
         "patient's own are, and BraTS ships no midline-shift ground truth to validate a "
         "displacement estimate against -- so none is computed.",
+    ),
+    (
+        "tumour growth pattern or invasiveness",
+        "A single time point on a segmented mask gives shape, not change over time, and "
+        "infiltration beyond the visible outline is not something a segmentation mask can show.",
     ),
 )
 
@@ -405,6 +415,83 @@ def _build_involvement_block(
 
 
 # --------------------------------------------------------------------------- #
+# Geometry regrouping (optional block; see `_build_geometry_block`)
+# --------------------------------------------------------------------------- #
+
+_GEOMETRY_CAVEAT: str = (
+    "These are geometric descriptors of the segmented mask -- principal-axis ratios, "
+    "bounding-box extents in mm, and the thickness of the enhancing rim measured inward "
+    "from its outer surface. They describe the shape of the outline the model drew, in this "
+    "scan, on this grid; they are not a measure of how the tumour is growing or of its "
+    "biology."
+)
+
+# Reporting order: how the geometry sub-blocks are grouped AND rendered.
+_GEOMETRY_BLOCKS: tuple[str, ...] = ("shape", "extent", "rim", "other")
+
+# `shape_profile`'s own key prefixes: `elongation_R`, `flatness_R`,
+# `principal_axis_R_i/j/k` are all PCA-derived shape ratios/axes, grouped
+# together under "shape". `rim_thickness_ET_*` is checked ahead of nothing
+# else here (no other prefix collides with it), but is still named first in
+# `_classify_geometry_key` below, matching the precedence style of
+# `_classify_burden_key` / `_classify_involvement_key` even though
+# `shape_profile_keys()` happens not to produce an overlapping prefix today --
+# a caller passing an equivalent flat mapping (the contract this block
+# accepts, see `_build_geometry_block`) is not guaranteed the same.
+_GEOMETRY_SHAPE_PREFIXES: tuple[str, ...] = ("elongation_", "flatness_", "principal_axis_")
+
+
+def _classify_geometry_key(key: str) -> str:
+    """Which report sub-block one `shape_profile` key belongs to.
+
+    Checked in a fixed precedence order: `rim_thickness*` first, then
+    `extent_*`, then the PCA shape-ratio/axis prefixes. Anything matching
+    none of them lands in `"other"` rather than being dropped (e.g.
+    `n_voxels_R`, or any key this module does not recognise) -- same rule as
+    `_classify_burden_key` / `_classify_involvement_key`.
+    """
+    if key.startswith("rim_thickness"):
+        return "rim"
+    if key.startswith("extent_"):
+        return "extent"
+    if key.startswith(_GEOMETRY_SHAPE_PREFIXES):
+        return "shape"
+    return "other"
+
+
+def _group_geometry(geometry: Mapping[str, object]) -> dict[str, dict[str, object]]:
+    """Regroups a flat `shape_profile` dict into the named sub-blocks a person can read.
+
+    See `_classify_geometry_key` for the precedence rule. Mirrors
+    `_group_involvement` exactly.
+    """
+    grouped: dict[str, dict[str, object]] = {name: {} for name in _GEOMETRY_BLOCKS}
+    for key, value in geometry.items():
+        grouped[_classify_geometry_key(key)][key] = value
+    return grouped
+
+
+def _build_geometry_block(geometry: Mapping[str, object]) -> dict[str, object]:
+    """Assembles the optional `"geometry"` report block from a raw `shape_profile` dict.
+
+    `caveat` is a REQUIRED field of the block, not README text -- same
+    reasoning as `MASS_EFFECT_CAVEAT` inside `anatomy` and `INVOLVEMENT_CAVEAT`
+    inside `involvement`. Accepts any flat mapping (this module does not
+    import `neurovision.anatomy.shape_descriptors`, see the module docstring's
+    no-deep-learning-stack rule and `_build_involvement_block`'s identical
+    contract for `involvement_profile`).
+    """
+    grouped = _group_geometry(geometry)
+    return {
+        "caveat": _GEOMETRY_CAVEAT,
+        "shape": grouped["shape"],
+        "extent": grouped["extent"],
+        "rim": grouped["rim"],
+        "other": grouped["other"],
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Eloquence proximity (purely geometric, from distance + threshold -- no
 # verdict is derived from these; the classification NAME is a caller-supplied
 # string identifying the published source, see `classification_name` below)
@@ -453,6 +540,7 @@ def build_report(
     top_n: int = 10,
     involvement: Mapping[str, object] | None = None,
     involvement_caveats: Sequence[str] = (),
+    geometry: Mapping[str, object] | None = None,
 ) -> dict:
     """Assembles one case's report dict from already-computed artifacts.
 
@@ -496,14 +584,22 @@ def build_report(
             block's `lower_bound_notes` (e.g. from
             `InvolvementGroups.ventricle_missing` / `.deep_wm_missing`).
             Ignored when `involvement` is `None`.
+        geometry: An optional `neurovision.anatomy.shape_descriptors.
+            shape_profile` output (or an equivalent flat mapping). When
+            `None` (the default), the returned dict has no `"geometry"` key
+            at all -- byte-for-byte the same shape this function produced
+            before this parameter existed. When given, a `"geometry"` block
+            is inserted immediately after `"involvement"` (if present) or
+            after `"anatomy"` (if not), and before `"eloquence"` either way.
 
     Returns:
         A plain dict, field order `report_version, case_id, generated_utc,
-        disclaimer, not_claimed, burden, anatomy, [involvement,] eloquence,
-        provenance` -- `involvement` present only when the `involvement`
-        argument is given. Values may still include numpy-like scalars and
-        non-finite floats pulled from `anatomy_table` / `burden` -- pass the
-        result through `json_safe` before serialising.
+        disclaimer, not_claimed, burden, anatomy, [involvement,] [geometry,]
+        eloquence, provenance` -- `involvement` present only when the
+        `involvement` argument is given, `geometry` present only when the
+        `geometry` argument is given. Values may still include numpy-like
+        scalars and non-finite floats pulled from `anatomy_table` / `burden`
+        -- pass the result through `json_safe` before serialising.
 
     Raises:
         ValueError: If `case_id`, `evidence`, `citation`,
@@ -582,6 +678,8 @@ def build_report(
     }
     if involvement is not None:
         result["involvement"] = _build_involvement_block(involvement, involvement_caveats)
+    if geometry is not None:
+        result["geometry"] = _build_geometry_block(geometry)
     result["eloquence"] = eloquence_block
     result["provenance"] = asdict(provenance)
     return result
@@ -605,6 +703,13 @@ _INVOLVEMENT_BLOCK_TITLES: dict[str, str] = {
     "groups": "Structural Groups (Ventricles / Deep White Matter)",
     "tissue": "Tissue Composition",
     "epicentre": "Epicentre",
+    "other": "Other",
+}
+
+_GEOMETRY_BLOCK_TITLES: dict[str, str] = {
+    "shape": "Principal-Axis Shape",
+    "extent": "Bounding Extent",
+    "rim": "Enhancing Rim Thickness",
     "other": "Other",
 }
 
@@ -684,6 +789,40 @@ def _format_involvement_value(key: str, value: object) -> str:
     return _cell(value)
 
 
+def _format_geometry_value(key: str, value: object) -> str:
+    """Formats one geometry (`shape_profile`) value from its key name.
+
+    Checked in a fixed precedence order, mirroring `_format_involvement_value`:
+    the one boolean-flag field by its exact name first (it would otherwise
+    also match no other rule and fall through to `_cell`, which would print
+    "1.0"/"0.0" rather than "yes"/"no"), then the `_mm`-suffixed distance
+    fields, then the PCA ratio/axis prefixes, then the voxel-count prefix.
+    """
+    if key == "rim_thickness_ET_has_core":
+        safe = json_safe(value)
+        if safe is None:
+            return "n/a"
+        return "yes" if float(safe) == 1.0 else "no"
+    if key.endswith("_mm"):
+        return _fmt_distance(value)
+    if key.startswith("elongation_") or key.startswith("flatness_"):
+        safe = json_safe(value)
+        if safe is None:
+            return "n/a"
+        return f"{float(safe):.2f}"
+    if key.startswith("principal_axis_"):
+        safe = json_safe(value)
+        if safe is None:
+            return "n/a"
+        return f"{float(safe):.3f}"
+    if key.startswith("n_voxels_"):
+        safe = json_safe(value)
+        if safe is None:
+            return "n/a"
+        return str(int(float(safe)))
+    return _cell(value)
+
+
 def _pipe_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
     """A hand-rolled Markdown pipe table.
 
@@ -708,15 +847,19 @@ def render_markdown(report: Mapping) -> str:
     the mass-effect caveat immediately under the heading), an optional
     "Involvement Profile" section (groups/tissue/epicentre, rendered only
     when `report["involvement"]` is present -- absent entirely otherwise),
-    the eloquence reference (verbatim evidence as a blockquote, plus
-    citation), what this report refuses to claim, and provenance last.
+    an optional "Shape and Extent (Geometric)" section (shape/extent/rim,
+    rendered only when `report["geometry"]` is present -- absent entirely
+    otherwise), the eloquence reference (verbatim evidence as a blockquote,
+    plus citation), what this report refuses to claim, and provenance last.
 
     The "Involvement Profile" heading is deliberately distinct from the
     "Anatomical Involvement" heading above it: the latter is the
     `localize.py`-derived per-structure table, this one is the coarser
     group/tissue/epicentre block from `involvement.py` -- reusing the same
     heading text for two different sections would make "no heading present"
-    unobservable when the block is absent.
+    unobservable when the block is absent. Same reasoning gives "Shape and
+    Extent (Geometric)" its own distinct heading for the `shape_descriptors.py`
+    block.
 
     Args:
         report: A `build_report` output (or anything with the same shape).
@@ -816,6 +959,22 @@ def render_markdown(report: Mapping) -> str:
             lines.append(f"### {_INVOLVEMENT_BLOCK_TITLES[block_name]}")
             for key in sorted(block):
                 lines.append(f"- **{key}**: {_format_involvement_value(key, block[key])}")
+            lines.append("")
+
+    # --- Geometry (optional) --------------------------------------------- #
+    geometry = report.get("geometry")
+    if geometry is not None:
+        lines.append("## Shape and Extent (Geometric)")
+        lines.append("")
+        lines.append(str(geometry["caveat"]))
+        lines.append("")
+        for block_name in ("shape", "extent", "rim", "other"):
+            block = geometry.get(block_name) or {}
+            if not block:
+                continue
+            lines.append(f"### {_GEOMETRY_BLOCK_TITLES[block_name]}")
+            for key in sorted(block):
+                lines.append(f"- **{key}**: {_format_geometry_value(key, block[key])}")
             lines.append("")
 
     # --- Eloquence ------------------------------------------------------- #
