@@ -2,7 +2,13 @@
 
 import { describe, expect, it } from "vitest";
 import type { AtlasStructureRow } from "../api";
-import { MAX_ATLAS_STRUCTURES, selectStructures, structureName, structureRow } from "./atlasSelection";
+import {
+  MAX_ATLAS_STRUCTURES,
+  selectStructures,
+  structureIndexForName,
+  structureName,
+  structureRow,
+} from "./atlasSelection";
 
 function makeTable(): AtlasStructureRow[] {
   return [
@@ -154,5 +160,19 @@ describe("structureRow", () => {
 
   it("returns null for an index absent from the table", () => {
     expect(structureRow(makeTable(), 999)).toBeNull();
+  });
+});
+
+describe("structureIndexForName", () => {
+  it("returns the index for a known name", () => {
+    expect(structureIndexForName(makeTable(), "Precentral_L")).toBe(3);
+  });
+
+  it("returns null when table is null", () => {
+    expect(structureIndexForName(null, "Precentral_L")).toBeNull();
+  });
+
+  it("returns null for a name absent from the table", () => {
+    expect(structureIndexForName(makeTable(), "Unknown_Structure_Z")).toBeNull();
   });
 });

@@ -21,6 +21,16 @@ interface ReportPanelProps {
   report: ReportResponse | null;
   /** The server's `detail` message (server_error / not_found) or the client validation message (invalid). */
   errorMessage: string | null;
+  /**
+   * Fired when the pointer enters/leaves a structure-table row (`name`), or
+   * the row is clicked (same handler, so a touch device - which never fires
+   * `onMouseEnter` - can still light the twin's shell). Optional so
+   * `App.tsx`'s demo path, which has no 3D twin to highlight, needs no
+   * change.
+   */
+  onHoverStructure?: (name: string | null) => void;
+  /** The structure name to highlight in the table, or null/absent for none - set by the caller from whichever atlas index the twin currently has highlighted. */
+  highlightedStructureName?: string | null;
 }
 
 // Rendering order for the burden sub-blocks - deliberately NOT the same order
@@ -79,7 +89,15 @@ function BurdenBlock({ title, block }: { title: string; block: Record<string, un
   );
 }
 
-function StructureTable({ rows }: { rows: AnatomyStructureRow[] }) {
+function StructureTable({
+  rows,
+  onHoverStructure,
+  highlightedStructureName,
+}: {
+  rows: AnatomyStructureRow[];
+  onHoverStructure?: (name: string | null) => void;
+  highlightedStructureName?: string | null;
+}) {
   if (rows.length === 0) {
     return <p className="font-mono text-xs text-text-dim">No structures recorded.</p>;
   }
@@ -102,7 +120,19 @@ function StructureTable({ rows }: { rows: AnatomyStructureRow[] }) {
               row report.py's docstring calls out: a structure that holds a
               small share of the tumour but has itself been mostly destroyed. */}
           {rows.map((row, i) => (
-            <tr key={`${row.structure}-${i}`} className="border-t border-surface-seam">
+            <tr
+              key={`${row.structure}-${i}`}
+              // onClick mirrors onMouseEnter so a touch device (which never
+              // fires hover events) can still light the twin's shell - see
+              // the caller's structureDetail.ts / structureIndexForName
+              // wiring, which turns this name back into an atlas index.
+              onMouseEnter={() => onHoverStructure?.(row.structure)}
+              onMouseLeave={() => onHoverStructure?.(null)}
+              onClick={() => onHoverStructure?.(row.structure)}
+              className={`cursor-default border-t border-surface-seam ${
+                row.structure === highlightedStructureName ? "bg-surface-raised" : ""
+              }`}
+            >
               <td className="py-1 pr-2 text-text-primary">{row.structure}</td>
               <td className="py-1 pr-2 text-text-secondary">{row.laterality ?? "—"}</td>
               <td className="py-1 pr-2 text-text-secondary">{row.lobe ?? "—"}</td>
@@ -167,7 +197,17 @@ function CenteredMessage({ children }: { children: ReactNode }) {
   );
 }
 
-export function ReportPanel({ open, onClose, layout, caseId, status, report, errorMessage }: ReportPanelProps) {
+export function ReportPanel({
+  open,
+  onClose,
+  layout,
+  caseId,
+  status,
+  report,
+  errorMessage,
+  onHoverStructure,
+  highlightedStructureName,
+}: ReportPanelProps) {
   if (!open) return null;
 
   const widthClass = layout === "single" ? "w-full" : "w-[420px]";
@@ -311,7 +351,11 @@ export function ReportPanel({ open, onClose, layout, caseId, status, report, err
                     {formatPercent(report.anatomy.frac_unlabelled)}
                   </span>
                 </p>
-                <StructureTable rows={report.anatomy.structures} />
+                <StructureTable
+                  rows={report.anatomy.structures}
+                  onHoverStructure={onHoverStructure}
+                  highlightedStructureName={highlightedStructureName}
+                />
                 <p className="font-mono text-[10px] leading-relaxed text-text-dim">
                   % of tumour is this structure's share of the whole tumour; % of structure is how
                   much of THIS structure the tumour has overtaken. A lesion can hold a small share

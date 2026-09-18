@@ -22,7 +22,14 @@ import { ViewportGrid } from "../../components/ViewportGrid";
 import { useClinicalJobVolumes } from "../../hooks/useClinicalJobVolumes";
 import { useClinicalReport } from "../../hooks/useClinicalReport";
 import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
+import {
+  MAX_ATLAS_STRUCTURES,
+  selectStructures,
+  structureIndexForName,
+  structureRow,
+} from "../../lib/atlasSelection";
 import { sliceIndexer } from "../../lib/slicing";
+import { reportRowForStructure } from "../../lib/structureDetail";
 
 const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 };
 // Fixed, not a slider - matches App.tsx's own choice exactly (same constant
@@ -76,6 +83,8 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
     uncertainty,
     conformalBand,
     gradcam,
+    atlas,
+    atlasTable,
     geometry,
     loading,
     error,
@@ -96,6 +105,26 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
   const [heatOverlay, setHeatOverlay] = useState<HeatOverlay>("none");
   const [view, setView] = useState<"slices" | "twin">("slices");
   const [reportOpen, setReportOpen] = useState(false);
+  // The atlas structure currently highlighted in the twin - lifted here (per
+  // T3.5/T3.6) because both BrainTwinScene (a shell click/hover) and
+  // ReportPanel (a table row hover/click) need to read AND write it, so
+  // neither owns it alone.
+  const [highlightedStructure, setHighlightedStructure] = useState<number | null>(null);
+  // Structure indices the user added via the "Add a structure" checkboxes,
+  // on top of whatever the report already selected. Kept separate from the
+  // report-derived indices so unchecking one only ever removes a
+  // user-added structure - the report's own selection is never touched by
+  // this state.
+  const [extraStructures, setExtraStructures] = useState<number[]>([]);
+
+  // A new job has no relationship to the previous one's highlighted/added
+  // structures - carrying them over would highlight or mesh a structure
+  // index that may mean something entirely different (or nothing) for the
+  // new case's report.
+  useEffect(() => {
+    setHighlightedStructure(null);
+    setExtraStructures([]);
+  }, [jobId]);
 
   // What actually feeds ViewportGrid/Legend's existing generic uncertainty
   // props - derived from the selector above plus whichever buffers are in.
@@ -207,6 +236,41 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, twinDataReady, geometry, volumes, predictionMask, jobId]);
+
+  // Which atlas indices get a shell in the twin: the report's own top-N
+  // involved structures (by name -> index, via the atlas table) plus
+  // whatever the user has added via the checkboxes below, capped at
+  // MAX_ATLAS_STRUCTURES - all the actual selection logic lives in
+  // selectStructures (lib/atlasSelection.ts), this is just wiring this
+  // job's report/table/extra state into it.
+  const atlasSelection = useMemo(
+    () => selectStructures({ report: reportState.report, table: atlasTable, extra: extraStructures }),
+    [reportState.report, atlasTable, extraStructures],
+  );
+
+  // The subset of atlasSelection that came from the report itself (as
+  // opposed to a user-added extra) - used only to label and lock those
+  // checkboxes in the "Add a structure" control below, since a report-
+  // derived structure isn't something extraStructures ever removes.
+  const reportDerivedIndices = useMemo(() => {
+    const set = new Set<number>();
+    if (!reportState.report || !atlasTable) return set;
+    for (const row of reportState.report.anatomy.structures) {
+      const index = structureIndexForName(atlasTable, row.structure);
+      if (index !== null) set.add(index);
+    }
+    return set;
+  }, [reportState.report, atlasTable]);
+
+  // Toggles one atlas structure in/out of extraStructures - never touches a
+  // report-derived index (its checkbox is disabled in the control below, so
+  // this never actually gets called for one, but the `<= 0` / duplicate
+  // guards mirror selectStructures's own so this stays safe either way).
+  function toggleExtraStructure(index: number, checked: boolean) {
+    setExtraStructures((prev) =>
+      checked ? (prev.includes(index) ? prev : [...prev, index]) : prev.filter((i) => i !== index),
+    );
+  }
 
   // The twin's badge mirrors the gatekeeper's decision for this job - the
   // one piece of information from the pipeline that belongs on the 3D view
@@ -337,6 +401,14 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
                 badge={twinBadge}
                 badgeTone={twinBadgeTone}
                 activeLayer={activeLayer}
+                atlas={
+                  atlas && atlasTable && atlasSelection.length > 0
+                    ? { volume: atlas.data, selection: atlasSelection, table: atlasTable }
+                    : null
+                }
+                highlightedStructure={highlightedStructure}
+                onStructureSelect={setHighlightedStructure}
+                structureDetail={(index) => reportRowForStructure(reportState.report, atlasTable, index)}
               />
             </div>
           ) : (
@@ -400,6 +472,19 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
           status={reportState.status}
           report={reportState.report}
           errorMessage={reportState.errorMessage}
+          // The report drawer overlays the viewport, but highlightedStructure
+          // is lifted to this component and fed to BrainTwinScene regardless
+          // of which view is showing - so hovering a row here still lights
+          // the shell even while the twin sits behind the drawer. A hovered
+          // name with no match in atlasTable (version mismatch, or the
+          // table hasn't loaded yet) clears the highlight rather than
+          // guessing.
+          onHoverStructure={(name) =>
+            setHighlightedStructure(name ? structureIndexForName(atlasTable, name) : null)
+          }
+          highlightedStructureName={
+            highlightedStructure !== null ? (structureRow(atlasTable, highlightedStructure)?.name ?? null) : null
+          }
         />
       </div>
 
@@ -454,6 +539,55 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
             3D twin
           </button>
         </div>
+
+        {/* "Add a structure": only meaningful in the twin view (the 2D
+            slices never draw atlas shells), and only once the atlas table
+            has loaded - a native <details> keeps this a zero-JS popover
+            (no open/close state to manage) that still closes itself on an
+            outside click, same as a browser <select>. Copy stays strictly
+            geometric (name/lobe/laterality/"from report"/a count) - never a
+            grade, stage, prognosis, deficit or impairment word. */}
+        {view === "twin" && atlasTable && (
+          <details className="relative shrink-0">
+            <summary
+              data-testid="clinical-atlas-structures-toggle"
+              className="cursor-pointer list-none rounded-sm px-2 py-1 font-mono text-xs text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
+            >
+              Structures · {atlasSelection.length} shown
+            </summary>
+            <div className="liquid-glass absolute bottom-full left-0 z-10 mb-1 max-h-64 w-64 overflow-y-auto rounded-md border border-surface-seam p-2">
+              <div className="flex flex-col gap-1">
+                {[...atlasTable]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((row) => {
+                    const checked = atlasSelection.includes(row.index);
+                    const fromReport = reportDerivedIndices.has(row.index);
+                    const atCap = !checked && atlasSelection.length >= MAX_ATLAS_STRUCTURES;
+                    const disabled = fromReport || atCap;
+                    return (
+                      <label
+                        key={row.index}
+                        title={atCap ? "16 structures max" : undefined}
+                        className="flex items-center gap-1.5 font-mono text-xs text-text-secondary"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={(e) => toggleExtraStructure(row.index, e.target.checked)}
+                          className="accent-[#E7EAEE]"
+                        />
+                        <span className="truncate">{row.name}</span>
+                        {fromReport && (
+                          <span className="ml-auto shrink-0 text-text-dim">from report</span>
+                        )}
+                      </label>
+                    );
+                  })}
+              </div>
+            </div>
+          </details>
+        )}
 
         <button
           type="button"

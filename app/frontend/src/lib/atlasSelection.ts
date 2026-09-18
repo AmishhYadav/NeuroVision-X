@@ -101,6 +101,17 @@ export function structureName(table: AtlasStructureRow[] | null, index: number):
 }
 
 /**
+ * The atlas index for structure `name` (exact match), or `null` if `table`
+ * is null or has no row with that name. Inverse of `structureName` - used to
+ * turn a hovered/clicked `ReportPanel` row (which only carries a name) back
+ * into the index `BrainTwinScene`'s `highlightedStructure` prop expects.
+ */
+export function structureIndexForName(table: AtlasStructureRow[] | null, name: string): number | null {
+  if (!table) return null;
+  return table.find((row) => row.name === name)?.index ?? null;
+}
+
+/**
  * The full atlas structure table row for `index`, or `null` if `table` is
  * null/has no such index. A linear scan - `table` has at most ~122 rows
  * (one full atlas), so this is not worth indexing.
