@@ -1,0 +1,187 @@
+# Molecular markers of adult-type diffuse glioma -> what each one means in the
+# WHO CNS5 classification, and a lookup from ENTERED pathology to the CNS5
+# integrated diagnosis name.
+#
+# T5.1 of docs/research/tool_completion_plan.md. Same discipline as
+# eloquence_map.yaml: the source owns every claim; this file owns only the
+# vocabulary and the mapping. NOTHING HERE IS DERIVED FROM IMAGING. Every value
+# that reaches a report through this file was typed in by a user from a
+# pathology result, and the report says so next to it.
+#
+# HOW TO AUDIT THIS FILE WITHOUT A NEURO-ONCOLOGY BACKGROUND.
+# Each marker has one `meaning` sentence and one `cns5_role` sentence. The
+# question to ask of each is "does the cited summary paper say this?", not
+# "is this biology correct?". The lookup table below is a small set of
+# if/then rows; each row names the CNS5 diagnosis it reproduces.
+#
+# NO PREDICTIVE CLAIM ANYWHERE. This file never says what a marker predicts
+# for a patient, what treatment it indicates, or how a tumour will behave.
+# It never mentions a WHO tier of any kind: the lookup returns a diagnosis
+# NAME only, and an IDH-mutant astrocytoma's CNS5 name is the same at every
+# tier, so no tier is needed to name it and none is produced.
+#
+# VOCABULARY RULE. The text in this file is rendered into the report, which
+# is scanned for the words grade / stage / prognosis / deficit / impair /
+# "will experience" (tests/test_report.py). None of those words may appear in
+# any `meaning`, `cns5_role`, `note` or `name` field below.
+
+version: 1
+
+citation: >
+  Louis DN, Perry A, Wesseling P, Brat DJ, Cree IA, Figarella-Branger D,
+  Hawkins C, Ng HK, Pfister SM, Reifenberger G, Soffietti R, von Deimling A,
+  Ellison DW. The 2021 WHO Classification of Tumors of the Central Nervous
+  System: a summary. Neuro-Oncology. 2021 Aug;23(8):1231-1251.
+  PMID 34185076. DOI 10.1093/neuonc/noab106.
+
+# HONESTY NOTE: the summary paper above was used, not the WHO Blue Book
+# itself. The rows in `cns5_lookup` reproduce that summary's adult-type
+# diffuse glioma family and its molecular glioblastoma criteria; anyone
+# re-deriving this file should say the same.
+
+scope: >
+  Adult-type diffuse gliomas only (astrocytoma IDH-mutant; oligodendroglioma
+  IDH-mutant and 1p/19q-codeleted; glioblastoma IDH-wildtype). Paediatric-type
+  gliomas, circumscribed gliomas, ependymomas and every non-glial tumour are
+  out of scope: for those the lookup returns no name.
+
+# Closed vocabularies. Anything else must raise. "Not entered" is the state
+# of every marker until a user enters one; "Not tested" is a user's explicit
+# statement that pathology did not test it. They are different facts and
+# stay different values.
+shared_vocabulary:
+  untested: "Not tested"
+  unentered: "Not entered"
+
+# One entry per marker. `allowed_values` always ends with the two shared
+# values above. `cns5_role` is what the classification does with the marker;
+# `meaning` is what the marker is.
+markers:
+  IDH:
+    label: "IDH1/IDH2 mutation"
+    allowed_values: ["Mutant", "Wildtype", "Not tested", "Not entered"]
+    meaning: >
+      Whether the tumour carries a mutation in the IDH1 or IDH2 gene, as
+      determined by pathology (immunohistochemistry and/or sequencing).
+    cns5_role: >
+      The first split of the adult-type diffuse gliomas: IDH-mutant tumours
+      are astrocytoma or oligodendroglioma; IDH-wildtype diffuse gliomas with
+      the criteria below are glioblastoma, IDH-wildtype.
+  1p/19q:
+    label: "1p/19q codeletion"
+    allowed_values: ["Codeleted", "Intact", "Not tested", "Not entered"]
+    meaning: >
+      Whether the tumour has lost the whole short arm of chromosome 1 and the
+      whole long arm of chromosome 19 together.
+    cns5_role: >
+      Among IDH-mutant diffuse gliomas, codeletion defines oligodendroglioma;
+      an intact 1p/19q with an IDH mutation is an astrocytoma.
+  MGMT:
+    label: "MGMT promoter methylation"
+    allowed_values: ["Methylated", "Unmethylated", "Not tested", "Not entered"]
+    meaning: >
+      Whether the promoter of the MGMT DNA-repair gene is methylated, as
+      reported by pathology.
+    cns5_role: >
+      Not a classification marker: CNS5 does not use it to name any tumour
+      type. Recorded here because pathology reports carry it; this tool
+      draws nothing from it.
+  ATRX:
+    label: "ATRX"
+    allowed_values: ["Mutant", "Wildtype", "Not tested", "Not entered"]
+    meaning: >
+      Whether ATRX is mutated (typically read as loss of nuclear ATRX
+      expression on immunohistochemistry).
+    cns5_role: >
+      Supporting marker: ATRX loss is characteristic of astrocytoma,
+      IDH-mutant, and is retained in oligodendroglioma. The lookup does not
+      use it to name a tumour; 1p/19q status is the defining test.
+  TP53:
+    label: "TP53"
+    allowed_values: ["Mutant", "Wildtype", "Not tested", "Not entered"]
+    meaning: >
+      Whether the TP53 gene is mutated.
+    cns5_role: >
+      Supporting marker: frequent in astrocytoma, IDH-mutant, and in
+      glioblastoma, IDH-wildtype. Not used by the lookup to name a tumour.
+  TERT:
+    label: "TERT promoter"
+    allowed_values: ["Mutant", "Wildtype", "Not tested", "Not entered"]
+    meaning: >
+      Whether the promoter of the TERT gene is mutated.
+    cns5_role: >
+      One of the three molecular criteria by which CNS5 names an
+      IDH-wildtype diffuse astrocytic glioma "glioblastoma, IDH-wildtype"
+      even without the classic microscopic features (the other two are EGFR
+      amplification and the combined gain of chromosome 7 with loss of
+      chromosome 10).
+  EGFR:
+    label: "EGFR amplification"
+    allowed_values: ["Amplified", "Not amplified", "Not tested", "Not entered"]
+    meaning: >
+      Whether the EGFR gene is present in many extra copies.
+    cns5_role: >
+      One of the three molecular criteria for glioblastoma, IDH-wildtype
+      (see TERT).
+  CDKN2A/B:
+    label: "CDKN2A/B homozygous deletion"
+    allowed_values: ["Deleted", "Intact", "Not tested", "Not entered"]
+    meaning: >
+      Whether both copies of the CDKN2A/CDKN2B locus are lost.
+    cns5_role: >
+      CNS5 uses it within the layered classification of astrocytoma,
+      IDH-mutant. It does not change that tumour's name, so the lookup does
+      not read it; this tool records the entered value only.
+
+# The one non-molecular entry the lookup needs: what pathology saw under the
+# microscope, reduced to the three patterns CNS5's adult-type family turns
+# on. This is ENTERED, never inferred from the image.
+histology:
+  label: "Histological pattern (entered)"
+  allowed_values:
+    - "Astrocytic"
+    - "Oligodendroglial"
+    - "Glioblastoma pattern"   # necrosis and/or microvascular proliferation seen
+    - "Not entered"
+
+# ENTERED pathology -> CNS5 integrated diagnosis NAME. Rows are checked in
+# order; the first whose `when` clauses all hold wins. A row's `when` lists
+# marker -> required value; `any_of` is satisfied by at least one listed
+# marker holding its value. `requires` is what the panel shows a user when no
+# row matches yet: the entries a name would need.
+#
+# The +7/-10 chromosomal criterion for glioblastoma, IDH-wildtype is not a
+# marker in this file, so a tumour meeting only that criterion gets no name
+# here. That is a gap in this file, not a statement about the tumour.
+cns5_lookup:
+  requires: ["IDH", "histology"]
+  rows:
+    - name: "Oligodendroglioma, IDH-mutant and 1p/19q-codeleted"
+      when:
+        IDH: "Mutant"
+        1p/19q: "Codeleted"
+      histology_in: ["Astrocytic", "Oligodendroglial", "Glioblastoma pattern"]
+    - name: "Astrocytoma, IDH-mutant"
+      when:
+        IDH: "Mutant"
+        1p/19q: "Intact"
+      histology_in: ["Astrocytic", "Oligodendroglial", "Glioblastoma pattern"]
+    - name: "Glioblastoma, IDH-wildtype"
+      when:
+        IDH: "Wildtype"
+      histology_in: ["Glioblastoma pattern"]
+    - name: "Glioblastoma, IDH-wildtype"
+      when:
+        IDH: "Wildtype"
+      histology_in: ["Astrocytic"]
+      any_of:
+        TERT: "Mutant"
+        EGFR: "Amplified"
+
+# Text the panel and the report use verbatim. Kept here so the copy is
+# versioned with the vocabulary it describes.
+copy:
+  panel_title: "Confirmed pathology, entered by user. Not derived from imaging."
+  ai_estimate_unavailable: "not available — model not trained"
+  cns5_line_suffix: "— from entered pathology"
+  cns5_line_label: "CNS5 integrated classification"

@@ -125,6 +125,17 @@ report:
   top_n: 10
   markdown: true
   out_subdir: reports
+  # T4.3: add the optional "geometry" block (shape_descriptors.shape_profile:
+  # elongation/flatness, extents, ET rim thickness) to each report. Default
+  # OFF for this batch script so every existing outputs/report_* JSON stays
+  # unchanged; the live clinical pipeline turns it on unconditionally.
+  # Needs the class map, so with it on the script re-reads each case's array
+  # from the burden run's resolved_source_dir (+ meta.json from
+  # preprocessed_dir below).
+  geometry: false
+  # Root of the preprocessed tree (<case>/meta.json supplies spacing and the
+  # crop bbox). Only read when geometry is true.
+  preprocessed_dir: ${data.preprocessing.out_dir}
 
 report_agreement:
   # Reports generated with analysis.report.source=label -- the ground-truth
