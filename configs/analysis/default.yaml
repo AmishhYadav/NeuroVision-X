@@ -118,6 +118,11 @@ report:
   # the classification name / evidence sentence / citation / coverage gaps.
   eloquence_map: knowledge/eloquence_map.yaml
   lobe_map: knowledge/aal_lobes.yaml
+  # T5: the molecular-marker vocabulary and CNS5 lookup the live clinical
+  # report's "Confirmed pathology (entered by user)" block is built from.
+  # Read only by app/backend (clinical_jobs, the pathology route); the batch
+  # script never adds that block -- a BraTS case has no entered pathology.
+  molecular_markers: knowledge/molecular_markers.yaml
   # null -> every case present in BOTH input tables.
   cases: null
   # How many structure rows, sorted by frac_of_structure descending, reach the
