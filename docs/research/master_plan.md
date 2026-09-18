@@ -195,7 +195,13 @@ queue, because the next session trusts it.
 | B1 | `src/neurovision/uncertainty/conformal.py` + `scripts/conformal.py` | `[x]` | λ̂ fitted on val, applied frozen to test, realised risk ≤ α on test |
 | B2 | Apply the frozen λ̂ to SSA and PED; weighted/Mondrian variant | `[x]` (Mondrian arm deferred — registered as a counterfactual, see prereg) | A table of nominal α vs realised risk per cohort, with CIs |
 
-#### Track 2 — GPU. **PARKED 2026-09-15** — see the box below. Resume from the recorded state, not from scratch.
+#### Track 2 — GPU. **UNPARKED 2026-09-18** (author decision) — Kaggle T4, 30 GPU-h/week, 12 h session cap. The PARKED box below is kept as the resume record; the live state is the table under it.
+
+> **Working rules for the Kaggle quota, set 2026-09-18:** every run is verified to finish in one go
+> before it is pushed (proven driver notebook, identity checks in the first minute, `max_hours`
+> under the 12 h cap); no run is relaunched repeatedly to "rehydrate" a failure; a run that cannot
+> be afforded inside its pre-registration's abort bound is not launched at all (Gate A, note 46).
+
 
 > **PARKED — author decision, 2026-09-15.** The model/paper track (everything GPU: G0, A7, Gate A,
 > D0–D3, B3, F) is paused so the remaining time goes into finishing the *tool* end to end. Rationale:
@@ -214,10 +220,10 @@ queue, because the next session trusts it.
 
 | # | Item | State | Done when |
 |---|---|---|---|
-| G0 | 2-epoch timing probe on the new hardware | `[ ]` | Measured step time and peak VRAM in a log, and the probe **reached the failure condition**, not merely executed |
+| G0 | 2-epoch timing probe on the new hardware | `[x]` **note 46** (2026-09-18): 1.087 s/it, 271.9 s/epoch, 9.47 GiB peak on T4 → 1000-epoch fold ≈ 75.5 GPU-h | Measured step time and peak VRAM in a log, and the probe **reached the failure condition**, not merely executed |
 | G1 | `scripts/export_nnunet_dataset.py` — our frozen split to nnU-Net layout | `[x]` | `splits_final.json` contains exactly our 875 train cases; no val or test case appears in it |
-| A7 | nnU-Net v2 `3d_fullres` single fold + Auto3DSeg SegResNet single fold | `[ ]` | Both scored through **our** `scripts/evaluate.py` metric path on the same 189 test cases |
-| — | **GATE A** | `[ ]` | `docs/research/preregistration_strong_baseline.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
+| A7 | nnU-Net v2 `3d_fullres` single fold + Auto3DSeg SegResNet single fold | `[-]` **unaffordable on Kaggle under the pre-registration** (75.5 GPU-h > 60 abort bound; fewer epochs forbidden — note 46). Needs the college card or an explicit amendment | Both scored through **our** `scripts/evaluate.py` metric path on the same 189 test cases |
+| — | **GATE A** | `[ ]` stays open — see A7 | `docs/research/preregistration_strong_baseline.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
 
 #### Track 1 continued — Phase C, the QC model. CPU. In progress.
 

@@ -1662,6 +1662,57 @@ sessions by resume is still ONE row — sum the GPU hours.
     `data/fixtures/dicom/UPENN-GBM-0000{1,2,3}{,.zip}` (gitignored, manifests
     committed).
 
+46. **G0 -- nnU-Net v2 TIMING PROBE, NUMBER FINALLY RECORDED: 1.087 s/iteration
+    ON A KAGGLE T4, SO THE DEFAULT 1000-EPOCH `3d_fullres` FOLD COSTS ~75.5 GPU-h
+    AND GATE A CANNOT RUN ON KAGGLE UNDER ITS OWN PRE-REGISTRATION.** Probe ran
+    2026-09-02 on Kaggle (`amishyadav123/neurovision-nnunet-probe`, COMPLETE);
+    the number sat unread in the kernel log until 2026-09-18 because the local
+    pull broke on a `BrokenPipeError` mid-download. Retrieved with
+    `kaggle kernels logs <slug>` (log only, no 10 GB `nnUNet_preprocessed`) into
+    `outputs/kaggle_kernels/nnunet-probe/log_only/neurovision-nnunet-probe.log`.
+
+    Setup: `nnUNetTrainer_5epochs`, `3d_fullres`, fold 0, on an **80/875-case
+    subset** of `Dataset901_NeuroVisionXBraTS21` (disk-bounded; the per-iteration
+    cost does not depend on the case count, only the per-epoch iteration count,
+    which nnU-Net fixes at 250). Plans: patch `[128, 160, 112]`, batch 2,
+    `PlainConvUNet` 6 stages `[32, 64, 128, 256, 320, 320]`, InstanceNorm3d.
+    `NVX_NNUNET_PROBE_HEALTH: OK`; mean validation Dice after 5 epochs 0.851
+    (nnU-Net's own metric on its own fold -- not comparable to anything else
+    here, recorded only to show the probe trained rather than idled).
+
+    | quantity | measured |
+    |---|---|
+    | 5-epoch (1250-iteration) wall | 1359.3 s |
+    | per iteration | **1.087 s** |
+    | per epoch (250 it) | 271.9 s (first epoch 306.6 s, cudnn warm-up) |
+    | peak VRAM | 9.47 GiB allocated / 10.17 GiB reserved of 14.56 |
+    | `nnUNetTrainer_250epochs`, fold 0 | ~18.9 GPU-h (1.8 sessions at `max_hours` 10.5) |
+    | `nnUNetTrainer_500epochs`, fold 0 | ~37.8 GPU-h (3.6 sessions) |
+    | **`nnUNetTrainer` default 1000 epochs, fold 0** | **~75.5 GPU-h (7.2 sessions)** |
+
+    **Consequence, read against `docs/research/preregistration_strong_baseline.md`
+    as written.** The pre-registration's abort condition is "more than 60 GPU-h
+    for the pair" and its invalidity list forbids "any tuning of nnU-Net
+    *downward* (fewer epochs, ...) to fit the compute budget -- if the full
+    recipe cannot be afforded, the run does not happen and the gate stays open."
+    The nnU-Net arm alone is 75.5 GPU-h before the Auto3DSeg arm is counted, on a
+    30 GPU-h/week quota: **2.5 weeks of the entire quota for one arm.** So on
+    Kaggle, Gate A is unaffordable by the rule the project set for itself, and
+    is **not launched**. The gate stays open; the paper reports the +0.0267 as
+    measured against the matched-recipe baseline only, with this cost note
+    beside it. Two ways to close it later, both the author's call: (a) the
+    college card, if it is materially faster than a T4 (a modern card at ~3-4x
+    T4 throughput brings the fold to ~20-25 GPU-h, inside the abort bound); (b)
+    an *explicit amendment* recorded below the pre-registration's Result line --
+    e.g. registering `nnUNetTrainer_250epochs` as a *reduced-schedule* arm that
+    can only ever produce PARITY or RETIRED, never SURVIVES -- which would have
+    to be written before the run and named as an amendment in the paper.
+    Neither is done here.
+
+    Artifacts: `outputs/kaggle_kernels/nnunet-probe/log_only/` (the log);
+    `outputs/kaggle_kernels/nnunet-probe/nnunet_probe.ipynb` (the driver).
+    `nnUNet_preprocessed` was deleted 2026-09-15 as a cache.
+
 ---
 
 ## Planned
