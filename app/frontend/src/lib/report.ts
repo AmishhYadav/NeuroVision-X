@@ -146,6 +146,93 @@ export function formatBurdenValue(key: string, value: unknown): string {
 }
 
 // --------------------------------------------------------------------- //
+// formatGeometryValue / geometryLabel - the optional `geometry` block
+// (T4.2's `shape_profile` regrouping). Mirrors report.py's
+// `_format_geometry_value` so the panel and the Markdown report agree on
+// how every number in this block reads.
+// --------------------------------------------------------------------- //
+
+/**
+ * Formats one `geometry` (`shape_profile`) value using its key name,
+ * mirroring `report.py::_format_geometry_value` rule-for-rule, in the same
+ * precedence order:
+ *
+ *   1. The one boolean-flag field, `rim_thickness_ET_has_core`, checked by
+ *      its exact name FIRST - it does not end in `_mm` or match any other
+ *      rule below, so if it fell through to the numeric fallback it would
+ *      print `"1"`/`"0"` instead of `"yes"`/`"no"`.
+ *   2. A key ending `_mm` (`extent_*_i/j/k_mm`, `rim_thickness_*_median/max_mm`)
+ *      -> `formatDistanceMm`.
+ *   3. `elongation_`/`flatness_` prefixes (PCA eigenvalue-ratio shape
+ *      descriptors) -> two decimals.
+ *   4. `principal_axis_` prefix (one component of a unit direction vector)
+ *      -> three decimals - two would lose too much of a near-zero component.
+ *   5. `n_voxels_` prefix -> a bare integer (a voxel count is never
+ *      fractional).
+ *   6. Anything else -> `formatNumber(value, 3)`, the same fallback
+ *      `formatBurdenValue` uses for a numeric key this module does not
+ *      recognise.
+ *
+ * `null`/`undefined`/non-finite renders as `"—"` at every branch (via
+ * `formatNumber`/`formatDistanceMm`'s own missing-value handling, or the
+ * `isMissingNumber` guard here for the boolean-flag branch).
+ */
+export function formatGeometryValue(key: string, value: number | null | undefined): string {
+  if (key === "rim_thickness_ET_has_core") {
+    if (isMissingNumber(value)) return MISSING;
+    return value === 1.0 ? "yes" : "no";
+  }
+  if (key.endsWith("_mm")) {
+    return formatDistanceMm(value);
+  }
+  if (key.startsWith("elongation_") || key.startsWith("flatness_")) {
+    return formatNumber(value, 2);
+  }
+  if (key.startsWith("principal_axis_")) {
+    return formatNumber(value, 3);
+  }
+  if (key.startsWith("n_voxels_")) {
+    return formatNumber(value, 0);
+  }
+  return formatNumber(value, 3);
+}
+
+/**
+ * A human label for a raw `geometry` key, built by pattern from the fixed
+ * key shapes `shape_descriptors.py`'s `shape_profile` actually emits (see
+ * that module's docstring) - not a per-key lookup table like `burdenLabel`,
+ * because every geometry key already encodes its region (`ET`/`TC`/`WT`)
+ * and, for `extent_*`/`principal_axis_*`, its axis (`i`/`j`/`k`) as a
+ * suffix, so a pattern captures the whole family in one rule instead of one
+ * table row per region. A key matching none of these patterns - a metric
+ * this function was not written against yet - falls back to the raw key
+ * unchanged, same rule as `burdenLabel`'s fallback.
+ */
+export function geometryLabel(key: string): string {
+  let m: RegExpExecArray | null;
+
+  m = /^rim_thickness_([A-Za-z]+)_(median|max)_mm$/.exec(key);
+  if (m) return `${m[1]} rim thickness, ${m[2]}`;
+
+  m = /^rim_thickness_([A-Za-z]+)_has_core$/.exec(key);
+  if (m) return `${m[1]} rim has core`;
+
+  m = /^(elongation|flatness)_([A-Za-z]+)$/.exec(key);
+  if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)} (${m[2]})`;
+
+  m = /^extent_([A-Za-z]+)_([ijk])_mm$/.exec(key);
+  if (m) return `Extent ${m[2]} (${m[1]})`;
+
+  m = /^principal_axis_([A-Za-z]+)_([ijk])$/.exec(key);
+  if (m) return `Principal axis ${m[2]} (${m[1]})`;
+
+  m = /^n_voxels_([A-Za-z]+)$/.exec(key);
+  if (m) return `Voxels (${m[1]})`;
+
+  return key;
+}
+
+// --------------------------------------------------------------------- //
 // validateReport
 // --------------------------------------------------------------------- //
 

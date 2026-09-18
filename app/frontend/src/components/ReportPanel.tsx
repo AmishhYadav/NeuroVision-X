@@ -1,8 +1,22 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import type { LayoutMode } from "./ViewportGrid";
-import type { AnatomyStructureRow, EloquenceInvolvedRow, ReportBurden, ReportResponse } from "../api";
-import { burdenLabel, formatBurdenValue, formatDistanceMm, formatPercent, segmentationLabel } from "../lib/report";
+import type {
+  AnatomyStructureRow,
+  EloquenceInvolvedRow,
+  ReportBurden,
+  ReportGeometry,
+  ReportResponse,
+} from "../api";
+import {
+  burdenLabel,
+  formatBurdenValue,
+  formatDistanceMm,
+  formatGeometryValue,
+  formatPercent,
+  geometryLabel,
+  segmentationLabel,
+} from "../lib/report";
 
 export type ReportPanelStatus =
   | "loading"
@@ -58,6 +72,36 @@ const BURDEN_BLOCK_TITLES: Record<keyof ReportBurden, string> = {
   other: "Other",
 };
 
+// Rendering order and titles for the optional geometry sub-blocks -
+// mirrors report.py's `_GEOMETRY_BLOCKS` / `_GEOMETRY_BLOCK_TITLES` exactly,
+// so a reader sees the same grouping and headings in this panel and in the
+// Markdown report.
+const GEOMETRY_BLOCK_ORDER: (keyof Omit<ReportGeometry, "caveat">)[] = [
+  "shape",
+  "extent",
+  "rim",
+  "other",
+];
+
+const GEOMETRY_BLOCK_TITLES: Record<keyof Omit<ReportGeometry, "caveat">, string> = {
+  shape: "Principal-axis shape",
+  extent: "Bounding extent",
+  rim: "Enhancing rim thickness",
+  other: "Other",
+};
+
+// `BurdenBlock`'s `format` prop is typed against `unknown` (it is also used
+// with `formatBurdenValue`, whose values can be strings/booleans, e.g.
+// `dominant_side_ET`); `geometry` values are always `number | string | boolean
+// | null` per `BurdenBlock` (the wire type, see api.ts), and in practice
+// always numeric or null for every key `_format_geometry_value` recognises -
+// this thin wrapper is the one cast site, rather than loosening
+// `formatGeometryValue`'s own signature to `unknown` and re-deriving the
+// missing-value checks it already gets from `formatNumber`/`formatDistanceMm`.
+function formatGeometryValueUnknown(key: string, value: unknown): string {
+  return formatGeometryValue(key, value as number | null | undefined);
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2 border-t border-surface-seam px-4 py-4">
@@ -67,7 +111,29 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function BurdenBlock({ title, block }: { title: string; block: Record<string, unknown> }) {
+/**
+ * One labelled sub-block of key/value rows, sorted by key. Generalised
+ * (T4.4) to take `label`/`format` functions rather than being hardwired to
+ * `burdenLabel`/`formatBurdenValue` - the geometry block (`GeometryBlock`
+ * below) reuses this same component with `geometryLabel`/
+ * `formatGeometryValue` instead of copy-pasting the markup. Defaults keep
+ * every existing call site (the burden blocks) working unchanged.
+ *
+ * Renders nothing for an empty block, in either use - a sub-block with no
+ * keys (e.g. `geometry.other` when nothing landed there) must not print a
+ * bare title over an empty list.
+ */
+function BurdenBlock({
+  title,
+  block,
+  label = burdenLabel,
+  format = formatBurdenValue,
+}: {
+  title: string;
+  block: Record<string, unknown>;
+  label?: (key: string) => string;
+  format?: (key: string, value: unknown) => string;
+}) {
   const keys = Object.keys(block).sort();
   if (keys.length === 0) return null;
   return (
@@ -78,9 +144,9 @@ function BurdenBlock({ title, block }: { title: string; block: Record<string, un
       <dl className="flex flex-col gap-0.5">
         {keys.map((key) => (
           <div key={key} className="flex items-baseline justify-between gap-3">
-            <dt className="font-mono text-xs text-text-secondary">{burdenLabel(key)}</dt>
+            <dt className="font-mono text-xs text-text-secondary">{label(key)}</dt>
             <dd className="tabular shrink-0 font-mono text-xs text-text-primary">
-              {formatBurdenValue(key, block[key])}
+              {format(key, block[key])}
             </dd>
           </div>
         ))}
@@ -363,6 +429,30 @@ export function ReportPanel({
                   by the second column.
                 </p>
               </Section>
+
+              {/* --- Geometry (optional, T4.2/T4.4) ------------------------------ */}
+              {(() => {
+                const geometry = report.geometry;
+                if (!geometry) return null;
+                return (
+                  <Section title="Shape and extent (geometric)">
+                    <p className="font-mono text-[11px] leading-relaxed text-text-dim">
+                      {geometry.caveat}
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      {GEOMETRY_BLOCK_ORDER.map((blockKey) => (
+                        <BurdenBlock
+                          key={blockKey}
+                          title={GEOMETRY_BLOCK_TITLES[blockKey]}
+                          block={geometry[blockKey]}
+                          label={geometryLabel}
+                          format={formatGeometryValueUnknown}
+                        />
+                      ))}
+                    </div>
+                  </Section>
+                );
+              })()}
 
               {/* --- Eloquence -------------------------------------------------- */}
               <Section title="Eloquence reference">

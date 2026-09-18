@@ -215,6 +215,27 @@ export interface ReportEloquence {
   coverage_gaps: string[];
 }
 
+/**
+ * The optional "Shape and extent (geometric)" block - mirrors
+ * `neurovision.reporting.report._build_geometry_block` field-for-field.
+ * Regrouped from a flat `shape_profile` dict into four labelled sub-blocks
+ * server-side; `caveat` is a required field of the block itself (not README
+ * text), same convention as `anatomy.caveat`.
+ *
+ * `geometry` is OPTIONAL on `ReportResponse` because this block was added in
+ * T4.2, after the report schema already shipped: a report file written
+ * before that change, and any batch report generated with the geometry flag
+ * off, has no `"geometry"` key at all - `validateReport` must not require
+ * it, and the panel must render correctly with `report.geometry` absent.
+ */
+export interface ReportGeometry {
+  caveat: string;
+  shape: BurdenBlock;
+  extent: BurdenBlock;
+  rim: BurdenBlock;
+  other: BurdenBlock;
+}
+
 export interface ReportProvenance {
   atlas_name: string;
   atlas_version: string;
@@ -236,6 +257,8 @@ export interface ReportResponse {
   not_claimed: [string, string][];
   burden: ReportBurden;
   anatomy: ReportAnatomy;
+  /** Present only when the server built this report with the geometry flag on - see `ReportGeometry`. */
+  geometry?: ReportGeometry;
   eloquence: ReportEloquence;
   provenance: ReportProvenance;
 }

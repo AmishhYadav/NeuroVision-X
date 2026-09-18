@@ -9,9 +9,11 @@ import {
   burdenLabel,
   formatBurdenValue,
   formatDistanceMm,
+  formatGeometryValue,
   formatNumber,
   formatPercent,
   formatVolumeMl,
+  geometryLabel,
   segmentationLabel,
   validateReport,
 } from "./report";
@@ -220,9 +222,104 @@ describe("burdenLabel", () => {
   });
 });
 
+describe("formatGeometryValue", () => {
+  it("formats rim_thickness_ET_has_core as yes/no", () => {
+    expect(formatGeometryValue("rim_thickness_ET_has_core", 1.0)).toBe("yes");
+    expect(formatGeometryValue("rim_thickness_ET_has_core", 0.0)).toBe("no");
+  });
+
+  it("renders the missing marker for a null rim_thickness_ET_has_core", () => {
+    expect(formatGeometryValue("rim_thickness_ET_has_core", null)).toBe("—");
+  });
+
+  it("formats a _mm key as a distance", () => {
+    expect(formatGeometryValue("rim_thickness_ET_median_mm", 3.214)).toBe("3.2 mm");
+    expect(formatGeometryValue("extent_WT_i_mm", 88.0)).toBe("88.0 mm");
+  });
+
+  it("formats an elongation_/flatness_ key to two decimals", () => {
+    expect(formatGeometryValue("elongation_WT", 1.23456)).toBe("1.23");
+    expect(formatGeometryValue("flatness_ET", 0.5)).toBe("0.50");
+  });
+
+  it("formats a principal_axis_ key to three decimals", () => {
+    expect(formatGeometryValue("principal_axis_ET_j", 0.70711)).toBe("0.707");
+  });
+
+  it("formats an n_voxels_ key as a bare integer", () => {
+    expect(formatGeometryValue("n_voxels_TC", 4864.0)).toBe("4864");
+  });
+
+  it("falls back to three decimals for an unrecognised numeric key", () => {
+    expect(formatGeometryValue("some_future_geometry_metric", 0.3116127822951931)).toBe("0.312");
+  });
+
+  it("renders the missing marker for null, undefined and non-finite input on the fallback path", () => {
+    expect(formatGeometryValue("some_future_geometry_metric", null)).toBe("—");
+    expect(formatGeometryValue("some_future_geometry_metric", undefined)).toBe("—");
+    expect(formatGeometryValue("some_future_geometry_metric", NaN)).toBe("—");
+  });
+});
+
+describe("geometryLabel", () => {
+  it("labels a rim_thickness median/max key", () => {
+    expect(geometryLabel("rim_thickness_ET_median_mm")).toBe("ET rim thickness, median");
+    expect(geometryLabel("rim_thickness_ET_max_mm")).toBe("ET rim thickness, max");
+  });
+
+  it("labels the rim_thickness has-core key", () => {
+    expect(geometryLabel("rim_thickness_ET_has_core")).toBe("ET rim has core");
+  });
+
+  it("labels an elongation_ key", () => {
+    expect(geometryLabel("elongation_WT")).toBe("Elongation (WT)");
+  });
+
+  it("labels a flatness_ key", () => {
+    expect(geometryLabel("flatness_TC")).toBe("Flatness (TC)");
+  });
+
+  it("labels an extent_ key with its axis", () => {
+    expect(geometryLabel("extent_WT_i_mm")).toBe("Extent i (WT)");
+  });
+
+  it("labels a principal_axis_ key with its axis", () => {
+    expect(geometryLabel("principal_axis_ET_j")).toBe("Principal axis j (ET)");
+  });
+
+  it("labels an n_voxels_ key", () => {
+    expect(geometryLabel("n_voxels_TC")).toBe("Voxels (TC)");
+  });
+
+  it("falls back to the raw key, unchanged, for an unknown key", () => {
+    expect(geometryLabel("some_future_geometry_metric_nobody_labelled_yet")).toBe(
+      "some_future_geometry_metric_nobody_labelled_yet",
+    );
+  });
+});
+
 describe("validateReport", () => {
   it("accepts a structurally complete report", () => {
     expect(() => validateReport(makeReport())).not.toThrow();
+  });
+
+  it("accepts a report with no geometry key at all (pre-T4.2 reports, and batch reports with the flag off)", () => {
+    const report = makeReport() as unknown as Record<string, unknown>;
+    expect(report.geometry).toBeUndefined();
+    expect(() => validateReport(report)).not.toThrow();
+  });
+
+  it("accepts a report with a geometry block present", () => {
+    const report = makeReport({
+      geometry: {
+        caveat: "These are geometric descriptors of the segmented mask.",
+        shape: { elongation_WT: 1.6 },
+        extent: { extent_WT_i_mm: 88.0 },
+        rim: { rim_thickness_ET_median_mm: 3.2 },
+        other: {},
+      },
+    });
+    expect(() => validateReport(report)).not.toThrow();
   });
 
   it("accepts a report with optional values missing (nulls, empty lists)", () => {
