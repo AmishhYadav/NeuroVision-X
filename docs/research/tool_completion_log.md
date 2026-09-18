@@ -14,7 +14,7 @@ Tier 1 (baseline, no code): `[x]` pytest 2058 pass / 32 skip · smoke 0 · vites
 ### T0
 - `[x]` T0.1 fixture — Kaggle competition returned 403 (rules not accepted; no browser to accept). Substituted **TCIA UPENN-GBM-00001** (public REST API, no login, CC BY 4.0): T1 axial 1 mm, T1CE axial 1 mm, FLAIR axial **3 mm** (61 slices), T2 **sagittal** SPACE 0.9 mm. `data/fixtures/dicom/UPENN-GBM-00001{,.zip}`; manifest `docs/data_manifests/fixture_dicom_upenn_gbm_00001_sha256.txt`. Author can still fetch `train/00000` after accepting the rules; T0.4 needs that one.
 - `[x]` T0.3 run on fixture — run 1 (00:27): E1 assigned all four roles correctly; pre-E2 QC REFUSED on `geometry_consistency` → F1 fixed (8902432). Run 2 (00:32→02:42): stuck in HD-BET accurate+TTA on CPU, 16 GB resident, swapping, killed → F2 fixed (fast + no TTA, config-driven). Run 3 (02:50) refused (`predicted_dice` WT/TC) on the old twin geometry; **run 4 (03:01→03:07) `done` / PROCEED in 334 s** — on fixture **UPENN-GBM-00002**, not 00001 (see F7) — job `a37fcaad`: HD-BET 250 s, inference 67 s, report written; DICOM-SEG refused on stale atlas-spacing assumption → F4 fixed (1dc5192), verified on the real job.
-- `[x]` T0.2 `scripts/run_clinical_study.py` + test — real run under `.venv-clinical` surfaced two things the faked test could not (F6): `GlobalHydra is already initialized` (script's `@hydra.main` vs the backend's own `initialize_config_dir`) and `dcm2niix` invisible when the venv is not activated; both fixed in the script.
+- `[x]` T0.2 `scripts/run_clinical_study.py` + test — real run under `.venv-clinical` surfaced two things the faked test could not (F6): `GlobalHydra is already initialized` (script's `@hydra.main` vs the backend's own `initialize_config_dir`) and `dcm2niix` invisible when the venv is not activated; both fixed in the script. **Definitive run 08:09→08:15 on 00002 with the committed script and no venv activation: `done` / PROCEED in 361 s, job `9c2cc294`, every artifact landed (report with geometry block, DICOM-SEG, Grad-CAM WT+TC, logits, job.json).**
 - `[-]` T0.4 comparison vs BraTS2021_00000 — needs the Kaggle `train/00000` fixture (author: accept competition rules, rerun `kaggle competitions download -c rsna-miccai-brain-tumor-radiogenomic-classification -f train/00000/...`)
 - `[x]` T0.5 job persistence (35ebf46) + clinical page lists previous studies / `?job=<id>` (d253b99)
 
@@ -24,10 +24,10 @@ Tier 1 (baseline, no code): `[x]` pytest 2058 pass / 32 skip · smoke 0 · vites
 
 ### T2 · T3 · T4 · T5 · T6
 - `[x]` T2.1+2.2 (78bb119) · `[x]` T2.3 (a5a72f8) · `[x]` T2.4+2.5 (0db9af4)
-- `[x]` T3.1 (00c0726) · `[x]` T3.2 (d268daa) · `[ ]` T3.3 · `[ ]` T3.4 · `[ ]` T3.5 · `[ ]` T3.6
-- `[x]` T4.1 (2018e9e) · `[x]` T4.2 (6fa6d8d) · `[x]` T4.3 clinical (599993a) · `[~]` T4.3 batch flag · `[ ]` T4.4
-- `[x]` T5.1 `knowledge/molecular_markers.yaml` · `[ ]` T5.2 · `[ ]` T5.3 · `[ ]` T5.4 · `[ ]` T5.5 · `[ ]` T5.6
-- `[ ]` T6.1 · `[ ]` T6.2 · `[ ]` T6.3 · `[ ]` T6.4
+- `[x]` T3.1 (00c0726) · `[x]` T3.2 (d268daa) · `[x]` T3.3 (9ae01a2) · `[x]` T3.4 (5730e9e) · `[x]` T3.5 scene (d3bb8b7) · `[~]` T3.5 viewer + T3.6 (agent resumed 13:07 after the 08:20→12:40 rate-limit pause)
+- `[x]` T4.1 (2018e9e) · `[x]` T4.2 (6fa6d8d) · `[x]` T4.3 clinical (599993a) · `[x]` T4.3 batch flag (0681523; verified flag-off byte-identical on 3 cases) · `[ ]` T4.4
+- `[x]` T5.1 `knowledge/molecular_markers.yaml` · `[x]` T5.2 (24b448a) · `[x]` T5.3 (20a9e1a) · `[x]` T5.4 (ffe4194) · `[~]` T5.5 (agent resumed 13:07) · `[ ]` T5.6
+- `[ ]` T6.1 · `[~]` T6.2 (agent resumed 13:07) · `[ ]` T6.3 · `[ ]` T6.4
 - `[ ]` T1.7 e2e section 12
 
 ## Findings (newest first)
