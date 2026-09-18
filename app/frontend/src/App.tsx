@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
+import { Brain, Layers, PanelLeftOpen } from "lucide-react";
 import {
   ApiUnreachableError,
-  fetchReport,
   getCases,
   getHealth,
   type CaseSummary,
   type HealthResponse,
   type Modality,
   type Plane,
-  type ReportResponse,
 } from "./api";
-import { classifyReportError } from "./lib/reportStatus";
 import type { OverlayMode } from "./lib/render";
+import { navigateTo } from "./lib/navigate";
 import { useCaseData } from "./hooks/useCaseData";
 import { useResponsiveLayout } from "./hooks/useResponsiveLayout";
 import { Header } from "./components/Header";
@@ -21,7 +20,6 @@ import { SliceRibbon } from "./components/SliceRibbon";
 import { MetricsPanel } from "./components/MetricsPanel";
 import { Legend } from "./components/Legend";
 import { ControlBar, MODALITY_ORDER } from "./components/ControlBar";
-import { ReportPanel, type ReportPanelStatus } from "./components/ReportPanel";
 import { BrainTwinScene, type BrainTwinInput } from "./components/BrainTwinScene";
 
 const UNCERTAINTY_OPACITY = 0.6;
@@ -39,8 +37,14 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [cases, setCases] = useState<CaseSummary[]>([]);
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  // Initialised from the URL so a link like /app?case=BraTS2021_00123 (e.g.
+  // the report page's "back to viewer" link) reopens on that case rather
+  // than the empty "pick a case" state.
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("case"),
+  );
   const [caseListOpen, setCaseListOpen] = useState(false);
+  const [caseListCollapsed, setCaseListCollapsed] = useState(false);
 
   const [modality, setModality] = useState<Modality>("t1ce");
   const [overlayMode, setOverlayMode] = useState<OverlayMode>("prediction");
@@ -53,12 +57,11 @@ export default function App() {
   const [focusedPlane, setFocusedPlane] = useState<Plane>("axial");
   const [sliceIndices, setSliceIndices] = useState<Record<Plane, number>>(ZERO_PLANES);
 
-  const [twinOpen, setTwinOpen] = useState(false);
-
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportStatus, setReportStatus] = useState<ReportPanelStatus>("loading");
-  const [report, setReport] = useState<ReportResponse | null>(null);
-  const [reportErrorMessage, setReportErrorMessage] = useState<string | null>(null);
+  // The 3D twin is the default view now - the flat viewport grid is one tab
+  // switch away, not the initial state. Deliberately NOT reset on case
+  // change: a user who switched to the scan view stays there while browsing
+  // cases (see the view-switch toolbar below).
+  const [twinOpen, setTwinOpen] = useState(true);
 
   const { layout, isPanelWidth } = useResponsiveLayout();
   const caseData = useCaseData(selectedCaseId);
@@ -115,46 +118,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [caseData.detail?.meta.case_id]);
 
-  // The report panel is per-case data fetched from a different endpoint than
-  // caseData, so it needs its own reset: closing it (rather than leaving it
-  // open showing the PREVIOUS case's report under the new case's header) and
-  // clearing any fetched report/error so the lazy-fetch effect below treats
-  // the next open as a fresh request.
+  // Keep the URL in sync with the selected case so it is bookmarkable and so
+  // the report page (a separate route now, not a panel) can link back to
+  // this exact case via /app?case=<id>. replaceState, not pushState: browsing
+  // cases is one continuous session, not a sequence of back-button stops.
   useEffect(() => {
-    setReportOpen(false);
-    setReport(null);
-    setReportStatus("loading");
-    setReportErrorMessage(null);
+    const next = selectedCaseId
+      ? `/app?case=${encodeURIComponent(selectedCaseId)}`
+      : "/app";
+    window.history.replaceState({}, "", next);
   }, [selectedCaseId]);
-
-  // Fetch the report lazily on first open, not on every case selection - a
-  // report costs a real request and most case switches never open the panel.
-  // Guarded on `report === null` so a fetch that already succeeded is never
-  // re-requested by closing and re-opening the panel; a fetch that failed
-  // (not_found / server_error / unreachable) leaves `report` null and IS
-  // retried on the next open, which is the only way to recover from
-  // "backend was down, started it, reopened the panel" without a page reload.
-  useEffect(() => {
-    if (!reportOpen || !selectedCaseId || report !== null) return;
-    const controller = new AbortController();
-    setReportStatus("loading");
-    (async () => {
-      try {
-        const r = await fetchReport(selectedCaseId, controller.signal);
-        if (controller.signal.aborted) return;
-        setReport(r);
-        setReportStatus("loaded");
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        const c = classifyReportError(err);
-        setReportErrorMessage(c.message);
-        setReportStatus(c.status);
-      }
-    })();
-    return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportOpen, selectedCaseId]);
 
   // Global slice-stepping and modality shortcuts, scoped to the last-focused viewport.
   useEffect(() => {
@@ -299,7 +272,7 @@ export default function App() {
       <div
         className={`relative flex min-h-0 flex-1 ${layout === "single" ? "flex-col" : "flex-row"}`}
       >
-        {showCaseListInline && (
+        {showCaseListInline && !caseListCollapsed && (
           <div className="w-56 shrink-0 overflow-hidden border-r border-surface-seam bg-surface-panel">
             <CaseList
               cases={cases}
@@ -307,7 +280,23 @@ export default function App() {
               onSelect={(id) => {
                 setSelectedCaseId(id);
               }}
+              collapsible
+              onCollapse={() => setCaseListCollapsed(true)}
             />
+          </div>
+        )}
+
+        {showCaseListInline && caseListCollapsed && (
+          <div className="flex w-9 shrink-0 flex-col items-center border-r border-surface-seam bg-surface-panel pt-2">
+            <button
+              type="button"
+              onClick={() => setCaseListCollapsed(false)}
+              aria-label="Show cases"
+              title="Show cases"
+              className="rounded-sm p-1 text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
+            >
+              <PanelLeftOpen size={14} aria-hidden="true" />
+            </button>
           </div>
         )}
 
@@ -349,6 +338,45 @@ export default function App() {
             </div>
           ) : (
             <>
+              {/* View switch: which case is loaded (left) and 3D twin vs. flat
+                  scan view (right). Sits above the loading bar so it is
+                  visible even while a case is still pulling its artifacts. */}
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="font-mono text-xs text-text-primary">{selectedCaseId}</span>
+                <div
+                  role="group"
+                  aria-label="View"
+                  className="ml-auto flex items-center gap-1"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setTwinOpen(true)}
+                    aria-pressed={twinOpen}
+                    className={`flex items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+                      twinOpen
+                        ? "bg-surface-raised text-text-primary"
+                        : "text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    <Brain size={13} aria-hidden="true" />
+                    3D twin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTwinOpen(false)}
+                    aria-pressed={!twinOpen}
+                    className={`flex items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+                      !twinOpen
+                        ? "bg-surface-raised text-text-primary"
+                        : "text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    <Layers size={13} aria-hidden="true" />
+                    Scan view
+                  </button>
+                </div>
+              </div>
+
               {/* A case pulls four modality volumes plus masks, entropy and the
                   profile - around 20 MB. Without this the viewports sit black
                   for several seconds and the app reads as frozen. Determinate,
@@ -374,8 +402,20 @@ export default function App() {
                 </div>
               )}
               {twinOpen ? (
-                <div className="min-h-0 flex-1 border border-surface-seam bg-surface-panel">
+                <div className="relative min-h-0 flex-1 border border-surface-seam bg-surface-panel">
                   <BrainTwinScene input={twinInput} />
+                  {/* BrainTwinScene's own empty state ("Pick a case to build
+                      its twin.") is meant for the no-case-selected moment,
+                      which can no longer reach it now that the twin is the
+                      default view - a case IS selected here, just still
+                      pulling its volumes, so this overlay says that instead. */}
+                  {twinInput === null && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-surface-panel">
+                      <span className="font-mono text-xs text-text-secondary">
+                        Loading {selectedCaseId}…
+                      </span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
@@ -438,16 +478,6 @@ export default function App() {
             />
           </div>
         )}
-
-        <ReportPanel
-          open={reportOpen}
-          onClose={() => setReportOpen(false)}
-          layout={layout}
-          caseId={selectedCaseId}
-          status={reportStatus}
-          report={report}
-          errorMessage={reportErrorMessage}
-        />
       </div>
 
       <ControlBar
@@ -465,10 +495,9 @@ export default function App() {
         showUncertainty={showUncertainty}
         onToggleUncertainty={() => setShowUncertainty((v) => !v)}
         hasReport={hasReport}
-        reportOpen={reportOpen}
-        onToggleReport={() => setReportOpen((v) => !v)}
-        twinOpen={twinOpen}
-        onToggleTwin={() => setTwinOpen((v) => !v)}
+        onOpenReport={() =>
+          selectedCaseId && navigateTo(`/report/${encodeURIComponent(selectedCaseId)}`)
+        }
       />
     </div>
   );
