@@ -1,6 +1,6 @@
 # Tool-completion log — status board for the autonomous run
 
-**Started 2026-09-18 00:10 (author away; demo 2026-09-19 ~14:00).** The plan is
+**Paused 2026-09-18 13:25 by the author ("wrap up"). Remaining: T5.6, T6.1, T6.3, T6.4, T1.7, T3 L/R eyeball, final demo checks + runbook. Started 2026-09-18 00:10 (author away; demo 2026-09-19 ~14:00).** The plan is
 `tool_completion_plan.md`; this file is the mutable board — one line per unit, newest finding on top
 of the Findings section. A session picking up cold: read this, then the plan, then continue the first
 `[ ]` / `[~]` unit in order. T7 is never started.
@@ -24,10 +24,10 @@ Tier 1 (baseline, no code): `[x]` pytest 2058 pass / 32 skip · smoke 0 · vites
 
 ### T2 · T3 · T4 · T5 · T6
 - `[x]` T2.1+2.2 (78bb119) · `[x]` T2.3 (a5a72f8) · `[x]` T2.4+2.5 (0db9af4)
-- `[x]` T3.1 (00c0726) · `[x]` T3.2 (d268daa) · `[x]` T3.3 (9ae01a2) · `[x]` T3.4 (5730e9e) · `[x]` T3.5 scene (d3bb8b7) · `[~]` T3.5 viewer + T3.6 (agent resumed 13:07 after the 08:20→12:40 rate-limit pause)
-- `[x]` T4.1 (2018e9e) · `[x]` T4.2 (6fa6d8d) · `[x]` T4.3 clinical (599993a) · `[x]` T4.3 batch flag (0681523; verified flag-off byte-identical on 3 cases) · `[ ]` T4.4
-- `[x]` T5.1 `knowledge/molecular_markers.yaml` · `[x]` T5.2 (24b448a) · `[x]` T5.3 (20a9e1a) · `[x]` T5.4 (ffe4194) · `[~]` T5.5 (agent resumed 13:07) · `[ ]` T5.6
-- `[ ]` T6.1 · `[~]` T6.2 (agent resumed 13:07) · `[ ]` T6.3 · `[ ]` T6.4
+- `[x]` T3.1 (00c0726) · `[x]` T3.2 (d268daa) · `[x]` T3.3 (9ae01a2) · `[x]` T3.4 (5730e9e) · `[x]` T3.5 scene (d3bb8b7) · `[x]` T3.5 viewer + T3.6 (02d44a7) · **`[ ]` T3 verify-by-eye L/R on a done job (trap 3) — NOT YET DONE, do before the demo**
+- `[x]` T4.1 (2018e9e) · `[x]` T4.2 (6fa6d8d) · `[x]` T4.3 clinical (599993a) · `[x]` T4.3 batch flag (0681523; verified flag-off byte-identical on 3 cases) · `[x]` T4.4
+- `[x]` T5.1 `knowledge/molecular_markers.yaml` · `[x]` T5.2 (24b448a) · `[x]` T5.3 (20a9e1a) · `[x]` T5.4 (ffe4194) · `[x]` T5.5 (63bbd33) · `[ ]` T5.6 MolecularPanel + api.ts putClinicalPathology
+- `[ ]` T6.1 markdown route · `[x]` T6.2 (ac4ec54) · `[ ]` T6.3 export zip route · `[ ]` T6.4 Export button
 - `[ ]` T1.7 e2e section 12
 
 ## Findings (newest first)
