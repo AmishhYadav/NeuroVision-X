@@ -5,7 +5,10 @@ import {
   ApiUnreachableError,
   createClinicalJob,
   fetchClinicalReport,
+  getAtlasStructures,
+  getCaseAtlas,
   getClinicalJob,
+  getClinicalJobAtlas,
   getClinicalJobConformalBand,
   getClinicalJobGeometry,
   getClinicalJobGradcam,
@@ -14,7 +17,7 @@ import {
   getClinicalJobVolume,
   listClinicalJobs,
 } from "./api";
-import type { ReportResponse } from "./api";
+import type { AtlasStructuresResponse, ReportResponse } from "./api";
 
 // A minimal but STRUCTURALLY COMPLETE report, satisfying validateReport's
 // required-field guard - copied from `lib/report.test.ts`'s `makeReport`
@@ -633,5 +636,136 @@ describe("fetchClinicalReport", () => {
     );
 
     await expect(fetchClinicalReport("job1")).rejects.toThrow();
+  });
+});
+
+describe("getAtlasStructures", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("hits /api/atlas/structures and returns the parsed table on success", async () => {
+    const body: AtlasStructuresResponse = {
+      atlas: "tzo116plus",
+      version: "2.0",
+      n_structures: 1,
+      structures: [
+        {
+          index: 5,
+          name: "Caudate_L",
+          laterality: "L",
+          lobe: "deep",
+          eloquence: "eloquent",
+          matched_term: "basal ganglia",
+        },
+      ],
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => body,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getAtlasStructures();
+    expect(result).toEqual(body);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/atlas/structures");
+  });
+
+  it("treats a 502 from the dev proxy as unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 502, statusText: "Bad Gateway" }),
+    );
+
+    await expect(getAtlasStructures()).rejects.toBeInstanceOf(ApiUnreachableError);
+  });
+});
+
+describe("getClinicalJobAtlas / getCaseAtlas", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("getClinicalJobAtlas reads the shape and kind headers and the bytes off the body on success", async () => {
+    const headers = new Map([
+      ["X-Volume-Shape", "2,3,4"],
+      ["X-Uncertainty-Kind", "atlas-structure-index"],
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: { get: (k: string) => headers.get(k) ?? null },
+      arrayBuffer: async () => new Uint8Array([0, 5, 12]).buffer,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const buf = await getClinicalJobAtlas("job1", [1, 1, 1]);
+    expect(buf).not.toBeNull();
+    expect(buf?.shape).toEqual([2, 3, 4]);
+    expect(buf?.kind).toBe("atlas-structure-index");
+    expect(Array.from(buf?.data ?? [])).toEqual([0, 5, 12]);
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/clinical/jobs/job1/atlas");
+  });
+
+  // Same convention as getClinicalJobGradcam: a 404 means no saved case
+  // meta for this job, a normal outcome, not an error.
+  it("getClinicalJobAtlas resolves to null on 404 rather than throwing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 404, statusText: "Not Found" }),
+    );
+
+    const result = await getClinicalJobAtlas("job1", [1, 1, 1]);
+    expect(result).toBeNull();
+  });
+
+  // A job that hasn't finished yet 409s, same as every other clinical
+  // volume route - the gate is "the job is done", not "the atlas exists".
+  it("getClinicalJobAtlas still surfaces a non-404 error status (409) as an ApiError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 409, statusText: "Conflict" }),
+    );
+
+    const err = await getClinicalJobAtlas("job1", [1, 1, 1]).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
+  });
+
+  it("getCaseAtlas hits the demo case atlas route and resolves to null on 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 404, statusText: "Not Found" }),
+    );
+
+    const result = await getCaseAtlas("case1", [1, 1, 1]);
+    expect(result).toBeNull();
+  });
+
+  it("getCaseAtlas reads the shape and kind headers on success", async () => {
+    const headers = new Map([
+      ["X-Volume-Shape", "5,6,7"],
+      ["X-Uncertainty-Kind", "atlas-structure-index"],
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      headers: { get: (k: string) => headers.get(k) ?? null },
+      arrayBuffer: async () => new Uint8Array([1]).buffer,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const buf = await getCaseAtlas("case1", [1, 1, 1]);
+    expect(buf?.shape).toEqual([5, 6, 7]);
+    expect(buf?.kind).toBe("atlas-structure-index");
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/cases/case1/atlas");
   });
 });

@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ApiUnreachableError,
+  ATLAS_STRUCTURE_INDEX,
+  getAtlasStructures,
+  getClinicalJobAtlas,
   getClinicalJobConformalBand,
   getClinicalJobGeometry,
   getClinicalJobGradcam,
   getClinicalJobMask,
   getClinicalJobUncertainty,
   getClinicalJobVolume,
+  type AtlasBuffer,
+  type AtlasStructureRow,
   type CaseMeta,
   type Modality,
   type UncertaintyBuffer,
@@ -35,6 +40,23 @@ export interface ClinicalJobVolumesState {
   conformalBand: Partial<Record<"WT" | "TC", UncertaintyBuffer | null>>;
   gradcam: Partial<Record<"WT" | "TC", UncertaintyBuffer | null>>;
   /**
+   * The atlas structure-index volume, cropped to this job's own bbox - which
+   * structure (by index) occupies each voxel, for picking a shell in the 3D
+   * twin (T3.4). `null` while loading, if the job has no saved case meta
+   * (404), or if the response's `X-Uncertainty-Kind` was not
+   * `ATLAS_STRUCTURE_INDEX` - a mislabelled volume is never painted (see
+   * `docs/lessons.md` lesson 29: label layers only from the header, never
+   * assume what a volume is).
+   */
+  atlas: AtlasBuffer | null;
+  /**
+   * The atlas's structure table (name, laterality, lobe, eloquence per
+   * index) - what `atlas`'s raw index values are named against, and what
+   * `selectStructures` (`src/lib/atlasSelection.ts`) maps the live report's
+   * structure names onto. `null` while loading or on failure.
+   */
+  atlasTable: AtlasStructureRow[] | null;
+  /**
    * Case geometry (`shape`, `spacing`, `bbox`) - what the 3D digital twin
    * needs to build real-world-scaled mesh geometry. Served by
    * `/clinical/jobs/{id}/geometry`, the one clinical route that carries
@@ -62,6 +84,8 @@ const EMPTY_STATE: ClinicalJobVolumesState = {
   uncertainty: null,
   conformalBand: {},
   gradcam: {},
+  atlas: null,
+  atlasTable: null,
   geometry: null,
   loading: false,
   error: null,
@@ -72,17 +96,19 @@ const EMPTY_STATE: ClinicalJobVolumesState = {
  * Loads a `"done"` clinical job's four modality volumes, its prediction
  * mask, its live-computed entropy map, its fitted conformal band for both
  * regions (`WT`, `TC`), its Grad-CAM explainability heatmap for both
- * regions, and its case geometry, in parallel.
+ * regions, its atlas structure-index volume and the atlas's structure
+ * table, and its case geometry, in parallel.
  *
  * **Core vs. supplementary.** The four volumes and the prediction mask are
  * the product - a done job with no error means at minimum those loaded, and
  * a failure fetching any of them is a real, hook-level `error` (see below).
  * Everything else - uncertainty, the conformal band (both regions), Grad-CAM
- * (both regions), and geometry - is supplementary: extras layered on top,
- * each capable of naming its own absence without taking the study down with
- * it. Geometry is the one exception that cuts both ways - the 3D twin
- * treats it as required to build scaled mesh geometry, but for fetch-failure
- * purposes here it is classified as supplementary, same as the rest.
+ * (both regions), the atlas volume, the atlas structure table, and geometry
+ * - is supplementary: extras layered on top, each capable of naming its own
+ * absence without taking the study down with it. Geometry is the one
+ * exception that cuts both ways - the 3D twin treats it as required to
+ * build scaled mesh geometry, but for fetch-failure purposes here it is
+ * classified as supplementary, same as the rest.
  *
  * This split exists because the batch is awaited together in one
  * `Promise.all`: on the first real done clinical job, `/conformal-band/WT`
@@ -189,6 +215,39 @@ export function useClinicalJobVolumes(
           }));
         });
 
+        // The atlas structure-index volume - what structure (by index)
+        // occupies each voxel, for the twin's per-structure shells (T3.4).
+        const atlasPromise = settleSupplementary(
+          "Atlas",
+          getClinicalJobAtlas(jobId, FALLBACK_SHAPE, signal),
+          warnings,
+        ).then((result) => {
+          if (signal.aborted) return;
+          // Guard against a mislabelled volume (docs/lessons.md lesson 29):
+          // only ever store this buffer as atlas data when the backend's
+          // own header confirms it - a 200 response is not, by itself,
+          // proof of what it contains.
+          if (result && result.kind !== ATLAS_STRUCTURE_INDEX) {
+            warnings.push(`Atlas unavailable: unexpected X-Uncertainty-Kind ${result.kind}`);
+            setState((prev) => ({ ...prev, atlas: null }));
+            return;
+          }
+          setState((prev) => ({ ...prev, atlas: result }));
+        });
+
+        // The atlas's own structure table - what `atlas`'s raw index values
+        // are named against. Not job-specific (same atlas for every job),
+        // but fetched alongside everything else so the viewer never has to
+        // juggle a second loading state for it.
+        const atlasTablePromise = settleSupplementary(
+          "Atlas structures",
+          getAtlasStructures(signal),
+          warnings,
+        ).then((result) => {
+          if (signal.aborted) return;
+          setState((prev) => ({ ...prev, atlasTable: result ? result.structures : null }));
+        });
+
         // Geometry feeds the 3D twin, but a failure to fetch it is still
         // classified as supplementary - it must not blank the slice viewer.
         const geometryPromise = settleSupplementary(
@@ -206,6 +265,8 @@ export function useClinicalJobVolumes(
           uncertaintyPromise,
           ...conformalBandPromises,
           ...gradcamPromises,
+          atlasPromise,
+          atlasTablePromise,
           geometryPromise,
         ]);
 

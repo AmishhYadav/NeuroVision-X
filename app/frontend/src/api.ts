@@ -93,6 +93,9 @@ export const CONFORMAL_BAND = "conformal-band";
 /** Seg-Grad-CAM explainability evidence - see `getClinicalJobGradcam`. */
 export const GRADCAM = "gradcam";
 
+/** The atlas structure-index volume - see `getClinicalJobAtlas` / `getCaseAtlas`. */
+export const ATLAS_STRUCTURE_INDEX = "atlas-structure-index";
+
 /**
  * `VolumeBuffer` plus the `X-Uncertainty-Kind` response header, verbatim.
  * The backend is CORS-exposing that header on purpose so the client cannot
@@ -103,6 +106,39 @@ export const GRADCAM = "gradcam";
 export interface UncertaintyBuffer extends VolumeBuffer {
   kind: string | null;
 }
+
+/**
+ * One row of the atlas's structure table - name, laterality, lobe,
+ * eloquence, per index. `index` is the 1-based value that structure carries
+ * in the `uint8` volume served by `getClinicalJobAtlas` / `getCaseAtlas`
+ * (0 is background, never a real structure) - see `getAtlasStructures`.
+ */
+export interface AtlasStructureRow {
+  index: number;
+  name: string;
+  laterality: string | null;
+  lobe: string | null;
+  eloquence: string | null;
+  matched_term: string | null;
+}
+
+/** `GET /api/atlas/structures` - mirrors `app.backend.api.get_atlas_structures` field-for-field. */
+export interface AtlasStructuresResponse {
+  atlas: string;
+  version: string;
+  n_structures: number;
+  structures: AtlasStructureRow[];
+}
+
+/**
+ * Wire-identical to `UncertaintyBuffer` (same `{data, shape, kind}` shape) -
+ * a distinct name only so callers reading atlas code don't have to reason
+ * about entropy/conformal/Grad-CAM semantics. `kind` must equal
+ * `ATLAS_STRUCTURE_INDEX`; a caller must check that from the header before
+ * treating the buffer as atlas data, never assume it (lesson: label layers
+ * only from the header, never assume what a volume is).
+ */
+export type AtlasBuffer = UncertaintyBuffer;
 
 export interface ProfilePlaneData {
   n: number;
@@ -283,6 +319,46 @@ async function getBinary(
   return { data: new Uint8Array(buf), shape };
 }
 
+/**
+ * Shared implementation behind every "optional, kinded binary" route -
+ * uncertainty, the conformal band, Grad-CAM, and the atlas structure-index
+ * volume. All four share one wire contract: a 404 is an expected absence (no
+ * cached logits, no fitted threshold, a job predating the feature, no saved
+ * atlas meta) and resolves to `null` rather than throwing; any other non-2xx
+ * status is a real `ApiError`; on success the shape comes from
+ * `X-Volume-Shape` (falling back to the caller-supplied shape when a proxy
+ * strips the header) and `kind` comes verbatim from `X-Uncertainty-Kind` -
+ * never assumed, so a caller can never mislabel what a volume actually is.
+ *
+ * Extracted because `getUncertainty`, `getClinicalJobUncertainty`,
+ * `getClinicalJobConformalBand` and `getClinicalJobGradcam` were byte-for-
+ * byte this same body, differing only in the path they built.
+ */
+async function getOptionalKindedBinary(
+  path: string,
+  fallbackShape: [number, number, number],
+  signal?: AbortSignal,
+): Promise<UncertaintyBuffer | null> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiUnreachableError();
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw responseError(res, path);
+  }
+  const shapeHeader = res.headers.get("X-Volume-Shape");
+  const shape: [number, number, number] = shapeHeader
+    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
+    : fallbackShape;
+  const kind = res.headers.get("X-Uncertainty-Kind");
+  const buf = await res.arrayBuffer();
+  return { data: new Uint8Array(buf), shape, kind };
+}
+
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return getJson<HealthResponse>("/health", signal);
 }
@@ -323,30 +399,36 @@ export function getMask(
  * which only surfaces `X-Volume-Shape`) so the label shown to the user is
  * always what the backend actually measured.
  */
-export async function getUncertainty(
+export function getUncertainty(
   caseId: string,
   fallbackShape: [number, number, number],
   signal?: AbortSignal,
 ): Promise<UncertaintyBuffer | null> {
-  const path = `/cases/${encodeURIComponent(caseId)}/uncertainty`;
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, { signal });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") throw err;
-    throw new ApiUnreachableError();
-  }
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw responseError(res, path);
-  }
-  const shapeHeader = res.headers.get("X-Volume-Shape");
-  const shape: [number, number, number] = shapeHeader
-    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
-    : fallbackShape;
-  const kind = res.headers.get("X-Uncertainty-Kind");
-  const buf = await res.arrayBuffer();
-  return { data: new Uint8Array(buf), shape, kind };
+  return getOptionalKindedBinary(
+    `/cases/${encodeURIComponent(caseId)}/uncertainty`,
+    fallbackShape,
+    signal,
+  );
+}
+
+/** The atlas's structure table - name, laterality, lobe, eloquence, per index. */
+export function getAtlasStructures(signal?: AbortSignal): Promise<AtlasStructuresResponse> {
+  return getJson<AtlasStructuresResponse>("/atlas/structures", signal);
+}
+
+/**
+ * This demo case's atlas structure-index volume, cropped to its own bbox -
+ * same "optional, kinded binary" contract as `getUncertainty` (null on 404,
+ * an `ApiError` on any other failure). `kind` must be checked against
+ * `ATLAS_STRUCTURE_INDEX` by the caller before the buffer is treated as
+ * atlas data.
+ */
+export function getCaseAtlas(
+  caseId: string,
+  fallbackShape: [number, number, number],
+  signal?: AbortSignal,
+): Promise<AtlasBuffer | null> {
+  return getOptionalKindedBinary(`/cases/${encodeURIComponent(caseId)}/atlas`, fallbackShape, signal);
 }
 
 export function getProfile(caseId: string, signal?: AbortSignal): Promise<CaseProfile> {
@@ -650,30 +732,16 @@ export function getClinicalJobMask(
  * Same as `getUncertainty`, but for a clinical job's live-computed entropy.
  * Returns null on 404 (no cached logits for this job) rather than throwing.
  */
-export async function getClinicalJobUncertainty(
+export function getClinicalJobUncertainty(
   jobId: string,
   fallbackShape: [number, number, number],
   signal?: AbortSignal,
 ): Promise<UncertaintyBuffer | null> {
-  const path = `/clinical/jobs/${encodeURIComponent(jobId)}/uncertainty`;
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, { signal });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") throw err;
-    throw new ApiUnreachableError();
-  }
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw responseError(res, path);
-  }
-  const shapeHeader = res.headers.get("X-Volume-Shape");
-  const shape: [number, number, number] = shapeHeader
-    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
-    : fallbackShape;
-  const kind = res.headers.get("X-Uncertainty-Kind");
-  const buf = await res.arrayBuffer();
-  return { data: new Uint8Array(buf), shape, kind };
+  return getOptionalKindedBinary(
+    `/clinical/jobs/${encodeURIComponent(jobId)}/uncertainty`,
+    fallbackShape,
+    signal,
+  );
 }
 
 /**
@@ -685,31 +753,17 @@ export async function getClinicalJobUncertainty(
  * conservative ("safety margin") mask but not the ordinary prediction, 255
  * inside the ordinary prediction.
  */
-export async function getClinicalJobConformalBand(
+export function getClinicalJobConformalBand(
   jobId: string,
   region: "WT" | "TC",
   fallbackShape: [number, number, number],
   signal?: AbortSignal,
 ): Promise<UncertaintyBuffer | null> {
-  const path = `/clinical/jobs/${encodeURIComponent(jobId)}/conformal-band/${region}`;
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, { signal });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") throw err;
-    throw new ApiUnreachableError();
-  }
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw responseError(res, path);
-  }
-  const shapeHeader = res.headers.get("X-Volume-Shape");
-  const shape: [number, number, number] = shapeHeader
-    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
-    : fallbackShape;
-  const kind = res.headers.get("X-Uncertainty-Kind");
-  const buf = await res.arrayBuffer();
-  return { data: new Uint8Array(buf), shape, kind };
+  return getOptionalKindedBinary(
+    `/clinical/jobs/${encodeURIComponent(jobId)}/conformal-band/${region}`,
+    fallbackShape,
+    signal,
+  );
 }
 
 /**
@@ -721,29 +775,35 @@ export async function getClinicalJobConformalBand(
  * isolation - a normal outcome, not an error). Byte values are a `[0, 1]`-
  * normalized evidence score scaled to uint8, the same convention as entropy.
  */
-export async function getClinicalJobGradcam(
+export function getClinicalJobGradcam(
   jobId: string,
   region: "WT" | "TC",
   fallbackShape: [number, number, number],
   signal?: AbortSignal,
 ): Promise<UncertaintyBuffer | null> {
-  const path = `/clinical/jobs/${encodeURIComponent(jobId)}/gradcam/${region}`;
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, { signal });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === "AbortError") throw err;
-    throw new ApiUnreachableError();
-  }
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw responseError(res, path);
-  }
-  const shapeHeader = res.headers.get("X-Volume-Shape");
-  const shape: [number, number, number] = shapeHeader
-    ? (shapeHeader.split(",").map((s) => parseInt(s.trim(), 10)) as [number, number, number])
-    : fallbackShape;
-  const kind = res.headers.get("X-Uncertainty-Kind");
-  const buf = await res.arrayBuffer();
-  return { data: new Uint8Array(buf), shape, kind };
+  return getOptionalKindedBinary(
+    `/clinical/jobs/${encodeURIComponent(jobId)}/gradcam/${region}`,
+    fallbackShape,
+    signal,
+  );
+}
+
+/**
+ * This clinical job's atlas structure-index volume, cropped to its own bbox
+ * - same "optional, kinded binary" contract as `getClinicalJobGradcam` (null
+ * on 404 - no saved case meta for this job; an `ApiError`, including 409 for
+ * a job that isn't `"done"` yet, on any other failure). `kind` must be
+ * checked against `ATLAS_STRUCTURE_INDEX` by the caller before the buffer is
+ * treated as atlas data - see `AtlasBuffer`.
+ */
+export function getClinicalJobAtlas(
+  jobId: string,
+  fallbackShape: [number, number, number],
+  signal?: AbortSignal,
+): Promise<AtlasBuffer | null> {
+  return getOptionalKindedBinary(
+    `/clinical/jobs/${encodeURIComponent(jobId)}/atlas`,
+    fallbackShape,
+    signal,
+  );
 }
