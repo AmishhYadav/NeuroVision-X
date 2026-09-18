@@ -17,7 +17,7 @@
 // CDP over it. Exits non-zero if any check fails, and always reports console
 // errors from the page.
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -92,11 +92,27 @@ const consoleErrors = [];
 // harness having to poll the DOM (the worker logs to the console, not to
 // anything visible on screen).
 const consoleMessages = [];
+// Evidence trail for Target.attachedToTarget, in case auto-attach doesn't
+// actually deliver a worker's console traffic - printed if the [twin] mesh
+// check still can't find its line, rather than silently weakening that check.
+const attachedTargets = [];
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
   if (m.id && pending.has(m.id)) {
     pending.get(m.id)(m);
     pending.delete(m.id);
+  }
+  if (m.method === "Target.attachedToTarget") {
+    const info = m.params?.targetInfo ?? {};
+    attachedTargets.push({ sessionId: m.params?.sessionId, type: info.type, url: info.url });
+    if (info.type === "worker") {
+      // A dedicated Worker (the twin mesher) gets its own CDP target - its
+      // console.log calls land on THAT session's Runtime domain, not the
+      // page's, so Runtime must be enabled per-session (flat mode: pass
+      // sessionId at the top level of the command, not inside params).
+      console.log(`     [cdp] attached worker target: ${info.url}`);
+      send("Runtime.enable", {}, m.params.sessionId);
+    }
   }
   if (m.method === "Runtime.consoleAPICalled" && ["error", "assert"].includes(m.params.type)) {
     consoleErrors.push((m.params.args ?? []).map((a) => a.value ?? a.description ?? "").join(" "));
@@ -108,11 +124,12 @@ ws.onmessage = (e) => {
     consoleErrors.push(m.params.exceptionDetails?.exception?.description ?? "exception");
   }
 };
-const send = (method, params = {}) =>
+const send = (method, params = {}, sessionId) =>
   new Promise((resolve) => {
     const id = nextId++;
     pending.set(id, resolve);
-    ws.send(JSON.stringify({ id, method, params }));
+    const message = sessionId ? { id, sessionId, method, params } : { id, method, params };
+    ws.send(JSON.stringify(message));
   });
 
 async function js(expression) {
@@ -166,6 +183,15 @@ const bodyText = `document.body.innerText`;
 
 await send("Page.enable");
 await send("Runtime.enable");
+// Dedicated Workers (the twin mesher) spawned after this point get their
+// own CDP target and, with flatten mode, announce themselves via
+// Target.attachedToTarget (handled in ws.onmessage above) instead of
+// requiring this harness to discover and attach to them itself.
+await send("Target.setAutoAttach", {
+  autoAttach: true,
+  waitForDebuggerOnStart: false,
+  flatten: true,
+});
 await send("Page.navigate", { url: BASE });
 await sleep(3000);
 
@@ -203,6 +229,7 @@ for (let i = 0; i < 40; i++) {
 }
 check("twin worker meshed the selected case", !!twinMeshLine, twinMeshLine ?? "no [twin] mesh line seen");
 if (twinMeshLine) console.log("     " + twinMeshLine);
+else console.log("     [cdp] attached targets seen so far: " + JSON.stringify(attachedTargets));
 
 const twinPressed = await js(
   `(function(){const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('3D twin'));return b ? b.getAttribute('aria-pressed') : null;})()`,
@@ -389,7 +416,18 @@ check("Report opens on its own route", reportPath === `/report/${REPORT_CASE}`, 
 
 const pageText = await js(bodyText);
 check("report page shows the case id", pageText.includes(REPORT_CASE));
-check("at-a-glance section present", /At a glance/.test(pageText));
+// ReportPage.tsx renders the overview as a hero card (a headline paragraph
+// plus a facts grid) with no "At a glance" heading of its own - only the
+// REMAINING sections carry an <h2> title. The hero's headline text is the
+// thing to check is actually there.
+const heroHeadline = await js(
+  `(function(){const p=document.querySelector('p.font-condensed.text-2xl');return p ? p.innerText.trim() : null;})()`,
+);
+check(
+  "overview hero renders a headline",
+  !!heroHeadline && heroHeadline.length > 20,
+  JSON.stringify(heroHeadline),
+);
 
 // Every category section's title, in the order ReportPage renders them.
 // "Ventricles, white matter and tissue type" is the one optional section
@@ -549,6 +587,411 @@ check(
   "no job/progress UI appears for a rejected upload (it never became a job)",
   !/Declined — not segmented/.test(clinicalErrorText),
 );
+
+console.log("\n12. Clinical study viewer - twin, layers, report, pathology");
+// Covers T1 (badge/caution), T2 (heat-layer switch), T3 (report dialog) and
+// T5 (confirmed-pathology -> CNS5 line) in one section, all against the SAME
+// live "done" clinical job - opening it fresh once is cheaper than four
+// separate navigations, and it is what a real demo session actually does:
+// one job, click through everything on it.
+const CLINICAL_JOB = process.env.NVX_E2E_CLINICAL_JOB ?? null;
+const consoleErrorsBeforeClinicalViewer = consoleErrors.length;
+
+let clinicalViewerJobId = CLINICAL_JOB;
+let clinicalViewerDecision = null;
+if (clinicalViewerJobId) {
+  // A job id was pinned via the env var - still need its decision for the
+  // badge/caution-strip checks below, so look it up rather than guessing.
+  const pinnedJob = await (
+    await fetch(`http://localhost:8000/api/clinical/jobs/${clinicalViewerJobId}`)
+  ).json();
+  clinicalViewerDecision = pinnedJob.gatekeeper_decision?.decision ?? null;
+} else {
+  // list_clinical_jobs() (app/backend/clinical_jobs.py) already returns
+  // newest-first, so the first "done" entry IS the newest done job.
+  const clinicalJobsList = await (await fetch("http://localhost:8000/api/clinical/jobs")).json();
+  const newestDone = (clinicalJobsList.jobs ?? []).find((j) => j.state === "done");
+  if (newestDone) {
+    clinicalViewerJobId = newestDone.job_id;
+    clinicalViewerDecision = newestDone.gatekeeper_decision?.decision ?? null;
+  }
+}
+
+if (!clinicalViewerJobId) {
+  console.log("     skipped: no done clinical job (set NVX_E2E_CLINICAL_JOB)");
+} else {
+  console.log(`     using clinical job ${clinicalViewerJobId} (decision=${clinicalViewerDecision})`);
+
+  // Re-queried fresh each time rather than held as a DOM handle - CDP
+  // Runtime.evaluate with returnByValue can't hand back a live element
+  // reference, and the twin view never remounts the canvas between these
+  // steps anyway, so re-finding it by size is cheap and always current.
+  const TWIN_CANVAS_DATA_URL_LEN = `(function(){
+    const c = [...document.querySelectorAll('canvas')].find((c) => {
+      const r = c.getBoundingClientRect();
+      return r.width > 100 && r.height > 100;
+    });
+    return c ? c.toDataURL('image/png').length : 0;
+  })()`;
+  // A coarse 2D re-draw of the WebGL backbuffer (readable only because the
+  // twin's <Canvas> sets preserveDrawingBuffer - see BrainTwinScene.tsx)
+  // into a tiny offscreen canvas, counting pixels that are not
+  // near-black. Cheaper than reading the full-resolution ImageData.
+  const TWIN_CANVAS_NONBLACK_COUNT = `(function(){
+    const c = [...document.querySelectorAll('canvas')].find((c) => {
+      const r = c.getBoundingClientRect();
+      return r.width > 100 && r.height > 100;
+    });
+    if (!c) return -1;
+    const off = document.createElement('canvas');
+    off.width = 64;
+    off.height = 64;
+    const ctx = off.getContext('2d');
+    ctx.drawImage(c, 0, 0, 64, 64);
+    const d = ctx.getImageData(0, 0, 64, 64).data;
+    let n = 0;
+    for (let p = 0; p < d.length; p += 4) {
+      if (Math.max(d[p], d[p + 1], d[p + 2]) > 40) n++;
+    }
+    return n;
+  })()`;
+  const TWIN_CANVAS_CENTRE = `(function(){
+    const c = [...document.querySelectorAll('canvas')].find((c) => {
+      const r = c.getBoundingClientRect();
+      return r.width > 100 && r.height > 100;
+    });
+    if (!c) return null;
+    const r = c.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  })()`;
+
+  await send("Page.navigate", { url: `${CLINICAL_URL}?job=${clinicalViewerJobId}` });
+  await sleep(2000);
+
+  // --- 1. Twin button enables once all four volumes + mask have loaded ----
+  let twinEnabled = false;
+  for (let i = 0; i < 60; i++) {
+    twinEnabled = await js(
+      `(function(){const b=document.querySelector('[data-testid="clinical-view-twin"]');return b ? !b.disabled : false;})()`,
+    );
+    if (twinEnabled) break;
+    await sleep(1000);
+  }
+  check("twin button enables once volumes are loaded", twinEnabled === true, String(twinEnabled));
+
+  // --- 2. Switch to the twin, wait for the worker's mesh pass ------------
+  const twinClickResult = await js(
+    `(function(){const b=document.querySelector('[data-testid="clinical-view-twin"]');if(!b)return 'MISSING';if(b.disabled)return 'DISABLED';b.click();return 'ok';})()`,
+  );
+  check("3D twin button is clickable", twinClickResult === "ok", twinClickResult);
+
+  const clinicalMeshRe = new RegExp(`\\[twin\\] mesh ${clinicalViewerJobId}`);
+  let clinicalMeshLine = null;
+  for (let i = 0; i < 40; i++) {
+    clinicalMeshLine = consoleMessages.find((m) => clinicalMeshRe.test(m));
+    if (clinicalMeshLine) break;
+    await sleep(1000);
+  }
+  check("twin worker meshed this clinical job", !!clinicalMeshLine, clinicalMeshLine ?? "no [twin] mesh line seen");
+  if (clinicalMeshLine) console.log("     " + clinicalMeshLine);
+  else console.log("     [cdp] attached targets seen so far: " + JSON.stringify(attachedTargets));
+
+  const twinPressedAfterClick = await js(
+    `(function(){const b=document.querySelector('[data-testid="clinical-view-twin"]');return b ? b.getAttribute('aria-pressed') : null;})()`,
+  );
+  check("twin view button is pressed after clicking", twinPressedAfterClick === "true", String(twinPressedAfterClick));
+
+  // --- 3/4. Pixels: non-trivial and actually non-black -------------------
+  const d0 = await js(TWIN_CANVAS_DATA_URL_LEN);
+  check("twin canvas is non-trivial", d0 > 5000, `dataURL length ${d0}`);
+  const nonBlack0 = await js(TWIN_CANVAS_NONBLACK_COUNT);
+  check("twin renders non-black pixels", nonBlack0 > 50, `${nonBlack0} of 4096 sampled px`);
+
+  // --- 5. Orbit drag changes the rendered frame ---------------------------
+  const canvasCentre = await js(TWIN_CANVAS_CENTRE);
+  if (canvasCentre) {
+    await send("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x: canvasCentre.x,
+      y: canvasCentre.y,
+      button: "left",
+      buttons: 1,
+      clickCount: 1,
+    });
+    await send("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: canvasCentre.x + 60,
+      y: canvasCentre.y,
+      button: "left",
+      buttons: 1,
+    });
+    await send("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x: canvasCentre.x + 120,
+      y: canvasCentre.y,
+      button: "left",
+      buttons: 1,
+    });
+    await send("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: canvasCentre.x + 120,
+      y: canvasCentre.y,
+      button: "left",
+      buttons: 0,
+    });
+    await sleep(800);
+  }
+  const d1 = await js(TWIN_CANVAS_DATA_URL_LEN);
+  check(
+    "orbit drag changes the rendered frame",
+    !!canvasCentre && d1 !== d0,
+    canvasCentre ? `${d0} vs ${d1}` : "no twin canvas found to drag",
+  );
+
+  // --- 6. Switching the heat layer repaints the twin ----------------------
+  const heatSwitchResult = await js(`(function(){
+    const group = document.querySelector('[role="group"][aria-label="Heat overlay"]');
+    if (!group) return { status: 'MISSING_GROUP' };
+    const buttons = [...group.querySelectorAll('button')];
+    // The first enabled option that isn't already pressed and isn't the
+    // "off" state - labels come from the component's own heatOptions, never
+    // hardcoded here.
+    const candidate = buttons.find(
+      (b) => !b.disabled && b.getAttribute('aria-pressed') !== 'true' && !/^(none|off)/i.test(b.textContent.trim()),
+    );
+    if (!candidate) {
+      return {
+        status: 'NO_CANDIDATE',
+        labels: buttons.map((b) => ({
+          label: b.textContent.trim(),
+          disabled: b.disabled,
+          pressed: b.getAttribute('aria-pressed'),
+        })),
+      };
+    }
+    candidate.click();
+    return { status: 'ok', label: candidate.textContent.trim() };
+  })()`);
+  check(
+    "a heat overlay option is available to switch to",
+    heatSwitchResult.status === "ok",
+    JSON.stringify(heatSwitchResult),
+  );
+  if (heatSwitchResult.status === "ok") {
+    console.log(`     switched heat overlay to "${heatSwitchResult.label}"`);
+    await sleep(1500);
+    const d2 = await js(TWIN_CANVAS_DATA_URL_LEN);
+    check("switching the heat layer repaints the twin", d2 !== d1, `${d1} vs ${d2}`);
+  }
+
+  // --- 7. Badge mirrors the gatekeeper decision ---------------------------
+  const twinBadgeText = await js(
+    `(function(){const b=document.querySelector('[data-testid="twin-badge"]');return b ? b.innerText : null;})()`,
+  );
+  check(
+    "twin badge is present and non-empty",
+    !!twinBadgeText && twinBadgeText.trim().length > 0,
+    String(twinBadgeText),
+  );
+  console.log(`     gatekeeper decision for this job: ${clinicalViewerDecision}`);
+  if (clinicalViewerDecision === "proceed_with_caution") {
+    check(
+      "twin badge reads caution for a proceed_with_caution job",
+      /caution/i.test(twinBadgeText ?? ""),
+      String(twinBadgeText),
+    );
+    const cautionStripPresent = await js(
+      `!!document.querySelector('[data-testid="clinical-caution-strip"]')`,
+    );
+    check(
+      "caution strip is shown for a proceed_with_caution job",
+      cautionStripPresent === true,
+      String(cautionStripPresent),
+    );
+  }
+
+  // --- 8. Report dialog opens and shows this job's real data -------------
+  const reportBeforeOpen = await (
+    await fetch(`http://localhost:8000/api/clinical/jobs/${clinicalViewerJobId}/report`)
+  ).json();
+
+  const reportToggleResult = await js(
+    `(function(){const b=document.querySelector('[data-testid="clinical-report-toggle"]');if(!b)return 'MISSING';if(b.disabled)return 'DISABLED';b.click();return 'ok';})()`,
+  );
+  check("report toggle opens the report", reportToggleResult === "ok", reportToggleResult);
+
+  let clinicalDialogText = null;
+  for (let i = 0; i < 20; i++) {
+    clinicalDialogText = await js(
+      `(function(){const d=document.querySelector('[aria-label="Structured report"]');return d ? d.innerText : null;})()`,
+    );
+    if (clinicalDialogText) break;
+    await sleep(500);
+  }
+  check("structured report dialog opens", !!clinicalDialogText, "dialog never appeared");
+  check(
+    "report dialog shows this job's case id",
+    !!clinicalDialogText && clinicalDialogText.includes(reportBeforeOpen.case_id),
+    reportBeforeOpen.case_id,
+  );
+
+  // The rendered structure NAME is a humanised, dictionary-mapped string
+  // (humanStructureName in lib/reportInterpretation.ts), not the atlas
+  // token this API returns - re-deriving that whole lookup table here would
+  // duplicate business logic this harness has no business owning. Instead,
+  // tie the check to structures[0]'s own NUMBERS, formatted the same simple
+  // way formatPercent does (one decimal, a trailing "%") - that still proves
+  // the row rendered is really this structure, at this index, from this
+  // job's real report, without hand-copying the name dictionary.
+  const firstStructure = reportBeforeOpen.anatomy?.structures?.[0] ?? null;
+  if (firstStructure) {
+    const expectedRegionPct = `${(firstStructure.frac_of_structure * 100).toFixed(1)}% of region`;
+    const expectedTumourPct = `${(firstStructure.frac_of_tumour * 100).toFixed(1)}% of tumour`;
+    check(
+      "report's regions list renders anatomy.structures[0]'s own numbers",
+      !!clinicalDialogText &&
+        clinicalDialogText.includes(expectedRegionPct) &&
+        clinicalDialogText.includes(expectedTumourPct),
+      `${expectedRegionPct} / ${expectedTumourPct}`,
+    );
+  } else {
+    console.log("     skipped: this job's report has no anatomy.structures entries");
+  }
+
+  // --- 9. Confirmed pathology -> CNS5 line, and it survives a reload -----
+  const pathologyUrl = `http://localhost:8000/api/clinical/jobs/${clinicalViewerJobId}/pathology`;
+  const resetPathology = () =>
+    fetch(pathologyUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ IDH: "Not entered", histology: "Not entered" }),
+    });
+
+  await resetPathology();
+
+  const idhLabel = reportBeforeOpen.molecular?.markers?.IDH?.label ?? null;
+  check("this job's report carries a molecular block with an IDH marker", !!idhLabel, JSON.stringify(reportBeforeOpen.molecular));
+
+  if (idhLabel) {
+    const setSelectValue = (label, value) => `(function(){
+      const sel = document.querySelector('select[aria-label=${JSON.stringify(label)}]');
+      if (!sel) return 'MISSING';
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      setter.call(sel, ${JSON.stringify(value)});
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'ok';
+    })()`;
+
+    const idhSetResult = await js(setSelectValue(idhLabel, "Wildtype"));
+    check("IDH select accepts an entered value", idhSetResult === "ok", idhSetResult);
+    await sleep(1000);
+    const histologySetResult = await js(setSelectValue("Histology", "Glioblastoma pattern"));
+    check("Histology select accepts an entered value", histologySetResult === "ok", histologySetResult);
+    await sleep(1000);
+
+    let cns5LineText = null;
+    for (let i = 0; i < 20; i++) {
+      cns5LineText = await js(
+        `(function(){const el=document.querySelector('[data-testid="cns5-line"]');return el ? el.innerText : null;})()`,
+      );
+      if (cns5LineText) break;
+      await sleep(500);
+    }
+    check("CNS5 line appears once both entries are made", !!cns5LineText, "no [data-testid=cns5-line] found within 10s");
+
+    // Read the resolved name/source from the server itself, after the
+    // in-page edits, rather than hardcoding the expected copy.
+    const reportAfterEntry = await (
+      await fetch(`http://localhost:8000/api/clinical/jobs/${clinicalViewerJobId}/report`)
+    ).json();
+    const cns5Name = reportAfterEntry.molecular?.cns5?.name ?? null;
+    const cns5Source = reportAfterEntry.molecular?.cns5?.source ?? null;
+    check(
+      "CNS5 line names the resolved classification",
+      !!cns5LineText && !!cns5Name && cns5LineText.includes(cns5Name),
+      `expected to find "${cns5Name}" in "${cns5LineText}"`,
+    );
+    check(
+      "CNS5 line cites its source",
+      !!cns5LineText && !!cns5Source && cns5LineText.includes(cns5Source),
+      `expected to find "${cns5Source}" in "${cns5LineText}"`,
+    );
+
+    // --- Reload: the entered value must survive a fresh mount -----------
+    await send("Page.navigate", { url: `${CLINICAL_URL}?job=${clinicalViewerJobId}` });
+    await sleep(3000);
+
+    let reloadReportToggleResult = "DISABLED";
+    for (let i = 0; i < 20; i++) {
+      reloadReportToggleResult = await js(
+        `(function(){const b=document.querySelector('[data-testid="clinical-report-toggle"]');if(!b)return 'MISSING';if(b.disabled)return 'DISABLED';b.click();return 'ok';})()`,
+      );
+      if (reloadReportToggleResult === "ok") break;
+      await sleep(500);
+    }
+    check(
+      "report toggle re-opens after reload",
+      reloadReportToggleResult === "ok",
+      reloadReportToggleResult,
+    );
+
+    let idhValueAfterReload = null;
+    for (let i = 0; i < 20; i++) {
+      idhValueAfterReload = await js(
+        `(function(){const sel=document.querySelector('select[aria-label=${JSON.stringify(idhLabel)}]');return sel ? sel.value : null;})()`,
+      );
+      if (idhValueAfterReload === "Wildtype") break;
+      await sleep(500);
+    }
+    check(
+      "entered value survives reload",
+      idhValueAfterReload === "Wildtype",
+      `IDH select reads "${idhValueAfterReload}" after reload`,
+    );
+
+    await resetPathology();
+  }
+
+  // --- 10. Export button (T6.4) exists and is enabled ---------------------
+  const exportButtonState = await js(
+    `(function(){const b=document.querySelector('[data-testid="clinical-export"]');if(!b)return 'MISSING';return b.disabled ? 'DISABLED' : 'ok';})()`,
+  );
+  check("export button is present and enabled", exportButtonState === "ok", exportButtonState);
+
+  // --- 11. Save an eyeball screenshot of the twin --------------------------
+  // Close the report dialog if this run left it open, and make sure the
+  // twin (not the slice grid a fresh mount defaults to) is the active view.
+  await js(
+    `(function(){const c=document.querySelector('[aria-label="Close report"]');if(c)c.click();return 'ok';})()`,
+  );
+  await sleep(300);
+  const twinReadyForShot = await js(
+    `(function(){const b=document.querySelector('[data-testid="clinical-view-twin"]');return b ? !b.disabled : false;})()`,
+  );
+  if (twinReadyForShot) {
+    await js(
+      `(function(){const b=document.querySelector('[data-testid="clinical-view-twin"]');if(b && b.getAttribute('aria-pressed')!=='true')b.click();return 'ok';})()`,
+    );
+    await sleep(1500);
+  }
+  const shotResponse = await send("Page.captureScreenshot", { format: "png" });
+  const shotBase64 = shotResponse.result?.data ?? null;
+  check("twin screenshot captured", !!shotBase64, "Page.captureScreenshot returned no data");
+  if (shotBase64) {
+    const shotDir = process.env.NVX_E2E_SHOT_DIR ?? "e2e/out";
+    mkdirSync(shotDir, { recursive: true });
+    const shotPath = join(shotDir, `twin-${clinicalViewerJobId.slice(0, 8)}.png`);
+    writeFileSync(shotPath, Buffer.from(shotBase64, "base64"));
+    console.log(`     saved ${shotPath}`);
+  }
+
+  // --- 12. Console hygiene for this section --------------------------------
+  check(
+    "no console errors from the clinical study viewer's interactions",
+    consoleErrors.length === consoleErrorsBeforeClinicalViewer,
+    consoleErrors.slice(consoleErrorsBeforeClinicalViewer).join(" | "),
+  );
+}
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
