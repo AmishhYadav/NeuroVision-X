@@ -6,6 +6,8 @@
 // while it runs.
 import { extentCenter, meshVoxelField, normalToScene, voxelToScene } from "../lib/twinGeometry";
 import { sampleLayersForClasses } from "../lib/twinLayers";
+import { meshStructure, structureBBoxes } from "../lib/structureMesh";
+import { MAX_ATLAS_STRUCTURES } from "../lib/atlasSelection";
 import type { VertexLayerKind } from "../lib/vertexColors";
 
 export type ClassName = "necrotic" | "oedema" | "enhancing";
@@ -38,6 +40,15 @@ export interface TwinMeshResult {
   voxelGeometry?: Partial<Record<ClassName, { positions: Float32Array; normals: Float32Array }>>;
   /** layerScalars[kind][class] = Float32Array (N) in [0,1], sampled one voxel inward. Present only when the request carried scalarLayers. */
   layerScalars?: Partial<Record<VertexLayerKind, Partial<Record<ClassName, Float32Array>>>>;
+  /**
+   * The brain mesh's own extentCenter() output (center + scale), i.e. the
+   * exact voxelToScene() arguments used for the brain/tumour meshes above.
+   * ALWAYS present (additive field - the existing demo path in App.tsx just
+   * ignores it). A later "structures" request needs this to place atlas
+   * structure shells in the SAME scene frame without re-deriving it (and
+   * without re-meshing the brain to get it).
+   */
+  frame: { center: [number, number, number]; scale: number };
 }
 
 // A second message the worker understands: resample an ALREADY-MESHED case
@@ -62,6 +73,38 @@ export interface TwinSampleResult {
   layerScalars: Partial<Record<VertexLayerKind, Partial<Record<ClassName, Float32Array>>>>;
 }
 
+// A third message the worker understands: mesh a SELECTION of atlas
+// structures (T3.4) - one Surface-Nets shell per selected index, in the
+// SAME scene frame as an earlier mesh request's brain/tumour meshes (see
+// TwinMeshResult.frame), without re-meshing the brain or tumour. Like
+// TwinSampleRequest, discriminated from a plain TwinMeshRequest by `kind`.
+export interface TwinStructuresRequest {
+  kind: "structures";
+  requestId: number;
+  caseId: string;
+  shape: [number, number, number]; // (D, H, W)
+  /**
+   * uint8 (D,H,W) atlas structure-index volume, 0 = background, value k =
+   * AtlasStructureRow.index. The CALLER keeps its own copy of this volume
+   * (a later selection change needs it again) - it must be sent with
+   * `.slice()` or structured-clone semantics, never `postMessage(..., [atlas.buffer])`,
+   * which would detach the caller's only copy.
+   */
+  atlas: Uint8Array;
+  /** Atlas indices to mesh, in no particular order - capped at MAX_ATLAS_STRUCTURES here regardless of what the caller sends. */
+  selection: number[];
+  /** The scene frame from a prior TwinMeshResult, so shells line up with the brain/tumour meshes already on screen. */
+  frame: TwinMeshResult["frame"];
+}
+
+export interface TwinStructuresResult {
+  kind: "structures";
+  requestId: number;
+  caseId: string;
+  /** Keyed by atlas structure index. An index absent here was either not found in `atlas`, or had fewer than 20 voxels (see meshStructure) - never thrown as an error. */
+  structures: Record<number, { position: Float32Array; normal: Float32Array; index: Uint32Array }>;
+}
+
 const CLASS_NAMES: Record<number, ClassName> = { 1: "necrotic", 2: "oedema", 3: "enhancing" };
 
 // Axis convention (see src/lib/twinGeometry.ts for the derivation and the
@@ -75,7 +118,7 @@ const CLASS_NAMES: Record<number, ClassName> = { 1: "necrotic", 2: "oedema", 3: 
 // +Z = posterior, which is left-handed and mirrors the whole brain left
 // for right - a mirrored brain still looks like a brain, so neither bug
 // was visible without a numeric probe.
-self.onmessage = (e: MessageEvent<TwinMeshRequest | TwinSampleRequest>) => {
+self.onmessage = (e: MessageEvent<TwinMeshRequest | TwinSampleRequest | TwinStructuresRequest>) => {
   const data = e.data;
   // A mesh request carries no `kind` field at all (see TwinSampleRequest's
   // docstring) - this keeps the existing App.tsx demo path, which only ever
@@ -85,6 +128,10 @@ self.onmessage = (e: MessageEvent<TwinMeshRequest | TwinSampleRequest>) => {
   // field; the runtime check itself is exact.
   if ("kind" in data && data.kind === "sample") {
     handleSampleRequest(data);
+    return;
+  }
+  if ("kind" in data && data.kind === "structures") {
+    handleStructuresRequest(data);
     return;
   }
   handleMeshRequest(data as TwinMeshRequest);
@@ -220,6 +267,7 @@ function handleMeshRequest(request: TwinMeshRequest) {
     tumorSource,
     tumorCentroidScene,
     classVolumesMl,
+    frame: { center, scale },
     ...(keepGeometry ? { voxelGeometry } : {}),
     ...(layerScalars ? { layerScalars } : {}),
   };
@@ -267,5 +315,41 @@ function handleSampleRequest(request: TwinSampleRequest) {
       if (arr) transferables.push(arr.buffer);
     }
   }
+  (self as unknown as Worker).postMessage(result, transferables);
+}
+
+// Meshes a SELECTION of atlas structures against an already-known scene
+// frame (see TwinStructuresRequest.frame) - no brain/tumour re-mesh at all.
+// structureBBoxes does the one full-volume pass this needs; meshStructure
+// then crops per structure (see structureMesh.ts for why cropping matters).
+function handleStructuresRequest(request: TwinStructuresRequest) {
+  const { requestId, caseId, shape, atlas, selection, frame } = request;
+
+  // Defensive cap: selectStructures() (atlasSelection.ts) already caps its
+  // own output at MAX_ATLAS_STRUCTURES, but the worker cannot assume every
+  // caller goes through that function.
+  const capped = selection.slice(0, MAX_ATLAS_STRUCTURES);
+  const bboxes = structureBBoxes(atlas, shape, capped);
+
+  const structures: TwinStructuresResult["structures"] = {};
+  const transferables: Transferable[] = [];
+
+  for (const structureIndex of capped) {
+    const bbox = bboxes.get(structureIndex);
+    if (!bbox) continue; // never occurs in this atlas volume (e.g. stale report reference)
+    const raw = meshStructure(atlas, shape, structureIndex, bbox);
+    if (!raw) continue; // <20 voxels, or an empty mesh
+
+    // Same voxel->scene transform as the brain/tumour meshes, using the
+    // CALLER-SUPPLIED frame rather than re-deriving one from this
+    // structure's own extent - that is exactly what keeps the shell
+    // aligned with everything already on screen.
+    const position = voxelToScene(raw.positions, frame.center, frame.scale);
+    const normal = normalToScene(raw.normals);
+    structures[structureIndex] = { position, normal, index: raw.indices };
+    transferables.push(position.buffer, normal.buffer, raw.indices.buffer);
+  }
+
+  const result: TwinStructuresResult = { kind: "structures", requestId, caseId, structures };
   (self as unknown as Worker).postMessage(result, transferables);
 }
