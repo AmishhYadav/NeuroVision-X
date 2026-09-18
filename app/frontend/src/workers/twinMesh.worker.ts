@@ -143,6 +143,11 @@ function handleMeshRequest(request: TwinMeshRequest) {
   const [D, H, W] = shape;
   const n = D * H * W;
 
+  // Perf instrumentation: this project verifies a performance change by
+  // re-running the real workload and checking the number moved, not by
+  // unit tests (there are none for this worker) - this is that number.
+  const tStart = performance.now();
+
   const brainField = new Float32Array(n);
   for (const vol of modalityVolumes) {
     for (let i = 0; i < n; i++) {
@@ -165,37 +170,70 @@ function handleMeshRequest(request: TwinMeshRequest) {
     keepLeft: boolean,
   ) => {
     const nTris = indices.length / 3;
-    const outIdx: number[] = [];
-    const remap = new Map<number, number>();
-    const outPos: number[] = [];
-    const outNorm: number[] = [];
+    const nVerts = positions.length / 3;
+    // Vertex remap: -1 = not kept (yet), else the vertex's NEW index,
+    // assigned in first-seen order while walking kept triangles in
+    // triangle order - same order the old Map<number, number> produced,
+    // but as one fixed-size typed array instead of a Map plus two
+    // number[] arrays growing via push().
+    const remap = new Int32Array(nVerts).fill(-1);
+    let vertCount = 0;
+    let triCount = 0;
     for (let t = 0; t < nTris; t++) {
       const a = indices[t * 3];
       const b = indices[t * 3 + 1];
       const c = indices[t * 3 + 2];
       const meanX = (positions[a * 3] + positions[b * 3] + positions[c * 3]) / 3;
-      const isLeft = meanX < 0;
-      if (isLeft !== keepLeft) continue;
-      for (const idx of [a, b, c]) {
-        let mapped = remap.get(idx);
-        if (mapped === undefined) {
-          mapped = outPos.length / 3;
-          remap.set(idx, mapped);
-          outPos.push(positions[idx * 3], positions[idx * 3 + 1], positions[idx * 3 + 2]);
-          outNorm.push(normals[idx * 3], normals[idx * 3 + 1], normals[idx * 3 + 2]);
-        }
-        outIdx.push(mapped);
-      }
+      if ((meanX < 0) !== keepLeft) continue;
+      triCount++;
+      if (remap[a] === -1) remap[a] = vertCount++;
+      if (remap[b] === -1) remap[b] = vertCount++;
+      if (remap[c] === -1) remap[c] = vertCount++;
     }
-    return {
-      position: new Float32Array(outPos),
-      normal: new Float32Array(outNorm),
-      index: new Uint32Array(outIdx),
-    };
+
+    // Exact-sized output arrays now that vertCount/triCount are known -
+    // no push(), no growth, no re-copy.
+    const outPos = new Float32Array(vertCount * 3);
+    const outNorm = new Float32Array(vertCount * 3);
+    const outIdx = new Uint32Array(triCount * 3);
+
+    // Place each kept vertex's data at its assigned slot. Iteration order
+    // here does not affect correctness (or the "first-seen order"
+    // guarantee) because the WRITE target is remap[v], not the loop
+    // position - remap[v] already encodes the first-seen order from the
+    // pass above.
+    for (let v = 0; v < nVerts; v++) {
+      const mapped = remap[v];
+      if (mapped === -1) continue;
+      outPos[mapped * 3] = positions[v * 3];
+      outPos[mapped * 3 + 1] = positions[v * 3 + 1];
+      outPos[mapped * 3 + 2] = positions[v * 3 + 2];
+      outNorm[mapped * 3] = normals[v * 3];
+      outNorm[mapped * 3 + 1] = normals[v * 3 + 1];
+      outNorm[mapped * 3 + 2] = normals[v * 3 + 2];
+    }
+
+    // Second walk over triangles, in the SAME order as the counting pass
+    // above, so triangle order (and therefore winding) is unchanged.
+    let triOut = 0;
+    for (let t = 0; t < nTris; t++) {
+      const a = indices[t * 3];
+      const b = indices[t * 3 + 1];
+      const c = indices[t * 3 + 2];
+      const meanX = (positions[a * 3] + positions[b * 3] + positions[c * 3]) / 3;
+      if ((meanX < 0) !== keepLeft) continue;
+      outIdx[triOut * 3] = remap[a];
+      outIdx[triOut * 3 + 1] = remap[b];
+      outIdx[triOut * 3 + 2] = remap[c];
+      triOut++;
+    }
+
+    return { position: outPos, normal: outNorm, index: outIdx };
   };
 
   const brainLeft = splitMesh(brainScenePos, brainSceneNorm, brainRaw.indices, true);
   const brainRight = splitMesh(brainScenePos, brainSceneNorm, brainRaw.indices, false);
+  const tBrainDone = performance.now();
 
   const tumor: TwinMeshResult["tumor"] = {};
   const classVolumesMl: TwinMeshResult["classVolumesMl"] = {};
@@ -231,20 +269,24 @@ function handleMeshRequest(request: TwinMeshRequest) {
       tumorCentroidScene = [centroidScene[0], centroidScene[1], centroidScene[2]];
     }
 
+    // Mesh each tumour class inside its own bounding box instead of the
+    // full (D,H,W) volume: a tumour class occupies a few percent of the
+    // volume's voxels, so one full-volume structureBBoxes pass (done ONCE
+    // for all three classes) plus meshStructure's per-class crop costs a
+    // fraction of three separate full-volume meshVoxelField calls.
+    // meshStructure is the exact same crop-then-mesh routine the atlas
+    // structure shells already use (see structureMesh.ts) - same field
+    // construction (`=== index ? 1 : 0`), same isovalue (0.5), same
+    // margin (1), just cropped to a bounding box first.
+    const bboxes = structureBBoxes(tumorMask, shape, [1, 2, 3]);
     for (const [clsStr, name] of Object.entries(CLASS_NAMES)) {
       const cls = Number(clsStr);
-      const field = new Float32Array(n);
-      let voxelCount = 0;
-      for (let i = 0; i < n; i++) {
-        if (tumorMask[i] === cls) {
-          field[i] = 1;
-          voxelCount++;
-        }
-      }
+      const bbox = bboxes.get(cls);
+      const voxelCount = bbox?.count ?? 0;
       classVolumesMl[name] = Math.round(voxelCount * voxelMl * 100) / 100;
-      if (voxelCount < 20) continue; // too small to surface meaningfully
-      const raw = meshVoxelField(field, [D, H, W], 0.5);
-      if (raw.positions.length === 0) continue;
+      if (!bbox || voxelCount < 20) continue; // too small to surface meaningfully
+      const raw = meshStructure(tumorMask, shape, cls, bbox);
+      if (!raw || raw.positions.length === 0) continue;
       const scenePos = voxelToScene(raw.positions, center, scale);
       const sceneNorm = normalToScene(raw.normals);
       tumor[name] = { position: scenePos, normal: sceneNorm, index: raw.indices };
@@ -255,6 +297,7 @@ function handleMeshRequest(request: TwinMeshRequest) {
       }
     }
   }
+  const tTumorDone = performance.now();
 
   const layerScalars = scalarLayers ? sampleLayersForClasses(scalarLayers, shape, voxelGeometry) : undefined;
 
@@ -296,6 +339,21 @@ function handleMeshRequest(request: TwinMeshRequest) {
       }
     }
   }
+
+  // One line, logged just before the buffers below get transferred away
+  // (and so still readable here) - see the tStart comment above for why
+  // this exists: the author's rule is that a perf change is verified by
+  // the real run moving this number, not by a passing test suite.
+  const totalMs = performance.now() - tStart;
+  const brainVerts = brainLeft.position.length / 3 + brainRight.position.length / 3;
+  let tumourVerts = 0;
+  for (const m of Object.values(tumor)) {
+    if (m) tumourVerts += m.position.length / 3;
+  }
+  console.debug(
+    `[twin] mesh ${caseId}: brain ${Math.round(tBrainDone - tStart)} ms, tumour ${Math.round(tTumorDone - tBrainDone)} ms, total ${Math.round(totalMs)} ms, verts brain=${brainVerts} tumour=${tumourVerts}`,
+  );
+
   (self as unknown as Worker).postMessage(result, transferables);
 }
 
