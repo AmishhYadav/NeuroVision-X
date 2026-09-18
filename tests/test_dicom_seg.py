@@ -383,6 +383,82 @@ def test_write_dicom_seg_round_trips(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 9b. mask_spacing_mm: an explicit, non-atlas spacing passes the geometry
+#     check against a source series that actually has that spacing (the live
+#     clinical path, post-resample -- see the module docstring's "historical
+#     note"); the default (None) keeps the old atlas-space behaviour.
+# ---------------------------------------------------------------------------
+
+
+def test_write_dicom_seg_accepts_explicit_non_atlas_mask_spacing(tmp_path: Path) -> None:
+    hd = pytest.importorskip("highdicom")
+
+    cfg = _dicom_seg_cfg_namespace()
+    # A non-isotropic, non-1mm spacing -- exactly the shape of the real study
+    # that E6's atlas-space assumption used to refuse (job a37fcaad..., source
+    # spacing (1.0, 0.9765625, 0.9765625), 2026-09-18).
+    non_atlas_spacing = (1.5, 1.0, 2.0)  # (through-plane, row, column), all != 1.0
+    sources = _make_source_datasets()
+    for i, ds in enumerate(sources):
+        # Evenly-spaced ImagePositionPatient -- _infer_slice_spacing_mm derives the
+        # through-plane spacing from consecutive slices' positions, not SliceThickness.
+        ds.ImagePositionPatient = [0.0, 0.0, float(i) * non_atlas_spacing[0]]
+        ds.PixelSpacing = [non_atlas_spacing[1], non_atlas_spacing[2]]
+    regions = _regions_matching_source(include_et=True)
+    out_path = tmp_path / "seg" / "non_atlas.dcm"
+
+    written_path = write_dicom_seg(
+        cfg, regions, sources, out_path, mask_spacing_mm=non_atlas_spacing
+    )
+    assert written_path == out_path
+    assert out_path.is_file()
+
+    seg = hd.seg.segread(str(out_path))
+    assert len(seg.SegmentSequence) == 3
+
+
+def test_write_dicom_seg_default_mask_spacing_mm_is_unchanged(tmp_path: Path) -> None:
+    """`mask_spacing_mm=None` (the default) must behave exactly like the old,
+    hardcoded-1mm-isotropic code path -- i.e. every pre-existing caller (and
+    test) that never passes it keeps working unmodified."""
+    pytest.importorskip("highdicom")
+
+    cfg = _dicom_seg_cfg_namespace()
+    sources = _make_source_datasets(n_slices=_N_SLICES)
+    # One slice too few for the mask -- still a plain shape mismatch, using
+    # the default 1mm-isotropic mask spacing (matches the source's own 1mm
+    # spacing here, so ONLY the shape reason should fire).
+    regions = _regions_matching_source(n_slices=_N_SLICES + 1, include_et=True)
+    out_path = tmp_path / "seg" / "default_spacing.dcm"
+
+    with pytest.raises(ValueError, match="shape mismatch") as excinfo:
+        write_dicom_seg(cfg, regions, sources, out_path)
+
+    assert "spacing mismatch" not in str(excinfo.value)
+    assert not out_path.exists()
+
+
+def test_check_geometry_against_source_with_explicit_mask_spacing() -> None:
+    """Pure check (no highdicom needed): an explicit mask spacing matching the
+    source series passes; the default 1mm-isotropic constant would NOT have."""
+    ok = check_geometry_against_source(
+        mask_shape=(20, 30, 40),
+        mask_spacing_mm=(1.5, 1.0, 2.0),
+        source_shape=(20, 30, 40),
+        source_spacing_mm=(1.5, 1.0, 2.0),
+    )
+    assert ok.ok is True
+
+    would_have_failed_with_the_old_constant = check_geometry_against_source(
+        mask_shape=(20, 30, 40),
+        mask_spacing_mm=(1.0, 1.0, 1.0),
+        source_shape=(20, 30, 40),
+        source_spacing_mm=(1.5, 1.0, 2.0),
+    )
+    assert would_have_failed_with_the_old_constant.ok is False
+
+
+# ---------------------------------------------------------------------------
 # 10. Refuses on geometry mismatch, and writes NOTHING.
 # ---------------------------------------------------------------------------
 

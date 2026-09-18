@@ -20,14 +20,26 @@ picture that "looked aligned" (see CLAUDE.md's ten traps, #9).
 So `write_dicom_seg` VALIDATES the mask's shape and voxel spacing against the
 source series (`check_geometry_against_source`) and REFUSES with every
 mismatch reason named, before writing anything, when they disagree. It does
-**not** resample the mask into the source series' geometry. Resampling a
-mask back through E2's saved inverse transform is a separate, not-yet-built
-step and is explicitly out of scope here.
+**not** resample the mask into the source series' geometry itself. Resampling
+a mask back through E2's saved inverse transform is a separate module
+(`neurovision.data.clinical_resample`).
 
-Because the mask always arrives in atlas space, its spacing is a fixed,
-documented physical constant of SRI24 (`_MASK_SPACING_MM`, 1 mm isotropic) --
-not a caller-supplied parameter and not something read from config, since
-there is nothing to configure: this project has committed to one atlas.
+**Historical note (accurate through 2026-09-15, no longer the live path).**
+This module was originally written assuming the mask ALWAYS arrives in atlas
+space, so its spacing was a fixed, documented physical constant of SRI24
+(`_MASK_SPACING_MM`, 1 mm isotropic) -- not a caller-supplied parameter, since
+there was nothing to configure. Since E6 shipped
+(`app.backend.clinical_jobs._export_dicom_seg`), the LIVE path resamples the
+mask into the center modality's own native NIfTI grid
+(`neurovision.data.clinical_resample.resample_mask_to_source`) and samples it
+onto the source series' own pixel grid (`neurovision.reporting.dicom_frames.
+mask_to_dicom_frames`) BEFORE calling `write_dicom_seg` at all -- so by
+construction the frames are already on the source series' own grid, and their
+spacing is that series' own spacing, not (1, 1, 1). `write_dicom_seg` now
+takes `mask_spacing_mm` as an explicit keyword argument for exactly this
+reason; passing `None` (the default) keeps `_MASK_SPACING_MM` for any caller
+that genuinely still has an atlas-space mask (e.g. a test, or a future
+non-DICOM export path).
 
 `highdicom` and `pydicom` live only in `.venv-clinical`
 (`requirements-clinical.txt`), never in the project's main `.venv` -- see
@@ -386,6 +398,7 @@ def write_dicom_seg(
     regions: np.ndarray,
     source_datasets: Sequence[Any],
     out_path: Path,
+    mask_spacing_mm: tuple[float, float, float] | None = None,
 ) -> Path:
     """Writes a mask as a DICOM Segmentation object, or refuses.
 
@@ -406,15 +419,40 @@ def write_dicom_seg(
     comparing across studies is its label and SNOMED coding, which never
     change.
 
+    This function does NOT re-sort `source_datasets`, and neither does
+    `highdicom.seg.Segmentation` below it: reading that class's own
+    `__init__` docstring (`.venv-clinical/.../highdicom/seg/sop.py`,
+    "Arrangement" section of the `pixel_array` parameter) -- since this
+    function never passes `plane_positions`, highdicom requires
+    "pixel-for-pixel correspondence between frame `pixel_array[i]` and
+    `source_images[i]`... It is the caller's responsibility to ensure
+    correct correspondences." So `source_datasets` (and the frames inside
+    `regions`) must already be in the physically correct slice order when
+    they reach this function -- see `neurovision.reporting.dicom_frames`'s
+    module docstring for the live path that guarantees this
+    (`sort_datasets_along_normal` + `mask_to_dicom_frames`, called by
+    `app.backend.clinical_jobs._export_dicom_seg` before this function).
+
     Args:
         cfg: The root config (or anything exposing `cfg.clinical.dicom_seg`
             with the fields in `configs/clinical/default.yaml`).
         regions: `(3, D, H, W)` numpy array, channel order `(ET, TC, WT)`,
-            binary values -- see `classes_from_regions`.
+            binary values -- see `classes_from_regions`. `D`'s slice order
+            must already match `source_datasets`' order exactly (see above).
         source_datasets: The source DICOM series' per-slice datasets (header
-            data is enough; pixel data need not be loaded).
+            data is enough; pixel data need not be loaded), already in the
+            correct physical slice order.
         out_path: Exact destination `.dcm` path. Its parent directory is
             created if missing.
+        mask_spacing_mm: The mask's own `(D, H, W)` voxel spacing, in mm, to
+            check against the source series. `None` (the default) falls
+            back to `_MASK_SPACING_MM` (SRI24's fixed 1 mm isotropic) -- the
+            historical atlas-space assumption this module was originally
+            written under (see the module docstring). The live clinical
+            path passes this explicitly, since by the time a mask reaches
+            here it has already been resampled onto the source series' own
+            grid, and its spacing is that series' own
+            (`neurovision.reporting.dicom_frames`, `read_source_geometry`).
 
     Returns:
         `out_path`, once the SEG object has been written there.
@@ -428,6 +466,8 @@ def write_dicom_seg(
             tumour voxels at all.
     """
     dicom_seg_cfg = cfg.clinical.dicom_seg
+    if mask_spacing_mm is None:
+        mask_spacing_mm = _MASK_SPACING_MM
 
     if dicom_seg_cfg.segmentation_type != "BINARY":
         raise ValueError(
@@ -446,7 +486,7 @@ def write_dicom_seg(
     source_shape, source_spacing_mm = read_source_geometry(source_datasets)
     geometry = check_geometry_against_source(
         mask_shape=class_map.shape,
-        mask_spacing_mm=_MASK_SPACING_MM,
+        mask_spacing_mm=mask_spacing_mm,
         source_shape=source_shape,
         source_spacing_mm=source_spacing_mm,
     )

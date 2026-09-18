@@ -27,15 +27,27 @@ research-frame prediction back to the full atlas-space grid E2 produced
 (`neurovision.inference.postprocess.uncrop_to_original`); resample that
 ATLAS-SPACE CLASS MAP (not yet split into regions) back into the center
 modality's native (pre-E2) geometry through E2's own saved inverse transform
-(`neurovision.data.clinical_resample.resample_mask_to_source`); only THEN
-split the resampled, native-space class map into the three nested ET/TC/WT
-region channels `neurovision.reporting.dicom_seg.write_dicom_seg` wants;
-find that modality's own raw DICOM headers under this job's `raw_dicom/`
-directory; and write the SEG object. A geometry mismatch there (`write_dicom_seg`'s
-own named refusal) or any other failure in this chain is caught, logged, and
-turned into "no SEG object for this job" -- it can never turn an otherwise-good
-segmentation into a `"failed"` job, mirroring exactly the failure-isolation
-philosophy the Grad-CAM block right before it already established.
+(`neurovision.data.clinical_resample.resample_mask_to_source`); find that
+modality's own raw DICOM headers under this job's `raw_dicom/` directory and
+sort them into physical slice order
+(`neurovision.reporting.dicom_frames.sort_datasets_along_normal`); sample the
+resampled, native-space class map onto THAT exact DICOM pixel grid, via the
+DICOM headers' own geometry and the resampled mask's NIfTI affine -- not by
+assuming the NIfTI array's axes line up with DICOM's row/col/slice axes,
+which they need not (`neurovision.reporting.dicom_frames.mask_to_dicom_frames`;
+see that module's docstring for why the old "just reshape the array" approach
+silently mis-registered a real study on 2026-09-18); only THEN split the
+sampled, DICOM-frame-ordered class map into the three nested ET/TC/WT region
+channels `neurovision.reporting.dicom_seg.write_dicom_seg` wants; and write
+the SEG object, passing it the SAME sorted dataset list `mask_to_dicom_frames`
+used (see that module's own ordering trap) and this series' own spacing
+(`neurovision.reporting.dicom_seg.read_source_geometry`) rather than the
+historical fixed atlas spacing. A `ValueError` from `mask_to_dicom_frames`
+(the two grids are not actually the same grid) or from `write_dicom_seg`
+itself (a residual geometry mismatch) is caught, logged, and turned into "no
+SEG object for this job" -- it can never turn an otherwise-good segmentation
+into a `"failed"` job, mirroring exactly the failure-isolation philosophy the
+Grad-CAM block right before it already established.
 
 Before any of that chain runs, `_validate_dicom_seg_cfg` checks the STATIC,
 config-derived parts of `cfg.clinical.dicom_seg` (`segmentation_type`,
@@ -1194,12 +1206,25 @@ def _export_dicom_seg(
     (`neurovision.data.clinical_resample.resample_mask_to_source`); this order
     matters and cannot be reversed, because `resample_mask_to_source`'s own
     docstring states its `mask` argument is a class map, not region channels;
-    (3) only THEN split the resampled, now-native-space class map into the
-    three nested ET/TC/WT region channels `write_dicom_seg` actually wants
-    (`_class_map_to_regions`); (4) find the center-role series' own raw DICOM
-    headers under this job's `raw_dicom/` directory (`_series_uid_for_role` +
-    `_collect_source_datasets`); (5) write the SEG object
-    (`neurovision.reporting.dicom_seg.write_dicom_seg`).
+    (3) find the center-role series' own raw DICOM headers under this job's
+    `raw_dicom/` directory (`_series_uid_for_role` + `_collect_source_datasets`)
+    and sort them into physical slice order
+    (`neurovision.reporting.dicom_frames.sort_datasets_along_normal`) -- this
+    has to happen BEFORE the next step, since sampling needs to know which
+    DICOM pixel grid to sample onto; (4) sample the resampled, native-space
+    class map onto that exact DICOM pixel grid, via the source series' own
+    geometry and the resampled mask's own NIfTI affine
+    (`neurovision.reporting.dicom_frames.mask_to_dicom_frames`) -- NOT by
+    assuming the NIfTI array's `(x, y, z)` axes already line up with DICOM's
+    `(slice, row, col)` axes, which they need not (see that module's
+    docstring for the real study this used to silently mis-register); (5)
+    only THEN split the sampled, DICOM-frame-ordered class map into the three
+    nested ET/TC/WT region channels `write_dicom_seg` actually wants
+    (`_class_map_to_regions`); (6) write the SEG object
+    (`neurovision.reporting.dicom_seg.write_dicom_seg`), passing it the SAME
+    sorted dataset list step (4) used, and this series' own spacing
+    (`neurovision.reporting.dicom_seg.read_source_geometry`) rather than the
+    historical fixed atlas-space spacing.
 
     `preprocess_result.plan.center_role` is used throughout -- as the resample
     target AND as the DICOM-SEG reference series -- rather than any separately
@@ -1209,18 +1234,20 @@ def _export_dicom_seg(
     This is a SUPPLEMENTARY artifact for PACS/OHIF interoperability, never a
     requirement for the clinical decision the job has already made by the time
     this runs (see `run_clinical_job`'s own Grad-CAM block, computed just
-    before this one, for the same philosophy). Three "cannot export, but
+    before this one, for the same philosophy). Four "cannot export, but
     nothing is wrong" cases are absorbed HERE, returning `None` rather than
     raising: no series was assigned the center role at all; no raw DICOM files
-    under `raw_dicom/` actually match that series_uid; and `write_dicom_seg`'s
-    own named refusal (`ValueError` -- e.g. a residual geometry mismatch after
-    a correct resample, which should be rare and worth logging distinctly from
-    a bug, but is handled identically). Any OTHER exception in this chain (a
-    missing E2 transformations directory, a bad resample, a corrupt atlas
-    NIfTI, ...) is NOT caught here -- it propagates, so `run_clinical_job`'s
-    own outer try/except around this call (mirroring the Grad-CAM loop's
-    per-region try/except) is the second, generic layer of the same
-    failure-isolation contract.
+    under `raw_dicom/` actually match that series_uid; `mask_to_dicom_frames`'s
+    own named refusal (`ValueError` -- the resampled mask and the source
+    series turned out not to be on the same physical grid); and
+    `write_dicom_seg`'s own named refusal (`ValueError` -- e.g. a residual
+    geometry mismatch after a correct resample, which should be rare and
+    worth logging distinctly from a bug, but is handled identically). Any
+    OTHER exception in this chain (a missing E2 transformations directory, a
+    bad resample, a corrupt atlas NIfTI, ...) is NOT caught here -- it
+    propagates, so `run_clinical_job`'s own outer try/except around this call
+    (mirroring the Grad-CAM loop's per-region try/except) is the second,
+    generic layer of the same failure-isolation contract.
 
     Args:
         job: The clinical job being exported. `job.case_id` names the cached
@@ -1251,7 +1278,8 @@ def _export_dicom_seg(
         happened).
     """
     from neurovision.data.clinical_resample import resample_mask_to_source
-    from neurovision.reporting.dicom_seg import write_dicom_seg
+    from neurovision.reporting.dicom_frames import mask_to_dicom_frames, sort_datasets_along_normal
+    from neurovision.reporting.dicom_seg import read_source_geometry, write_dicom_seg
 
     center_role = preprocess_result.plan.center_role
 
@@ -1275,13 +1303,13 @@ def _export_dicom_seg(
         ingest_result.paths[center_role],
         out_dir=resample_dir,
     )
-    native_class_map = np.asarray(nib.load(str(resampled_path)).dataobj).astype(np.uint8)
+    resampled_img = nib.load(str(resampled_path))
+    native_class_map = np.asarray(resampled_img.dataobj).astype(np.uint8)  # (x, y, z), NIfTI axes
+    native_affine = resampled_img.affine
 
-    # --- 3. NOW split the resampled, native-space class map into the three
-    # nested region channels write_dicom_seg wants. --------------------------
-    regions = _class_map_to_regions(native_class_map)
-
-    # --- 4. Find the center-role series' own raw DICOM headers. -------------
+    # --- 3. Find the center-role series' own raw DICOM headers and sort them
+    # into physical slice order -- needed BEFORE sampling (step 4), since
+    # that is the exact pixel grid being sampled onto. ------------------------
     series_uid = _series_uid_for_role(ingest_result, center_role)
     if series_uid is None:
         logger.warning(
@@ -1304,16 +1332,37 @@ def _export_dicom_seg(
         )
         return None
 
-    # --- 5. Write, or accept write_dicom_seg's own named refusal. -----------
-    out_path = job_dir / "dicom_seg" / f"{job.case_id}.dcm"
+    sorted_datasets = sort_datasets_along_normal(source_datasets)
+
+    # --- 4. Sample the resampled, native-space class map onto that exact
+    # DICOM pixel grid -- never by assuming the NIfTI array's axes already
+    # line up with DICOM's (slice, row, col) axes. ----------------------------
     try:
-        write_dicom_seg(cfg, regions, source_datasets, out_path)
+        frames = mask_to_dicom_frames(native_class_map, native_affine, sorted_datasets)
     except ValueError as exc:
-        # write_dicom_seg's own refusal (a geometry mismatch, an all-empty
-        # class map, ...) -- see its docstring's Raises section. A correct
-        # resample should make this rare; it is worth logging distinctly from
-        # a bug, but the outcome (no SEG artifact, job still reaches "done")
-        # is identical either way.
+        # The resampled mask and the source series turned out not to be on
+        # the same physical grid -- see dicom_frames.py's own docstring. A
+        # correct resample should make this rare; it is worth logging
+        # distinctly from a bug, but the outcome (no SEG artifact, job still
+        # reaches "done") is identical either way.
+        logger.warning(
+            "_export_dicom_seg: mask_to_dicom_frames refused for job %s: %s", job.job_id, exc
+        )
+        return None
+
+    # --- 5. NOW split the sampled, DICOM-frame-ordered class map into the
+    # three nested region channels write_dicom_seg wants. --------------------
+    regions = _class_map_to_regions(frames)
+
+    # --- 6. Write, passing the SAME sorted dataset list step 4 used, and this
+    # series' own spacing -- or accept write_dicom_seg's own named refusal. --
+    out_path = job_dir / "dicom_seg" / f"{job.case_id}.dcm"
+    mask_spacing_mm = read_source_geometry(sorted_datasets)[1]
+    try:
+        write_dicom_seg(cfg, regions, sorted_datasets, out_path, mask_spacing_mm=mask_spacing_mm)
+    except ValueError as exc:
+        # write_dicom_seg's own refusal (a residual geometry mismatch, an
+        # all-empty class map, ...) -- see its docstring's Raises section.
         logger.warning("_export_dicom_seg: write_dicom_seg refused for job %s: %s", job.job_id, exc)
         return None
 

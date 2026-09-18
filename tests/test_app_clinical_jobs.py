@@ -691,6 +691,35 @@ def test_series_uid_for_role_finds_assigned_uid_and_returns_none_when_absent() -
     assert clinical_jobs._series_uid_for_role(ingest_result, "flair") is None
 
 
+def _patch_frame_helpers(
+    monkeypatch: pytest.MonkeyPatch, spacing: tuple[float, float, float] = (1.0, 1.0, 1.0)
+) -> None:
+    """Fakes the sort/sample/read-geometry helpers `_export_dicom_seg` now calls
+    around `write_dicom_seg` (`neurovision.reporting.dicom_frames.
+    sort_datasets_along_normal`/`mask_to_dicom_frames`,
+    `neurovision.reporting.dicom_seg.read_source_geometry`), as no-ops:
+    `sort_datasets_along_normal` returns its input unchanged, and
+    `mask_to_dicom_frames` returns its `mask` argument unchanged. These tests
+    are about `_export_dicom_seg`'s OWN wiring/ordering, not about real DICOM
+    geometry, and use bare placeholder `source_datasets` (e.g. plain strings)
+    that carry none of the attributes the real geometry helpers need --
+    `tests/test_dicom_frames.py` is where those helpers' own geometry math is
+    actually proven.
+    """
+    monkeypatch.setattr(
+        "neurovision.reporting.dicom_frames.sort_datasets_along_normal",
+        lambda source_datasets: list(source_datasets),
+    )
+    monkeypatch.setattr(
+        "neurovision.reporting.dicom_frames.mask_to_dicom_frames",
+        lambda mask, mask_affine, source_datasets, **kwargs: mask,
+    )
+    monkeypatch.setattr(
+        "neurovision.reporting.dicom_seg.read_source_geometry",
+        lambda source_datasets: ((len(source_datasets), 1, 1), spacing),
+    )
+
+
 def test_export_dicom_seg_chain_order_and_arguments(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -739,13 +768,14 @@ def test_export_dicom_seg_chain_order_and_arguments(
 
     write_calls: list[dict] = []
 
-    def _fake_write_dicom_seg(cfg, regions, source_datasets, out_path):
+    def _fake_write_dicom_seg(cfg, regions, source_datasets, out_path, mask_spacing_mm=None):
         write_calls.append(
             {
                 "cfg": cfg,
                 "regions": np.array(regions),
                 "source_datasets": source_datasets,
                 "out_path": Path(out_path),
+                "mask_spacing_mm": mask_spacing_mm,
             }
         )
         return Path(out_path)
@@ -759,6 +789,7 @@ def test_export_dicom_seg_chain_order_and_arguments(
         return ["dataset_a", "dataset_b"]
 
     monkeypatch.setattr(clinical_jobs, "_collect_source_datasets", _fake_collect_source_datasets)
+    _patch_frame_helpers(monkeypatch, spacing=(2.0, 3.0, 4.0))
 
     sentinel_cfg = object()
     result = clinical_jobs._export_dicom_seg(
@@ -792,6 +823,9 @@ def test_export_dicom_seg_chain_order_and_arguments(
     np.testing.assert_array_equal(write_call["regions"], expected_regions)
     assert write_call["source_datasets"] == ["dataset_a", "dataset_b"]
     assert write_call["out_path"] == job_dir / "dicom_seg" / f"{job.case_id}.dcm"
+    # ...and the source series' own spacing (read_source_geometry), not the
+    # historical fixed atlas-space spacing.
+    assert write_call["mask_spacing_mm"] == (2.0, 3.0, 4.0)
 
     # _collect_source_datasets was asked for the series_uid E1 assigned to
     # the center role, under this job's own raw_dicom directory.
@@ -821,8 +855,9 @@ def test_export_dicom_seg_write_dicom_seg_refusal_returns_none(
     monkeypatch.setattr(
         clinical_jobs, "_collect_source_datasets", lambda raw_dicom_dir, series_uid: ["dataset_a"]
     )
+    _patch_frame_helpers(monkeypatch)
 
-    def _refusing_write_dicom_seg(cfg, regions, source_datasets, out_path):
+    def _refusing_write_dicom_seg(cfg, regions, source_datasets, out_path, mask_spacing_mm=None):
         raise ValueError("write_dicom_seg: refusing to write -- geometry mismatch")
 
     monkeypatch.setattr(
@@ -871,10 +906,10 @@ def test_export_dicom_seg_no_series_assigned_to_center_role_returns_none(
     fixture = _build_export_dicom_seg_fixture(tmp_path)
     shape = fixture["shape"]
 
-    # The series_uid check (step 4) runs AFTER uncrop/resample/region-split
-    # (steps 1-3), so resample_mask_to_source is still reached and must be
-    # faked here -- this test is about the series_uid lookup, not about
-    # re-proving resample_mask_to_source itself.
+    # The series_uid check (step 3) runs AFTER uncrop/resample (steps 1-2),
+    # so resample_mask_to_source is still reached and must be faked here --
+    # this test is about the series_uid lookup, not about re-proving
+    # resample_mask_to_source itself.
     def _fake_resample_mask_to_source(
         mask, atlas_affine, transformations_dir, target_role, target_native_path, out_dir
     ):
@@ -1033,6 +1068,7 @@ def _wire_dicom_seg_chain(
     monkeypatch.setattr(
         clinical_jobs, "_collect_source_datasets", lambda raw_dicom_dir, series_uid: ["dataset_a"]
     )
+    _patch_frame_helpers(monkeypatch)
 
     return series_uid
 
@@ -1044,7 +1080,7 @@ def test_run_clinical_job_dicom_seg_refusal_still_reaches_done_with_no_cached_dc
     job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
     _wire_dicom_seg_chain(monkeypatch, tmp_path)
 
-    def _refusing_write_dicom_seg(cfg, regions, source_datasets, out_path):
+    def _refusing_write_dicom_seg(cfg, regions, source_datasets, out_path, mask_spacing_mm=None):
         raise ValueError("refused: geometry mismatch")
 
     monkeypatch.setattr(
@@ -1092,7 +1128,7 @@ def test_run_clinical_job_dicom_seg_success_caches_dcm_at_expected_path(
     job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
     _wire_dicom_seg_chain(monkeypatch, tmp_path)
 
-    def _fake_write_dicom_seg(cfg, regions, source_datasets, out_path):
+    def _fake_write_dicom_seg(cfg, regions, source_datasets, out_path, mask_spacing_mm=None):
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
         Path(out_path).write_bytes(b"fake dicom bytes")
         return Path(out_path)
@@ -1918,7 +1954,7 @@ def test_run_clinical_job_calls_generate_report_and_reaches_done(
     _wire_dicom_seg_chain(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "neurovision.reporting.dicom_seg.write_dicom_seg",
-        lambda cfg, regions, source_datasets, out_path: None,
+        lambda cfg, regions, source_datasets, out_path, mask_spacing_mm=None: None,
     )
 
     calls: list[dict] = []
@@ -1952,7 +1988,7 @@ def test_run_clinical_job_report_generation_failure_isolated_still_reaches_done(
     _wire_dicom_seg_chain(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "neurovision.reporting.dicom_seg.write_dicom_seg",
-        lambda cfg, regions, source_datasets, out_path: None,
+        lambda cfg, regions, source_datasets, out_path, mask_spacing_mm=None: None,
     )
 
     def _raising_generate_report(job_, clinical_settings, job_dir, cfg):
