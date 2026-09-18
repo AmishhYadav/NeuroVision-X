@@ -1713,6 +1713,113 @@ sessions by resume is still ONE row — sum the GPU hours.
     `outputs/kaggle_kernels/nnunet-probe/nnunet_probe.ipynb` (the driver).
     `nnUNet_preprocessed` was deleted 2026-09-15 as a cache.
 
+47. **PHASE G, THE END-TO-END ERROR BUDGET: THE PIPELINE HANDS BACK A USABLE
+    MASK FOR 85% OF IN-DISTRIBUTION STUDIES, 78% OF SSA AND 24% OF PED -- AND
+    THE REFUSAL GATE, AS DEPLOYED, IS NEARLY INERT ON SSA AND CATCHES ONE THIRD
+    OF PED'S UNUSABLE OUTPUTS. SILENT-FAILURE RATE 4.2% / 18.3% / 49.5%.**
+    Run 2026-09-19, `python scripts/error_budget.py model=segqc`, 6 min on the
+    M4. Protocol fixed first in `docs/research/error_budget_protocol.md`
+    (commit `8a28783`): usable = `dice_WT >= 0.7 AND dice_TC >= 0.7` (Gate C's
+    own bar, reused not tuned); gate = the deployed `neurovision` refusal gate
+    with the FROZEN val-fitted `outputs/gatekeeper/thresholds.json`
+    (`predicted_dice` + `conformal_band` at alpha 0.10; input QC passes by
+    construction on curated challenge NIfTI); nothing refitted. Percentile
+    bootstrap CIs, 10,000 resamples, seed 42.
+
+    **G2 -- the central table.** `P(accepted)` is what the gate lets through;
+    `P(usable)` is the no-gate rate; `P(usable | accepted)` is what the gate is
+    supposed to raise; `P(accepted AND usable)` is end-to-end success.
+
+    | cohort | n | P(accepted) | P(usable), no gate | P(usable \| accepted) | **P(accepted AND usable)** |
+    |---|---|---|---|---|---|
+    | BraTS test | 189 | 0.894 [0.847, 0.937] | 0.937 [0.900, 0.968] | 0.953 [0.917, 0.982] | **0.852 [0.799, 0.900]** |
+    | SSA | 60 | 0.967 [0.917, 1.000] | 0.800 [0.700, 0.900] | 0.810 [0.707, 0.897] | **0.783 [0.667, 0.883]** |
+    | PED | 99 | 0.737 [0.647, 0.818] | 0.273 [0.192, 0.364] | 0.329 [0.219, 0.438] | **0.242 [0.162, 0.333]** |
+
+    **G5 -- the four cells (silent failure = accepted but not usable).**
+
+    | cohort | correct accept | **silent failure** | over-refusal | correct refusal | refusals by signal |
+    |---|---|---|---|---|---|
+    | test | 161 | **8 (4.2%)** | 16 (8.5%) | 4 | 12 `conformal_band` (all over-refusals), 8 `predicted_dice` (4 right, 4 wrong) |
+    | SSA | 47 | **11 (18.3%)** | 1 | 1 | 2 refusals total, one of each kind |
+    | PED | 24 | **49 (49.5%)** | 3 | 23 | 10 both signals, 9 `predicted_dice`, 4 `conformal_band`; over-refusals 3 |
+
+    Read plainly: in distribution the gate refuses **four usable studies for
+    every unusable one it catches** (16 vs 4) and lifts the usable rate among
+    accepted studies by 1.6 points (0.937 to 0.953). On SSA it is a no-op --
+    two refusals in sixty, one right, one wrong -- while 11 of 12 unusable
+    masks are handed back as PROCEED. On PED it discriminates (23 of 26
+    refusals are correct, precision 0.88) but its recall on the 72 unusable
+    cases is 0.32, so **half the paediatric cohort receives a confidently
+    accepted mask with `dice_TC` below 0.7** (mean accepted `dice_TC` 0.544,
+    against 0.922 on test). Every `conformal_band` refusal in distribution
+    was an over-refusal; that signal contributes nothing correct on test and
+    only 4 of 26 refusals on PED.
+
+    **Conformal guarantee at the deployed alpha 0.10 (realised mean miss rate at
+    the val-fitted threshold; the guarantee is a cohort expectation, not a
+    per-case bound).** Acceptance by the gate does NOT restore the guarantee
+    where it breaks:
+
+    | cohort | WT all | WT accepted | TC all | TC accepted |
+    |---|---|---|---|---|
+    | test | 0.083 [0.072, 0.095] | 0.081 | 0.091 [0.072, 0.113] | 0.086 |
+    | SSA | 0.107 [0.080, 0.146] | 0.092 | **0.171** [0.129, 0.222] | **0.159** |
+    | PED | **0.139** [0.107, 0.176] | 0.104 | **0.651** [0.590, 0.711] | **0.573** |
+
+    In distribution, 4/4 cells hold (consistent with note 42). Under shift the
+    accepted subset is a little better than the whole cohort (PED WT drops to
+    0.104, on the boundary) but PED TC stays at 5.7x nominal *after* gating.
+    The gate filters some of the worst cases; it does not turn a broken
+    guarantee into a valid one.
+
+    **G3 -- pipeline-level coverage/accuracy curve** (gate re-fitted on the
+    frozen val table at each refuse quantile; description, not calibration):
+
+    | refuse q | test coverage / P(usable\|acc) | SSA | PED |
+    |---|---|---|---|
+    | 0.01 | 0.937 / 0.944 | 0.983 / 0.814 | 0.798 / 0.304 |
+    | **0.02 (deployed)** | **0.894 / 0.953** | **0.967 / 0.810** | **0.737 / 0.329** |
+    | 0.05 | 0.804 / 0.947 | 0.917 / 0.818 | 0.646 / 0.344 |
+    | 0.10 | 0.677 / 0.945 | 0.800 / 0.812 | 0.505 / 0.420 |
+    | 0.20 | 0.450 / 0.976 | 0.600 / 0.833 | 0.253 / 0.440 |
+    | 0.30 | 0.259 / 0.980 | 0.333 / 0.900 | 0.081 / 0.375 |
+
+    On test the curve is flat until the gate is throwing away half the cohort.
+    On PED it never reaches 0.5: **refusing three quarters of paediatric
+    studies still leaves 56% of the accepted ones unusable.** No operating
+    point of this gate makes PED deployable; the gate has no signal that the
+    *cohort* is wrong, only that individual masks look poor, and the QC
+    model's optimism under shift (C19) is exactly the reason.
+
+    **Bar sensitivity** (`summary.csv`, bars 0.5-0.9): the ordering test > SSA
+    > PED and the "gate is nearly inert on SSA" reading hold at every bar.
+    At bar 0.5, silent failure is 3 / 6 / 31 cases; at 0.9 it is 51 / 33 / 68.
+    P(accepted) is bar-independent by construction (0.894 / 0.967 / 0.737).
+
+    **What this changes.** The thesis sentence "refuses inputs it cannot
+    handle" is now quantified and it is only partly true: the gate catches
+    individually bad masks with decent precision but low recall, and it is
+    blind to cohort-level shift. That is a finding, and it is the honest
+    version of the central number. The three cohorts' end-to-end rates
+    (0.852 / 0.783 / 0.242) go in the paper as the deliverable Phase G
+    promised, with the silent-failure column beside them. Two direct
+    consequences: (i) an OOD / cohort-shift signal is the missing gate input,
+    not a better QC regressor -- `ood_score` is still a structural placeholder;
+    (ii) `conformal_band` should not be an enabled refusal signal at this
+    operating point -- in distribution it only over-refuses. Neither change is
+    made here; both are deployment decisions for the author.
+
+    **Not measured here.** Input QC on real DICOM (n=3 fixtures, note 45:
+    1 PROCEED, 1 REFUSE, 1 unrun -- an anecdote); UCSF-PDGM as a fourth
+    cohort (Phase F not started); lesion-wise usability (voxel bar only, by
+    protocol).
+
+    Artifacts: `outputs/error_budget/` -- `per_case_{test,ssa,ped}.csv`,
+    `summary.csv` (cohort x bar), `taxonomy.csv`, `coverage_curve.csv`,
+    `stage_reliability.csv`, `error_budget_config.yaml`. Code:
+    `src/neurovision/analysis/error_budget.py` (+22 tests), `scripts/error_budget.py`.
+
 ---
 
 ## Planned

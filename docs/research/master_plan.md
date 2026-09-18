@@ -248,7 +248,7 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 | B3 | Deep-ensemble comparator, completing the uncertainty ladder | D1 seeds exist |
 | E | **E1–E7 built and wired** (2026-08-26/27) — the pipeline is reachable at `/clinical` | See the Phase E board below. What remains for Phase E is *tool completion*, to be scoped with the author in a tool-completion plan (next document to write, 2026-09-15) |
 | F | IDH on UCSF-PDGM | Explicit go/no-go after Phase C — decided **not yet** (2026-08-26); parked with the rest of the GPU track 2026-09-15 |
-| G | End-to-end error budget | Everything above that will actually ship |
+| G | End-to-end error budget | **G1/G2/G3/G5 measured 2026-09-19 on test/SSA/PED — note 47, `outputs/error_budget/`, protocol `error_budget_protocol.md`.** End-to-end usable-mask rate 0.852 / 0.783 / 0.242; silent failure 4.2 / 18.3 / 49.5%. G4 (UCSF-PDGM) waits on Phase F; G6 stretch not started |
 | H | Write-up and release | G |
 
 #### Track 1 continued — Phase E, the clinical front-end. CPU. E1–E6 built 2026-08-24.
