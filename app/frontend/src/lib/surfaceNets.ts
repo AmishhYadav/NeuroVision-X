@@ -9,6 +9,13 @@
 //
 // Reference: Gibson, "Constrained Elastic Surface Nets" (1998); this is the
 // widely-taught unconstrained/naive variant.
+//
+// The two grid-walking loops below are written to allocate nothing per
+// cell (flat precomputed index tables, one scratch buffer reused across
+// iterations, no destructuring, no per-cell function calls that create
+// arrays) because this runs several times per case, inside a Web Worker,
+// over multi-million-voxel volumes - allocation pressure there is directly
+// user-visible latency before the 3D twin appears.
 
 export interface SurfaceNetsResult {
   positions: Float32Array; // (N, 3)
@@ -43,6 +50,15 @@ const CORNER_OFFSETS: readonly [number, number, number][] = [
   [1, 1, 1],
 ];
 
+// Flat, allocation-free forms of the two tables above, built once at module
+// load. EDGE_A/EDGE_B replace destructuring `for (const [a, b] of
+// CUBE_EDGES)`; CORNER_X/Y/Z replace destructuring `CORNER_OFFSETS[c]`.
+const EDGE_A = new Uint8Array(CUBE_EDGES.map(([a]) => a));
+const EDGE_B = new Uint8Array(CUBE_EDGES.map(([, b]) => b));
+const CORNER_X = new Float32Array(CORNER_OFFSETS.map(([x]) => x));
+const CORNER_Y = new Float32Array(CORNER_OFFSETS.map(([, y]) => y));
+const CORNER_Z = new Float32Array(CORNER_OFFSETS.map(([, , z]) => z));
+
 /**
  * @param field flat (dx, dy, dz) scalar field, C order (x-fastest... see index())
  * @param dims [dx, dy, dz]
@@ -56,6 +72,15 @@ export function surfaceNets(
   const [dx, dy, dz] = dims;
   const index = (x: number, y: number, z: number) => x + dx * (y + dy * z);
 
+  // Flat index delta for each of the 8 corners of a cell whose (0,0,0)
+  // corner sits at flat index `base`: field[base + cornerDelta[c]] is the
+  // same value as field[index(x + ox, y + oy, z + oz)], because index() is
+  // linear in x, y, z.
+  const cornerDelta = new Int32Array(8);
+  for (let c = 0; c < 8; c++) {
+    cornerDelta[c] = CORNER_X[c] + dx * (CORNER_Y[c] + dy * CORNER_Z[c]);
+  }
+
   // One cell per (dx-1, dy-1, dz-1) grid of cubes. cellVertex maps a cell's
   // flat cell-index to its vertex index in `positions`, or -1 if inactive.
   const cdx = dx - 1;
@@ -66,14 +91,21 @@ export function surfaceNets(
 
   const positions: number[] = [];
 
+  // Reused across every cell of the first pass - allocating this inside the
+  // loop was the single largest cost on large volumes (one Float32Array per
+  // cell, millions of cells).
+  const corner = new Float32Array(8);
+
   for (let z = 0; z < cdz; z++) {
     for (let y = 0; y < cdy; y++) {
-      for (let x = 0; x < cdx; x++) {
-        const corner = new Float32Array(8);
+      // `base` is field[index(0, y, z)]; advancing x by one voxel advances
+      // the flat field index by exactly one (field is x-fastest), so we
+      // increment it instead of recomputing index(x, y, z) every cell.
+      let base = index(0, y, z);
+      for (let x = 0; x < cdx; x++, base++) {
         let inside = 0;
         for (let c = 0; c < 8; c++) {
-          const [ox, oy, oz] = CORNER_OFFSETS[c];
-          const v = field[index(x + ox, y + oy, z + oz)];
+          const v = field[base + cornerDelta[c]];
           corner[c] = v;
           if (v > isovalue) inside |= 1 << c;
         }
@@ -83,15 +115,21 @@ export function surfaceNets(
         let sy = 0;
         let sz = 0;
         let crossings = 0;
-        for (const [a, b] of CUBE_EDGES) {
+        for (let e = 0; e < 12; e++) {
+          const a = EDGE_A[e];
+          const b = EDGE_B[e];
           const va = corner[a];
           const vb = corner[b];
           const aInside = va > isovalue;
           const bInside = vb > isovalue;
           if (aInside === bInside) continue;
           const t = (isovalue - va) / (vb - va);
-          const [ax, ay, az] = CORNER_OFFSETS[a];
-          const [bx, by, bz] = CORNER_OFFSETS[b];
+          const ax = CORNER_X[a];
+          const ay = CORNER_Y[a];
+          const az = CORNER_Z[a];
+          const bx = CORNER_X[b];
+          const by = CORNER_Y[b];
+          const bz = CORNER_Z[b];
           sx += ax + t * (bx - ax);
           sy += ay + t * (by - ay);
           sz += az + t * (bz - az);
@@ -122,12 +160,16 @@ export function surfaceNets(
 
   for (let z = 0; z < dz; z++) {
     for (let y = 0; y < dy; y++) {
-      for (let x = 0; x < dx; x++) {
-        const v0 = field[index(x, y, z)];
+      // Same incrementing-base trick as the first pass: field[base] is
+      // field[index(x, y, z)], and the three axis-neighbours are fixed
+      // strides away (+1, +dx, +dx*dy) rather than fresh index() calls.
+      let base = index(0, y, z);
+      for (let x = 0; x < dx; x++, base++) {
+        const v0 = field[base];
+        const a = v0 > isovalue;
         // Edge along X: needs y>0,z>0 to have all four neighbouring cells.
         if (x + 1 < dx && y > 0 && z > 0 && y < dy && z < dz) {
-          const v1 = field[index(x + 1, y, z)];
-          const a = v0 > isovalue;
+          const v1 = field[base + 1];
           const b = v1 > isovalue;
           if (a !== b) {
             emitQuad(
@@ -141,8 +183,7 @@ export function surfaceNets(
         }
         // Edge along Y.
         if (y + 1 < dy && x > 0 && z > 0) {
-          const v1 = field[index(x, y + 1, z)];
-          const a = v0 > isovalue;
+          const v1 = field[base + dx];
           const b = v1 > isovalue;
           if (a !== b) {
             emitQuad(
@@ -156,8 +197,7 @@ export function surfaceNets(
         }
         // Edge along Z.
         if (z + 1 < dz && x > 0 && y > 0) {
-          const v1 = field[index(x, y, z + 1)];
-          const a = v0 > isovalue;
+          const v1 = field[base + dx * dy];
           const b = v1 > isovalue;
           if (a !== b) {
             emitQuad(
@@ -195,11 +235,17 @@ function computeNormals(positions: Float32Array, indices: Uint32Array): Float32A
     const nx = ay * bz - az * by;
     const ny = az * bx - ax * bz;
     const nz = ax * by - ay * bx;
-    for (const i of [i0, i1, i2]) {
-      normals[i] += nx;
-      normals[i + 1] += ny;
-      normals[i + 2] += nz;
-    }
+    // Explicit per-vertex accumulation instead of `for (const i of [i0, i1,
+    // i2])`, which allocated a 3-element array per triangle.
+    normals[i0] += nx;
+    normals[i0 + 1] += ny;
+    normals[i0 + 2] += nz;
+    normals[i1] += nx;
+    normals[i1 + 1] += ny;
+    normals[i1 + 2] += nz;
+    normals[i2] += nx;
+    normals[i2 + 1] += ny;
+    normals[i2 + 2] += nz;
   }
   for (let i = 0; i < normals.length; i += 3) {
     const len = Math.hypot(normals[i], normals[i + 1], normals[i + 2]) || 1;

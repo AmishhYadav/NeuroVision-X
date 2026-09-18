@@ -86,4 +86,66 @@ describe("surfaceNets", () => {
       expect(count).toBe(2);
     }
   });
+
+  // FNV-1a 32-bit hash, used only to compress a golden mesh into one constant
+  // below so the fixture itself doesn't have to live in the repo.
+  function fnv1a(str: string): number {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+    return h >>> 0;
+  }
+
+  it("matches the pre-optimisation golden checksum bit-for-bit", () => {
+    // Same field the golden fixture was generated from: dims [40, 33, 29],
+    // a sphere of radius 11 centred at the grid middle, plus a second,
+    // off-centre blob of radius 5 at (8, 8, 8). 1 inside either sphere, 0
+    // outside, isovalue 0.5.
+    const dims: [number, number, number] = [40, 33, 29];
+    const [dx, dy, dz] = dims;
+    const field = new Float32Array(dx * dy * dz);
+    const cx = dx / 2;
+    const cy = dy / 2;
+    const cz = dz / 2;
+    const r1 = 11;
+    const bx = 8;
+    const by = 8;
+    const bz = 8;
+    const r2 = 5;
+    for (let z = 0; z < dz; z++) {
+      for (let y = 0; y < dy; y++) {
+        for (let x = 0; x < dx; x++) {
+          const d1 = Math.hypot(x - cx, y - cy, z - cz);
+          const d2 = Math.hypot(x - bx, y - by, z - bz);
+          const inside = d1 < r1 || d2 < r2;
+          field[x + dx * (y + dy * z)] = inside ? 1 : 0;
+        }
+      }
+    }
+
+    const result = surfaceNets(field, dims, 0.5);
+
+    expect(result.positions.length).toBeGreaterThan(0);
+    expect(result.indices.length % 3).toBe(0);
+    for (let i = 0; i < result.normals.length; i += 3) {
+      const len = Math.hypot(result.normals[i], result.normals[i + 1], result.normals[i + 2]);
+      expect(len).toBeGreaterThan(1 - 1e-4);
+      expect(len).toBeLessThan(1 + 1e-4);
+    }
+
+    const round = (v: number) => Math.round(v * 1e6) / 1e6;
+    const positions = Array.from(result.positions, round);
+    const normals = Array.from(result.normals, round);
+    const indices = Array.from(result.indices);
+    const str = `${JSON.stringify(positions)}|${JSON.stringify(normals)}|${JSON.stringify(indices)}`;
+
+    // Generated from the UNMODIFIED (pre-hot-loop-optimisation) surfaceNets
+    // implementation, against the field described above. Any change to
+    // vertex order, vertex position, index order/winding, or normals must
+    // reproduce this exact value.
+    const GOLDEN_CHECKSUM = 2228312546;
+    expect(fnv1a(str)).toBe(GOLDEN_CHECKSUM);
+  });
 });
