@@ -1502,6 +1502,7 @@ def _generate_report(
         summarize_case,
     )
     from neurovision.anatomy.shape_descriptors import shape_profile
+    from neurovision.reporting.molecular import empty_molecular_block, load_molecular_knowledge
     from neurovision.reporting.report import Provenance, build_report, write_report
     from neurovision.utils.io import read_json, read_yaml
 
@@ -1530,10 +1531,35 @@ def _generate_report(
     # rather than adding a version field to KnowledgeBase for one caller.
     classification = load_classification(localize_cfg.eloquence_map)
     lobe_doc = read_yaml(localize_cfg.lobe_map)
+
+    # T5.4: the molecular-marker knowledge base, loaded the same way as
+    # eloquence_map/lobe_map above -- straight from the composed cfg's
+    # (repo-relative) path string, no manual REPO_ROOT join, relying on the
+    # same "process cwd is the repo root" convention hydra.job.chdir=false
+    # already establishes for every other knowledge/atlas path this function
+    # reads.
+    molecular_knowledge = load_molecular_knowledge(Path(report_cfg.molecular_markers))
     knowledge_versions = {
         "eloquence_map": classification.version,
         "aal_lobes": int(lobe_doc["version"]),
+        "molecular_markers": molecular_knowledge.version,
     }
+
+    # T5.4: the report this function writes to <job_dir>/report/<case_id>.json
+    # always carries the EMPTY molecular block -- every marker
+    # "Not entered", IDH's ai_estimate the fixed "not available" string,
+    # cns5["name"] None -- never a block built from any pathology a user has
+    # since typed in. Entered pathology is merged in at READ time by the API
+    # (T5.5, `merge_pathology` against `<job_dir>/pathology.json`), not here:
+    # this function runs exactly once, right after the gatekeeper, so if it
+    # baked entered values into the cached file, a value entered a week later
+    # could never reach a report already on disk, and re-running this
+    # function to pick it up would rewrite an artifact the pipeline itself
+    # already finished producing. Keeping the written file always-empty means
+    # the pipeline's own artifact stays exactly what the pipeline produced,
+    # and every later read recomputes the CNS5 name fresh from whatever is
+    # currently in pathology.json.
+    molecular_block = empty_molecular_block(molecular_knowledge)
 
     # Unlike scripts/localize.py::resolve_involvement, this reads
     # cfg.analysis.localize.involvement directly rather than defensively via
@@ -1680,6 +1706,7 @@ def _generate_report(
         involvement=involvement,
         involvement_caveats=involvement_caveats,
         geometry=geometry,
+        molecular=molecular_block,
     )
 
     out_dir = job_dir / "report"

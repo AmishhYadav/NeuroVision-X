@@ -1619,18 +1619,38 @@ def test_generate_report_calls_underlying_functions_with_expected_arguments(
             assert actual_value == expected_value, key
     assert "elongation_WT" in br["geometry"]
 
+    from neurovision.reporting.molecular import load_molecular_knowledge
     from neurovision.utils.io import read_yaml
 
     expected_aal_version = int(read_yaml(cfg.analysis.localize.lobe_map)["version"])
+    # T5.4: the real (unmocked) molecular knowledge file, loaded the same way
+    # _generate_report loads it, just to read its own `version` field.
+    expected_molecular_version = load_molecular_knowledge(
+        Path(cfg.analysis.report.molecular_markers)
+    ).version
     provenance = br["provenance"]
     assert provenance.atlas_name == "FakeAtlas"
     assert provenance.atlas_version == "9.9"
     assert provenance.atlas_source == "unit-test atlas"
     assert provenance.atlas_licence == str(cfg.anatomy.licence)
-    assert provenance.knowledge_versions == {"eloquence_map": 3, "aal_lobes": expected_aal_version}
+    assert provenance.knowledge_versions == {
+        "eloquence_map": 3,
+        "aal_lobes": expected_aal_version,
+        "molecular_markers": expected_molecular_version,
+    }
     assert provenance.segmentation_source == "prediction"
     assert job.job_id in provenance.segmentation_dir
     assert provenance.code_revision is None
+
+    # T5.4: _generate_report always passes the EMPTY molecular block (every
+    # marker "Not entered", IDH's ai_estimate the fixed unavailability
+    # string, cns5.name None) -- entered pathology is merged in later, at
+    # READ time by the API, never baked into this cached artifact.
+    assert isinstance(br["molecular"], dict)
+    assert br["molecular"]["markers"]["IDH"]["ai_estimate"] == {
+        "status": "not available — model not trained"
+    }
+    assert br["molecular"]["cns5"]["name"] is None
 
 
 def test_generate_report_involvement_disabled_skips_involvement_and_passes_none(
@@ -1964,6 +1984,11 @@ def test_generate_report_min_frac_drops_low_overlap_row_from_report(
     assert keys.index("geometry") < keys.index("eloquence")
     assert isinstance(report["geometry"]["caveat"], str) and report["geometry"]["caveat"]
     assert "rim_thickness_ET_median_mm" in report["geometry"]["rim"]
+
+    # T5.4: the real (unmocked) molecular block, written straight to this
+    # job's cached report file.
+    assert isinstance(report["molecular"]["caveat"], str) and report["molecular"]["caveat"]
+    assert "molecular_markers" in report["provenance"]["knowledge_versions"]
 
 
 def test_generate_report_missing_meta_json_raises(tmp_path: Path) -> None:
