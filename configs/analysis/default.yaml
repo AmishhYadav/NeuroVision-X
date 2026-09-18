@@ -700,3 +700,46 @@ error_budget:
 
   # Caps cases per cohort. null = all. A subsetting knob for a smoke run.
   max_cases: null
+
+compare_family:
+  # One pre-registered Holm family spanning several cohorts and tables.
+  # scripts/compare_family.py runs compare_models per item and re-applies
+  # Holm ONCE across the union of every p-value, so the family is corrected
+  # exactly as the pre-registration declares it, never per table. The
+  # defaults below are D0 (docs/research/preregistration_augmentation.md):
+  # primary dice_TC pooled SSA+PED; secondary dice_ET/WT pooled, dice_* on
+  # BraTS test, lesion-wise ET/TC/WT on both. 12 comparisons, one family.
+  # Override `comparisons`/names from the CLI or a +experiment file for D1.
+  out_dir: outputs/compare_family/${analysis.compare_family.name}
+  name: d0_heavy_aug
+  name_a: neurovision_heavy_aug
+  name_b: neurovision
+  n_boot: 10000
+  ci: 0.95
+  alpha: 0.05
+  practical_threshold: null
+  comparisons:
+    - cohort: test
+      a: outputs/eval_test_neurovision_heavy_aug/per_case_metrics.csv
+      b: outputs/neurovision/eval_test/per_case_metrics.csv
+      metrics: [dice_ET, dice_TC, dice_WT]
+    - cohort: pooled_ssa_ped
+      a:
+        - outputs/eval_ssa_neurovision_heavy_aug/per_case_metrics.csv
+        - outputs/eval_ped_neurovision_heavy_aug/per_case_metrics.csv
+      b:
+        - outputs/eval_ssa_neurovision/per_case_metrics.csv
+        - outputs/eval_ped_neurovision/per_case_metrics.csv
+      metrics: [dice_ET, dice_TC, dice_WT]
+    - cohort: test_lesionwise
+      a: outputs/replay_lesionwise/eval_test_neurovision_heavy_aug/per_case_default.csv
+      b: outputs/replay_lesionwise/eval_test/per_case_default.csv
+      metrics: [lwdice_ET, lwdice_TC, lwdice_WT]
+    - cohort: pooled_ssa_ped_lesionwise
+      a:
+        - outputs/replay_lesionwise/eval_ssa_neurovision_heavy_aug/per_case_default.csv
+        - outputs/replay_lesionwise/eval_ped_neurovision_heavy_aug/per_case_default.csv
+      b:
+        - outputs/replay_lesionwise/eval_ssa_neurovision/per_case_default.csv
+        - outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
+      metrics: [lwdice_ET, lwdice_TC, lwdice_WT]
