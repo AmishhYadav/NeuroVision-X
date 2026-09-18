@@ -236,6 +236,17 @@ export interface ReportGeometry {
   other: BurdenBlock;
 }
 
+/** Optional atlas-overlap block (ventricles, deep white matter, tissue class, epicentre). Present in reports built by scripts/report.py from 2026-08-19 on; absent on older reports, so every reader must null-check it. */
+export interface ReportInvolvement {
+  caveat: string;
+  not_vasari: string;
+  lower_bound_notes: string[];
+  groups: BurdenBlock; // keys like ventricle_overlap_mm3, ventricle_frac_of_tumour, ventricle_frac_of_group, ventricle_contact, deep_wm_* (same four)
+  tissue: BurdenBlock; // cortical_frac_of_tumour, white_matter_frac_of_tumour, csf_frac_of_tumour, outside_tissue_frac_of_tumour
+  epicentre: BurdenBlock; // epicentre_structure, epicentre_exact, epicentre_distance_mm, epicentre_laterality, epicentre_side, epicentre_lobe
+  other: BurdenBlock;
+}
+
 export interface ReportProvenance {
   atlas_name: string;
   atlas_version: string;
@@ -259,6 +270,8 @@ export interface ReportResponse {
   anatomy: ReportAnatomy;
   /** Present only when the server built this report with the geometry flag on - see `ReportGeometry`. */
   geometry?: ReportGeometry;
+  /** Present only on reports built from 2026-08-19 on - see `ReportInvolvement`. */
+  involvement?: ReportInvolvement;
   eloquence: ReportEloquence;
   provenance: ReportProvenance;
 }
