@@ -3,6 +3,9 @@
 // see /public/twin) with a properly opaque, lit material instead of the
 // thin translucent shell used for the in-tool digital twin, plus a
 // procedural streamline layer wrapping the surface for visual texture.
+// No case is selected on the landing page, so the hero shows the brain
+// shell only - no tumour. A tumour is only ever rendered for a selected
+// case inside the tool itself.
 //
 // Two honesty notes, deliberate:
 //   - This is a FIXED illustrative case, not case-aware. The real,
@@ -16,15 +19,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { hexToRgb } from "../../lib/colors";
 import { loadMesh, type MeshBuffers } from "../../lib/loadBinary";
 
 const TWIN_BASE = "/twin";
-const CLASS_HEX: Record<string, string> = {
-  necrotic: "#56B4E9",
-  oedema: "#009E73",
-  enhancing: "#D55E00",
-};
 
 function toGeometry(buf: MeshBuffers): THREE.BufferGeometry {
   const geom = new THREE.BufferGeometry();
@@ -34,15 +31,9 @@ function toGeometry(buf: MeshBuffers): THREE.BufferGeometry {
   return geom;
 }
 
-function rgbToThreeColor(hex: string): THREE.Color {
-  const [r, g, b] = hexToRgb(hex);
-  return new THREE.Color(r / 255, g / 255, b / 255);
-}
-
 interface Assets {
   brainLeft: THREE.BufferGeometry;
   brainRight: THREE.BufferGeometry;
-  tumor: Record<string, THREE.BufferGeometry>;
 }
 
 function useHeroAssets(): Assets | null {
@@ -50,22 +41,14 @@ function useHeroAssets(): Assets | null {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [brainLeft, brainRight, necrotic, oedema, enhancing] = await Promise.all([
+      const [brainLeft, brainRight] = await Promise.all([
         loadMesh(TWIN_BASE, "brain-left"),
         loadMesh(TWIN_BASE, "brain-right"),
-        loadMesh(TWIN_BASE, "tumor-necrotic"),
-        loadMesh(TWIN_BASE, "tumor-oedema"),
-        loadMesh(TWIN_BASE, "tumor-enhancing"),
       ]);
       if (cancelled) return;
       setAssets({
         brainLeft: toGeometry(brainLeft),
         brainRight: toGeometry(brainRight),
-        tumor: {
-          necrotic: toGeometry(necrotic),
-          oedema: toGeometry(oedema),
-          enhancing: toGeometry(enhancing),
-        },
       });
     })();
     return () => {
@@ -155,16 +138,6 @@ function Scene({ assets }: { assets: Assets }) {
     <group ref={groupRef}>
       <mesh geometry={assets.brainLeft} material={shellMaterial} />
       <mesh geometry={assets.brainRight} material={shellMaterial} />
-      {Object.entries(assets.tumor).map(([name, geom]) => (
-        <mesh key={name} geometry={geom}>
-          <meshStandardMaterial
-            color={rgbToThreeColor(CLASS_HEX[name])}
-            emissive={rgbToThreeColor(CLASS_HEX[name])}
-            emissiveIntensity={0.5}
-            roughness={0.3}
-          />
-        </mesh>
-      ))}
       <Streamlines radius={1.05} />
     </group>
   );
