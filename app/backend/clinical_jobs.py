@@ -1400,6 +1400,19 @@ def _generate_report(
     and its result is never merged into `summarize_case`'s own output in the
     first place, so there is nothing to split back out.
 
+    Also computes `shape_descriptors.shape_profile` (T4.3: elongation,
+    flatness, bounding-box extents, principal axis and enhancing-rim
+    thickness, per region) and always passes it to `build_report` as the
+    optional `geometry=` block. `scripts/report.py`'s batch driver leaves
+    this OFF by default, because its `outputs/report_*` files are published
+    artefacts already joined against scored `burden.csv`/`anatomy.csv` rows,
+    and turning it on would change those files' byte-for-byte content for no
+    research reason. A live clinical job protects no published number -- it
+    is a brand new report for a brand new case -- so there is nothing this
+    block could disturb, and the extra geometric detail is strictly
+    additive value for the reader; hence it runs unconditionally here, with
+    no config flag on this path.
+
     Two pieces of `localize_one`'s own post-processing are replicated here,
     NOT skipped: (1) the `cfg.analysis.localize.min_frac` filter, dropping
     non-`"unlabelled"` rows whose `frac_of_structure` AND `frac_of_tumour`
@@ -1488,6 +1501,7 @@ def _generate_report(
         localize_case,
         summarize_case,
     )
+    from neurovision.anatomy.shape_descriptors import shape_profile
     from neurovision.reporting.report import Provenance, build_report, write_report
     from neurovision.utils.io import read_json, read_yaml
 
@@ -1598,6 +1612,16 @@ def _generate_report(
         connectivity=int(burden_cfg.connectivity),
     )
 
+    # T4.3 geometric shape descriptors -- unconditional here, unlike
+    # scripts/report.py's batch driver (default OFF there). Additivity is
+    # what makes the two defaults safe to disagree: the batch driver's
+    # outputs/report_* files are already-published, already-scored
+    # artefacts, so adding a new block would move their byte content for no
+    # research reason; this is a brand new report for a brand new clinical
+    # case with no published number to protect, so there is nothing to keep
+    # stable and the extra detail is pure upside for the reader.
+    geometry = shape_profile(classes, geom)
+
     involvement = None
     if groups is not None:
         # WT (never ET/TC), reusing the `wt_mask` already computed above for
@@ -1655,6 +1679,7 @@ def _generate_report(
         top_n=int(report_cfg.top_n),
         involvement=involvement,
         involvement_caveats=involvement_caveats,
+        geometry=geometry,
     )
 
     out_dir = job_dir / "report"

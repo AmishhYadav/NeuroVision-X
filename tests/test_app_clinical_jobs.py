@@ -14,6 +14,7 @@ import dataclasses
 import io
 import json
 import logging
+import math
 import os
 import zipfile
 from pathlib import Path
@@ -28,6 +29,8 @@ from app.backend.config import Settings
 from scipy.special import logit as inverse_expit
 
 from neurovision.anatomy.atlas import Atlas, AtlasLabels, AtlasStructure
+from neurovision.anatomy.burden import CaseGeometry
+from neurovision.anatomy.shape_descriptors import shape_profile
 from neurovision.data.clinical_preprocess import PreprocessResult
 from neurovision.data.dicom_ingest import ROLES, IngestResult, RoleAssignment, SeriesOutcome
 from neurovision.inference.gatekeeper import Decision, GateDecision
@@ -1593,6 +1596,29 @@ def test_generate_report_calls_underlying_functions_with_expected_arguments(
     assert br["involvement"] is fake_involvement
     assert br["involvement_caveats"] == ("caveat one", "caveat two")
 
+    # T4.3: geometry is always computed and passed, unconditionally, on the
+    # clinical path (no config flag) -- built from THIS job's own classes and
+    # the same geom burden_profile above was given. shape_profile/CaseGeometry
+    # are the real (unmocked) functions here, so this pins content, not just
+    # presence.
+    expected_geom = CaseGeometry.from_meta(
+        meta, cropped=True, midline_index=cfg.analysis.burden.midline_index
+    )
+    expected_geometry = shape_profile(classes, expected_geom)
+    # Plain `==` on the two dicts would fail here: shape_profile fills
+    # undefined regions (e.g. ET has < 4 voxels in this fixture) with NaN,
+    # and NaN != NaN even when both sides came from the identical
+    # computation -- compare key-by-key with `math.isnan` standing in for
+    # NaN equality instead.
+    assert br["geometry"].keys() == expected_geometry.keys()
+    for key, expected_value in expected_geometry.items():
+        actual_value = br["geometry"][key]
+        if isinstance(expected_value, float) and math.isnan(expected_value):
+            assert math.isnan(actual_value), key
+        else:
+            assert actual_value == expected_value, key
+    assert "elongation_WT" in br["geometry"]
+
     from neurovision.utils.io import read_yaml
 
     expected_aal_version = int(read_yaml(cfg.analysis.localize.lobe_map)["version"])
@@ -1928,6 +1954,16 @@ def test_generate_report_min_frac_drops_low_overlap_row_from_report(
     assert involved_names == {"Structure_A"}
     assert "Structure_B" not in involved_names
     assert report["anatomy"]["n_structures_involved"] == 1
+
+    # T4.3: the geometry block is attached unconditionally on the clinical
+    # path (no config flag -- see _generate_report's docstring), in the
+    # position build_report documents: after "anatomy" (and "involvement",
+    # when present), before "eloquence". It always carries a non-empty
+    # "caveat" string and a "rim" sub-block with the ET rim-thickness keys.
+    keys = list(report.keys())
+    assert keys.index("geometry") < keys.index("eloquence")
+    assert isinstance(report["geometry"]["caveat"], str) and report["geometry"]["caveat"]
+    assert "rim_thickness_ET_median_mm" in report["geometry"]["rim"]
 
 
 def test_generate_report_missing_meta_json_raises(tmp_path: Path) -> None:
