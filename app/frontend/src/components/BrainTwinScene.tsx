@@ -26,13 +26,18 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
+import type { AtlasStructureRow } from "../api";
 import { hexToRgb } from "../lib/colors";
 import { scalarsToColors, type VertexLayerKind } from "../lib/vertexColors";
+import { structureRow } from "../lib/atlasSelection";
+import { structureColor } from "../lib/structureColors";
 import type {
   TwinMeshRequest,
   TwinMeshResult,
   TwinSampleRequest,
   TwinSampleResult,
+  TwinStructuresRequest,
+  TwinStructuresResult,
 } from "../workers/twinMesh.worker";
 import { Legend } from "./Legend";
 
@@ -68,6 +73,13 @@ function rgbToThreeColor(hex: string): THREE.Color {
   return new THREE.Color(r / 255, g / 255, b / 255);
 }
 
+/** structureColor's [0,1] RGB triple as a CSS hex string, for the legend/detail-card swatches (three.js meshes use structureColor directly - see TwinModel.renderStructureMesh). */
+function structureColorHex(index: number): string {
+  const [r, g, b] = structureColor(index);
+  const toHex = (c: number) => Math.round(c * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
 export interface BrainTwinInput {
   caseId: string;
   shape: [number, number, number];
@@ -100,22 +112,36 @@ interface TwinGeometries {
   tumor: Partial<Record<ClassName, THREE.BufferGeometry>>;
 }
 
+/** Atlas structure shells to draw - see BrainTwinSceneProps.atlas for the field meanings. */
+export interface TwinAtlasInput {
+  volume: Uint8Array;
+  selection: number[];
+  table: AtlasStructureRow[];
+}
+
 /**
  * Owns the worker, dispatches one mesh job per case, and caches results by
  * case id. Also resolves `activeLayer`'s scalars for the current case: if
  * they were not already included in the case's mesh response (e.g. the
  * layer was picked after the mesh finished), it sends a cheap "sample"
  * message that reuses the mesh's own voxel geometry instead of re-meshing.
+ * And, when `atlas` names a non-empty selection, meshes those atlas
+ * structures against the case's own scene frame (see TwinMeshResult.frame),
+ * again without re-meshing the brain or tumour.
  */
 function useTwinMesh(
   input: BrainTwinInput | null,
   activeLayer: TwinActiveLayer | null,
+  atlas: TwinAtlasInput | null,
 ): {
   result: TwinMeshResult | null;
   geometries: TwinGeometries | null;
   computing: boolean;
   /** activeLayer's per-class scalars for the CURRENT case, or null if there is no active layer or its scalars have not arrived yet. */
   activeLayerScalars: Partial<Record<ClassName, Float32Array>> | null;
+  /** Meshed shells for the CURRENT case + atlas.selection, or null if atlas is absent/empty or not yet meshed. */
+  structureGeometries: Map<number, THREE.BufferGeometry> | null;
+  structuresComputing: boolean;
 } {
   const workerRef = useRef<Worker | null>(null);
   // Base mesh geometry per case - independent of which layer is active, so
@@ -126,8 +152,23 @@ function useTwinMesh(
   const layerCacheRef = useRef<Map<string, Map<string, Partial<Record<ClassName, Float32Array>>>>>(
     new Map(),
   );
+  // Meshed atlas structures per case, then per selection key
+  // (`selection.join(",")` - a different selection is a different set of
+  // shells, but revisiting a previously-seen selection, e.g. switching case
+  // and back, is free).
+  const structuresCacheRef = useRef<Map<string, Map<string, TwinStructuresResult["structures"]>>>(
+    new Map(),
+  );
   const requestIdRef = useRef(0);
-  const pendingRef = useRef<{ type: "mesh" | "sample"; caseId: string; key?: string } | null>(null);
+  // A "structures" request shares this same requestId counter with "mesh"
+  // and "sample" requests (see the pendingRef type below), so the two
+  // request kinds serialise against each other rather than racing - a
+  // structures request fired just after a sample request will simply wait
+  // its turn. Both are cheap compared to the initial mesh pass, so this is
+  // acceptable rather than needing its own independent id space.
+  const pendingRef = useRef<
+    { type: "mesh" | "sample" | "structures"; caseId: string; key?: string } | null
+  >(null);
   // Read inside the mesh-request effect without adding activeLayer as a
   // dependency - that effect must stay keyed on caseId alone (a case switch
   // is the only thing that should trigger a re-mesh).
@@ -138,6 +179,10 @@ function useTwinMesh(
   // worker's onmessage), so bump this to force activeLayerScalars to
   // recompute after a sample response lands.
   const [layerVersion, setLayerVersion] = useState(0);
+  // Same idea as layerVersion, but for structuresCacheRef - forces
+  // structureGeometries to recompute after a "structures" response lands.
+  const [structuresVersion, setStructuresVersion] = useState(0);
+  const [structuresComputing, setStructuresComputing] = useState(false);
 
   useEffect(() => {
     activeLayerRef.current = activeLayer;
@@ -147,7 +192,9 @@ function useTwinMesh(
     workerRef.current = new Worker(new URL("../workers/twinMesh.worker.ts", import.meta.url), {
       type: "module",
     });
-    workerRef.current.onmessage = (e: MessageEvent<TwinMeshResult | TwinSampleResult>) => {
+    workerRef.current.onmessage = (
+      e: MessageEvent<TwinMeshResult | TwinSampleResult | TwinStructuresResult>,
+    ) => {
       const data = e.data;
       if (data.requestId !== requestIdRef.current) return; // stale response from a superseded request
       const pending = pendingRef.current;
@@ -166,6 +213,20 @@ function useTwinMesh(
           setLayerVersion((v) => v + 1);
         }
         setComputing(false);
+        return;
+      }
+
+      if ("kind" in data && data.kind === "structures") {
+        if (pending?.type === "structures" && pending.key) {
+          let caseStructures = structuresCacheRef.current.get(data.caseId);
+          if (!caseStructures) {
+            caseStructures = new Map();
+            structuresCacheRef.current.set(data.caseId, caseStructures);
+          }
+          caseStructures.set(pending.key, data.structures);
+          setStructuresVersion((v) => v + 1);
+        }
+        setStructuresComputing(false);
         return;
       }
 
@@ -260,6 +321,36 @@ function useTwinMesh(
     workerRef.current?.postMessage(request);
   }, [input, activeLayer, result]);
 
+  // Structures request: fires whenever the case, the atlas volume, or the
+  // selection changes (or a cached case turns out not to have THIS selection
+  // meshed yet) - never re-meshes the brain/tumour, only meshes the newly
+  // selected structures against the case's own scene frame (result.frame).
+  useEffect(() => {
+    if (!input || !atlas || atlas.selection.length === 0) return;
+    const cachedMesh = meshCacheRef.current.get(input.caseId);
+    if (!cachedMesh) return; // mesh (and its frame) not ready yet
+    const key = atlas.selection.join(",");
+    const caseStructures = structuresCacheRef.current.get(input.caseId);
+    if (caseStructures?.has(key)) return; // already meshed
+
+    requestIdRef.current += 1;
+    setStructuresComputing(true);
+    pendingRef.current = { type: "structures", caseId: input.caseId, key };
+    const request: TwinStructuresRequest = {
+      kind: "structures",
+      requestId: requestIdRef.current,
+      caseId: input.caseId,
+      shape: input.shape,
+      // Deliberately NOT transferred (see TwinStructuresRequest's docstring)
+      // - the caller (the report/atlas panel a later unit wires up) keeps
+      // its own copy of this volume for the next selection change.
+      atlas: atlas.volume,
+      selection: atlas.selection,
+      frame: cachedMesh.frame,
+    };
+    workerRef.current?.postMessage(request);
+  }, [input, atlas, result]);
+
   const geometries = useMemo<TwinGeometries | null>(() => {
     if (!result) return null;
     const tumor: Partial<Record<ClassName, THREE.BufferGeometry>> = {};
@@ -279,7 +370,27 @@ function useTwinMesh(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input?.caseId, activeLayer, layerVersion, result]);
 
-  return { result, geometries, computing, activeLayerScalars };
+  const structureGeometries = useMemo(() => {
+    if (!input || !atlas || atlas.selection.length === 0) return null;
+    const key = atlas.selection.join(",");
+    const structures = structuresCacheRef.current.get(input.caseId)?.get(key);
+    if (!structures) return null;
+    const out = new Map<number, THREE.BufferGeometry>();
+    for (const [indexStr, buf] of Object.entries(structures)) {
+      out.set(Number(indexStr), toGeometry(buf));
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input?.caseId, atlas, structuresVersion]);
+
+  return {
+    result,
+    geometries,
+    computing,
+    activeLayerScalars,
+    structureGeometries,
+    structuresComputing,
+  };
 }
 
 interface TwinModelProps {
@@ -290,6 +401,12 @@ interface TwinModelProps {
   onSelect: (c: ClassName | null) => void;
   /** Per-class vertex RGB from scalarsToColors, or absent/no-entry -> that class keeps its flat class colour. */
   colorsByClass: Partial<Record<ClassName, Float32Array>> | null;
+  /** Meshed atlas structure shells to render, keyed by atlas index, or null when none are selected/ready. */
+  structureGeometries: Map<number, THREE.BufferGeometry> | null;
+  /** Atlas index to draw more opaque/emissive, or null/absent for none. */
+  highlightedStructure?: number | null;
+  /** Fired on a shell click (its index) or on empty space (null, via the canvas's onPointerMissed). */
+  onStructureSelect?: (index: number | null) => void;
 }
 
 const HEMISPHERE_GAP = 0.55;
@@ -306,6 +423,9 @@ function TwinModel({
   selected,
   onSelect,
   colorsByClass,
+  structureGeometries,
+  highlightedStructure = null,
+  onStructureSelect,
 }: TwinModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const leftRef = useRef<THREE.Group>(null);
@@ -340,6 +460,66 @@ function TwinModel({
   );
 
   const tumorClasses = Object.keys(geometries.tumor) as ClassName[];
+
+  // Which hemisphere group each structure shell belongs to, so it slides
+  // apart WITH that hemisphere when the brain is separated (same rule
+  // splitMesh above uses for the brain itself: scene X < 0 is patient LEFT -
+  // see twinMesh.worker.ts's axis-convention comment). Computed once per
+  // structureGeometries change via computeBoundingBox() rather than on every
+  // frame - a structure shell's geometry never moves once meshed, only the
+  // group it sits in does.
+  const structureSides = useMemo(() => {
+    const sides = new Map<number, "left" | "right">();
+    if (!structureGeometries) return sides;
+    for (const [index, geom] of structureGeometries) {
+      geom.computeBoundingBox();
+      const bbox = geom.boundingBox;
+      const centerX = bbox ? (bbox.min.x + bbox.max.x) / 2 : 0;
+      sides.set(index, centerX < 0 ? "left" : "right");
+    }
+    return sides;
+  }, [structureGeometries]);
+
+  const leftStructures: [number, THREE.BufferGeometry][] = [];
+  const rightStructures: [number, THREE.BufferGeometry][] = [];
+  if (structureGeometries) {
+    for (const [index, geom] of structureGeometries) {
+      (structureSides.get(index) === "left" ? leftStructures : rightStructures).push([index, geom]);
+    }
+  }
+
+  // Translucent atlas structure shell: opacity/emissive step up when this
+  // index is the highlighted one (report-table hover/click, controlled by
+  // the parent), same pattern as the tumour meshes' own selected-vs-not
+  // emissiveIntensity step below. `stopPropagation` keeps a shell click from
+  // also toggling hemisphere separation (the click would otherwise bubble to
+  // the hemisphere group's own onClick).
+  const renderStructureMesh = (index: number, geom: THREE.BufferGeometry) => {
+    const isHighlighted = highlightedStructure === index;
+    const [r, g, b] = structureColor(index);
+    const color = new THREE.Color(r, g, b);
+    return (
+      <mesh
+        key={`structure-${index}`}
+        geometry={geom}
+        onClick={(e: ThreeEvent<MouseEvent>) => {
+          e.stopPropagation();
+          onStructureSelect?.(index);
+        }}
+      >
+        <meshStandardMaterial
+          transparent
+          opacity={isHighlighted ? 0.55 : 0.28}
+          roughness={0.5}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          color={color}
+          emissive={color}
+          emissiveIntensity={isHighlighted ? 0.35 : 0.08}
+        />
+      </mesh>
+    );
+  };
 
   // Imperative, not a JSX attribute prop: BufferGeometry attributes are
   // mutated directly (same pattern toGeometry already uses for
@@ -378,6 +558,7 @@ function TwinModel({
             onToggleSeparate();
           }}
         />
+        {leftStructures.map(([index, geom]) => renderStructureMesh(index, geom))}
       </group>
       <group ref={rightRef}>
         <mesh
@@ -388,8 +569,12 @@ function TwinModel({
             onToggleSeparate();
           }}
         />
+        {rightStructures.map(([index, geom]) => renderStructureMesh(index, geom))}
       </group>
 
+      {/* Tumour meshes render AFTER the atlas shells above (JSX/paint order),
+          so a tumour surface is never hidden behind a translucent structure
+          shell occupying the same space. */}
       {tumorClasses.map((cls) => {
         const painted = Boolean(colorsByClass?.[cls]);
         return (
@@ -451,6 +636,14 @@ export interface BrainTwinSceneProps {
   badgeTone?: "caution" | "neutral";
   /** The scalar layer currently painting the tumour meshes, or null/absent -> flat class colours (today's look). */
   activeLayer?: TwinActiveLayer | null;
+  /** Atlas structure shells to draw. `volume` is the uint8 structure-index volume in the same (D,H,W) layout as input.tumorMask; `selection` the indices to mesh (already capped by selectStructures); `table` the structure metadata. */
+  atlas?: TwinAtlasInput | null;
+  /** Structure index to emphasise (hover/click from the report table), or null. Controlled by the parent. */
+  highlightedStructure?: number | null;
+  /** Fired when the user clicks a shell (index) or clicks empty space (null). */
+  onStructureSelect?: (index: number | null) => void;
+  /** Per-structure detail the parent computes from the report (e.g. overlap fractions). Absent → the card shows name/laterality/lobe/eloquence only. */
+  structureDetail?: (index: number) => { fracOfStructure: number | null; fracOfTumour: number | null } | null;
 }
 
 export function BrainTwinScene({
@@ -458,8 +651,16 @@ export function BrainTwinScene({
   badge,
   badgeTone = "neutral",
   activeLayer = null,
+  atlas = null,
+  highlightedStructure = null,
+  onStructureSelect,
+  structureDetail,
 }: BrainTwinSceneProps) {
-  const { result, geometries, computing, activeLayerScalars } = useTwinMesh(input, activeLayer);
+  const { result, geometries, computing, activeLayerScalars, structureGeometries } = useTwinMesh(
+    input,
+    activeLayer,
+    atlas,
+  );
   const [separated, setSeparated] = useState(false);
   const [selected, setSelected] = useState<ClassName | null>(null);
   const controlsRef = useRef<import("three-stdlib").OrbitControls | null>(null);
@@ -504,7 +705,10 @@ export function BrainTwinScene({
     <div className="relative h-full w-full">
       <Canvas
         camera={{ position: [0, 0.3, 2.6], fov: 42 }}
-        onPointerMissed={() => setSelected(null)}
+        onPointerMissed={() => {
+          setSelected(null);
+          onStructureSelect?.(null);
+        }}
         dpr={[1, 2]}
         // `preserveDrawingBuffer` keeps the rendered frame in the backbuffer
         // after compositing, instead of the default WebGL clear - required
@@ -527,6 +731,9 @@ export function BrainTwinScene({
                 selected={selected}
                 onSelect={setSelected}
                 colorsByClass={colorsByClass}
+                structureGeometries={structureGeometries}
+                highlightedStructure={highlightedStructure}
+                onStructureSelect={onStructureSelect}
               />
               <CameraDolly controlsRef={controlsRef} target={dollyTarget} />
             </>
@@ -567,52 +774,154 @@ export function BrainTwinScene({
 
       {geometries && (
         <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col gap-1 font-mono text-[11px] text-text-dim">
-          <span>Drag to orbit · scroll to zoom · click a hemisphere to separate</span>
+          <span>
+            Drag to orbit · scroll to zoom · click a hemisphere to separate
+            {structureGeometries && structureGeometries.size > 0 ? " · click a structure" : ""}
+          </span>
         </div>
       )}
 
-      {geometries && selected && result && (
-        <div className="liquid-glass absolute top-3 right-3 w-56 rounded-md border border-surface-seam px-3 py-3">
-          <div className="mb-1 flex items-center gap-2">
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-              style={{ backgroundColor: CLASS_HEX[selected] }}
-              aria-hidden="true"
-            />
-            <span className="font-mono text-xs text-text-primary">{CLASS_LABEL[selected]}</span>
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              className="ml-auto text-text-dim hover:text-text-primary"
-              aria-label="Close tumour detail"
-            >
-              ×
-            </button>
-          </div>
-          <p className="tabular font-mono text-[11px] text-text-secondary">
-            {(result.classVolumesMl[selected] ?? 0).toFixed(2)} ml, this case
-          </p>
-          <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
-            {result.tumorSource === "label" ? "Real ground-truth label" : "Real saved model prediction"},{" "}
-            {result.caseId}.
-          </p>
-          {selectedLayerMean !== null && (
-            <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
-              mean {activeLayer!.kind} at surface−1 voxel: {selectedLayerMean.toFixed(2)}
-            </p>
+      {/* Tumour detail (top) and structure detail (below it, when both are
+          open at once) stack in one flex column rather than two independently
+          top-positioned cards, so a tall tumour card never overlaps the
+          structure card beneath it. */}
+      {geometries && (selected || (highlightedStructure !== null && atlas)) && (
+        <div className="absolute top-3 right-3 flex w-56 flex-col gap-2">
+          {selected && result && (
+            <div className="liquid-glass rounded-md border border-surface-seam px-3 py-3">
+              <div className="mb-1 flex items-center gap-2">
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                  style={{ backgroundColor: CLASS_HEX[selected] }}
+                  aria-hidden="true"
+                />
+                <span className="font-mono text-xs text-text-primary">{CLASS_LABEL[selected]}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  className="ml-auto text-text-dim hover:text-text-primary"
+                  aria-label="Close tumour detail"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="tabular font-mono text-[11px] text-text-secondary">
+                {(result.classVolumesMl[selected] ?? 0).toFixed(2)} ml, this case
+              </p>
+              <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
+                {result.tumorSource === "label" ? "Real ground-truth label" : "Real saved model prediction"},{" "}
+                {result.caseId}.
+              </p>
+              {selectedLayerMean !== null && (
+                <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
+                  mean {activeLayer!.kind} at surface−1 voxel: {selectedLayerMean.toFixed(2)}
+                </p>
+              )}
+            </div>
           )}
+
+          {highlightedStructure !== null &&
+            atlas &&
+            (() => {
+              const row = structureRow(atlas.table, highlightedStructure);
+              if (!row) return null; // stale index (a report/atlas version mismatch) - nothing to show
+              const detail = structureDetail?.(highlightedStructure) ?? null;
+              return (
+                <div
+                  data-testid="twin-structure-detail"
+                  className="liquid-glass rounded-md border border-surface-seam px-3 py-3"
+                >
+                  <div className="mb-1 flex items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                      style={{ backgroundColor: structureColorHex(highlightedStructure) }}
+                      aria-hidden="true"
+                    />
+                    <span className="font-mono text-xs text-text-primary">{row.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => onStructureSelect?.(null)}
+                      className="ml-auto text-text-dim hover:text-text-primary"
+                      aria-label="Close structure detail"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <p className="font-mono text-[11px] text-text-secondary">
+                    {row.laterality ?? "—"} · {row.lobe ?? "—"}
+                  </p>
+                  {/* Raw table value, verbatim - never invented (e.g. never
+                      substitute a friendlier word than what the atlas's own
+                      eloquence field actually says). */}
+                  <p className="mt-1 font-mono text-[11px] text-text-secondary">{row.eloquence ?? "—"}</p>
+                  {detail && (detail.fracOfStructure !== null || detail.fracOfTumour !== null) && (
+                    <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
+                      {detail.fracOfStructure !== null &&
+                        `${(detail.fracOfStructure * 100).toFixed(0)}% of ${row.name} overlaps the mask`}
+                      {detail.fracOfStructure !== null && detail.fracOfTumour !== null && " · "}
+                      {detail.fracOfTumour !== null && `${(detail.fracOfTumour * 100).toFixed(0)}% of the tumour`}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
         </div>
       )}
 
-      {/* Label the layer ONLY by the header value passed in via activeLayer.kind
-          - never an invented string - so the twin can never show a name for a
-          quantity the backend did not actually send. */}
-      {activeLayer && (
-        <div
-          data-testid="twin-layer-legend"
-          className="liquid-glass absolute right-3 bottom-3 w-48 rounded-md border border-surface-seam"
-        >
-          <Legend overlayMode="prediction" showUncertainty hasLabel={false} uncertaintyKind={activeLayer.kind} />
+      {/* Bottom-right stack: the structure legend (when shells are drawn)
+          above the layer legend (when a scalar layer is active) - a
+          flex-col-reverse column anchored at its bottom edge, so either can
+          be present alone without leaving a gap where the other would have
+          been. */}
+      {(activeLayer || (structureGeometries && structureGeometries.size > 0)) && (
+        <div className="absolute right-3 bottom-3 flex w-48 flex-col-reverse gap-2">
+          {/* Label the layer ONLY by the header value passed in via
+              activeLayer.kind - never an invented string - so the twin can
+              never show a name for a quantity the backend did not actually
+              send. */}
+          {activeLayer && (
+            <div data-testid="twin-layer-legend" className="liquid-glass rounded-md border border-surface-seam">
+              <Legend overlayMode="prediction" showUncertainty hasLabel={false} uncertaintyKind={activeLayer.kind} />
+            </div>
+          )}
+
+          {structureGeometries && structureGeometries.size > 0 && atlas && (
+            <div
+              data-testid="twin-structure-legend"
+              className="liquid-glass max-h-48 overflow-y-auto rounded-md border border-surface-seam p-2"
+            >
+              <div className="eyebrow px-1 pb-1">Structures</div>
+              <div className="flex flex-col gap-1">
+                {/* atlas.selection's own order (report order), not the Map's
+                    - Object.entries on the worker's numeric-keyed structures
+                    object always comes back in ascending index order in JS,
+                    which would silently re-sort this list away from the
+                    report's involvement ranking. */}
+                {atlas.selection
+                  .filter((index) => structureGeometries.has(index))
+                  .map((index) => {
+                    const row = structureRow(atlas.table, index);
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => onStructureSelect?.(index)}
+                        className="flex items-center gap-2 text-left"
+                      >
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                          style={{ backgroundColor: structureColorHex(index) }}
+                          aria-hidden="true"
+                        />
+                        <span className="truncate font-mono text-[11px] text-text-secondary">
+                          {row?.name ?? `#${index}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
