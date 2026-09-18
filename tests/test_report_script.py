@@ -24,12 +24,13 @@ from pathlib import Path
 from types import ModuleType
 
 import hydra
+import numpy as np
 import pandas as pd
 import pytest
 import yaml
 from omegaconf import OmegaConf
 
-from neurovision.utils.io import write_yaml
+from neurovision.utils.io import ensure_dir, write_json, write_yaml
 
 _SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "report.py"
 _spec = importlib.util.spec_from_file_location("report_script", _SCRIPT_PATH)
@@ -292,6 +293,8 @@ def _compose_cfg(
     cases: list[str] | None = None,
     markdown: bool | None = None,
     top_n: int | None = None,
+    geometry: bool | None = None,
+    preprocessed_dir: Path | None = None,
 ):
     """Composes the real Hydra config, pointing analysis.report.* at tmp_path fixtures."""
     overrides = [
@@ -309,6 +312,10 @@ def _compose_cfg(
         overrides.append(f"analysis.report.markdown={str(bool(markdown)).lower()}")
     if top_n is not None:
         overrides.append(f"analysis.report.top_n={int(top_n)}")
+    if geometry is not None:
+        overrides.append(f"analysis.report.geometry={str(bool(geometry)).lower()}")
+    if preprocessed_dir is not None:
+        overrides.append(f"analysis.report.preprocessed_dir={preprocessed_dir}")
 
     with hydra.initialize_config_dir(version_base="1.3", config_dir=_CONFIG_DIR):
         cfg = hydra.compose(config_name="config", overrides=overrides)
@@ -557,3 +564,197 @@ def test_resolve_cases_empty_requested_raises(tmp_path: Path) -> None:
     inputs = load_inputs(cfg)
     with pytest.raises(ValueError):
         resolve_cases(inputs, [])
+
+
+# ---------------------------------------------------------------------------
+# 9. T4.3 -- analysis.report.geometry
+# ---------------------------------------------------------------------------
+#
+# `_build_fixture_tree` already points burden_dir's `resolved_source_dir` at
+# `tmp_path / "eval" / "predictions"` (the default `source="prediction"`), so
+# the geometry fixtures below write class-map .npy files there -- the exact
+# directory `_resolve_geometry_source` reads back out of the parsed
+# `burden_config.yaml`. Every key in the report dict published today is
+# unaffected by any of this: these tests only turn the new flag on.
+
+_GEOMETRY_SHAPE: tuple[int, int, int] = (12, 12, 12)
+
+# BraTS-convention affine: diag(-1, -1, 1), same fixture `tests/test_burden_script.py`
+# uses -- affine[0][0] must be non-zero or CaseGeometry.from_meta refuses to guess
+# the left/right orientation.
+_GEOMETRY_AFFINE: list[list[float]] = [
+    [-1.0, 0.0, 0.0, 0.0],
+    [0.0, -1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+]
+
+
+def _synthetic_class_map(shape: tuple[int, int, int] = _GEOMETRY_SHAPE) -> np.ndarray:
+    """A small class map: an ET sphere (class 3) wrapped around an NCR core (class 1).
+
+    Gives `shape_profile`'s ET rim-thickness estimator a real core to measure
+    against (the two-sided estimator, not the empty-core fallback), so
+    `rim_thickness_ET_median_mm` comes out as a genuine finite number rather
+    than incidentally.
+    """
+    d, h, w = shape
+    zz, yy, xx = np.meshgrid(np.arange(d), np.arange(h), np.arange(w), indexing="ij")
+    cz, cy, cx = d / 2, h / 2, w / 2
+    dist = np.sqrt((zz - cz) ** 2 + (yy - cy) ** 2 + (xx - cx) ** 2)
+    classes = np.zeros(shape, dtype=np.uint8)
+    classes[dist < 5.0] = 3  # ET
+    classes[dist < 2.0] = 1  # NCR core, inside the ET shell
+    return classes
+
+
+def _write_geometry_meta(meta_path: Path, shape: tuple[int, int, int] = _GEOMETRY_SHAPE) -> None:
+    """Writes a meta.json with the keys `CaseGeometry.from_meta` and `_load_classes` read.
+
+    `source="prediction"` (the fixture default) means `cropped=False`, so the
+    array is checked against `original_shape` -- shaped identically to
+    `cropped_shape`/`bbox` here only for realism, since a real meta.json
+    always carries all three together.
+    """
+    write_json(
+        {
+            "case_id": "unused",
+            "spacing": [1.0, 1.0, 1.0],
+            "affine": _GEOMETRY_AFFINE,
+            "original_shape": list(shape),
+            "cropped_shape": list(shape),
+            "bbox": [[0, shape[0]], [0, shape[1]], [0, shape[2]]],
+        },
+        meta_path,
+    )
+
+
+def _write_geometry_fixture(
+    tmp_path: Path, prep_dir: Path, case_ids: list[str], *, cases_with_array: list[str]
+) -> None:
+    """Writes each case's meta.json under `prep_dir`, and a class-map .npy for a subset.
+
+    The array goes to `tmp_path / "eval" / "predictions"` -- the exact
+    directory `_build_fixture_tree` records as `resolved_source_dir` in
+    `burden_config.yaml` for the default `source="prediction"`. `case_ids`
+    not in `cases_with_array` get a `meta.json` but no array, so
+    `report_one` raises `FileNotFoundError` for them (test: the missing-array
+    case).
+
+    Args:
+        tmp_path: The test's tmp_path (fixes the predictions directory).
+        prep_dir: Where `analysis.report.preprocessed_dir` is pointed.
+        case_ids: Every case to write a `meta.json` for.
+        cases_with_array: The subset to also write a class-map `.npy` for.
+    """
+    predictions_dir = ensure_dir(tmp_path / "eval" / "predictions")
+    classes = _synthetic_class_map()
+    for case_id in case_ids:
+        _write_geometry_meta(ensure_dir(prep_dir / case_id) / "meta.json")
+        if case_id in cases_with_array:
+            np.save(predictions_dir / f"{case_id}.npy", classes)
+
+
+def test_geometry_flag_off_by_default_adds_no_key(tmp_path: Path) -> None:
+    """The published shape stays exactly what it was: no "geometry" key, ever."""
+    burden_dir, localize_dir, eloq_path, lobe_path = _build_fixture_tree(tmp_path)
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(tmp_path, output_dir, burden_dir, localize_dir, eloq_path, lobe_path)
+
+    run_report(cfg)
+    with open(output_dir / "reports" / "CASE_A.json", encoding="utf-8") as f:
+        report = json.load(f)
+
+    assert "geometry" not in report
+    assert set(report.keys()) == {
+        "report_version",
+        "case_id",
+        "generated_utc",
+        "disclaimer",
+        "not_claimed",
+        "burden",
+        "anatomy",
+        "eloquence",
+        "provenance",
+    }
+
+
+def test_geometry_flag_on_adds_finite_rim_thickness_before_eloquence(tmp_path: Path) -> None:
+    burden_dir, localize_dir, eloq_path, lobe_path = _build_fixture_tree(tmp_path)
+    prep_dir = tmp_path / "preprocessed"
+    _write_geometry_fixture(tmp_path, prep_dir, CASE_IDS, cases_with_array=CASE_IDS)
+
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(
+        tmp_path,
+        output_dir,
+        burden_dir,
+        localize_dir,
+        eloq_path,
+        lobe_path,
+        geometry=True,
+        preprocessed_dir=prep_dir,
+    )
+
+    run_report(cfg)
+    with open(output_dir / "reports" / "CASE_A.json", encoding="utf-8") as f:
+        report = json.load(f)
+
+    assert "geometry" in report
+    keys = list(report.keys())
+    assert keys.index("geometry") < keys.index("eloquence")
+
+    rim_median = report["geometry"]["rim"]["rim_thickness_ET_median_mm"]
+    assert rim_median == pytest.approx(rim_median)  # finite: NaN != NaN, so this fails on NaN
+    assert rim_median > 0.0
+
+
+def test_geometry_flag_on_missing_array_fails_that_case_only(tmp_path: Path) -> None:
+    """A case with no class-map array is a per-case failure, not a run-killer."""
+    burden_dir, localize_dir, eloq_path, lobe_path = _build_fixture_tree(tmp_path)
+    prep_dir = tmp_path / "preprocessed"
+    # CASE_B gets a meta.json but no .npy -- report_one's per-case try/except
+    # (run_report's loop) counts it as a failure and excludes it from the
+    # manifest, exactly like an ordinary report_one exception.
+    _write_geometry_fixture(tmp_path, prep_dir, CASE_IDS, cases_with_array=["CASE_A", "CASE_C"])
+
+    output_dir = tmp_path / "out"
+    cfg = _compose_cfg(
+        tmp_path,
+        output_dir,
+        burden_dir,
+        localize_dir,
+        eloq_path,
+        lobe_path,
+        geometry=True,
+        preprocessed_dir=prep_dir,
+    )
+
+    manifest_path = run_report(cfg)
+    manifest = pd.read_csv(manifest_path)
+
+    assert set(manifest["case_id"]) == {"CASE_A", "CASE_C"}
+    assert "CASE_B" not in set(manifest["case_id"])
+    assert not (output_dir / "reports" / "CASE_B.json").exists()
+
+
+def test_geometry_flag_on_all_arrays_missing_raises(tmp_path: Path) -> None:
+    """Every case failing (no class-map array anywhere) raises, per run_report's own contract."""
+    burden_dir, localize_dir, eloq_path, lobe_path = _build_fixture_tree(tmp_path)
+    output_dir = tmp_path / "out"
+    # geometry=true, but no class-map .npy was ever written under
+    # tmp_path/"eval"/"predictions" -- every case's _load_classes call raises
+    # FileNotFoundError, so all three fail and run_report raises.
+    cfg = _compose_cfg(
+        tmp_path,
+        output_dir,
+        burden_dir,
+        localize_dir,
+        eloq_path,
+        lobe_path,
+        geometry=True,
+        preprocessed_dir=tmp_path / "preprocessed",
+    )
+
+    with pytest.raises(RuntimeError, match="0/3"):
+        run_report(cfg)

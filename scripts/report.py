@@ -29,6 +29,22 @@ every case is present on both sides -- and the artifact would look entirely
 plausible. `load_inputs` therefore checks that `burden_config.yaml` and
 `localize_config.yaml` agree on `source`, `split`, and `resolved_source_dir`
 before doing anything else.
+
+`analysis.report.geometry` (T4.3) optionally adds a `"geometry"` block --
+elongation/flatness, bounding-box extents, ET rim thickness, from
+`neurovision.anatomy.shape_descriptors.shape_profile` -- to every report.
+Default OFF: every published `outputs/report_*` JSON must stay byte-identical
+to what this script wrote before the flag existed, and turning it on costs an
+extra per-case array load this script otherwise never does (the class map
+`scripts/burden.py` itself already read, re-read from the same resolved
+source directory). The live clinical pipeline (`app/backend/clinical_jobs.py`)
+turns the equivalent flag on unconditionally; this batch driver leaves the
+choice to the caller:
+
+    python scripts/report.py \\
+        analysis.report.burden_dir=outputs/burden_neurovision \\
+        analysis.report.localize_dir=outputs/localize_neurovision \\
+        analysis.report.geometry=true
 """
 
 from __future__ import annotations
@@ -43,14 +59,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import hydra
+import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
+from neurovision.anatomy.burden import CaseGeometry
 from neurovision.anatomy.involvement import INVOLVEMENT_FIELDS, load_involvement_notes
 from neurovision.anatomy.localize import Classification, load_classification
+from neurovision.anatomy.shape_descriptors import shape_profile
 from neurovision.reporting.report import Provenance, build_report, write_report
-from neurovision.utils.io import ensure_dir, read_yaml, write_yaml
+from neurovision.utils.io import ensure_dir, read_json, read_yaml, write_yaml
 from neurovision.utils.logging import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -65,6 +84,40 @@ _CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
 # analysis.{burden,localize} config, resolved_source_dir added by the driver
 # itself.
 _PROVENANCE_KEYS: tuple[str, ...] = ("source", "split")
+
+
+@dataclass(frozen=True)
+class GeometrySource:
+    """Where the T4.3 geometry block's per-case class map and meta.json live.
+
+    Built once in `load_inputs`, from `burden_config.yaml`'s own recorded
+    provenance -- NOT recomputed from `cfg.analysis.report` -- so the class
+    map `_load_classes` re-reads is guaranteed to be the SAME array
+    `scripts/burden.py` profiled for `burden.csv`, never a different run's
+    predictions that merely share a case id.
+
+    Attributes:
+        source_dir: The burden run's own `resolved_source_dir` -- for
+            `source="prediction"` this is `<eval_dir>/predictions`; for
+            `source="label"` it equals `preprocessed_dir` and is unused
+            (`_load_classes` reads `label.npy` under `preprocessed_dir`
+            instead, per the geometry rule `scripts/burden.py` documents).
+        preprocessed_dir: Root of the preprocessed tree, supplying
+            `meta.json` for every case (and `label.npy` when `cropped`).
+        cropped: Whether the class map is in the CROPPED preprocessed frame
+            (`source="label"`) or the ORIGINAL, uncropped BraTS geometry
+            (`source="prediction"`) -- mirrors `scripts/burden.py`'s
+            `_resolve_source_root`.
+        midline_index: The burden run's own resolved midline index (or
+            `None`, meaning "derive from meta.json"), read straight from
+            `burden_config.yaml` so the geometry block's left/right
+            convention matches `burden.csv` exactly.
+    """
+
+    source_dir: Path
+    preprocessed_dir: Path
+    cropped: bool
+    midline_index: float | None
 
 
 @dataclass(frozen=True)
@@ -95,6 +148,13 @@ class ReportInputs:
             knowledge file the localisation run recorded in
             `localize_config.yaml`. Empty when that run had involvement
             disabled.
+        geometry_enabled: Whether `cfg.analysis.report.geometry` is true for
+            this run. Defaults `False` so every existing caller building a
+            `ReportInputs` directly (there are none left in this file after
+            this change, but a defaulted field keeps the constructor
+            backward-compatible regardless) keeps working unchanged.
+        geometry_source: Where to re-read each case's class map when
+            `geometry_enabled` is `True`; `None` when it is `False`.
     """
 
     burden: pd.DataFrame
@@ -108,6 +168,8 @@ class ReportInputs:
     coverage_line: str
     split: str
     involvement_caveats: tuple[str, ...] = ()
+    geometry_enabled: bool = False
+    geometry_source: GeometrySource | None = None
 
 
 def git_revision(repo_root: Path) -> str | None:
@@ -201,6 +263,90 @@ def _check_provenance_agreement(
         )
 
 
+def _resolve_geometry_source(report_cfg: DictConfig, burden_config: dict) -> GeometrySource:
+    """Builds the `GeometrySource` for a run with `analysis.report.geometry=true`.
+
+    Reads `source`, `resolved_source_dir`, and `midline_index` from the
+    ALREADY-PARSED `burden_config.yaml` (the same file `_check_provenance_agreement`
+    reads) rather than from `cfg.analysis.burden`, which this script never
+    composes -- `burden_config.yaml` is the one record of which directory and
+    which midline convention actually produced `burden.csv`, and a run whose
+    `cfg` happens to carry a different `analysis.burden.*` value must not be
+    able to silently disagree with it.
+
+    Args:
+        report_cfg: `cfg.analysis.report`.
+        burden_config: The parsed `burden_config.yaml`.
+
+    Returns:
+        A `GeometrySource`. `cropped` is `True` only for `source="label"`,
+        mirroring `scripts/burden.py::_resolve_source_root`.
+    """
+    source = str(burden_config.get("source"))
+    resolved_source_dir = burden_config.get("resolved_source_dir")
+    return GeometrySource(
+        source_dir=Path(str(resolved_source_dir)),
+        preprocessed_dir=Path(str(report_cfg.get("preprocessed_dir"))),
+        cropped=(source == "label"),
+        midline_index=burden_config.get("midline_index"),
+    )
+
+
+def _load_classes(case_id: str, src: GeometrySource) -> tuple[np.ndarray, dict]:
+    """Loads one case's class map and `meta.json`, for the T4.3 geometry block.
+
+    Mirrors `scripts/burden.py::load_case`'s geometry rule and shape check
+    exactly (that function cannot be imported here -- `scripts/` is not a
+    package -- so the rule is duplicated in miniature rather than imported).
+
+    Args:
+        case_id: The case to load.
+        src: The resolved `GeometrySource`.
+
+    Returns:
+        `(classes, meta)`: the class-map array, `(D, H, W)`, and the parsed
+        `meta.json` mapping.
+
+    Raises:
+        FileNotFoundError: If the class-map array is missing, naming the
+            path that was checked.
+        ValueError: If the array is not 3-D, or its shape does not match
+            `meta["cropped_shape"]` (when `src.cropped`) or
+            `meta["original_shape"]` (otherwise) -- the same mix-up guard
+            `scripts/burden.py::load_case` applies.
+    """
+    if src.cropped:
+        array_path = src.preprocessed_dir / case_id / "label.npy"
+    else:
+        array_path = src.source_dir / f"{case_id}.npy"
+    meta_path = src.preprocessed_dir / case_id / "meta.json"
+
+    if not array_path.is_file():
+        raise FileNotFoundError(
+            f"_load_classes({case_id!r}): no class-map array at {array_path} "
+            f"(cropped={src.cropped})."
+        )
+
+    array = np.load(array_path)
+    meta = read_json(meta_path)
+
+    if array.ndim != 3:
+        raise ValueError(
+            f"_load_classes({case_id!r}): expected a 3-D class map at {array_path}, got shape "
+            f"{array.shape} (ndim={array.ndim})."
+        )
+
+    expected_key = "cropped_shape" if src.cropped else "original_shape"
+    expected = tuple(int(s) for s in meta[expected_key])
+    if tuple(array.shape) != expected:
+        raise ValueError(
+            f"_load_classes({case_id!r}): array at {array_path} has shape {tuple(array.shape)}, "
+            f"expected {expected} (meta['{expected_key}'], cropped={src.cropped})."
+        )
+
+    return array, meta
+
+
 def load_inputs(cfg: DictConfig) -> ReportInputs:
     """Loads and cross-checks the burden table, the anatomy tables, and the knowledge metadata.
 
@@ -250,6 +396,15 @@ def load_inputs(cfg: DictConfig) -> ReportInputs:
         "licence": str(atlas_block.get("licence", "")),
     }
 
+    # T4.3: off by default (see the module docstring for why). `.get` rather
+    # than attribute access so a config composed before these keys existed
+    # (an older report_config.yaml re-run, or a caller's own override tree)
+    # still works instead of raising a missing-key error.
+    geometry_enabled = bool(report_cfg.get("geometry", False))
+    geometry_source = (
+        _resolve_geometry_source(report_cfg, burden_config) if geometry_enabled else None
+    )
+
     return ReportInputs(
         burden=burden,
         anatomy=anatomy,
@@ -262,6 +417,8 @@ def load_inputs(cfg: DictConfig) -> ReportInputs:
         coverage_line=str(localize_config["coverage_line"]),
         split=str(localize_config["split"]),
         involvement_caveats=_involvement_caveats(localize_config),
+        geometry_enabled=geometry_enabled,
+        geometry_source=geometry_source,
     )
 
 
@@ -369,7 +526,8 @@ def report_one(case_id: str, inputs: ReportInputs, provenance: Provenance, top_n
     Raises:
         KeyError: If `case_id` is absent from `inputs.burden` or
             `inputs.anatomy_summary`.
-        ValueError: See `build_report`.
+        FileNotFoundError: See `_load_classes`, when `inputs.geometry_enabled`.
+        ValueError: See `_load_classes` and `build_report`.
     """
     burden_row = inputs.burden.loc[case_id].to_dict()
     # Defensive: build_report would otherwise land this as a duplicate inside
@@ -397,6 +555,23 @@ def report_one(case_id: str, inputs: ReportInputs, provenance: Provenance, top_n
         if field in anatomy_summary_row
     }
 
+    # T4.3, off by default: only build the "geometry" kwarg at all when the
+    # flag is on, so the build_report call below is untouched (no `geometry=
+    # None`) when it is off -- build_report's own docstring guarantees `None`
+    # produces byte-identical output to before this parameter existed, but an
+    # explicit `geometry=None` argument would still be a diff to the call
+    # site every existing test and published report was generated against.
+    extra: dict[str, object] = {}
+    if inputs.geometry_enabled:
+        assert inputs.geometry_source is not None  # guaranteed by load_inputs
+        classes, meta = _load_classes(case_id, inputs.geometry_source)
+        geom = CaseGeometry.from_meta(
+            meta,
+            cropped=inputs.geometry_source.cropped,
+            midline_index=inputs.geometry_source.midline_index,
+        )
+        extra["geometry"] = shape_profile(classes, geom)
+
     classification = inputs.classification
     return build_report(
         case_id,
@@ -413,6 +588,7 @@ def report_one(case_id: str, inputs: ReportInputs, provenance: Provenance, top_n
         top_n=top_n,
         involvement=involvement or None,
         involvement_caveats=inputs.involvement_caveats,
+        **extra,
     )
 
 
