@@ -1,6 +1,6 @@
 # Tool-completion log — status board for the autonomous run
 
-**Paused 2026-09-18 ~15:10 by the author ("wrap up"). Remaining: T5.6, T6.4, T1.7 (smoke sections 2a/10 rewritten for the new viewer flow, section 12 not started), T3 L/R eyeball, final demo checks + runbook.** Previous pause 13:25. Between the two pauses, at the author's direct request (chat, not the plan): landing hero without tumour; 3D twin default view + scan-view switch; collapsible case list; `/report/<case_id>` plain-language page; twin meshing ~4x faster (see F8). Plus T6.1 and T6.3. Started 2026-09-18 00:10 (author away; demo 2026-09-19 ~14:00).** The plan is
+**Resumed 2026-09-18 ~22:30 after the author's "demo went fine, finish everything" — T5.6, T6.4, T1.7 section 12, the L/R eyeball and T-docs all landed by ~23:30; every T0–T6 unit is `[x]` except T0.4 (`[-]` blocked on Kaggle rules). T7 never started (gated).** Previous pauses 13:25 and ~15:10. The plan is
 `tool_completion_plan.md`; this file is the mutable board — one line per unit, newest finding on top
 of the Findings section. A session picking up cold: read this, then the plan, then continue the first
 `[ ]` / `[~]` unit in order. T7 is never started.
@@ -19,21 +19,24 @@ Tier 1 (baseline, no code): `[x]` pytest 2058 pass / 32 skip · smoke 0 · vites
 - `[x]` T0.5 job persistence (35ebf46) + clinical page lists previous studies / `?job=<id>` (d253b99)
 
 ### T1
-- `[x]` T1.1 `/geometry` (03f84d0) · `[x]` T1.2+T1.3 (3c54428) · `[x]` T1.4+T1.5 (commit after) · `[x]` T1.6 viewer twin + report drawer · `[ ]` T1.7 e2e section 12 · **`[ ]` T1 verify-by-eye on a real done job (blocked on T0.3 run 3)**
+- `[x]` T1.1 `/geometry` (03f84d0) · `[x]` T1.2+T1.3 (3c54428) · `[x]` T1.4+T1.5 (commit after) · `[x]` T1.6 viewer twin + report drawer · `[ ]` T1.7 e2e section 12 · `[x]` T1 by-eye on 9c2cc294 (same screenshot as T3)
 - `[x]` **Twin bug fix (767f0ed)** — see F3. Must be eyeballed on the research viewer too (`/app`, any case): brain should now be crisp, not smeared; patient-left on screen-right when facing the front.
 
 ### T2 · T3 · T4 · T5 · T6
 - `[x]` T2.1+2.2 (78bb119) · `[x]` T2.3 (a5a72f8) · `[x]` T2.4+2.5 (0db9af4)
-- `[x]` T3.1 (00c0726) · `[x]` T3.2 (d268daa) · `[x]` T3.3 (9ae01a2) · `[x]` T3.4 (5730e9e) · `[x]` T3.5 scene (d3bb8b7) · `[x]` T3.5 viewer + T3.6 (02d44a7) · **`[ ]` T3 verify-by-eye L/R on a done job (trap 3) — NOT YET DONE, do before the demo**
+- `[x]` T3.1 (00c0726) · `[x]` T3.2 (d268daa) · `[x]` T3.3 (9ae01a2) · `[x]` T3.4 (5730e9e) · `[x]` T3.5 scene (d3bb8b7) · `[x]` T3.5 viewer + T3.6 (02d44a7) · **`[x]` T3 L/R on job 9c2cc294 (2026-09-18 ~23:00)** — numerically (atlas `_L` centroids at scene +X, `_R` at −X, WT centroid at −X, report `dominant_side: right`) AND by Claude's eye on a front-view, hemispheres-separated headless screenshot (`docs/research/figures/twin_clinical_9c2cc294_front_separated.png`): every `_R` shell and the clipped tumour sit in the screen-left half = patient right, radiological convention. **The author has still not looked at it.**
 - `[x]` T4.1 (2018e9e) · `[x]` T4.2 (6fa6d8d) · `[x]` T4.3 clinical (599993a) · `[x]` T4.3 batch flag (0681523; verified flag-off byte-identical on 3 cases) · `[x]` T4.4
-- `[x]` T5.1 `knowledge/molecular_markers.yaml` · `[x]` T5.2 (24b448a) · `[x]` T5.3 (20a9e1a) · `[x]` T5.4 (ffe4194) · `[x]` T5.5 (63bbd33) · `[ ]` T5.6 MolecularPanel + api.ts putClinicalPathology
-- `[x]` T6.1 markdown route (a32e9c4) · `[x]` T6.2 (ac4ec54) · `[x]` T6.3 export zip route (d0d70d3) · `[ ]` T6.4 Export button (spec written, agent stopped by the author before it edited anything)
-- `[~]` T1.7 e2e — sections 1/2a/10 of `e2e/smoke.mjs` rewritten for twin-default + report page (uncommitted if the run at 15:10 did not go green; see F8); section 12 (clinical job, SwiftShader) not started
+- `[x]` T5.1 `knowledge/molecular_markers.yaml` · `[x]` T5.2 (24b448a) · `[x]` T5.3 (20a9e1a) · `[x]` T5.4 (ffe4194) · `[x]` T5.5 (63bbd33) · `[x]` T5.6 MolecularPanel + api.ts putClinicalPathology (9da608e; PUT→GET→reload verified live on 9c2cc294)
+- `[x]` T6.1 markdown route (a32e9c4) · `[x]` T6.2 (ac4ec54) · `[x]` T6.3 export zip route (d0d70d3) · `[x]` T6.4 Export button (ed16461; route live-tested: 5-entry zip, 1.1 MB)
+- `[x]` T1.7 e2e — sections 1/2a/10 committed (ce72b15); section 12 (clinical job under SwiftShader: twin pixels, orbit, layer repaint, badge, report, pathology round-trip + reload, export button, screenshot) — see F9/F10 for the two harness findings on the way
 
 ### Author-requested viewer work (2026-09-18 afternoon, outside the plan)
 - `[x]` hero brain shell only (d86bc73) · `[x]` surfaceNets perf (fb44b7d) · `[x]` worker bbox crop + timing log (a2a469e) · `[x]` twin default + scan switch + collapsible cases + `?case=` URL (171b753) · `[x]` `lib/reportInterpretation.ts` (d767c75) · `[x]` `/report/<case_id>` page (72d9650). Reviewer: no findings. **Not yet eyeballed in a browser by anyone** — first thing tomorrow: open `/app`, pick a case, twin should appear within ~1 s of the load bar finishing; click Report.
 
 ## Findings (newest first)
+
+- **F10 (23:05) — the clinical twin was rendering into a ~150 px strip.** `ClinicalPage.tsx` mounted the viewer in a plain `div.min-h-0.flex-1`; the viewer's own `flex-1` root is a flex-1 child of a *block* parent, so it only ever got its content height, and the canvas got what was left after the toolbar and ribbon. Nobody noticed on the demo path because `App.tsx` mounts the same viewer differently. One class change (`flex flex-col` on the slot, 02ed1a5): canvas 150 → 638 px at a 1400 px window. Found only because the e2e screenshot was actually looked at.
+- **F9 (22:55) — a dedicated Worker's `console.log` never reaches the page's CDP `Runtime` domain.** Sections 2a and 12 polled `consoleMessages` for the worker's `[twin] mesh …` timing line and both failed while every pixel check passed. The harness now auto-attaches worker targets (`Target.setAutoAttach`, flatten) and enables `Runtime` on each session; the line is F8's verification and had never actually been captured by anyone.
 
 - **F8 (15:00) — the slow case render was the twin mesher, not the network.** All seven per-case artifacts serve in ~0.4 s total (curl-timed). `surfaceNets` allocated a `Float32Array(8)` and destructured tuples per cell over 3.4 M cells (~282 ms/pass), and ran 4 full-volume passes per case (brain + 3 tumour classes) plus a `Map`-based hemisphere split. Now: allocation-free loops (~70 ms/pass, bit-identical by golden checksum), tumour classes meshed inside their bounding boxes via `meshStructure`, typed-array split. The worker logs `[twin] mesh <case>: brain N ms, tumour N ms, total N ms` — that line is the verification; nobody has read it from a real browser yet (Chrome extension was disconnected all afternoon). The e2e smoke's new section 2a captures it.
 - **Smoke assumption (15:00):** `e2e/smoke.mjs` section 1 hardcoded `/baseline_unet3d/` as the experiment name; it now reads `/api/health`. Backend was serving `neurovision` at the time.

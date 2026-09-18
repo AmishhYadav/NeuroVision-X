@@ -253,12 +253,24 @@ Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the mo
 | # | Item | State | Note |
 |---|---|---|---|
 | E1 | `data/dicom_ingest.py` — study folder → four named NIfTIs | `[x]` | FLAIR beats T2 and T1CE beats T1 *structurally*, by score-zeroing, not by rule order |
-| E2 | `data/clinical_preprocess.py` — co-registration, SRI24, HD-BET, optional N4 | `[x]` built · `[ ]` **run on a real study** | Pure planning layer testable with no ANTs; needs an HD-BET weight download on first real run |
+| E2 | `data/clinical_preprocess.py` — co-registration, SRI24, HD-BET, optional N4 | `[x]` built · `[x]` **run on real studies 2026-09-18** (UPENN-GBM-00002 `done`/PROCEED in 361 s; 00001 `refused` reproducibly — note 45) | HD-BET `fast`, no TTA on the CPU floor (note 45 F2); pre-E2 QC runs at `stage="pre_registration"` (F1) |
 | E3+E4 | `inference/input_qc.py` — 12 label-free checks, refusal with a named reason | `[x]` | E4 is one of E3's checks; splitting them would put one refusal rule in two places |
 | E5 | `inference/gatekeeper.py` — PROCEED / CAUTION / REFUSE | `[x]` **calibrated 2026-08-26** | `enabled_signals=[input_qc, predicted_dice, conformal_band]` (Gate C positive; `ood_score` stays disabled, no scorer built). `scripts/calibrate_gatekeeper.py model=segqc` run on n=187 val cases; `configs/clinical/default.yaml`'s `gatekeeper.thresholds` now points at `outputs/gatekeeper/thresholds.json` (gitignored — rerun that exact command after a fresh clone to regenerate it) |
 | E6 | `reporting/dicom_seg.py` — DICOM-SEG out | `[x]` module built and tested · `[x]` **wired into live jobs 2026-08-27** (commit `54c03a6`, with entropy / conformal / Grad-CAM on live jobs) | Validates geometry against the source series and refuses; still does **not** resample from atlas space, so a real post-E2 case can still come back "export refused" — that is a reported outcome of the job, not a failure |
 | E7 | UI — bounded mask, QC estimate, refusal banner | `[x]` **done 2026-08-26** | 3D digital-twin viewer + landing page (found uncommitted, finished, committed); new `/clinical` page — upload, job status, `RefusalBanner` (neutrally worded, pulls REFUSE findings from whichever gate fired), `GatekeeperPanel` (the QC-model predicted-Dice / conformal-band detail, surfaced not just logged), `ClinicalStudyViewer` (reuses `ViewportGrid`/`SliceRibbon`/`Legend` unmodified). E2E harness extended (section 11), not replaced |
 | — | Wire E1–E5 into `app/backend/` | `[x]` **done 2026-08-26** — `clinical_jobs.py` (E1→E3→E2→E3→segment(neurovision, pinned)→QC/conformal signals→E5) + `/clinical/*` HTTP routes on `api.py` (upload, list/get/delete job, volume + mask fetch); `"refused"` a distinct job state from `"failed"`, surfaced as HTTP 200 not an error; full suite green (2004 passed, 15 skipped) | E6 deliberately excluded (see E6 row). Frontend wiring (a refusal banner, QC-estimate display) against these routes is the one remaining piece to make this reachable in the browser -- E7 |
+
+#### Track 1 continued — the tool-completion queue T0–T7. CPU. Built 2026-09-18.
+
+**Lives in `docs/research/tool_completion_plan.md` (the plan) and
+`docs/research/tool_completion_log.md` (the board + findings F1–F8).** One line here so this
+section stays the map: T0 real-DICOM run `[x]` (T0.4 comparison `[-]` blocked on the Kaggle fixture)
+· T0.5 job persistence `[x]` · T1 twin on the clinical screen `[x]` · T2 uncertainty/Grad-CAM painted
+on the twin `[x]` · T3 atlas shells + structure detail `[x]` · T4 shape descriptors (optional
+`geometry` block, batch script byte-identical with the flag off) `[x]` · T5 molecular panel
+(entered pathology, CNS5 lookup, AI slot "not available") `[x]` · T6 export (markdown, twin snapshot,
+zip bundle) `[x]` · **T7 (Phase F, IDH) `[ ]` never started — GPU, gated on the author's go and a
+TCIA-downloader dependency ask.** Note 45 records what the real studies showed.
 
 ### 4.4 The dependency arrows that actually bind
 

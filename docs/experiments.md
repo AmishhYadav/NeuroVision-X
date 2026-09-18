@@ -1561,6 +1561,107 @@ sessions by resume is still ONE row — sum the GPU hours.
     Artifacts: `outputs/confidence/neurovision_test/` --
     `per_case_confidence.csv`, `summary.csv`, `confidence_vs_entropy.csv`.
 
+45. **FIRST REAL DICOM STUDIES THROUGH THE CLINICAL PIPELINE: ONE `done`/PROCEED
+    IN 361 s ON THE M4, ONE `refused` REPRODUCIBLY ON `predicted_dice`, AND
+    SEVEN THINGS THE GREEN SUITE COULD NOT HAVE CAUGHT.** Run 2026-09-18,
+    tool-completion plan T0 (`docs/research/tool_completion_plan.md`).
+    Fixtures: TCIA **UPENN-GBM-00001/00002/00003** (public REST API, CC BY 4.0;
+    manifests `docs/data_manifests/fixture_dicom_upenn_gbm_0000{1,2,3}_sha256.txt`).
+    The Kaggle RSNA-MICCAI `train/00000` fixture the plan named returned 403
+    (competition rules not accepted), so **T0.4 -- the clinical-vs-research
+    comparison on the same BraTS patient -- is not run and this note carries no
+    "preprocessing sensitivity" number.** Nothing here is a performance claim:
+    n=2 done-or-refused studies with no ground truth.
+
+    Definitive run, committed script, no venv activation:
+    `.venv-clinical/bin/python scripts/run_clinical_study.py +clinical.study_dir=data/fixtures/dicom/UPENN-GBM-00002 +clinical.out_dir=outputs/clinical_jobs`
+    -> job `9c2cc294`, **`done` / PROCEED, wall 361 s**. Stage times from
+    `summary.json`: ingest 1 s · pre-E2 input QC 1 s · **clinical preprocessing
+    (ANTs rigid co-reg + SRI24 + HD-BET fast, no TTA) 279 s** · post-E2 QC 1 s ·
+    research preprocessing 2 s · inference **65 s** · gatekeeper 1 s · Grad-CAM
+    6 s · DICOM-SEG 2 s · report 0.1 s. Every artifact landed: report JSON
+    (burden, anatomy, involvement, geometry, molecular, eloquence, provenance),
+    DICOM-SEG (opens in pydicom), Grad-CAM WT+TC, logits, `job.json`.
+
+    | study | pre-E2 QC | post-E2 QC | predicted Dice WT / TC | conformal band WT / TC | decision |
+    |---|---|---|---|---|---|
+    | UPENN-GBM-00002 (`9c2cc294`) | warn (geometry, anisotropy 3.2 on FLAIR, shape, skull) | ok | **0.901 / 0.895** (cuts 0.707/0.789 · 0.465/0.660) | 0.974 / 0.992 | **PROCEED** |
+    | UPENN-GBM-00001 (`f4a4a754`; also `29bb17`) | warn (same four) | ok | **0.656 / 0.685** | 0.957 / 0.981 | **REFUSE** on `predicted_dice` WT |
+
+    Job `9c2cc294` report, for the record (no truth to compare against): WT
+    176.0 mL, TC 44.2 mL, ET 28.8 mL; dominant side right for all three
+    regions (frac_left_WT 0.046); top overlapped structures `Amygdala_R`,
+    `Pallidum_R`, `Putamen_R` (each ~100% of the structure inside WT);
+    eloquence: near eloquent, distance 0.0 mm; ET rim thickness median 3.9 mm,
+    max 15.7 mm.
+
+    **Findings, in the order they were hit (F1-F7 in
+    `docs/research/tool_completion_log.md`, each with its fix commit):**
+
+    1. **Pre-E2 input QC refused every real study on `geometry_consistency`.**
+       Before co-registration the four series legitimately sit on different
+       grids (192x256x192 axial, 192x256x320 sagittal, 192x256x60), so the
+       affine-agreement check fired REFUSE by construction -- exactly the
+       "resample-then-QC vs relax" risk the plan named. Resolution was **not a
+       threshold change**: the pre-E2 pass now runs with
+       `stage="pre_registration"`, under which only that one check is reported
+       at WARN with a message saying E2 will co-register; the post-E2 pass keeps
+       REFUSE; the default stage is unchanged so no existing caller moved.
+    2. **HD-BET's defaults are unusable on the 16 GB CPU floor.** brainles never
+       forwards mode/TTA, so the default is accurate (5 folds) x TTA (8 mirrors)
+       = 40 passes: 2 h 10 min, 16 GB resident, swapping, killed. Now
+       `clinical.preprocess.hd_bet_mode: fast`, `hd_bet_tta: false` -- HD-BET's
+       own documented CPU setting; a GPU deployment opts back in. 250 s on the
+       M4. Weights live inside `.venv-clinical`'s `brainles_hd_bet/model_weights/`
+       (5 x 65 MB), see `docs/reproducibility.md`.
+    3. **The shipped 3D twin was geometrically wrong twice over** and nobody had
+       seen it: the worker passed `[D,H,W]` dims to an x-fastest surface-nets
+       over a w-fastest buffer (wrong strides on every real case with D != W),
+       and the scene frame was left-handed -- a mirrored brain (trap 3 in 3D).
+       Fixed in `lib/twinGeometry.ts` with tests; scene is now (Left, Superior,
+       Anterior), right-handed, outward normals. Numerical L/R check on
+       `9c2cc294` (2026-09-18 22:40): `Precentral_L` / `Hippocampus_L` atlas
+       centroids land at scene +X, the `_R` pair at -X, the WT centroid at -X,
+       and the report says `dominant_side: right` -- atlas, mask and report
+       agree in one frame.
+    4. **DICOM-SEG export refused on the first real study, and would have
+       mis-registered had it not.** It compared source spacing (1.0, 0.977,
+       0.977) against a hard-coded (1,1,1) atlas spacing, and reshaped the
+       NIfTI (x,y,z) array straight into DICOM (slice,row,col) frames. New
+       `reporting/dicom_frames.py` samples the native-frame mask onto each
+       DICOM pixel's own world position (IPP/IOP/PixelSpacing, LPS->RAS via the
+       mask affine) and sorts slices along the normal. Verified on job
+       `a37fcaad`: 183,353/183,353 voxels sampled; ET frames land on T1CE mean
+       691 vs brain 318, with slice-/row-flipped controls at 435/461.
+    5. Conformal band mask needed the restrictively fitted threshold (0f234c8).
+    6. **A script's faked test cannot reach a real-run failure (trap 9 again).**
+       `run_clinical_study.py` was green on a fully faked pipeline and failed
+       twice on the fixture: `@hydra.main` left `GlobalHydra` initialised so the
+       backend's own `initialize_config_dir` raised, and `dcm2niix` was
+       invisible without the venv on `PATH`. Both fixed in the script.
+    7. **UPENN-GBM-00001 is refused reproducibly, and it is not registration
+       nondeterminism.** ANTs rigid registration to SRI24 lands in the same
+       basin across four probe runs (translations within 0.2 mm). 00001's
+       FLAIR is 3 mm-slice (61 slices) -- the most out-of-distribution input of
+       the three fixtures -- and the QC model puts its WT at 0.656 against a
+       refuse cut of 0.707. Under the Gate C caveat (the QC model is
+       optimistic under shift — C5/C19 in `docs/paper/claims_and_evidence.md`), a refusal here is the conservative
+       outcome, and it is the demo's "refused job is the pipeline working"
+       beat.
+
+    **What this does and does not say.** The plumbing works end to end on
+    scanner DICOM that was never skull-stripped or co-registered, and the
+    refusal gate fires on the worst-quality input of the three. It says nothing
+    about accuracy on this data -- there is no truth, and T0.4 is still owed.
+    The one design decision flagged, not silently taken: F1's
+    `pre_registration` stage. The one config change: F2's HD-BET mode, which is
+    a compute setting, not a QC threshold.
+
+    Artifacts: `outputs/clinical_jobs/{9c2cc294…,f4a4a754…,a37fcaad…,29bb17d1…}/`
+    (`summary.json` on the two script runs, `job.json` on all four);
+    `data/fixtures/dicom/UPENN-GBM-0000{1,2,3}{,.zip}` (gitignored, manifests
+    committed).
+
 ---
 
 ## Planned

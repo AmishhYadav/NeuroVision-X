@@ -188,7 +188,7 @@ package's `__init__.py` for the decorator to run.
 
 ---
 
-## Current status — 2026-09-15
+## Current status — 2026-09-18
 
 **Phase: Milestone 4. Read `docs/research/master_plan.md` first.** It is the active plan and
 supersedes the sequencing and gates of `execution_plan.md` and `improvement_plan.md`.
@@ -231,14 +231,21 @@ two of ~three sessions done, no third launched**. The exact resume state for eac
 box at the top of `docs/research/master_plan.md` §4.3 Track 2. Do not restart any of it from
 scratch, and do not start it at all without the author saying so.
 
-**The active work is finishing the tool** — the clinical pipeline as a complete, usable product
-rather than a better model. The reasoning: a complete tool with a slightly weaker model is a better
-outcome than an incomplete tool with a marginally better one. **The scope is
-`docs/research/tool_completion_plan.md` (approved 2026-09-18)** — queue T0–T7, dependency arrows,
-and a "Demo cut" section for the author's presentation on **2026-09-19 ~14:00**. Read it before
-building anything; on or before that date, work only the Demo cut tiers. Phase F (IDH) is T7
-there, gated on the author's go. Re-read `docs/research/master_plan.md` §4.2 before assuming
-anything is or is not done — the filesystem is the ground truth.
+**The tool-completion queue T0–T6 is BUILT (2026-09-18, demo given).** Scope was
+`docs/research/tool_completion_plan.md`; the board with every commit and finding F1–F8 is
+`docs/research/tool_completion_log.md`; note 45 in `docs/experiments.md` records the first real-DICOM
+runs (UPENN-GBM-00002 `done`/PROCEED in 361 s on the M4; 00001 `refused` reproducibly). What exists
+on a clinical job now: 3D twin with uncertainty / Grad-CAM / conformal painted on it, atlas shells
+with structure detail, the report with an optional `geometry` block and a `molecular` panel (entered
+pathology → CNS5 name; AI slot literally "not available — model not trained"), markdown + zip export
+with a twin snapshot, job persistence across restarts, and E2E section 12 driving all of it on a real
+done job under SwiftShader. **Still open:** T0.4 (clinical-vs-research comparison on one BraTS
+patient — blocked on the author accepting the Kaggle RSNA-MICCAI competition rules so
+`train/00000` downloads); the by-eye L/R check is numerically confirmed (note 45 F3) but no human
+has looked at the twin on a real job yet. **T7 (Phase F, IDH) is not started** — GPU, gated on the
+author's explicit go, needs a TCIA-downloader dependency ask, ~3–4 weeks. The serving command for
+the clinical demo is in `docs/reproducibility.md` §5. Re-read `docs/research/master_plan.md` §4.2
+before assuming anything is or is not done — the filesystem is the ground truth.
 
 **Data on disk.** `data/preprocessed/{brats,brats_ssa,brats_ped}` — `brats` is backed only by the live
 Kaggle dataset `amishyadav123/neurovision-brats-prep`, so **do not delete it**. Raw data was deleted

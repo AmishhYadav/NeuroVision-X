@@ -277,6 +277,48 @@ uv pip install -r app/backend/requirements.txt --python .venv-clinical/bin/pytho
 .venv-clinical/bin/uvicorn app.backend.main:app --reload
 ```
 
+**The clinical demo as it was served on 2026-09-18** (the `neurovision` run of
+record on the research viewer, clinical jobs under their own root so a restart
+rehydrates them — T0.5):
+
+```bash
+NVX_EXPERIMENT=neurovision \
+NVX_EVAL_DIR=outputs/neurovision/eval_test \
+NVX_CHECKPOINT=outputs/neurovision/checkpoints/best.pt \
+NVX_REPORT_DIR=outputs/report_neurovision/reports \
+NVX_JOB_DIR=outputs/clinical_jobs \
+.venv-clinical/bin/uvicorn app.backend.main:app --port 8000
+# and, in app/frontend:  npm run dev
+```
+
+`NVX_CLINICAL_CHECKPOINT` defaults to `outputs/neurovision/checkpoints/best.pt`
+and is the only segmenter a clinical job ever uses.
+
+### Real-DICOM fixtures and HD-BET weights (T0, 2026-09-18)
+
+- **Fixtures:** `data/fixtures/dicom/UPENN-GBM-0000{1,2,3}/` plus the `.zip` of
+  each (gitignored under `/data/`). Source: TCIA UPENN-GBM collection via its
+  public REST API, no login, CC BY 4.0. SHA-256 manifests are committed at
+  `docs/data_manifests/fixture_dicom_upenn_gbm_0000{1,2,3}_sha256.txt`. The
+  RSNA-MICCAI Kaggle `train/00000` fixture the plan named still returns 403
+  until the competition rules are accepted in a browser; T0.4 waits on it.
+- **HD-BET weights** download on the first `HDBetExtractor()` call into the
+  package itself, not `~/hd-bet_params`:
+  `.venv-clinical/lib/python3.11/site-packages/brainles_hd_bet/model_weights/{0..4}.model`
+  (5 × 65 MB). A fresh `.venv-clinical` re-downloads them on first use; nothing
+  to copy. `configs/clinical/default.yaml` runs `hd_bet_mode: fast`,
+  `hd_bet_tta: false` — the CPU floor cannot afford accurate+TTA (note 45, F2).
+- **One study, end to end, as a command** (writes `summary.json` beside the job):
+
+  ```bash
+  .venv-clinical/bin/python scripts/run_clinical_study.py \
+      +clinical.study_dir=data/fixtures/dicom/UPENN-GBM-00002 \
+      +clinical.out_dir=outputs/clinical_jobs
+  ```
+
+  361 s on the M4 (279 s of it HD-BET + ANTs). No venv activation needed: the
+  script puts its own interpreter's `bin/` (where `dcm2niix` lives) on `PATH`.
+
 Two consequences worth stating plainly, because both are easy to trip over:
 
 - **A lesion-wise number and a voxel-wise number are produced under different
