@@ -241,17 +241,23 @@ def run_study(study_dir: Path, out_dir: Path, *, settings: Settings | None = Non
     # module docstring's own example usage) without first `source
     # .venv-clinical/bin/activate` leaves PATH pointing at the SYSTEM
     # python's bin directories, so dcm2niix silently fails to resolve at E1
-    # ingest even though it is sitting right next to sys.executable.
-    # Prepending sys.executable's own directory makes "the venv this script
-    # is actually running under" win regardless of whether it was activated.
-    interpreter_bin_dir = str(Path(sys.executable).resolve().parent)
+    # ingest.
+    #
+    # `sys.executable` is NOT the right source for that directory: inside a
+    # venv it is typically a SYMLINK to the base interpreter (e.g. a
+    # Homebrew/uv python), and `Path(sys.executable).resolve()` follows that
+    # symlink straight OUT of the venv, landing in the base interpreter's
+    # own bin dir -- never where dcm2niix actually lives. `sys.prefix`, by
+    # contrast, IS the venv root by definition (a venv always sets
+    # `sys.prefix` to itself, symlinks notwithstanding), so deriving the bin
+    # dir from `sys.prefix` is correct regardless of how `sys.executable`
+    # happens to be wired.
+    venv_bin_dir = str(Path(sys.prefix) / ("Scripts" if os.name == "nt" else "bin"))
     existing_path = os.environ.get("PATH", "")
     path_entries = existing_path.split(os.pathsep) if existing_path else []
-    if interpreter_bin_dir not in path_entries:
+    if venv_bin_dir not in path_entries:
         os.environ["PATH"] = (
-            os.pathsep.join([interpreter_bin_dir, existing_path])
-            if existing_path
-            else interpreter_bin_dir
+            os.pathsep.join([venv_bin_dir, existing_path]) if existing_path else venv_bin_dir
         )
 
     from app.backend import clinical_jobs

@@ -242,22 +242,70 @@ def test_run_study_records_summary_when_run_clinical_job_raises(
     assert "run_clinical_job raised unexpectedly" in caplog.text
 
 
-def test_run_study_prepends_interpreter_bin_dir_to_path(
+def test_run_study_prepends_venv_bin_dir_to_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The dir prepended to PATH must come from `sys.prefix` (the venv root), not
+    from resolving `sys.executable` -- see run_study's own comment: in a venv,
+    `sys.executable` is typically a symlink OUT to the base interpreter, and
+    `.resolve()`-ing it lands outside the venv entirely."""
     study_dir = _make_study_dir(tmp_path)
     out_dir = tmp_path / "clinical_out"
     settings = _settings(tmp_path)
     monkeypatch.setenv("NVX_JOB_DIR", str(out_dir))
-    monkeypatch.setenv("PATH", "/definitely/not/the/interpreters/bin")
+    monkeypatch.setenv("PATH", "/definitely/not/the/venvs/bin")
 
     _wire_full_pipeline_to_gatekeeper(monkeypatch, tmp_path)
     monkeypatch.setattr(inference, "explain_case", lambda *a, **k: Path("/fake/gradcam.npy"))
 
     run_clinical_study_script.run_study(study_dir, out_dir, settings=settings)
 
-    interpreter_bin_dir = str(Path(sys.executable).resolve().parent)
-    assert os.environ["PATH"].startswith(interpreter_bin_dir)
+    expected_bin_dir = str(Path(sys.prefix) / ("Scripts" if os.name == "nt" else "bin"))
+    prepended = os.environ["PATH"].split(os.pathsep)[0]
+    assert prepended == expected_bin_dir
+
+    # On this machine sys.executable may or may not itself be a symlink out
+    # of the venv -- only assert the two differ (and that the resolved,
+    # symlink-followed dir was NOT what got prepended) when they actually do
+    # differ here; the real regression this guards is covered unconditionally
+    # by the next test, which forces the symlink case directly.
+    resolved_executable_dir = str(Path(sys.executable).resolve().parent)
+    if resolved_executable_dir != expected_bin_dir:
+        assert prepended != resolved_executable_dir
+
+
+def test_run_study_path_fix_survives_a_symlinked_sys_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reproduces the real failure directly: a venv's `sys.executable` symlinked
+    out to the base interpreter must not defeat the PATH fix -- `sys.prefix`
+    (the venv root) must still win, independent of the machine this test runs
+    on."""
+    fake_venv_root = tmp_path / "fake_venv"
+    fake_bin_dir = fake_venv_root / "bin"
+    fake_bin_dir.mkdir(parents=True)
+    symlinked_executable = fake_bin_dir / "python"
+    # Mirrors a real venv exactly: its own bin/python is a symlink pointing
+    # OUT to the real, base interpreter -- resolving it walks out of
+    # fake_venv_root entirely, which is exactly the bug this test proves is
+    # no longer reachable.
+    symlinked_executable.symlink_to(sys.executable)
+
+    monkeypatch.setattr(sys, "executable", str(symlinked_executable))
+    monkeypatch.setattr(sys, "prefix", str(fake_venv_root))
+
+    study_dir = _make_study_dir(tmp_path)
+    out_dir = tmp_path / "clinical_out"
+    settings = _settings(tmp_path)
+    monkeypatch.setenv("NVX_JOB_DIR", str(out_dir))
+    monkeypatch.setenv("PATH", "/definitely/not/the/venvs/bin")
+
+    _wire_full_pipeline_to_gatekeeper(monkeypatch, tmp_path)
+    monkeypatch.setattr(inference, "explain_case", lambda *a, **k: Path("/fake/gradcam.npy"))
+
+    run_clinical_study_script.run_study(study_dir, out_dir, settings=settings)
+
+    assert os.environ["PATH"].split(os.pathsep)[0] == str(fake_bin_dir)
 
 
 # --- exit_code_for_state ----------------------------------------------------
