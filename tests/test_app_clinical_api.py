@@ -20,9 +20,12 @@ instance).
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
+import struct
 import zipfile
+import zlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1215,3 +1218,146 @@ def test_clinical_job_atlas_applies_job_bbox_crop_offset(
     assert response.headers["x-volume-shape"] == "3,3,3"
     expected = fake_volume[1:4, 2:5, 3:6]
     assert response.content == expected.tobytes()
+
+
+# --- T6.3: POST /api/clinical/jobs/{job_id}/export ---------------------------
+
+
+def _tiny_png(rgb: tuple[int, int, int] = (255, 0, 0)) -> bytes:
+    """Builds a minimal valid 1x1 PNG by hand -- no Pillow, per this module's constraints."""
+
+    def _chunk(tag: bytes, data: bytes) -> bytes:
+        body = tag + data
+        return (
+            struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+        )
+
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)  # 1x1, 8-bit, RGB, no interlace
+    raw_scanline = b"\x00" + bytes(rgb)  # filter byte 0 ("none") + one RGB pixel
+    idat = zlib.compress(raw_scanline)
+    return signature + _chunk(b"IHDR", ihdr) + _chunk(b"IDAT", idat) + _chunk(b"IEND", b"")
+
+
+def _export(client: TestClient, job_id: str, snapshots: list[tuple[str, bytes]] | None = None):
+    files = [("snapshots", (name, content, "image/png")) for name, content in (snapshots or [])]
+    return client.post(f"/api/clinical/jobs/{job_id}/export", files=files or None)
+
+
+def test_export_bundle_contains_every_artifact(client: TestClient, backend: Path) -> None:
+    from neurovision.reporting.report import render_markdown
+
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    payload = _full_clinical_report(job.case_id)
+    _write_clinical_report(settings, job, payload)
+    seg_bytes = b"fake dicom bytes for export"
+    _write_clinical_dicom_seg(settings, job, seg_bytes)
+
+    response = _export(
+        client, job.job_id, [("a.png", _tiny_png()), ("b.png", _tiny_png((0, 255, 0)))]
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    assert f'filename="neurovision-{job.job_id}.zip"' in response.headers["content-disposition"]
+
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    assert set(archive.namelist()) == {
+        "report.json",
+        "report.md",
+        "dicom-seg.dcm",
+        "job.json",
+        "snapshots/a.png",
+        "snapshots/b.png",
+        "MANIFEST.txt",
+    }
+
+    report_json_bytes = archive.read("report.json")
+    report_json = json.loads(report_json_bytes)
+    assert report_json["case_id"] == job.case_id
+    assert archive.read("report.md").decode("utf-8") == render_markdown(report_json)
+    assert archive.read("dicom-seg.dcm") == seg_bytes
+
+    manifest = archive.read("MANIFEST.txt").decode("utf-8")
+    assert f"job={job.job_id}" in manifest
+    assert f"case={job.case_id}" in manifest
+    expected_digest = hashlib.sha256(report_json_bytes).hexdigest()
+    assert f"report.json  {len(report_json_bytes)} bytes  sha256={expected_digest}" in manifest
+
+
+def test_export_bundle_without_dicom_seg_marks_it_absent_in_manifest(
+    client: TestClient, backend: Path
+) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report(settings, job, _full_clinical_report(job.case_id))
+
+    response = _export(client, job.job_id)
+    assert response.status_code == 200
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    assert "dicom-seg.dcm" not in archive.namelist()
+    manifest = archive.read("MANIFEST.txt").decode("utf-8")
+    assert "dicom-seg.dcm  ABSENT" in manifest
+
+
+def test_export_bundle_no_snapshots_is_fine(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report(settings, job, _full_clinical_report(job.case_id))
+
+    response = _export(client, job.job_id)
+    assert response.status_code == 200
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    assert not any(name.startswith("snapshots/") for name in archive.namelist())
+
+
+def test_export_bundle_rejects_non_png_snapshot(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report(settings, job, _full_clinical_report(job.case_id))
+
+    response = _export(client, job.job_id, [("x.png", b"hello")])
+    assert response.status_code == 400
+    assert "PNG" in response.json()["detail"]
+
+
+def test_export_bundle_sanitises_snapshot_names(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report(settings, job, _full_clinical_report(job.case_id))
+
+    response = _export(client, job.job_id, [("../../evil name.PNG", _tiny_png())])
+    assert response.status_code == 200
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    assert "snapshots/evil_name.png" in archive.namelist()
+
+
+def test_export_bundle_no_cached_report_is_404(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    response = _export(client, job.job_id)
+    assert response.status_code == 404
+
+
+def test_export_bundle_on_queued_job_is_409(client: TestClient) -> None:
+    created = _upload(client, _valid_study_zip()).json()
+    response = _export(client, created["job_id"])
+    assert response.status_code == 409
+
+
+def test_export_bundle_on_unknown_job_is_404(client: TestClient) -> None:
+    response = _export(client, "no-such-job")
+    assert response.status_code == 404
+
+
+def test_export_bundle_writes_nothing_under_job_dir(client: TestClient, backend: Path) -> None:
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    _write_clinical_report(settings, job, _full_clinical_report(job.case_id))
+    job_dir = jobs.job_root(settings) / job.job_id
+
+    before = sorted(p.relative_to(job_dir) for p in job_dir.rglob("*") if p.is_file())
+    response = _export(client, job.job_id, [("a.png", _tiny_png())])
+    assert response.status_code == 200
+    after = sorted(p.relative_to(job_dir) for p in job_dir.rglob("*") if p.is_file())
+    assert before == after

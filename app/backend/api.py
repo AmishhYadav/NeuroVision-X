@@ -29,9 +29,14 @@ CLAUDE.md constraint 3 -- never GPU-only).
 from __future__ import annotations
 
 import dataclasses
+import hashlib
+import io
 import json
 import logging
 import os
+import re
+import zipfile
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -1171,6 +1176,181 @@ def get_clinical_job_report_markdown(job_id: str) -> Response:
     return Response(
         content=render_markdown(report),
         media_type="text/markdown; charset=utf-8",
+    )
+
+
+# --- T6.3: POST /clinical/jobs/{job_id}/export -------------------------------
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_MAX_SNAPSHOT_BYTES = 20 * 1024 * 1024  # 20 MB -- a clinical bundle is emailed, not streamed.
+_UNSAFE_SNAPSHOT_CHARS = re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _sanitise_snapshot_name(filename: str | None, index: int, taken: set[str]) -> str:
+    """Turns one uploaded snapshot's filename into a safe, unique `.png` zip entry name.
+
+    `Path(...).name` first, so a path-like filename (e.g. `"../../evil.png"`,
+    the zip-slip shape CLAUDE.md's trap list warns about elsewhere in this
+    project) contributes no directory component at all -- only its final
+    segment is ever considered. The extension is then forced to `.png`
+    regardless of what was uploaded (a bundle only ever holds PNGs, by the
+    time this function runs the signature check already passed), and every
+    character outside `[A-Za-z0-9._-]` in what remains is replaced with `_`.
+    If the result collides with a name already placed in this same zip
+    (`taken`), `-2`, `-3`, ... is inserted before `.png` until it does not.
+
+    Args:
+        filename: The upload's client-supplied filename, or `None`.
+        index: This upload's position in the request, used to name it when
+            `filename` is empty.
+        taken: Names already used in this bundle; mutated to record the
+            name this call returns.
+
+    Returns:
+        A zip-safe entry name, e.g. `"evil_name.png"`, with no directory
+        component and no repeat within `taken`.
+    """
+    raw_name = Path(filename or f"snapshot-{index}").name
+    stem = Path(raw_name).stem or f"snapshot-{index}"
+    safe_stem = _UNSAFE_SNAPSHOT_CHARS.sub("_", stem)
+    candidate = f"{safe_stem}.png"
+    suffix = 2
+    while candidate in taken:
+        candidate = f"{safe_stem}-{suffix}.png"
+        suffix += 1
+    taken.add(candidate)
+    return candidate
+
+
+def _manifest_line(name: str, content: bytes) -> str:
+    """One `MANIFEST.txt` line: `<name>  <size bytes>  sha256=<hex>`, for one bundled entry."""
+    return f"{name}  {len(content)} bytes  sha256={hashlib.sha256(content).hexdigest()}"
+
+
+@router.post("/clinical/jobs/{job_id}/export")
+async def export_clinical_job(
+    job_id: str, snapshots: list[UploadFile] = File(default=[])
+) -> Response:
+    """Bundles a clinical job's report, DICOM-SEG object and viewer snapshots into one ZIP.
+
+    The whole archive is built in an in-memory `io.BytesIO` and returned as
+    this single response's body -- nothing is written under the job
+    directory. Unlike every route above that serves a file already cached
+    on disk (`get_clinical_job_dicom_seg`, `get_clinical_job_report`, ...),
+    this route's only output is bytes on the wire, so calling it twice, or
+    never, never changes what is on disk for this job.
+
+    The archive holds:
+        - `report.json`: `_load_merged_clinical_report(job_id)` (the T5.5
+          pathology-merged dict `GET .../report` also returns), re-encoded
+          with `json.dumps(..., indent=2)`. That helper's own 404 (unknown
+          job, not done, or done with no cached report) is left to
+          propagate -- a bundle with no report is not a bundle, so there is
+          nothing useful to zip.
+        - `report.md`: `render_markdown` on that SAME dict, so the Markdown
+          in the zip can never disagree with the JSON sitting next to it.
+        - `dicom-seg.dcm`: this job's cached DICOM-SEG bytes, if
+          `_clinical_dicom_seg_path` names an existing file. Omitted, not
+          failed, otherwise -- a missing SEG object (export refused or
+          failed for this case) must not block the rest of the bundle;
+          `MANIFEST.txt` records the omission instead.
+        - `job.json`: the bytes of `clinical_jobs._job_json_path` if that
+          file survived on disk, else a fresh `json.dumps` of the exact dict
+          `GET /clinical/jobs/{job_id}` returns -- so the bundle always
+          carries some record of the job's state even for an
+          in-memory-only job.
+        - `snapshots/<safe name>.png`: one entry per uploaded file (see
+          `_sanitise_snapshot_name`). Each is rejected with 400 if over
+          `_MAX_SNAPSHOT_BYTES` or if its first 8 bytes are not the PNG
+          signature -- a bad upload must not silently ship a non-image
+          inside a clinical bundle.
+        - `MANIFEST.txt`: a first line naming the job, case and generation
+          time, then one `_manifest_line` per entry above (or an `ABSENT`
+          line for a missing DICOM-SEG) -- so a reader of the zip, offline,
+          with no access to the live job, can tell which artifacts were
+          present and verify every byte against its recorded sha256.
+
+    Args:
+        job_id: The clinical job to export.
+        snapshots: Zero or more viewer-snapshot PNGs, uploaded as
+            `multipart/form-data` under the repeated field name
+            `"snapshots"`.
+
+    Returns:
+        A `Response` with `media_type="application/zip"` and a
+        `Content-Disposition` naming the download `neurovision-<job_id>.zip`.
+    """
+    settings = get_settings()
+    job = _require_done_clinical_job(job_id)
+
+    from neurovision.reporting.report import render_markdown
+
+    report = _load_merged_clinical_report(job_id)
+    report_json_bytes = json.dumps(report, indent=2).encode("utf-8")
+    report_md_bytes = render_markdown(report).encode("utf-8")
+
+    dicom_seg_path = _clinical_dicom_seg_path(settings, job)
+    dicom_seg_bytes = dicom_seg_path.read_bytes() if dicom_seg_path.is_file() else None
+
+    job_json_path = clinical_jobs._job_json_path(settings, job_id)
+    if job_json_path.is_file():
+        job_json_bytes = job_json_path.read_bytes()
+    else:
+        job_json_bytes = json.dumps(_clinical_job_to_json(job), indent=2).encode("utf-8")
+
+    snapshot_entries: list[tuple[str, bytes]] = []
+    taken_names: set[str] = set()
+    for index, upload in enumerate(snapshots):
+        content = await upload.read()
+        if len(content) > _MAX_SNAPSHOT_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"snapshot {upload.filename!r} is {len(content)} bytes, over the "
+                    f"{_MAX_SNAPSHOT_BYTES} byte limit"
+                ),
+            )
+        if content[:8] != _PNG_SIGNATURE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"snapshot {upload.filename!r} is not a valid PNG (bad signature)",
+            )
+        name = _sanitise_snapshot_name(upload.filename, index, taken_names)
+        snapshot_entries.append((name, content))
+
+    manifest_lines = [
+        f"NeuroVision-X export  job={job_id}  case={job.case_id}  "
+        f"generated_utc={datetime.now(UTC).isoformat()}"
+    ]
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("report.json", report_json_bytes)
+        manifest_lines.append(_manifest_line("report.json", report_json_bytes))
+
+        archive.writestr("report.md", report_md_bytes)
+        manifest_lines.append(_manifest_line("report.md", report_md_bytes))
+
+        if dicom_seg_bytes is not None:
+            archive.writestr("dicom-seg.dcm", dicom_seg_bytes)
+            manifest_lines.append(_manifest_line("dicom-seg.dcm", dicom_seg_bytes))
+        else:
+            manifest_lines.append("dicom-seg.dcm  ABSENT (no cached DICOM-SEG for this job)")
+
+        archive.writestr("job.json", job_json_bytes)
+        manifest_lines.append(_manifest_line("job.json", job_json_bytes))
+
+        for name, content in snapshot_entries:
+            entry_name = f"snapshots/{name}"
+            archive.writestr(entry_name, content)
+            manifest_lines.append(_manifest_line(entry_name, content))
+
+        archive.writestr("MANIFEST.txt", "\n".join(manifest_lines) + "\n")
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="neurovision-{job_id}.zip"'},
     )
 
 
