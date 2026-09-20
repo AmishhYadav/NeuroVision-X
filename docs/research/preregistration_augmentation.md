@@ -132,3 +132,74 @@ and abort/report if per-epoch wall-clock implies materially more than ~30 GPU-h 
 ## Result
 
 *(To be completed after the run. Nothing above this line may be edited once the first number exists.)*
+
+**Completed 2026-09-20.** Verdict: **NULL — recipe unchanged.**
+
+### What ran
+
+`neurovision_heavy_aug`, three chained Kaggle T4 sessions (`neurovision-d0-s1`, `-s2`, `-s3`),
+**23.7 GPU-h** (10.27 + 10.40 + 3.04), 80/80 epochs, `NVX_HEALTH: OK` at every session exit, peak
+VRAM 6.17 GiB. Final checkpoint epoch 79, `val/dice_mean` 0.89375 against the seed-42 `neurovision`
+checkpoint's 0.89380 — i.e. the two recipes are indistinguishable on the selection metric itself.
+Checkpoint config verified against this file before evaluation: `experiment_name=neurovision_heavy_aug`,
+seed 42, 64³, 80 epochs, only the `data.augment` block differing, exactly the four transforms above.
+
+Evaluation: `scripts/evaluate.py` on BraTS test (189), SSA (60) and PED (99), Mac CPU,
+`sw_batch_size=1`, `save_logits=true`; lesion-wise columns via `scripts/replay_logits.py` off those
+saved logits, no second inference pass. The family was corrected once across all 12 comparisons by
+`scripts/compare_family.py` (`outputs/compare_family/d0_heavy_aug/family.csv`), not per table.
+
+### The family, in full, as declared
+
+| Cohort | Metric | heavy_aug | neurovision | Δ | 95% CI | p_holm (m=12) | Verdict |
+|---|---|---|---|---|---|---|---|
+| **pooled SSA+PED (PRIMARY)** | **dice_TC** | 0.5814 | 0.5697 | **+0.0117** | [−0.0006, +0.0245] | 0.936 | **INCONCLUSIVE** |
+| pooled SSA+PED | dice_ET | 0.6638 | 0.6445 | +0.0193 | [−0.0038, +0.0441] | 1 | inconclusive |
+| pooled SSA+PED | dice_WT | 0.8712 | 0.8667 | +0.0045 | [−0.0023, +0.0130] | 1 | inconclusive |
+| BraTS test | dice_ET | 0.8715 | 0.8709 | +0.0007 | [−0.0030, +0.0056] | 0.010 | inconclusive |
+| BraTS test | dice_TC | 0.9155 | 0.9161 | −0.0006 | [−0.0073, +0.0053] | 0.781 | inconclusive |
+| BraTS test | dice_WT | 0.9324 | 0.9321 | +0.0004 | [−0.0026, +0.0041] | 0.121 | inconclusive |
+| BraTS test | lwdice_ET | 0.7630 | 0.7550 | +0.0080 | [−0.0143, +0.0319] | 0.065 | inconclusive |
+| BraTS test | lwdice_TC | 0.8120 | 0.8150 | −0.0030 | [−0.0246, +0.0185] | 0.305 | inconclusive |
+| BraTS test | lwdice_WT | 0.7077 | 0.7183 | −0.0106 | [−0.0359, +0.0143] | 0.183 | inconclusive |
+| pooled SSA+PED | lwdice_ET | 0.5111 | 0.4957 | +0.0154 | [−0.0111, +0.0415] | 1 | inconclusive |
+| pooled SSA+PED | lwdice_TC | 0.3508 | 0.3569 | −0.0061 | [−0.0367, +0.0249] | 1 | inconclusive |
+| pooled SSA+PED | lwdice_WT | 0.6483 | 0.6420 | +0.0064 | [−0.0239, +0.0369] | 1 | inconclusive |
+
+**12 of 12 inconclusive.** The primary endpoint's CI contains zero by 0.0006, which is a near miss and
+is reported as such rather than rounded into a result.
+
+### Consequence, per the decision rule
+
+Row 2 of the table above fires: **NULL, recipe unchanged.** `_baseline_common.yaml`'s augmentation
+stays as it is. D1 (`preregistration_multiseed.md`) therefore trains seed 43 on the **current**
+augmentation block, which is what that file's recipe rule prescribes for any verdict other than ADOPT.
+D2 and D3 proceed on the current recipe. Nothing here is folded into the deployed model; the clinical
+checkpoint remains `neurovision` seed 42.
+
+### One descriptive observation, explicitly not a claim
+
+The pooled null is an average over two cohorts that moved in opposite directions:
+
+| Cohort | Δ dice_ET | Δ dice_TC | Δ dice_WT |
+|---|---|---|---|
+| SSA (n=60) | −0.0032 | −0.0159 | +0.0027 |
+| PED (n=99) | +0.0329 | +0.0284 | +0.0057 |
+
+Heavier augmentation helps the paediatric cohort on every region and does not help — slightly hurts —
+the sub-Saharan one. That is a plausible mechanism (simulated contrast/bias-field/anatomy variation
+is closer to the paediatric shift than to the SSA one) and it is **not** something this experiment
+may assert: the endpoint family is fixed and pooled, the split above was not pre-registered, and the
+per-cohort n is smaller still. It is recorded because it should drive what D2/D3 test next, not
+because it is a finding.
+
+### What this does and does not license
+
+- It does **not** license "augmentation closes the generalisation gap." It does not.
+- It does **not** license "augmentation is useless under shift" either. The power statement fixed
+  above applies: at n=159 with one seed, an effect of the size actually observed on the primary
+  endpoint (+0.0117) is below what this comparison can resolve. D1 will put a number on how much of
+  that is seed noise.
+- It does confirm the in-distribution additivity the design principle requires: no BraTS-test number
+  moved (largest |Δ| 0.0007 voxel-wise), so the augmentation is not trading in-domain accuracy for
+  anything.

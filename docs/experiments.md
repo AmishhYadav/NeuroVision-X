@@ -1820,6 +1820,63 @@ sessions by resume is still ONE row — sum the GPU hours.
     `stage_reliability.csv`, `error_budget_config.yaml`. Code:
     `src/neurovision/analysis/error_budget.py` (+22 tests), `scripts/error_budget.py`.
 
+48. **D0 -- HEAVY AUGMENTATION DOES NOT CLOSE THE SHIFT GAP: 12 OF 12
+    COMPARISONS INCONCLUSIVE, VERDICT NULL, RECIPE UNCHANGED.** Pre-registered
+    2026-08-27 in `docs/research/preregistration_augmentation.md`; that file's
+    `## Result` section carries the full 12-row family and is the authoritative
+    record. Summary here.
+
+    **The run.** `neurovision_heavy_aug` -- `configs/experiment/neurovision.yaml`
+    with only the `data.augment` block changed (small-angle rotation, gamma,
+    simulated bias field, elastic deformation), seed 42, 64^3, 80 epochs.
+    Three chained Kaggle T4 sessions (`neurovision-d0-s1/-s2/-s3`), **23.7
+    GPU-h** (10.27 + 10.40 + 3.04), 80/80 epochs, `NVX_HEALTH: OK` at every
+    exit, peak VRAM 6.17 GiB. Final `val/dice_mean` **0.89375** against the
+    seed-42 `neurovision` checkpoint's **0.89380** -- the two recipes are
+    indistinguishable on the selection metric itself, before any test set is
+    touched. The checkpoint's embedded `config_yaml` was read back and checked
+    against the pre-registration before it was evaluated: right experiment
+    name, right seed, right patch size, right epoch count, only the four
+    declared transforms added.
+
+    **The result.** Primary endpoint, paired `dice_TC` on pooled SSA+PED
+    (n=159): **+0.0117, CI [-0.0006, +0.0245], p_holm 0.936 -> INCONCLUSIVE**.
+    The CI clears zero by 0.0006 and that is a near miss, recorded as a near
+    miss rather than rounded into a result. Every one of the 12 pre-registered
+    comparisons is inconclusive under the family-wide Holm correction
+    (`scripts/compare_family.py`, m=12, one correction across both tables and
+    both metric conventions -- not per table). In distribution nothing moved:
+    largest |delta| on BraTS test is 0.0007 voxel-wise, so the augmentation
+    buys nothing and costs nothing in domain.
+
+    **Verdict NULL by the pre-registered rule, so the recipe is unchanged.**
+    `_baseline_common.yaml` keeps its current augmentation; D1 trains seed 43
+    on it; D2/D3 proceed on it; the deployed clinical checkpoint stays
+    `neurovision` seed 42.
+
+    **The one thing worth following up, stated as description and not as a
+    claim.** The pooled null averages two cohorts moving in opposite
+    directions: PED (n=99) **+0.0329 ET / +0.0284 TC / +0.0057 WT**, SSA (n=60)
+    **-0.0032 ET / -0.0159 TC / +0.0027 WT**. Simulated contrast, bias-field
+    and anatomy variation plausibly resembles the paediatric shift more than
+    the sub-Saharan one. This split was not pre-registered, the family is fixed
+    and pooled, and per-cohort n is smaller still -- so it may not be asserted.
+    It is recorded because it is the most useful thing this run produced for
+    choosing what D2/D3 test.
+
+    **Cost note for the next session.** Evaluation of the three cohorts was
+    ~348 cases on the Mac CPU at `sw_batch_size=1`, measured **~1.4 min/case**
+    (not the "~15 cases/min" `CLAUDE.md` still claims -- that figure is wrong
+    by two orders of magnitude and it is why a healthy PED run looked stalled).
+    Lesion-wise columns came off the saved fp16 logits via
+    `scripts/replay_logits.py` in **under 3 minutes per cohort**, zero
+    inference -- the saved-logits policy paying for itself again.
+
+    Artifacts: `outputs/eval_{test,ssa,ped}_neurovision_heavy_aug/`,
+    `outputs/replay_lesionwise/eval_*_neurovision_heavy_aug/`,
+    `outputs/compare_family/d0_heavy_aug/family.csv`, checkpoint at
+    `outputs/neurovision_heavy_aug/checkpoints/best.pt` (epoch 79).
+
 ---
 
 ## Planned

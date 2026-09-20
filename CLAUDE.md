@@ -105,8 +105,9 @@ need to read and understand each piece.
 | Dedicated GPU (college cluster) | Gradient descent only |
 | Kaggle GPU (fallback) | Same role, rationed and session-capped; keep configs runnable there |
 
-If it can run on a CPU, it does not belong in a GPU session. Deterministic evaluation measures ~15
-cases/min on the M4 — all 189 test cases in ~25 minutes. Only checkpoints and logs cross the wire
+If it can run on a CPU, it does not belong in a GPU session. Deterministic evaluation measures **~1.4 min/case** on the M4 at `sw_batch_size=1` — all 189 test
+cases in ~4.5 h (measured 2026-09-20, note 48; the old "~15 cases/min / 25 minutes" figure here was
+wrong by two orders of magnitude and made a healthy run look stalled). Only checkpoints and logs cross the wire
 back from the GPU box; never `logits/`, `predictions/` or `uncertainty/`, which are caches and are
 cheaper to rebuild locally.
 
@@ -188,7 +189,7 @@ package's `__init__.py` for the decorator to run.
 
 ---
 
-## Current status — 2026-09-18
+## Current status — 2026-09-20
 
 **Phase: Milestone 4. Read `docs/research/master_plan.md` first.** It is the active plan and
 supersedes the sequencing and gates of `execution_plan.md` and `improvement_plan.md`.
@@ -223,6 +224,16 @@ PROCEED / PROCEED_WITH_CAUTION / REFUSE — reachable in the browser at `/clinic
 job is a distinct, successful outcome, never conflated with a failure. E6 (DICOM-SEG export) plus
 entropy / conformal / Grad-CAM are wired into live jobs as of `54c03a6` (2026-08-27).
 2004+ tests passing, frontend build/tests clean, `scripts/smoke_test.py` clean.
+
+**Phase D is moving again (Track 2 unparked 2026-09-18).** **D0 — heavy augmentation — is DONE and
+its verdict is NULL** (2026-09-20, note 48): 23.7 GPU-h over three T4 sessions, 80/80 epochs, and
+**12 of 12** pre-registered comparisons inconclusive under one Holm family; primary endpoint pooled
+SSA+PED `dice_TC` **+0.0117, CI [−0.0006, +0.0245]**, a near miss recorded as a near miss. The shared
+augmentation recipe therefore does **not** change, and the deployed checkpoint stays `neurovision`
+seed 42. Do not write "heavy augmentation helps PED" — the per-cohort split that suggests it was not
+pre-registered (C23 and its do-not-write row in `claims_and_evidence.md`). **D1 (seed 43, the noise
+floor every single-seed margin in this project needs) launches next on the current augmentation**, as
+D0's NULL prescribes; ~23 GPU-h over three chained Kaggle sessions.
 
 **What is next — direction changed 2026-09-15.** The CPU research track (Phases A, B, C, E) is
 done. **The GPU/model track is PARKED** (author decision, 2026-09-15): G0's nnU-Net probe ran but its
