@@ -223,7 +223,8 @@ PROCEED / PROCEED_WITH_CAUTION / REFUSE — reachable in the browser at `/clinic
 (`app/backend/clinical_jobs.py`, `/api/clinical/*`, `app/frontend/src/pages/clinical/`). A `"refused"`
 job is a distinct, successful outcome, never conflated with a failure. E6 (DICOM-SEG export) plus
 entropy / conformal / Grad-CAM are wired into live jobs as of `54c03a6` (2026-08-27).
-2004+ tests passing, frontend build/tests clean, `scripts/smoke_test.py` clean.
+2,230 tests passing (35 skipped, ~85 s, verified 2026-09-19), frontend build/tests clean,
+`scripts/smoke_test.py` clean.
 
 **Phase D is moving again (Track 2 unparked 2026-09-18).** **D0 — heavy augmentation — is DONE and
 its verdict is NULL** (2026-09-20, note 48): 23.7 GPU-h over three T4 sessions, 80/80 epochs, and
@@ -260,10 +261,12 @@ before assuming anything is or is not done — the filesystem is the ground trut
 
 **Data on disk.** `data/preprocessed/{brats,brats_ssa,brats_ped}` — `brats` is backed only by the live
 Kaggle dataset `amishyadav123/neurovision-brats-prep`, so **do not delete it**. Raw data was deleted
-2026-08-19 with SHA-256 manifests committed to `docs/data_manifests/`. **Three** checkpoints survive
-— `neurovision`, `baseline_unet3d`, and `ablation_content_only_gate`
+2026-08-19 with SHA-256 manifests committed to `docs/data_manifests/`. **Four** checkpoints survive
+— `neurovision`, `baseline_unet3d`, `ablation_content_only_gate`
 (`outputs/ablation_content_only_gate/checkpoints/checkpoints/best.pt`, epoch 79, val dice_mean
-0.8933, verified loadable 2026-08-23). Only `capacity_control` is permanently lost, and it has
+0.8933, verified loadable 2026-08-23), and `neurovision_heavy_aug`
+(`outputs/neurovision_heavy_aug/checkpoints/best.pt`, epoch 79, val dice_mean 0.89375, D0's arm —
+note 48, verdict NULL, so it is a measurement and never a deployment candidate). Only `capacity_control` is permanently lost, and it has
 neither predictions, logits nor checkpoint — so **no capacity-control number can ever be re-scored
 under a new metric.**
 
@@ -275,13 +278,16 @@ that `neurovision`'s live directories are nested one level deeper than the other
 |---|---|---|---|---|
 | `neurovision` | `outputs/neurovision/eval_val/logits` | `outputs/neurovision/eval_test/logits` | `outputs/eval_ssa_neurovision/logits` | `outputs/eval_ped_neurovision/logits` |
 | `baseline_unet3d` | `outputs/eval_val_baseline_unet3d/logits` | `outputs/eval_test_baseline_unet3d/logits` | `outputs/eval_ssa_baseline_unet3d/logits` | `outputs/eval_ped_baseline_unet3d/logits` |
+| `neurovision_heavy_aug` | — | `outputs/eval_test_neurovision_heavy_aug/logits` | `outputs/eval_ssa_neurovision_heavy_aug/logits` | `outputs/eval_ped_neurovision_heavy_aug/logits` |
 | `ablation_content_only_gate` | — | — | — | — |
 | `capacity_control` | — | — | — | — |
 
-~19 GB in total; 119 GiB free after the 2026-09-15 reclaim (`docs/reproducibility.md` §11 lists
+~25 GB in total (D0's three cohorts added ~6 GB on 2026-09-19); ~79 GiB free as of 2026-09-20,
+was 119 GiB after the 2026-09-15 reclaim (`docs/reproducibility.md` §11 lists
 exactly what went — every `ambiguity_*` and MC `uncertainty/` cache, `nnunet_raw`, `data/raw`). Both
 complete rows mean lesion-wise re-scoring and the whole conformal phase need **zero inference**. `ablation_content_only_gate` has no saved volume artifact at all but
-its checkpoint survives, so it costs one ~15 min CPU pass per split to bring back.
+its checkpoint survives, so it costs one CPU pass per split to bring back — at the measured ~1.4 min/case that is ~4.5 h for
+test, not the 15 minutes this file used to claim.
 
 Two traps in that table. `outputs/eval_test` is **not** `neurovision` — it is the superseded
 200-epoch/96³ U-Net (ET 0.8587), and it is the only directory holding `predictions/` rather than
