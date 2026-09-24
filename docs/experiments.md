@@ -1877,6 +1877,63 @@ sessions by resume is still ONE row — sum the GPU hours.
     `outputs/compare_family/d0_heavy_aug/family.csv`, checkpoint at
     `outputs/neurovision_heavy_aug/checkpoints/best.pt` (epoch 79).
 
+49. **D1 -- THE SEED NOISE FLOOR IS MEASURED: 12 OF 12 COMPARISONS
+    INCONCLUSIVE, AND BOTH MARGINS IT WAS BUILT TO CHECK SURVIVE.**
+    Pre-registered 2026-09-18 in `docs/research/preregistration_multiseed.md`;
+    that file's `## Result` section carries the full 12-row family and is the
+    authoritative record. Summary here.
+
+    **The run.** `neurovision_seed43` -- `configs/experiment/neurovision.yaml`
+    recipe exactly, seed 43, 64^3, 80 epochs, current `_baseline_common.yaml`
+    augmentation (D0's NULL verdict prescribes no change to the shared
+    recipe). Three chained Kaggle T4 sessions
+    (`neurovision-d1-seed43-s1/-s2/-s3`, epoch 0->33->70->79), one W&B run
+    throughout (`iriee13d`), `GIT_REF=9c770ce6a83213931475c05f4850da253a3009de`
+    pinned for all three sessions, `NVX_HEALTH: OK` and `nonfinite=[]` at
+    every session exit. Final train loss 0.4545, peak VRAM 7.66 GiB reserved.
+    Checkpoint: `outputs/neurovision_seed43/checkpoints/best.pt` (epoch 79,
+    val/dice_mean 0.8947, against seed 42's 0.89380 -- close but not
+    identical, as expected of a second seed).
+
+    **The result.** `scripts/evaluate.py` on BraTS test (n=189), SSA (n=60),
+    PED (n=99), Mac CPU, `sw_batch_size=1`, `save_logits=true` -- the same
+    code path as every other published number. `dice_mean`: test 0.9070, SSA
+    0.8212, PED 0.6246 (full ET/TC/WT breakdown in the pre-registration).
+    `scripts/replay_logits.py` (`.venv-analysis`) then added lesion-wise
+    columns off the saved logits with zero further inference; a
+    self-consistency check against `evaluate.py`'s own output matched exactly
+    (mean absolute delta ~1e-17) on all three splits. `scripts/compare_family.py`
+    ran the pre-registered fixed family -- {dice_ET, dice_TC, dice_WT,
+    lwdice_ET} x {test, SSA, PED}, m=12, one Holm correction across all of it
+    -- comparing `neurovision_seed43` against the deployed seed-42
+    `neurovision` checkpoint. **12 of 12 comparisons are INCONCLUSIVE.** The
+    largest paired difference is PED `lwdice_ET`, +0.0393, CI [-0.0040,
+    +0.0857], still inconclusive under the family correction (p_holm 1).
+
+    **The verdict.** This was a measurement, not a hypothesis test, and it
+    resolves the two questions it was pre-registered to answer. (1) Against
+    the headline +0.0267 ET Dice architecture claim (C1, over
+    `baseline_unet3d`, test): the seed-to-seed noise floor on the same metric
+    and cohort is +0.0021, CI [-0.0018, +0.0068] -- about 13x smaller than
+    the published margin, so per the pre-registration's own decision rule the
+    headline **stands**, with this noise floor now printed beside it. (2)
+    Against D0's pooled SSA+PED `dice_TC` result (C23, +0.0117, CI [-0.0006,
+    +0.0245], already inconclusive on its own): a matching descriptive-only
+    pooled comparison (not part of the 12-item Holm family, no further
+    correction) gives seed43-seed42 pooled `dice_TC` = +0.0111, CI [-0.0056,
+    +0.0276], n=159 -- essentially the same magnitude as D0's own effect.
+    D0's heavy-augmentation result is therefore **not distinguishable from
+    seed noise**, which independently reinforces D0's NULL verdict rather
+    than contradicting it. Per the pre-registration's "Deployment
+    consequence": none -- the deployed clinical checkpoint stays
+    `neurovision` seed 42 regardless; D1 was a measurement, not a model
+    candidate.
+
+    Artifacts: `outputs/eval_{test,ssa,ped}_neurovision_seed43/logits`,
+    `outputs/replay_lesionwise/eval_{test,ssa,ped}_neurovision_seed43/`,
+    `outputs/compare_family/d1_seed_noise_floor/family.csv`, checkpoint at
+    `outputs/neurovision_seed43/checkpoints/best.pt` (epoch 79).
+
 ---
 
 ## Planned

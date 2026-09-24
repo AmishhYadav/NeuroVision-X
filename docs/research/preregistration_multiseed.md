@@ -90,3 +90,93 @@ GPU-h total, or if `NVX_HEALTH` reports non-finite metrics at any session exit.
 
 *(To be completed after the run. Nothing above this line may be edited once the first number
 exists.)*
+
+**Completed 2026-09-24.** This is a measurement, not a hypothesis test, so there is no ADOPT/NULL/
+REJECT verdict to fire — the result below is the noise floor itself.
+
+### What ran
+
+`neurovision_seed43`, per the recipe rule above: D0 fired **NULL** (`preregistration_augmentation.md`),
+so this run trains on the current `_baseline_common.yaml` augmentation, unchanged. Three chained
+Kaggle T4 sessions (`neurovision-d1-seed43-s1`, `-s2`, `-s3`, epoch 0→33, 33→70, 70→79), one W&B run
+throughout (`iriee13d`), `GIT_REF=9c770ce6a83213931475c05f4850da253a3009de` pinned for all three
+sessions, `NVX_HEALTH: OK` and `nonfinite=[]` at every session exit. Final train loss 0.4545, peak
+VRAM 7.66 GiB reserved. Checkpoint: `outputs/neurovision_seed43/checkpoints/best.pt` (epoch 79,
+val/dice_mean 0.8947, against seed 42's 0.89380).
+
+Evaluation: `scripts/evaluate.py` on BraTS test (189), SSA (60) and PED (99), Mac CPU,
+`sw_batch_size=1`, `data.num_workers=0`, `save_logits=true` — the same code path as the seed-42 run
+and every other published number:
+
+| Cohort | dice_ET | dice_TC | dice_WT | dice_mean |
+|---|---|---|---|---|
+| test (n=189) | 0.8730 | 0.9145 | 0.9336 | 0.9070 |
+| SSA (n=60) | 0.7894 | 0.7723 | 0.9018 | 0.8212 |
+| PED (n=99) | 0.5590 | 0.4647 | 0.8501 | 0.6246 |
+
+Lesion-wise columns came off the saved fp16 logits via `scripts/replay_logits.py`
+(`.venv-analysis`, `analysis.replay.lesionwise.enabled=true`), zero further inference. A
+self-consistency check against `evaluate.py`'s own output matched exactly (mean absolute delta
+~1e-17) on all three splits.
+
+### The family, in full, as declared
+
+`scripts/compare_family.py` (`.venv-analysis`), family `d1_seed_noise_floor`,
+`neurovision_seed43` vs `neurovision` (seed 42, deployed), the fixed 12-comparison family, one Holm
+correction across all of it (`outputs/compare_family/d1_seed_noise_floor/family.csv`, n_boot=10000).
+Paired difference is seed43 − seed42.
+
+| Cohort | Metric | n | Δ | 95% CI | p_holm (m=12) | Verdict |
+|---|---|---|---|---|---|---|
+| test | dice_ET | 189 | +0.0021 | [-0.0018, +0.0068] | 1 | inconclusive |
+| test | dice_TC | 189 | -0.0015 | [-0.0098, +0.0046] | 0.3068 | inconclusive |
+| test | dice_WT | 189 | +0.0015 | [-0.0009, +0.0040] | 1 | inconclusive |
+| test | lwdice_ET | 189 | -0.0070 | [-0.0269, +0.0133] | 1 | inconclusive |
+| SSA | dice_ET | 60 | +0.0111 | [-0.0053, +0.0294] | 1 | inconclusive |
+| SSA | dice_TC | 60 | -0.0123 | [-0.0370, +0.0073] | 1 | inconclusive |
+| SSA | dice_WT | 60 | +0.0059 | [-0.0006, +0.0137] | 0.2484 | inconclusive |
+| SSA | lwdice_ET | 60 | +0.0267 | [-0.0215, +0.0788] | 1 | inconclusive |
+| PED | dice_ET | 99 | -0.0044 | [-0.0431, +0.0331] | 1 | inconclusive |
+| PED | dice_TC | 99 | +0.0253 | [+0.0042, +0.0472] | 0.2484 | inconclusive |
+| PED | dice_WT | 99 | +0.0011 | [-0.0181, +0.0175] | 1 | inconclusive |
+| PED | lwdice_ET | 99 | +0.0393 | [-0.0040, +0.0857] | 1 | inconclusive |
+
+**12 of 12 inconclusive.** PED `dice_TC`'s CI clears zero on its own ([+0.0042, +0.0472]) but does
+not survive the family-wide Holm correction (p_holm 0.2484) — reported as a near miss, the same
+convention D0 used for its own primary endpoint, not rounded into a result.
+
+### What the number is for — the two pre-registered readings
+
+**(1) The headline +0.0267 ET Dice architecture claim (C1, over `baseline_unet3d`, test).** Noise
+floor: test `dice_ET` seed43−seed42 = +0.0021, CI [-0.0018, +0.0068] — about 13x smaller than the
+published margin. Per this file's own decision rule ("if several times smaller, the headline stands
+with the noise floor printed beside it"), the headline **stands**.
+
+**(2) D0's pooled SSA+PED `dice_TC` result (C23, +0.0117, CI [-0.0006, +0.0245], p_holm 0.936,
+already inconclusive on its own).** The 12-item family above is deliberately per-cohort, not pooled,
+so this reading needs a separate pooled noise-floor number. A descriptive-only comparison (not part
+of the 12-item Holm family, no additional Holm correction — `compare_models` called directly on the
+pooled SSA+PED case list, n_boot=10000) gives:
+
+**Pooled SSA+PED `dice_TC`, seed43−seed42 = +0.0111, CI [-0.0056, +0.0276], n=159.**
+
+This is essentially the same magnitude as D0's own +0.0117. D0's heavy-augmentation result is
+therefore **not distinguishable from seed noise** — this independently reinforces D0's NULL verdict
+(which was already inconclusive on its own bootstrap CI) rather than contradicting it.
+
+### Deployment consequence
+
+None, as specified above. The deployed clinical checkpoint stays `neurovision` seed 42 regardless;
+this was a measurement, not a model candidate.
+
+### What this does and does not license
+
+- It does **not** license treating `neurovision_seed43` as a second independent confirmation of any
+  claim — that is explicitly excluded above ("What would make this invalid").
+- It does **not** license picking whichever seed looks better on a given cohort; neither seed is
+  "the model" for anything beyond this noise-floor measurement.
+- It does license printing a noise floor beside the two margins named above, and it does license
+  reading D0's own result in light of that floor.
+- With two seeds there is still no seed-level variance estimate, only one difference, exactly as the
+  Power statement above says. A third seed (`baseline_unet3d_seed43`, then `neurovision_seed44`)
+  remains the next run in the queue if Kaggle quota allows, not started here.
