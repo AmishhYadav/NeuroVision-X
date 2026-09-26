@@ -252,7 +252,18 @@ gatekeeper:
   # is enabled because Phase B (B1/B2) is unconditionally done -- no gate
   # attached to that signal. ood_score has no scorer built yet (see
   # scripts/calibrate_gatekeeper.py's module docstring) and stays disabled.
-  enabled_signals: [input_qc, predicted_dice, conformal_band]
+  #
+  # conformal_band REMOVED from refusal 2026-09-26 (Milestone 5, P0.4) --
+  # a post-hoc deployment decision taken AFTER note 47 was read, so any
+  # error-budget number under this setting is post-hoc, and note 47's
+  # numbers (with conformal_band enabled) stay the pre-registered ones.
+  # Reason: at the deployed operating point every one of its 12 in-
+  # distribution refusals was an over-refusal (usable mask refused), and it
+  # contributed 4 of 26 refusals on PED. The band is still COMPUTED and
+  # DISPLAYED on every job (clinical_jobs.py reads conformal_dir /
+  # conformal_alpha below regardless) -- it is just no longer allowed to
+  # refuse a study.
+  enabled_signals: [input_qc, predicted_dice]
 
   # Root of the deployed model's Phase B conformal run -- holds fit.json and
   # eval_val/curves.npz. Fixed to the neurovision run specifically, same

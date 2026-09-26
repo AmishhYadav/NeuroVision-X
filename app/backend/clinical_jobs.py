@@ -944,7 +944,9 @@ def clinical_conformal_band_mask(
     return band
 
 
-def _load_conformal_fitted_thresholds(regions: Sequence[str], alpha: float) -> dict[str, float]:
+def _load_conformal_fitted_thresholds(
+    regions: Sequence[str], alpha: float, *, strict: bool
+) -> dict[str, float]:
     """Loads the fitted conformal threshold for each region, at one alpha, from `fit.json`.
 
     Degrades gracefully when the file itself is absent (same philosophy as
@@ -959,15 +961,21 @@ def _load_conformal_fitted_thresholds(regions: Sequence[str], alpha: float) -> d
             `scripts/conformal.py`'s `_fit_payload` actually writes. A
             fixed-decimals format (`f"{alpha:.2f}"` -> `"0.10"`) would
             silently miss every entry.
+        strict: If `True`, a missing key or a null threshold raises (use
+            this only when `conformal_band` can refuse a study). If
+            `False`, either case is logged as a WARNING and that region is
+            omitted from the result instead -- `conformal_band` is
+            display-only, so a bad fit must not crash an otherwise-good job.
 
     Returns:
         region -> fitted threshold. `{}` if `_conformal_fit_path()` does not
-        exist on disk.
+        exist on disk. Under `strict=False`, regions with a missing key or a
+        null threshold are simply absent from the dict.
 
     Raises:
-        ValueError: If a region's key is absent from the file, or if that
-            entry's `"threshold"` is `None` (an infeasible fit cannot back a
-            live signal).
+        ValueError: If `strict=True` and a region's key is absent from the
+            file, or if that entry's `"threshold"` is `None` (an infeasible
+            fit cannot back a live signal).
     """
     path = _conformal_fit_path()
     if not path.is_file():
@@ -983,13 +991,33 @@ def _load_conformal_fitted_thresholds(regions: Sequence[str], alpha: float) -> d
     for region in regions:
         key = f"{region}__alpha_{alpha}"
         if key not in payload:
-            raise ValueError(f"_load_conformal_fitted_thresholds: missing key {key!r} in {path}.")
+            if strict:
+                raise ValueError(
+                    f"_load_conformal_fitted_thresholds: missing key {key!r} in {path}."
+                )
+            logger.warning(
+                "_load_conformal_fitted_thresholds: missing key %r in %s; region %r omitted "
+                "(conformal_band is display-only).",
+                key,
+                path,
+                region,
+            )
+            continue
         threshold = payload[key]["threshold"]
         if threshold is None:
-            raise ValueError(
-                f"_load_conformal_fitted_thresholds: {path}'s entry for {key!r} has "
-                "threshold=null (an infeasible fit); it cannot back a live signal."
+            if strict:
+                raise ValueError(
+                    f"_load_conformal_fitted_thresholds: {path}'s entry for {key!r} has "
+                    "threshold=null (an infeasible fit); it cannot back a live signal."
+                )
+            logger.warning(
+                "_load_conformal_fitted_thresholds: %s's entry for %r has threshold=null "
+                "(an infeasible fit); region %r omitted (conformal_band is display-only).",
+                path,
+                key,
+                region,
             )
+            continue
         result[region] = float(threshold)
     return result
 
@@ -1915,7 +1943,10 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
             )
 
         alpha = float(cfg.clinical.gatekeeper.conformal_alpha)
-        fitted = _load_conformal_fitted_thresholds(regions, alpha)
+        # Strict (raise on a bad fit) only when conformal_band can actually refuse a
+        # study -- as a display-only signal it must never crash an otherwise-good job.
+        strict_conformal = "conformal_band" in cfg.clinical.gatekeeper.enabled_signals
+        fitted = _load_conformal_fitted_thresholds(regions, alpha, strict=strict_conformal)
         conformal_band_map: dict[str, float] | None = None
         if fitted:
             missing_fitted = [r for r in regions if r not in fitted]

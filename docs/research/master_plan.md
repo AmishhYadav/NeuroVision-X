@@ -200,20 +200,20 @@ and are archive-only; `tool_completion_plan.md`/`_log.md` join them once T0.4 cl
 | P0.1 | Thesis rewritten to match the evidence (`CLAUDE.md`) | `[x]` 2026-09-26 | No live doc says "safe to deploy on data it was not trained on" |
 | P0.2 | One live plan: this block; README doc-map fixed | `[x]` 2026-09-26 | README points here, not at a superseded plan |
 | P0.3 | Overlap checks: are UPENN-GBM-00001/00002 BraTS 2021 cases (which split)? Where did UCSF-PDGM cases go in BraTS 2021? | `[x]` 2026-09-26, **note 50**: 00002 = `BraTS2021_01202`, 00001 ≈ `BraTS2021_01034`, **both train split** — the demo PROCEED is a training patient; UCSF-PDGM recorded, resolved only if IDH goes | A note in `experiments.md`; the demo case labelled "may be a training case" if unresolvable |
-| P0.4 | `conformal_band` → display-only (drop from `enabled_signals`); re-run `scripts/error_budget.py` | `[ ]` | New note labelled **post-hoc deployment change**; note 47 stays the pre-registered number |
-| P0.5 | Honest guarantee wording (`Legend.tsx:70`, `GatekeeperPanel.tsx`, model card); backend band display tolerates a missing fit (`clinical_jobs.py:947`) | `[ ]` | No UI string says "guaranteed" without "on average, in distribution, not per patient" |
+| P0.4 | `conformal_band` → display-only (drop from `enabled_signals`); re-run `scripts/error_budget.py` | `[x]` 2026-09-26, **note 51** (post-hoc): test usable 0.852→0.915, PED silent failure 49→53/99; author accepted, P1.3 scopes PED out | New note labelled **post-hoc deployment change**; note 47 stays the pre-registered number |
+| P0.5 | Honest guarantee wording (`Legend.tsx:70`, `GatekeeperPanel.tsx`, model card); backend band display tolerates a missing fit (`clinical_jobs.py:947`) | `[x]` 2026-09-26 frontend (`5a979dc`) + backend strict/non-strict loader; model-card line still to do | No UI string says "guaranteed" without "on average, in distribution, not per patient" |
 | P0.6 | Remove verified-dead code only (`forward_multitask`, `Atlas.tissue_mask`, `GateDecision.cautions`); fix stale "96^3" comment (`_baseline_common.yaml:85`) | `[ ]` | Suite green; nothing else from `simplification_review.md` |
 | P0.7 | **Author:** eyeball the twin on job `9c2cc294` + the research viewer (brain crisp; patient-left on screen-right) | `[ ]` | Author says so |
 | **Phase 1 — CPU science (Oct 2 – Oct 22)** | | | |
-| P1.1 | **Local recalibration** (the pre-registered Mondrian arm + a k-sweep 5/10/15/20/30, 1000 seeded splits, α 0.05/0.10/0.20, WT/TC, both models, SSA/PED, test as control). Amendment committed first | `[ ]` | A numbered note + claim C24, labelled **counterfactual** |
+| P1.1 | **Local recalibration** (the pre-registered Mondrian arm + a k-sweep 5/10/15/20/30, 1000 seeded splits, α 0.05/0.10/0.20, WT/TC, both models, SSA/PED, test as control). Amendment committed first | `[~]` amendment `f978022`, library `34baf88`; driver + run next | A numbered note + claim C24, labelled **counterfactual** |
 | P1.2 | T0.4 one-case pilot (RSNA `train/00000`) → real-DICOM validation with ground truth, ≤40 RSNA cases whose BraTS ID is in **test**. Protocol doc first | `[ ]` | A numbered note; a real-DICOM stage row in the error budget |
 | P1.3 | Intended-use signal ("adult glioma only") from DICOM `PatientAge` | `[ ]` | A numbered note, reported as **scoping, never detection** |
 | P1.4 | *Stretch:* pre-registered OOD score from input statistics (CPU) | `[ ]` | Only if P1.1–P1.3 land by Oct 22 |
 | **Phase 2 — GPU readiness (Oct 23 – Nov 5)** | | | |
-| P2.1 | `training.init_from` — weights-only, fresh optimizer | `[ ]` | CPU tests: loads weights; `last.pt` resume beats `init_from` |
+| P2.1 | `training.init_from` — weights-only, fresh optimizer | `[x]` 2026-09-26 `aa29714` | CPU tests: loads weights; `last.pt` resume beats `init_from` |
 | P2.2 | Frozen cross-fit splits `configs/data/splits_{ssa,ped}_cf{0,1}.yaml` (seeded generator) | `[ ]` | Committed before any training; old SSA/PED split files untouched |
 | P2.3 | nnU-Net prediction importer → our metric path | `[ ]` | GT round-trip `np.array_equal` on a case with NCR+ED; mirrored import fails |
-| P2.4 | `scripts/gpu_session.py` (lifted from `kaggle_train.ipynb`) + `scripts/cluster/{run_tmux.sh,run.sbatch,nnunet.sh}` | `[ ]` | CPU dry run of `overfit2` prints `NVX_HEALTH: OK` |
+| P2.4 | `scripts/gpu_session.py` (lifted from `kaggle_train.ipynb`) + `scripts/cluster/{run_tmux.sh,run.sbatch,nnunet.sh}` | `[~]` launcher `915e83c`; cluster wrappers + notebook switch-over to do | CPU dry run of `overfit2` prints `NVX_HEALTH: OK` |
 | P2.5 | Pre-registrations: Gate A amendment (dedicated card, abort bound restated, **full** 1000-epoch recipe, Auto3DSeg arm dropped with reason); D3 cross-fitted fine-tune; TTA measurement; `baseline_unet3d` seed 43 | `[ ]` | Each committed before its run |
 | P2.5b | Fresh-clone rehearsal (clean clone → venv → `reproduce.sh verify` → smoke → regenerate `thresholds.json`) | `[ ]` | Every stale instruction it finds is fixed |
 | P2.6 | `docs/research/gpu_request.md` — run list, measured T4-h, VRAM, disk, stack, internet | `[ ]` | Submitted to the college ~Nov 5 |

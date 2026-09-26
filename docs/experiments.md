@@ -2002,6 +2002,51 @@ sessions by resume is still ONE row — sum the GPU hours.
     re-run as part of a result, it becomes a real script through the
     normal `py-implementer` loop.
 
+51. **POST-HOC DEPLOYMENT CHANGE (Milestone 5, P0.4): `conformal_band` IS NO
+    LONGER A REFUSAL SIGNAL -- END-TO-END USABLE RATE IN DISTRIBUTION RISES
+    0.852 -> 0.915, BUT PED LOSES 4 CORRECT REFUSALS (SILENT FAILURE 49 -> 53
+    OF 99).** Run 2026-09-26: `python scripts/error_budget.py model=segqc
+    analysis.error_budget.out_dir=outputs/error_budget_p04_band_display_only`.
+    The only change is `configs/clinical/default.yaml`
+    `gatekeeper.enabled_signals: [input_qc, predicted_dice]`, where before it
+    also included `conformal_band`. The frozen thresholds and everything else
+    are identical to note 47.
+
+    **This is post-hoc.** The decision was taken *after* reading note 47,
+    which showed every one of `conformal_band`'s 12 in-distribution
+    refusals was an over-refusal. So **note 47's numbers remain the
+    pre-registered Phase G result**, and this note is a deployment change
+    measured afterwards. It must be labelled that way anywhere it is quoted.
+    The band is still computed and displayed on every clinical job (the
+    overlay and its route). It simply cannot refuse a study any more.
+
+    | cohort | P(accepted) | P(usable \| accepted) | **P(accepted AND usable)** | correct accept / silent failure / over-refusal / correct refusal |
+    |---|---|---|---|---|
+    | test, note 47 | 0.894 | 0.953 | 0.852 [0.799, 0.899] | 161 / 8 / 16 / 4 |
+    | test, band display-only | 0.958 | 0.956 | **0.915 [0.873, 0.952]** | 173 / 8 / 4 / 4 |
+    | SSA, note 47 | 0.967 | 0.810 | 0.783 | 47 / 11 / 1 / 1 |
+    | SSA, band display-only | 0.967 | 0.810 | 0.783 | 47 / 11 / 1 / 1 (identical) |
+    | PED, note 47 | 0.737 | 0.329 | 0.242 [0.162, 0.333] | 24 / 49 / 3 / 23 |
+    | PED, band display-only | 0.798 | 0.329 | 0.263 [0.182, 0.354] | 26 / **53** / 1 / 19 |
+
+    It moved in the predicted direction (the plan predicted "test
+    over-refusals fall; PED recall does not rise"). In distribution, 12 usable
+    studies are no longer refused, and silent failure is unchanged at 8. On SSA
+    nothing moved. On PED, 4 of the band's refusals were correct catches,
+    and those four unusable masks are now accepted, so silent failure goes
+    from 49.5% to 53.5%.
+
+    **Why the author accepted the PED cost (2026-09-26).** P1.3 adds an
+    intended-use rule ("adult glioma only", from DICOM `PatientAge`) that
+    refuses paediatric studies wholesale. Under that scoping, PED's gate
+    behaviour stops being the deployed behaviour. That rule is itself
+    reported as scoping, never as detection (a rule that refuses every child
+    scores 100% on PED by construction). Until P1.3 lands, the PED row above
+    is the honest cost of this change.
+
+    Artifacts: `outputs/error_budget_p04_band_display_only/` (same layout as
+    `outputs/error_budget/`, which is left untouched).
+
 ---
 
 ## Planned

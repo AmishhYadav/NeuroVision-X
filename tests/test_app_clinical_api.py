@@ -713,6 +713,27 @@ def test_clinical_job_conformal_band_no_fitted_threshold_is_404(
     assert response.status_code == 404
 
 
+def test_clinical_job_conformal_band_null_threshold_is_404_not_500(
+    client: TestClient, backend: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An infeasible fit (threshold=null) is a display-only miss, not a crash --
+    the route must fall through to its existing 404 branch, never raise (regression
+    for the route calling `_load_conformal_fitted_thresholds` without `strict=False`).
+    """
+    settings = config.get_settings()
+    job = _fabricate_done_clinical_job(settings)
+    shape = (5, 6, 7)
+    _write_clinical_logits(settings, job, np.zeros((3, *shape), dtype=np.float32))
+
+    fit_path = tmp_path / "fit.json"
+    fit_path.write_text(json.dumps({"WT__alpha_0.1": {"threshold": None}}))
+    monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
+
+    response = client.get(f"/api/clinical/jobs/{job.job_id}/conformal-band/WT")
+    assert response.status_code == 404
+    assert "WT" in response.json()["detail"]
+
+
 # --- GET /api/clinical/jobs/{job_id}/gradcam/{region} -----------------------
 
 

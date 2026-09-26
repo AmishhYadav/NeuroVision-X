@@ -822,7 +822,9 @@ def get_clinical_job_conformal_band(job_id: str, region: str) -> Response:
     logits = np.load(logits_path).astype(np.float32)
 
     alpha = float(cfg.clinical.gatekeeper.conformal_alpha)
-    fitted = clinical_jobs._load_conformal_fitted_thresholds([region], alpha)
+    # Display route: a missing/infeasible fit must fall through to the 404 branch
+    # below, never raise a 500 -- so strict=False.
+    fitted = clinical_jobs._load_conformal_fitted_thresholds([region], alpha, strict=False)
     if region not in fitted:
         raise HTTPException(
             status_code=404,

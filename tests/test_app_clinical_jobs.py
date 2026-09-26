@@ -352,7 +352,7 @@ def test_load_conformal_fitted_thresholds_finds_alpha_0_1_key(
     )
     monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
 
-    result = clinical_jobs._load_conformal_fitted_thresholds(["WT", "TC"], alpha=0.1)
+    result = clinical_jobs._load_conformal_fitted_thresholds(["WT", "TC"], alpha=0.1, strict=True)
     assert result == {"WT": 0.42, "TC": 0.37}
 
 
@@ -364,7 +364,7 @@ def test_load_conformal_fitted_thresholds_missing_key_raises(
     monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
 
     with pytest.raises(ValueError, match="TC__alpha_0.1"):
-        clinical_jobs._load_conformal_fitted_thresholds(["WT", "TC"], alpha=0.1)
+        clinical_jobs._load_conformal_fitted_thresholds(["WT", "TC"], alpha=0.1, strict=True)
 
 
 def test_load_conformal_fitted_thresholds_null_threshold_raises(
@@ -375,7 +375,7 @@ def test_load_conformal_fitted_thresholds_null_threshold_raises(
     monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
 
     with pytest.raises(ValueError, match="threshold=null"):
-        clinical_jobs._load_conformal_fitted_thresholds(["WT"], alpha=0.1)
+        clinical_jobs._load_conformal_fitted_thresholds(["WT"], alpha=0.1, strict=True)
 
 
 def test_load_conformal_fitted_thresholds_missing_file_returns_empty_and_warns(
@@ -385,10 +385,52 @@ def test_load_conformal_fitted_thresholds_missing_file_returns_empty_and_warns(
     monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: missing_path)
 
     with caplog.at_level(logging.WARNING, logger=clinical_jobs.logger.name):
-        result = clinical_jobs._load_conformal_fitted_thresholds(["WT"], alpha=0.1)
+        result = clinical_jobs._load_conformal_fitted_thresholds(["WT"], alpha=0.1, strict=True)
 
     assert result == {}
     assert any("no fit.json" in record.message for record in caplog.records)
+
+
+def test_load_conformal_fitted_thresholds_non_strict_missing_key_omits_and_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """strict=False: a missing region key is omitted, never raised."""
+    fit_path = tmp_path / "fit.json"
+    _write_fit_json(fit_path, {"WT__alpha_0.1": {"threshold": 0.42}})
+    monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
+
+    with caplog.at_level(logging.WARNING, logger=clinical_jobs.logger.name):
+        result = clinical_jobs._load_conformal_fitted_thresholds(
+            ["WT", "TC"], alpha=0.1, strict=False
+        )
+
+    assert result == {"WT": 0.42}
+    assert any(
+        "TC__alpha_0.1" in record.message and "TC" in record.message for record in caplog.records
+    )
+
+
+def test_load_conformal_fitted_thresholds_non_strict_null_threshold_omits_and_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """strict=False: a null (infeasible-fit) threshold is omitted, never raised."""
+    fit_path = tmp_path / "fit.json"
+    _write_fit_json(
+        fit_path,
+        {
+            "WT__alpha_0.1": {"threshold": None},
+            "TC__alpha_0.1": {"threshold": 0.37},
+        },
+    )
+    monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
+
+    with caplog.at_level(logging.WARNING, logger=clinical_jobs.logger.name):
+        result = clinical_jobs._load_conformal_fitted_thresholds(
+            ["WT", "TC"], alpha=0.1, strict=False
+        )
+
+    assert result == {"TC": 0.37}
+    assert any("threshold=null" in record.message for record in caplog.records)
 
 
 # --- _ingest_result_to_dict ----------------------------------------------------
@@ -573,6 +615,36 @@ def test_run_clinical_job_gradcam_failure_isolated_other_region_still_computed(
     # Both regions were genuinely attempted -- the WT failure did not also skip
     # TC, proving the two calls sit in their own, independent try/except blocks.
     assert set(calls) == {"WT", "TC"}
+
+
+def test_run_clinical_job_null_conformal_threshold_does_not_fail_job_when_display_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """conformal_band is display-only in the real default config (not in
+    `enabled_signals`), so a null fitted threshold must be swallowed (strict=False),
+    not raised -- the job still reaches `done`.
+    """
+    settings = _settings(tmp_path)
+    job = clinical_jobs.create_clinical_job(settings, _valid_study_zip())
+    _wire_full_pipeline_to_gatekeeper(monkeypatch, tmp_path)
+
+    fit_path = tmp_path / "fit.json"
+    _write_fit_json(
+        fit_path,
+        {
+            "WT__alpha_0.1": {"threshold": None},
+            "TC__alpha_0.1": {"threshold": None},
+        },
+    )
+    monkeypatch.setattr(clinical_jobs, "_conformal_fit_path", lambda: fit_path)
+    monkeypatch.setattr(
+        inference, "explain_case", lambda job_settings, case_id, region, **kwargs: None
+    )
+
+    result = clinical_jobs.run_clinical_job(settings, job.job_id)
+
+    assert result.state == "done"
+    assert result.state != "failed"
 
 
 # --- DICOM-SEG export (E6) wiring: _export_dicom_seg unit-level -------------
