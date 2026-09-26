@@ -25,7 +25,15 @@ function formatDetailValue(value: unknown): string {
 }
 
 function VerdictRow({ verdict }: { verdict: GatekeeperSignalVerdict }) {
-  const label = SIGNAL_LABEL[verdict.signal] ?? verdict.signal;
+  const baseLabel = SIGNAL_LABEL[verdict.signal] ?? verdict.signal;
+  // `enabled: false` means this signal is computed and shown, but the
+  // backend's gatekeeper never looks at it when deciding proceed/caution/
+  // refuse (see `configs/clinical/default.yaml`'s `gatekeeper.enabled_signals`
+  // - conformal_band was removed from that list 2026-09-26). That is
+  // informational, not an error, a missing value, or a step towards refusal,
+  // so it gets its own label suffix and muted styling below rather than
+  // sharing any treatment that could read as a problem with this case.
+  const label = verdict.enabled ? baseLabel : `${baseLabel} (not used for refusal)`;
   // Only flat (non-object) detail entries are worth a one-line readout here;
   // anything nested stays available in the raw JSON below rather than being
   // recursively flattened into a summary that was never meant to hold it.
@@ -36,16 +44,22 @@ function VerdictRow({ verdict }: { verdict: GatekeeperSignalVerdict }) {
   return (
     <div className="flex flex-col gap-1 border-t border-surface-seam pt-2 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-mono text-xs text-text-primary">{label}</span>
+        <span
+          className={`font-mono text-xs ${verdict.enabled ? "text-text-primary" : "text-text-dim"}`}
+        >
+          {label}
+        </span>
         <span className="font-mono text-[10px] tracking-[0.04em] text-text-dim uppercase">
           {!verdict.enabled
-            ? "not enabled"
+            ? "informational"
             : !verdict.available
               ? "unavailable"
               : verdict.decision.replace(/_/g, " ")}
         </span>
       </div>
-      <p className="font-mono text-[11px] leading-relaxed text-text-secondary">
+      <p
+        className={`font-mono text-[11px] leading-relaxed ${verdict.enabled ? "text-text-secondary" : "text-text-dim"}`}
+      >
         {verdict.message}
       </p>
       {detailEntries.length > 0 && (

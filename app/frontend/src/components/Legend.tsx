@@ -66,8 +66,18 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
                 normalized values (128/255 and 255/255). */}
             <Swatch color="#E46A3F" label="Safety margin (not in point estimate)" />
             <Swatch color="#FCFDBF" label="Point estimate (and safety margin)" />
-            <div className="text-center font-mono text-[10px] text-text-dim">
-              Conformal band: guaranteed-coverage region
+            {/* This is an average-case, in-distribution calibration result,
+                not a per-patient guarantee - it does not hold on data unlike
+                what the model was trained on (measured to fail on the SSA and
+                paediatric cohorts, see docs/experiments.md). The short line
+                stays visible; the full explanation is a native `title`
+                tooltip rather than more on-screen text, so the legend does
+                not grow every time a caveat is added. */}
+            <div
+              className="text-center font-mono text-[10px] text-text-dim"
+              title="Calibrated so that, averaged over in-distribution studies, mask + band miss at most 10% of tumour voxels (α = 0.10). Not a guarantee for this patient, and it does not hold for scans unlike the training data."
+            >
+              Conformal band: average-case bound (in-distribution only, not per patient)
             </div>
           </div>
         ) : (
