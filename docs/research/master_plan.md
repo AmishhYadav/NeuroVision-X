@@ -232,7 +232,7 @@ waiting for the college card. **Hard cap 30 GPU-h/week; plan to ≤ 28.** Ledger
 
 | Week from | Planned sessions | ~GPU-h |
 |---|---|---|
-| 2026-09-26 | `baseline-seed43-s1` (launched 2026-09-26) · Gate A s1 · Gate A s2 | 5 + 11 + 11 |
+| 2026-09-26 | `baseline-seed43-s1` **DONE** (80/80 epochs, best 79, val dice_mean 0.8855 vs seed 42's 0.8854; health line read `NAN` only because `grad_norm_max`=inf on 3 AMP-overflow steps that GradScaler skipped by design — weights/optimizer finite, scale 32768; run valid, checkpoint `outputs/baseline_unet3d_seed43/checkpoints/best.pt`; CPU eval next) · Gate A s1 (queued behind it) · Gate A s2 | 5 + 11 + 11 |
 | 2026-10-03 | Gate A s3, s4 · D3 SSA cf0/cf1 | 22 + 3 |
 | 2026-10-10 | Gate A s5, s6 · D3 PED cf0/cf1 | 22 + 4 |
 | 2026-10-17 | Gate A s7 + test prediction session · TTA (if registered) | ~15 + 2 |
