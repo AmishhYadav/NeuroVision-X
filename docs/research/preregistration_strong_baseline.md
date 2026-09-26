@@ -144,3 +144,78 @@ time implies more than 60 GPU-h for the pair.
 
 *(To be completed after the runs. Nothing above this line may be edited once the first number
 exists.)*
+
+---
+
+## Amendment 1 — where and how the nnU-Net arm runs, fixed 2026-09-26 before any of its numbers exist
+
+**Why an amendment.** Note 46 measured the pre-registered recipe at **271.9 s/epoch, 9.47 GiB peak on
+a Kaggle T4**, so one `3d_fullres` fold of nnU-Net's default 1000-epoch schedule costs **~75.5 GPU-h**
+— above this document's 60 GPU-h abort bound for the pair. The bound did its job: nothing ran. On
+2026-09-26 the author decided (Milestone 5, overriding the "college card, Dec" line in
+`master_plan.md` P4) to run the **full, unreduced recipe on Kaggle T4s, chained across sessions**,
+rather than wait for the college card or register the reduced 250-epoch arm. This amendment fixes
+every detail that decision leaves open. It edits nothing above the `## Result` line, and it is
+committed before the first training session is launched.
+
+**What does not change.** The endpoints (E1 voxel-wise ET Dice, E2 lesion-wise ET Dice, co-primary,
+paired, n = 189), the statistics (paired bootstrap + Wilcoxon, Holm over the whole family), the
+decision rule (SURVIVES / PARITY / RETIRED, split outcomes → PARITY), the invalidity list, and the
+prohibition on tuning nnU-Net downward. **The recipe is not reduced in any way**: 1000 epochs × 250
+iterations, SGD + poly schedule, nnU-Net's own augmentation, its self-configured patch and batch size.
+
+**Fixed now.**
+
+1. **Cost bound.** The 60 GPU-h bound for the *pair* is replaced by **95 GPU-h for the nnU-Net arm
+   alone** (75.5 measured + ~10% chaining overhead + test inference). **Abort** if the per-epoch
+   time measured in session 1 implies more than 95 GPU-h for 1000 epochs, or if cumulative spend
+   passes 95 GPU-h before `checkpoint_final.pth` exists. An aborted run is reported as aborted,
+   never as a reduced-schedule result.
+2. **The Auto3DSeg arm is dropped**, before any number from it exists. Reason: cost. It was a
+   secondary, non-gating comparator; with it the pair would need a second ~40–70 GPU-h arm on the
+   same quota. The family below is correspondingly smaller. Dropping an arm whose result is unknown
+   cannot bias the gate.
+3. **Training data: `fold = "all"`, all 875 train cases.** This document's *Controlled* list fixes the
+   training case list as the 875 cases of `configs/data/splits.yaml`. nnU-Net's "fold 0" would train
+   on only 700 of them (its 5-fold split holds 175 back for internal validation), a 20% data
+   handicap on the comparator that would bias the gate towards SURVIVES. `fold all` trains on exactly
+   our 875 — the same list `neurovision` trained on. nnU-Net's internal "validation" in `fold all`
+   runs on training cases, so its pseudo-Dice is a health signal only, never a result.
+4. **Plans.** `nnUNetv2_plan_and_preprocess -c 3d_fullres` with the CLI default planner
+   (`nnUNetPlans`), exactly as the note-46 probe. Planned **once** (CPU kernel
+   `neurovision-gatea-prep`); every session trains on that byte-identical `nnUNetPlans.json`.
+   nnU-Net's newer ResEnc presets are not used: they are a different recommended configuration,
+   not the default this document names.
+5. **Chaining.** Sessions resume with nnU-Net's **own** resume path (`maybe_load_checkpoint` with
+   `continue_training=True`, the `--c` flag): weights, SGD momentum, AMP scaler, logger and epoch
+   counter are restored, and the poly learning rate is a function of the epoch index, so the
+   schedule is the single 1000-epoch curve. Two operational differences, neither of which touches
+   the optimisation: `checkpoint_latest.pth` is written **every epoch** instead of every 50 (so a
+   session loses nothing when it stops), and each session stops **between** epochs when its wall-clock
+   budget is reached. Data-loader RNG is not restored across a resume — exactly as with nnU-Net's own
+   `--c`, and nnU-Net training is not bit-deterministic anyway. Every session begins with identity
+   checks (expected start epoch, trainer and plans identity, pinned `GIT_REF`) and ends with a
+   health line; a session that fails a check stops before training.
+6. **Checkpoint used for prediction: `checkpoint_final.pth`** (nnU-Net's default). `checkpoint_best`
+   is never used — it is selected on training cases in `fold all`.
+7. **Inference.** `nnUNetv2_predict` defaults (Gaussian sliding window, step 0.5, **mirroring on**)
+   on the 189 test cases. Mirroring is part of nnU-Net's standard recipe, so it stays on for the
+   primary arm; `neurovision` is scored without TTA as before. A **secondary, descriptive** nnU-Net
+   row with `--disable_tta` is also produced, so the reader can see how much of any gap is test-time
+   augmentation. It does not enter the Holm family.
+8. **Scoring convention (controlled, as above).** nnU-Net's hard labels are mapped to our label
+   convention (nnU-Net 1 = ED, 2 = NCR → our 2 and 1; 3 = ET unchanged), reoriented and cropped to
+   each case's `meta.json` geometry, turned into ±20 pseudo-logits on the (ET, TC, WT) region
+   channels, and scored by `analysis/replay.py::replay_case` with the **project default
+   post-processing chain** (threshold 0.5, `min_component_size` 50, nesting enforced) — the same
+   chain every other arm is scored with. The importer (`master_plan.md` P2.3) must pass a
+   ground-truth round-trip (`np.array_equal` on a case containing NCR and ED) and a mirrored import
+   must fail its check, before any nnU-Net prediction is scored. nnU-Net's own
+   `apply_postprocessing` is not used (it needs the 5-fold ensemble this design does not train).
+9. **The family**, fixed now: E1 and E2 for `neurovision` vs `nnunet_v2_3dfullres` (the gate), plus
+   the secondary rows — TC and WT for voxel-wise and lesion-wise Dice, and HD95 on ET/TC/WT — for
+   that pairing and for `nnunet_v2_3dfullres` vs `baseline_unet3d`. One Holm family over all of
+   them, via `scripts/compare_family.py`. The gate reads only E1 and E2, each with its family-Holm p.
+
+**Predictions are not added.** This document registered a decision rule, not a directional
+prediction, and that stays true.
