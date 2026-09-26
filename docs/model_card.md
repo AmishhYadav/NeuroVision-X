@@ -99,7 +99,10 @@ statistically equivalent (paired TOST, margin 0.03 AUROC), inter-branch disagree
 model's own trained confidence head is worse on all three regions (on WT it is at chance).
 
 **Conformal risk control** (`scripts/conformal.py`) calibrates a decision threshold on val and applies
-it frozen, giving a distribution-free bound on the mask's miss rate.
+it frozen, giving a distribution-free bound on the mask's miss rate. **The bound is an average over
+studies, not a promise about any one patient**: calibrated at α = 0.10 it means that, over many
+in-distribution studies, the conservative mask misses at most 10% of tumour voxels on average — an
+individual study can miss far more.
 
 - **In distribution it holds**: realised risk lands at 0.64×–0.96× of nominal α in 6 of 6 cells, for
   this model and for the baseline. It is a theorem, so it holds for an arbitrarily bad model too.
@@ -113,7 +116,9 @@ Anyone deploying this must read the second bullet as the operating reality, not 
 A real DICOM study goes through: ingest → input QC → co-registration + atlas registration +
 skull-stripping → input QC again → segmentation (this checkpoint, pinned) → QC-model estimate and
 conformal band → refusal gate → **PROCEED / PROCEED_WITH_CAUTION / REFUSE**. A refusal is a successful
-outcome of the job, never an error.
+outcome of the job, never an error. Since 2026-09-26 the conformal band is **display-only** — shown on
+every job but no longer allowed to refuse (note 51, a post-hoc change; the table below is note 47's
+pre-registered measurement with the band still enabled).
 
 Measured end to end with the deployed frozen gate, nothing refit (note 47):
 
