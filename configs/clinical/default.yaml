@@ -285,6 +285,22 @@ gatekeeper:
   # A signal NOT in enabled_signals is absent by design and is reported as
   # such, never counted either way.
 
+  # P1.3 intended use -- "adult glioma only" (Milestone 5, 2026-09-26).
+  # Read from the DICOM study's PatientAge tag at ingest. A labelling rule,
+  # not a quality measurement: it is reported as SCOPING, never as detection
+  # (a rule that refuses every child scores 100% on a paediatric cohort by
+  # construction). Wired in only once the `intended_use` signal exists --
+  # add it to enabled_signals above at that point, not before.
+  #
+  # missing_age: DOCUMENTED EXCEPTION to the "an enabled signal that arrives
+  # as None is a REFUSE" rule above (author decision 2026-09-26). Age is
+  # routinely stripped by de-identification, and refusing every anonymised
+  # study for a labelling rule would make the tool unusable on public data;
+  # a missing age is therefore a CAUTION with a named reason, not a REFUSE.
+  intended_use:
+    min_age_years: 18
+    missing_age: caution # caution | refuse
+
   # Regions the mask-quality signals are read on. WT and TC are the
   # conformal pre-registration's primary endpoints; ET is secondary there
   # because 2.6% of BraTS 2021 cases have no enhancing tumour at all and
@@ -321,3 +337,32 @@ gatekeeper:
 
   # Where the calibrated thresholds are written. Fixed, not ${output_dir}.
   out_dir: outputs/gatekeeper
+
+validation:
+  # P1.2 real-DICOM validation with ground truth (Milestone 5). RSNA-MICCAI
+  # 2021 radiogenomic competition DICOMs share BraTS 2021's 5-digit IDs, so a
+  # case whose BraTS ID is in OUR test split has raw scanner DICOM AND a
+  # published ground truth. Protocol: docs/research/real_dicom_validation_protocol.md
+  # (written and committed before the first scored case).
+  competition: rsna-miccai-brain-tumor-radiogenomic-classification
+  labels_csv: data/rsna_miccai/train_labels.csv
+  download_dir: data/rsna_miccai/cases
+  split_path: configs/data/splits.yaml
+  split: test
+  # Flagged by the RSNA competition organisers as problematic.
+  exclude_ids: ["00109", "00123", "00709"]
+  max_cases: 40
+  seed: 42
+  # RSNA folder name -> our ingest role. Applied via ingest.role_overrides
+  # (keyed by SeriesInstanceUID), STATED as such in the protocol: RSNA's
+  # "T1wCE" tokenises to one unrecognised token, and adding it to the rule
+  # table would be tuning ingest on validation data.
+  role_folders:
+    FLAIR: flair
+    T1w: t1
+    T1wCE: t1ce
+    T2w: t2
+  # Disk: one case is ~0.4-0.6 GB of DICOM and ~69 GiB is free, so a case's
+  # DICOM is deleted once it has been scored (its SHA-256 manifest stays).
+  keep_dicom_after_run: false
+  out_dir: outputs/real_dicom_validation

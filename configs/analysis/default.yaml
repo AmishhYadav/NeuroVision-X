@@ -749,3 +749,39 @@ compare_family:
       a: outputs/replay_lesionwise/eval_ped_neurovision_seed43/per_case_default.csv
       b: outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
       metrics: [lwdice_ET]
+
+local_recalibration:
+  # Milestone 5 P1.1 -- docs/research/preregistration_conformal.md Amendment 1.
+  # A COUNTERFACTUAL ("what would a new site need to restore the bound?"),
+  # never external validation. Reads the per-case curves Phase B already
+  # saved; no inference.
+  out_dir: outputs/local_recalibration
+  models:
+    neurovision:
+      conformal_dir: outputs/conformal/neurovision
+      cohorts: {test: eval_test, ssa: eval_ssa_neurovision, ped: eval_ped_neurovision}
+    baseline_unet3d:
+      conformal_dir: outputs/conformal/baseline_unet3d
+      cohorts: {test: eval_test_baseline_unet3d, ssa: eval_ssa_baseline_unet3d, ped: eval_ped_baseline_unet3d}
+  regions: [WT, TC]
+  alphas: [0.05, 0.10, 0.20]
+  ks: [5, 10, 15, 20, 30, half]
+  n_splits: 1000
+  seed: 42
+
+crossfit_splits:
+  # Milestone 5 P2.2 -- frozen 2-fold cross-fit split files for the D3
+  # external-cohort fine-tune. Written ONCE by scripts/make_crossfit_splits.py
+  # and committed before any training; never regenerated (same rule as every
+  # other split file). The source split files stay untouched -- their
+  # train/val must stay empty.
+  n_folds: 2
+  seed: 42
+  # Cases carved from each fold's TRAINING half for monitoring only. The
+  # D3 pre-registration scores last.pt, so val never selects a checkpoint.
+  val_n: 5
+  cohorts:
+    ssa: configs/data/splits_ssa.yaml
+    ped: configs/data/splits_ped.yaml
+  out_pattern: configs/data/splits_{cohort}_cf{fold}.yaml
+
