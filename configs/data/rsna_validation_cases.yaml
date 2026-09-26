@@ -1,0 +1,93 @@
+# P1.2 real-DICOM validation sample -- docs/research/real_dicom_validation_protocol.md.
+# Eligible: BraTS 2021 test-split IDs present in RSNA-MICCAI train_labels.csv (90 on 2026-09-26).
+# Sample: numpy.random.default_rng(42).choice(sorted(eligible), 40, replace=False), then sorted.
+# FROZEN -- committed before any of these studies was downloaded. Never regenerate.
+# rsna_id is the RSNA folder name (train/<rsna_id>); nothing is excluded after download.
+pilot:
+  case_id: BraTS2021_00000
+  rsna_id: '00000'
+  split: train
+  note: geometry pilot only, never reported as validation
+n_eligible: 90
+seed: 42
+cases:
+- case_id: BraTS2021_00032
+  rsna_id: '00032'
+- case_id: BraTS2021_00059
+  rsna_id: 00059
+- case_id: BraTS2021_00077
+  rsna_id: '00077'
+- case_id: BraTS2021_00084
+  rsna_id: 00084
+- case_id: BraTS2021_00099
+  rsna_id: 00099
+- case_id: BraTS2021_00134
+  rsna_id: '00134'
+- case_id: BraTS2021_00185
+  rsna_id: 00185
+- case_id: BraTS2021_00206
+  rsna_id: '00206'
+- case_id: BraTS2021_00230
+  rsna_id: '00230'
+- case_id: BraTS2021_00247
+  rsna_id: '00247'
+- case_id: BraTS2021_00271
+  rsna_id: '00271'
+- case_id: BraTS2021_00283
+  rsna_id: 00283
+- case_id: BraTS2021_00296
+  rsna_id: 00296
+- case_id: BraTS2021_00314
+  rsna_id: '00314'
+- case_id: BraTS2021_00320
+  rsna_id: '00320'
+- case_id: BraTS2021_00321
+  rsna_id: '00321'
+- case_id: BraTS2021_00364
+  rsna_id: '00364'
+- case_id: BraTS2021_00403
+  rsna_id: '00403'
+- case_id: BraTS2021_00451
+  rsna_id: '00451'
+- case_id: BraTS2021_00464
+  rsna_id: '00464'
+- case_id: BraTS2021_00478
+  rsna_id: 00478
+- case_id: BraTS2021_00504
+  rsna_id: '00504'
+- case_id: BraTS2021_00561
+  rsna_id: '00561'
+- case_id: BraTS2021_00579
+  rsna_id: 00579
+- case_id: BraTS2021_00583
+  rsna_id: 00583
+- case_id: BraTS2021_00610
+  rsna_id: '00610'
+- case_id: BraTS2021_00620
+  rsna_id: '00620'
+- case_id: BraTS2021_00628
+  rsna_id: 00628
+- case_id: BraTS2021_00638
+  rsna_id: 00638
+- case_id: BraTS2021_00651
+  rsna_id: '00651'
+- case_id: BraTS2021_00668
+  rsna_id: 00668
+- case_id: BraTS2021_00679
+  rsna_id: 00679
+- case_id: BraTS2021_00694
+  rsna_id: 00694
+- case_id: BraTS2021_00703
+  rsna_id: '00703'
+- case_id: BraTS2021_00724
+  rsna_id: '00724'
+- case_id: BraTS2021_00734
+  rsna_id: '00734'
+- case_id: BraTS2021_00780
+  rsna_id: 00780
+- case_id: BraTS2021_00787
+  rsna_id: 00787
+- case_id: BraTS2021_00789
+  rsna_id: 00789
+- case_id: BraTS2021_01008
+  rsna_id: 01008
