@@ -137,6 +137,21 @@ checkpoint:
   mode: max
   resume: null # path to a checkpoint, or null to start fresh
 
+  # Path to a DIFFERENT run's checkpoint to fine-tune from (e.g. the deployed
+  # `neurovision` checkpoint, for D3's external-cohort fine-tune), or null.
+  # MUST live in a DIFFERENT directory from this run's own `dir` above --
+  # scripts/train.py raises ValueError if it does not, because otherwise this
+  # run would silently auto-resume from THAT directory's own last.pt instead
+  # of ever fine-tuning at all. Give the fine-tune its own `dir` (e.g. a
+  # distinct experiment_name); point init_from at the source run's directory.
+  # Applied as weights only: fresh optimizer/scheduler/AMP scaler, epoch 0,
+  # global_step 0, best_metric reset, a NEW W&B run -- and only when neither
+  # `resume` above nor an auto-found `last.pt` in `dir` exists, so a
+  # pre-empted fine-tune resumes from ITS OWN last.pt on the next attempt
+  # instead of restarting from these init_from weights every time. See
+  # scripts/train.py's `apply_resume_or_init` / `resolve_init_from_checkpoint`.
+  init_from: null
+
 # Wall-clock stop, in hours. Set below Kaggle's 12h limit so the run saves a
 # final checkpoint and exits cleanly instead of being killed mid-epoch.
 max_hours: 11.0

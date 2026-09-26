@@ -10,9 +10,11 @@ Example usage:
     python scripts/train.py data.root_dir=/path/to/preprocessed wandb.mode=disabled
 
 The wiring is split into small functions (`build_dataloaders`, `init_wandb`,
-`select_resume_checkpoint`, `run_training`) rather than one long `main`, so
-each piece can be unit tested without going through Hydra -- see
-tests/test_train_script.py.
+`select_resume_checkpoint`, `resolve_init_from_checkpoint`,
+`apply_resume_or_init`, `run_training`) rather than one long `main`, so each
+piece can be unit tested without going through Hydra -- see
+tests/test_train_script.py and tests/test_train_init_from.py (the last for
+`training.checkpoint.init_from`, the fine-tune entry point).
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ from neurovision.losses import segmentation  # noqa: F401
 from neurovision.losses.registry import build_loss
 from neurovision.models import baseline  # noqa: F401
 from neurovision.models.registry import build_model
-from neurovision.training.checkpoint import ResumeState, find_resume_checkpoint
+from neurovision.training.checkpoint import ResumeState, find_resume_checkpoint, load_checkpoint
 from neurovision.training.trainer import Trainer
 from neurovision.utils.device import get_device
 from neurovision.utils.logging import setup_logging
@@ -220,6 +222,137 @@ def select_resume_checkpoint(cfg: DictConfig) -> Path | None:
     return find_resume_checkpoint(cfg.training.checkpoint.dir)
 
 
+def resolve_init_from_checkpoint(cfg: DictConfig) -> Path | None:
+    """Validates and resolves `cfg.training.checkpoint.init_from`, if set.
+
+    Called by `apply_resume_or_init` BEFORE `select_resume_checkpoint` is
+    even consulted -- see that function's docstring for why the order
+    matters: this validation must run whether or not a resume is about to
+    happen, so a fine-tune config that accidentally reuses the SOURCE run's
+    own `checkpoint.dir` is caught immediately, not only on runs where no
+    `last.pt` happens to already be sitting there.
+
+    `.get(...)` (not plain attribute access) is deliberate: `init_from` is a
+    new key, and a config built without it (e.g. an older experiment config,
+    or a test fixture that predates this key) must be read as "not set"
+    rather than raise `ConfigAttributeError`.
+
+    Args:
+        cfg: The full composed Hydra config.
+
+    Returns:
+        The resolved `init_from` path, or None if it is not set.
+
+    Raises:
+        FileNotFoundError: If `init_from` is set but no file exists there.
+        ValueError: If `init_from` resolves to a path inside this run's own
+            `training.checkpoint.dir`. That directory is exactly where this
+            run auto-discovers a `last.pt` to resume from -- if `init_from`
+            pointed into the SOURCE run's own checkpoint dir (which already
+            has a `last.pt`), this run would silently RESUME the source run
+            at its last saved epoch instead of fine-tuning from `init_from`'s
+            weights at all.
+    """
+    init_from = cfg.training.checkpoint.get("init_from")
+    if init_from is None:
+        return None
+
+    init_path = Path(init_from).resolve()
+    if not init_path.is_file():
+        raise FileNotFoundError(
+            f"training.checkpoint.init_from={init_from!r} does not exist "
+            f"(resolved to {init_path}). It must point at a checkpoint file "
+            "written by neurovision.training.checkpoint.save_checkpoint."
+        )
+
+    checkpoint_dir = Path(cfg.training.checkpoint.dir).resolve()
+    if init_path.is_relative_to(checkpoint_dir):
+        raise ValueError(
+            f"training.checkpoint.init_from={init_path} lies inside this run's own "
+            f"training.checkpoint.dir={checkpoint_dir}. This run would auto-resume the "
+            "source run's last.pt instead of fine-tuning -- give the fine-tune its own "
+            "training.checkpoint.dir (e.g. a distinct experiment_name), separate from the "
+            "source run's, and point init_from at a checkpoint in THAT (the source's) "
+            "directory instead."
+        )
+
+    return init_path
+
+
+def apply_resume_or_init(cfg: DictConfig, trainer: Trainer) -> ResumeState | None:
+    """Resumes, fine-tune-initializes, or leaves `trainer` fresh, per config.
+
+    Implements the full precedence in one place: explicit
+    `training.checkpoint.resume` > an auto-found `<training.checkpoint.dir>/
+    last.pt` > `training.checkpoint.init_from` > fresh init.
+
+    `init_from` is validated FIRST, unconditionally, before
+    `select_resume_checkpoint` ever runs -- even on a run that is about to
+    resume anyway. This is deliberate, not an optimization: if `init_from`
+    were only checked after confirming no resume is available, a fine-tune
+    config that mistakenly points `training.checkpoint.dir` at the SOURCE
+    run's own checkpoint directory would find that directory's `last.pt`,
+    resume the source run silently, and never reach the `init_from` check at
+    all -- exactly the failure the inside-`checkpoint.dir` guard exists to
+    catch. Validating first closes that hole; `init_from` is still only
+    *applied* below once resuming has been ruled out, so a legitimately
+    pre-empted fine-tune (whose OWN checkpoint.dir, distinct from the
+    source's, holds its own `last.pt`) still resumes correctly.
+
+    `init_from` restores model weights ONLY, via `load_checkpoint` with
+    `optimizer=None` and `restore_rng=False`: the optimizer, scheduler and
+    AMP scaler stay the fresh ones `Trainer.__init__` already built, and
+    `trainer.start_epoch` / `trainer.global_step` / `trainer.best_metric` are
+    left at their fresh-run defaults. A fine-tune is a NEW run that borrows
+    weights, not a continuation of the source run's schedule -- so the
+    caller must also start a NEW W&B run for it (`init_wandb` is given None
+    here, exactly as for a fresh run).
+
+    Args:
+        cfg: The full composed Hydra config.
+        trainer: A freshly constructed `Trainer`, not yet trained.
+
+    Returns:
+        The `ResumeState` from `Trainer.resume_from`, if a resume happened;
+        otherwise None, for both `init_from` and a fully fresh run.
+
+    Raises:
+        FileNotFoundError: See `resolve_init_from_checkpoint`.
+        ValueError: See `resolve_init_from_checkpoint`.
+    """
+    # Validated up front, unconditionally -- see the docstring above for why
+    # this must happen before select_resume_checkpoint, not only when it
+    # returns None.
+    init_path = resolve_init_from_checkpoint(cfg)
+
+    resume_path = select_resume_checkpoint(cfg)
+    if resume_path is not None:
+        resume_state = trainer.resume_from(resume_path)
+        logger.info(
+            "RESUME: continuing training from epoch %d (checkpoint: %s)",
+            resume_state.start_epoch,
+            resume_path,
+        )
+        return resume_state
+
+    if init_path is not None:
+        load_checkpoint(
+            init_path,
+            trainer.model,
+            map_location=str(trainer.device),
+            restore_rng=False,
+        )
+        logger.info(
+            "INIT_FROM: fine-tuning from %s (weights only -- fresh optimizer/scheduler/"
+            "scaler, epoch 0, global_step 0, best_metric reset, new W&B run)",
+            init_path,
+        )
+        return None
+
+    logger.info("FRESH: starting a new training run from epoch 0")
+    return None
+
+
 def run_training(cfg: DictConfig) -> dict[str, float]:
     """Builds every training component and runs `Trainer.train()`.
 
@@ -230,11 +363,15 @@ def run_training(cfg: DictConfig) -> dict[str, float]:
        random transforms) that a resumed run needs to reconstruct identically.
     2. Resolve the device, build the dataloaders, model, and loss.
     3. Construct the `Trainer` with `wandb_run=None`.
-    4. Resume from a checkpoint (if any) BEFORE initializing W&B. This order
-       is inverted from what you might expect: resuming into the same W&B
-       run needs `id=resume_state.wandb_run_id`, which is only known after
-       the checkpoint has been read. Initializing W&B first would create a
-       fresh run and orphan the original one the checkpoint belongs to.
+    4. `apply_resume_or_init` resumes from a checkpoint, or fine-tune-
+       initializes from `training.checkpoint.init_from`, or leaves the
+       Trainer fresh -- see that function's docstring for the precedence.
+       This happens BEFORE initializing W&B: resuming into the same W&B run
+       needs `id=resume_state.wandb_run_id`, which is only known after the
+       checkpoint has been read (a fine-tune via `init_from`, like a fresh
+       run, always starts a NEW W&B run). Initializing W&B first would
+       create a fresh run and orphan the original one a resumed checkpoint
+       belongs to.
     5. Run `trainer.train()`, log the final metrics, and finish the W&B run
        in a `finally` so an exception or a `max_hours` stop still closes it.
 
@@ -261,18 +398,7 @@ def run_training(cfg: DictConfig) -> dict[str, float]:
     # in this function's docstring.
     trainer = Trainer(cfg, model, train_loader, val_loader, loss_fn, device, wandb_run=None)
 
-    resume_path = select_resume_checkpoint(cfg)
-
-    if resume_path is not None:
-        resume_state = trainer.resume_from(resume_path)
-        logger.info(
-            "RESUME: continuing training from epoch %d (checkpoint: %s)",
-            resume_state.start_epoch,
-            resume_path,
-        )
-    else:
-        resume_state = None
-        logger.info("FRESH: starting a new training run from epoch 0")
+    resume_state = apply_resume_or_init(cfg, trainer)
 
     # Only now, with resume_state known, is it safe to start (or resume) the
     # W&B run -- see the ordering note above.
