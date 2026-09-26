@@ -701,6 +701,53 @@ error_budget:
   # Caps cases per cohort. null = all. A subsetting knob for a smoke run.
   max_cases: null
 
+real_dicom_validation:
+  # P1.2 -- docs/research/real_dicom_validation_protocol.md. Consumed by
+  # scripts/validate_real_dicom.py. Front-end isolation on BraTS 2021 TEST-split
+  # patients via their original RSNA-MICCAI DICOM, NOT external validation (every
+  # case is in-distribution) -- see that protocol's "What this is not" section.
+
+  # The frozen pilot + 40-case sample, committed before any study was downloaded.
+  # Never regenerate this file from here.
+  cases_file: configs/data/rsna_validation_cases.yaml
+
+  # Per-study zips, named <rsna_id>.zip, RSNA-MICCAI layout
+  # (<rsna_id>/{FLAIR,T1w,T1wCE,T2w}/*.dcm).
+  zips_dir: data/rsna/studies
+
+  out_dir: outputs/real_dicom_validation
+  work_dir: ${analysis.real_dicom_validation.out_dir}
+
+  # The research-path reference row per case -- the paired difference
+  # clinical-path Dice minus this is the front-end cost.
+  research_per_case: outputs/neurovision/eval_test/per_case_metrics.csv
+
+  # Root of the preprocessed BraTS tree the ground truth (label.npy / meta.json)
+  # is read from for every case, pilot included.
+  gt_root: data/preprocessed/brats
+
+  # Note 47's usable-segmentation bar (WT and TC Dice), reused, not retuned.
+  usable_threshold: 0.7
+
+  n_boot: 10000
+  seed: ${seed}
+
+  # The pilot (a TRAINING case) is always excluded from every reported statistic
+  # -- this only controls whether it is ALSO run through the full clinical
+  # pipeline (true) or left to the self-test alone (false).
+  include_pilot: true
+
+  # RSNA study folder name -> this project's role name
+  # (neurovision.data.dicom_ingest.ROLES). The ingest rule table does not
+  # recognise the RSNA token "T1wCE", so role assignment for every case here
+  # comes from the folder name alone -- see scripts/validate_real_dicom.py's
+  # module docstring.
+  role_by_folder:
+    FLAIR: flair
+    T1w: t1
+    T1wCE: t1ce
+    T2w: t2
+
 compare_family:
   # One pre-registered Holm family spanning several cohorts and tables.
   # scripts/compare_family.py runs compare_models per item and re-applies
