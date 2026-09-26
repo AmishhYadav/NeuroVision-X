@@ -28,6 +28,7 @@ from neurovision.data.dicom_ingest import (
     classify_series,
     ingest_study,
     normalise_tokens,
+    parse_patient_age,
     resolve_dcm2niix,
 )
 
@@ -47,6 +48,7 @@ def _header(
     inversion_time: float | None = None,
     contrast_agent: str = "",
     n_instances: int = 20,
+    patient_age: str | None = None,
 ) -> SeriesHeader:
     """Build a `SeriesHeader` with sensible defaults, overriding what a test cares about."""
     return SeriesHeader(
@@ -64,6 +66,7 @@ def _header(
         inversion_time=inversion_time,
         contrast_agent=contrast_agent,
         n_instances=n_instances,
+        patient_age=patient_age,
     )
 
 
@@ -446,6 +449,89 @@ def test_manifest_records_the_outcome(tmp_path: Path) -> None:
     for entry in manifest["series"].values():
         assert isinstance(entry["outcome"], str)
         assert "SeriesOutcome" not in entry["outcome"]
+    # `_build_manifest` was called with no `patient_age_years` argument
+    # above (additivity: every existing call site keeps working), so the
+    # manifest must still carry the key, just set to None.
+    assert manifest["patient_age_years"] is None
+
+
+# ---------------------------------------------------------------------------
+# 16d. parse_patient_age: the DICOM AS value representation, nnnD|W|M|Y.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("061Y", 61.0),
+        ("006M", 0.5),
+        ("010W", 10 * 7 / 365.25),
+        ("003D", 3 / 365.25),
+        (" 045Y ", 45.0),  # surrounding whitespace tolerated
+        ("000Y", 0.0),  # zero is a valid age, not malformed
+        ("", None),  # empty
+        (None, None),  # tag absent
+        ("61", None),  # too short, not 4 chars
+        ("xxxY", None),  # non-digit count
+        ("061Z", None),  # unknown unit
+    ],
+)
+def test_parse_patient_age(value: str | None, expected: float | None) -> None:
+    result = parse_patient_age(value)
+    if expected is None:
+        assert result is None
+    else:
+        assert result == pytest.approx(expected)
+
+
+# ---------------------------------------------------------------------------
+# 16e. _resolve_patient_age: reconciling age across the series assigned to
+#      each role. Pure logic -- no pydicom needed -- since it only reads
+#      the already-parsed `SeriesHeader.patient_age` raw strings.
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_patient_age_agrees_across_roles() -> None:
+    from neurovision.data.dicom_ingest import _resolve_patient_age
+
+    role_headers = {
+        "t1": _header(series_uid="uid-t1", patient_age="061Y"),
+        "t1ce": _header(series_uid="uid-t1ce", patient_age="061Y"),
+    }
+
+    age, warning = _resolve_patient_age(role_headers)
+
+    assert age == pytest.approx(61.0)
+    assert warning is None
+
+
+def test_resolve_patient_age_conflict_returns_none_and_warns() -> None:
+    from neurovision.data.dicom_ingest import _resolve_patient_age
+
+    role_headers = {
+        "t1": _header(series_uid="uid-t1", patient_age="061Y"),
+        "t1ce": _header(series_uid="uid-t1ce", patient_age="045Y"),
+    }
+
+    age, warning = _resolve_patient_age(role_headers)
+
+    assert age is None
+    assert warning is not None
+    assert "61" in warning and "45" in warning
+
+
+def test_resolve_patient_age_absent_returns_none_without_warning() -> None:
+    from neurovision.data.dicom_ingest import _resolve_patient_age
+
+    role_headers = {
+        "t1": _header(series_uid="uid-t1", patient_age=None),
+        "t1ce": _header(series_uid="uid-t1ce", patient_age=""),  # malformed, not absent
+    }
+
+    age, warning = _resolve_patient_age(role_headers)
+
+    assert age is None
+    assert warning is None
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +546,9 @@ def test_role_assignment_and_ingest_result_are_frozen_dataclasses() -> None:
     with pytest.raises(AttributeError):
         assignment.role = "t2"  # type: ignore[misc]
 
+    # Existing construction, with no `patient_age_years` argument, must
+    # keep working unchanged -- additivity is the whole point of giving it
+    # a default.
     result = IngestResult(
         paths={},
         assignments={},
@@ -469,6 +558,7 @@ def test_role_assignment_and_ingest_result_are_frozen_dataclasses() -> None:
     )
     with pytest.raises(AttributeError):
         result.missing_roles = ()  # type: ignore[misc]
+    assert result.patient_age_years is None
 
 
 # ---------------------------------------------------------------------------
@@ -494,6 +584,7 @@ def _write_synthetic_dicom(
     series_description: str,
     echo_time: float | None = None,
     repetition_time: float | None = None,
+    patient_age: str | None = None,
     instance_number: int = 1,
 ) -> None:
     """Write a minimal DICOM file that `pydicom` AND `dcm2niix` both accept.
@@ -526,6 +617,8 @@ def _write_synthetic_dicom(
         ds.EchoTime = echo_time
     if repetition_time is not None:
         ds.RepetitionTime = repetition_time
+    if patient_age is not None:
+        ds.PatientAge = patient_age
 
     # Minimal image geometry: a 4x4 single-slice image, one per instance,
     # stacked along Z by InstanceNumber.
@@ -570,6 +663,7 @@ def test_read_series_headers_groups_by_series_uid(tmp_path: Path) -> None:
             series_description="AX T1",
             echo_time=8.0,
             repetition_time=500.0,
+            patient_age="061Y",
             instance_number=i + 1,
         )
     for i in range(5):
@@ -591,6 +685,51 @@ def test_read_series_headers_groups_by_series_uid(tmp_path: Path) -> None:
     assert headers_by_uid[t2_uid].n_instances == 5
     assert headers_by_uid[t1_uid].series_description == "AX T1"
     assert headers_by_uid[t1_uid].echo_time == pytest.approx(8.0)
+    # PatientAge is read as the raw AS string; parsing to years is
+    # `parse_patient_age`'s job, not this function's.
+    assert headers_by_uid[t1_uid].patient_age == "061Y"
+    # Absent tag -> None, never an empty string.
+    assert headers_by_uid[t2_uid].patient_age is None
+
+
+# ---------------------------------------------------------------------------
+# 17b. The full pre-conversion pipeline (headers -> roles -> age) surfaces a
+#      conflicting age as a warning, without needing a real dcm2niix binary.
+# ---------------------------------------------------------------------------
+
+
+def test_read_headers_to_resolved_age_conflict(tmp_path: Path) -> None:
+    pytest.importorskip("pydicom")
+    from neurovision.data.dicom_ingest import _resolve_patient_age, read_series_headers
+
+    t1_uid = "1.2.3.20"
+    t1ce_uid = "1.2.3.21"
+
+    _write_synthetic_dicom(
+        tmp_path / "t1_000.dcm",
+        series_uid=t1_uid,
+        series_number=1,
+        series_description="AX T1",
+        echo_time=8.0,
+        repetition_time=500.0,
+        patient_age="061Y",
+    )
+    _write_synthetic_dicom(
+        tmp_path / "t1ce_000.dcm",
+        series_uid=t1ce_uid,
+        series_number=2,
+        series_description="AX T1 POST GD",
+        patient_age="045Y",
+    )
+
+    headers = read_series_headers(tmp_path)
+    role_headers, _assignments, _rejected, _warnings = assign_roles(headers, min_instances=1)
+
+    age, warning = _resolve_patient_age(role_headers)
+
+    assert age is None
+    assert warning is not None
+    assert "61" in warning and "45" in warning
 
 
 # ---------------------------------------------------------------------------
@@ -630,6 +769,7 @@ def test_ingest_study_writes_a_manifest(tmp_path: Path) -> None:
             series_description="AX T1",
             echo_time=8.0,
             repetition_time=500.0,
+            patient_age="061Y",
             instance_number=i + 1,
         )
 
@@ -643,6 +783,8 @@ def test_ingest_study_writes_a_manifest(tmp_path: Path) -> None:
 
     assert "t1" in result.paths
     assert result.paths["t1"].is_file()
+    # Consistent (here, single-series) age surfaces on the result...
+    assert result.patient_age_years == pytest.approx(61.0)
     manifest_path = out_dir / "ingest_manifest.json"
     assert manifest_path.is_file()
 
@@ -654,3 +796,5 @@ def test_ingest_study_writes_a_manifest(tmp_path: Path) -> None:
     assert manifest["series"][t1_uid]["role"] == "t1"
     assert manifest["series"][t1_uid]["outcome"] == "assigned"
     assert set(manifest["missing_roles"]) == {"t1ce", "t2", "flair"}
+    # ...and on the manifest written to disk.
+    assert manifest["patient_age_years"] == pytest.approx(61.0)

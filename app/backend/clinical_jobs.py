@@ -1043,7 +1043,9 @@ def _ingest_result_to_dict(result: IngestResult) -> dict[str, Any]:
     Returns:
         A JSON-serialisable dict: `paths` (role -> str path), `assignments`
         (series_uid -> `{role, score, reasons, outcome}`), `missing_roles`,
-        `rejected` (`[{series_uid, reason}, ...]`), `warnings`.
+        `rejected` (`[{series_uid, reason}, ...]`), `warnings`,
+        `patient_age_years` (P1.3a: read for a later gatekeeper signal,
+        `None` when absent or when the assigned series disagreed).
     """
     return {
         "paths": {role: str(path) for role, path in result.paths.items()},
@@ -1059,6 +1061,7 @@ def _ingest_result_to_dict(result: IngestResult) -> dict[str, Any]:
         "missing_roles": list(result.missing_roles),
         "rejected": [{"series_uid": uid, "reason": reason} for uid, reason in result.rejected],
         "warnings": list(result.warnings),
+        "patient_age_years": result.patient_age_years,
     }
 
 

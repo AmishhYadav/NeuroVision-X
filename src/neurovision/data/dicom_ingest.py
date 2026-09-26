@@ -81,6 +81,10 @@ class SeriesHeader:
         inversion_time: TI in ms, or None if absent.
         contrast_agent: (0018,0010), empty string when absent.
         n_instances: Number of DICOM instances (files) in this series.
+        patient_age: PatientAge (0010,1010), the raw 4-character DICOM "AS"
+            string (e.g. `"061Y"`), or `None` if absent. Kept raw here --
+            `parse_patient_age` does the unit conversion -- so this plain,
+            pydicom-free dataclass never needs to know the AS format.
     """
 
     series_uid: str
@@ -97,6 +101,7 @@ class SeriesHeader:
     inversion_time: float | None
     contrast_agent: str
     n_instances: int
+    patient_age: str | None = None
 
 
 class SeriesOutcome(StrEnum):
@@ -166,6 +171,15 @@ class IngestResult:
             out outright (localiser, wrong modality, too few instances).
         warnings: Non-fatal notes -- an ambiguous series, an override that
             displaced an automatic winner, an empty study.
+        patient_age_years: Patient age in years, read from `PatientAge` on
+            the series assigned to each role (P1.3a: a later gatekeeper
+            signal enforces "adult glioma only" intended use with this,
+            reported as SCOPING, never detection). `None` when every
+            assigned series lacks a readable age, or when the assigned
+            series disagree with each other (see `assign_roles`'
+            `warnings` for the conflicting values in that case). Last
+            field, with a default, so every existing call that builds an
+            `IngestResult` without it keeps working unchanged.
     """
 
     paths: dict[str, Path]
@@ -173,6 +187,7 @@ class IngestResult:
     missing_roles: tuple[str, ...]
     rejected: tuple[tuple[str, str], ...]
     warnings: tuple[str, ...]
+    patient_age_years: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +263,93 @@ def normalise_tokens(text: str) -> tuple[str, ...]:
     if not text:
         return ()
     return tuple(part for part in _TOKEN_SPLIT_RE.split(text.lower()) if part)
+
+
+def parse_patient_age(value: str | None) -> float | None:
+    """Parse a DICOM `PatientAge` (VR "AS") value into a plain number of years.
+
+    An AS value is exactly 4 characters: a zero-padded 3-digit count
+    followed by one unit character, `D` (days), `W` (weeks), `M` (months)
+    or `Y` (years) -- e.g. UPENN-style `"061Y"`. Converted to years so ages
+    recorded in different units become comparable: `Y -> n`, `M -> n/12`,
+    `W -> n*7/365.25`, `D -> n/365.25`.
+
+    `PatientBirthDate` is deliberately never used as a fallback here: a
+    de-identification pipeline routinely blanks it (it names the patient),
+    so on a real clinical study it is empty far more often than
+    `PatientAge` is.
+
+    Args:
+        value: The raw `PatientAge` element, or `None` if the tag is
+            absent. Tolerates surrounding whitespace and pydicom returning
+            it as a plain `str`.
+
+    Returns:
+        Age in years, or `None` if `value` is `None`, empty, or not a
+        well-formed 4-character AS string (e.g. `"61"`, `"xxxY"`). Never
+        raises -- a malformed age must not fail ingest.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if len(text) != 4:
+        return None
+
+    digits, unit = text[:3], text[3]
+    if not digits.isdigit():
+        return None
+
+    n = int(digits)  # "000Y" is a valid (if unusual) age of 0.0, not malformed
+    if unit == "Y":
+        return float(n)
+    if unit == "M":
+        return n / 12
+    if unit == "W":
+        return n * 7 / 365.25
+    if unit == "D":
+        return n / 365.25
+    return None
+
+
+def _resolve_patient_age(
+    role_headers: Mapping[str, SeriesHeader],
+) -> tuple[float | None, str | None]:
+    """Reconcile patient age across the series `assign_roles` picked for each role.
+
+    Only the roles that carry a parseable `PatientAge` contribute; a role
+    with a missing or malformed age is simply skipped rather than treated
+    as a conflict. If every contributing role agrees, that age wins. If
+    two roles disagree, this refuses to guess -- P1.3a's later gatekeeper
+    signal must never silently pick one age over another -- and reports a
+    warning naming the values instead.
+
+    Args:
+        role_headers: role -> the winning `SeriesHeader` for that role, as
+            returned by `assign_roles`.
+
+    Returns:
+        `(patient_age_years, warning)`. `warning` is `None` unless the
+        assigned series disagreed, in which case `patient_age_years` is
+        also `None` and `warning` names the conflicting values.
+    """
+    ages_by_role: dict[str, float] = {}
+    for role, header in role_headers.items():
+        age = parse_patient_age(header.patient_age)
+        if age is not None:
+            ages_by_role[role] = age
+
+    if not ages_by_role:
+        logger.debug("_resolve_patient_age: no assigned series carried a readable PatientAge.")
+        return None, None
+
+    if len(set(ages_by_role.values())) > 1:
+        detail = ", ".join(f"{role}={age:.2f}y" for role, age in sorted(ages_by_role.items()))
+        warning = (
+            f"assigned series disagree on patient age ({detail}); " "patient_age_years set to None"
+        )
+        return None, warning
+
+    return next(iter(ages_by_role.values())), None
 
 
 def _rejection_reason(header: SeriesHeader, tokens: frozenset[str]) -> str | None:
@@ -717,6 +819,7 @@ def read_series_headers(study_dir: Path) -> list[SeriesHeader]:
                 inversion_time=_safe_float(getattr(first, "InversionTime", None)),
                 contrast_agent=str(getattr(first, "ContrastBolusAgent", "") or ""),
                 n_instances=len(datasets),
+                patient_age=str(getattr(first, "PatientAge", "") or "") or None,
             )
         )
     return headers
@@ -868,6 +971,7 @@ def _build_manifest(
     assignments: Mapping[str, RoleAssignment],
     rejected: Sequence[tuple[str, str]],
     warnings: Sequence[str],
+    patient_age_years: float | None = None,
 ) -> dict[str, Any]:
     """Build the plain-dict audit trail `ingest_study` writes as JSON.
 
@@ -886,6 +990,10 @@ def _build_manifest(
             series seen, including rejected, ambiguous and losing ones.
         rejected: `(series_uid, why)` pairs for series thrown out outright.
         warnings: Non-fatal notes (ambiguous series, an override, etc.).
+        patient_age_years: Patient age in years reconciled across the
+            assigned series (see `_resolve_patient_age`), or `None`. A
+            default so every existing caller of this internal helper still
+            works unchanged.
 
     Returns:
         A JSON-serialisable dict: the manifest.
@@ -895,6 +1003,7 @@ def _build_manifest(
         "out_dir": str(out_dir),
         "roles_written": {role: str(path) for role, path in paths.items()},
         "missing_roles": list(missing_roles),
+        "patient_age_years": patient_age_years,
         "series": {
             uid: {
                 "role": a.role,
@@ -921,7 +1030,10 @@ def ingest_study(cfg: Any, study_dir: Path, out_dir: Path) -> IngestResult:
     `<out_dir>/<role>.nii.gz`, and writes `<out_dir>/ingest_manifest.json`
     recording every series seen, its assignment, its score and its reasons,
     plus the missing roles -- the manifest is the audit trail that must
-    make a wrong assignment explainable after the fact.
+    make a wrong assignment explainable after the fact. Also reconciles
+    `PatientAge` across the assigned series (P1.3a: a later gatekeeper
+    signal enforces "adult glioma only" intended use with this, reported as
+    SCOPING, never detection) -- see `_resolve_patient_age`.
 
     Args:
         cfg: The root config (or anything exposing `cfg.clinical.ingest`
@@ -955,6 +1067,10 @@ def ingest_study(cfg: Any, study_dir: Path, out_dir: Path) -> IngestResult:
     )
     missing_roles = tuple(role for role in ROLES if role not in role_headers)
 
+    patient_age_years, age_warning = _resolve_patient_age(role_headers)
+    if age_warning is not None:
+        warnings = (*warnings, age_warning)
+
     out_dir = ensure_dir(out_dir)
     paths: dict[str, Path] = {}
     for role, header in role_headers.items():
@@ -962,7 +1078,14 @@ def ingest_study(cfg: Any, study_dir: Path, out_dir: Path) -> IngestResult:
         paths[role] = convert_series(study_dir, header, out_path, dcm2niix)
 
     manifest = _build_manifest(
-        study_dir, out_dir, paths, missing_roles, assignments, rejected, warnings
+        study_dir,
+        out_dir,
+        paths,
+        missing_roles,
+        assignments,
+        rejected,
+        warnings,
+        patient_age_years,
     )
     write_json(manifest, out_dir / "ingest_manifest.json")
 
@@ -972,4 +1095,5 @@ def ingest_study(cfg: Any, study_dir: Path, out_dir: Path) -> IngestResult:
         missing_roles=missing_roles,
         rejected=rejected,
         warnings=warnings,
+        patient_age_years=patient_age_years,
     )
