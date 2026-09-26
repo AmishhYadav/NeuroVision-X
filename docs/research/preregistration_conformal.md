@@ -310,3 +310,97 @@ comparison.
 
 Full numbers, all caveats: `docs/experiments.md` note 42. Artifacts: `outputs/conformal/neurovision/`
 (`fit.json`, `realised_risk.csv`, `inflation.csv`, per-split `curves.npz`).
+
+---
+
+## Amendment 1 — the local-recalibration (Mondrian) arm, fixed 2026-09-26 before any of its numbers exist
+
+**Why an amendment.** The B2 secondary arm above ("recalibrate $\hat\tau$ per cohort on a random half,
+evaluate on the other half, 100 splits, seed 42") was registered on 2026-08-23 and **never run**
+(deferred in `master_plan.md`). Milestone 5 (P1.1) runs it. This amendment only pins down details
+the original text left open and adds one sweep. It does not touch anything above the `## Result` line,
+and it is committed before the driver has produced a single number.
+
+**Disclosure: what is already known.** On 2026-09-24 a code-feasibility check read each cohort's
+mean miss rate at the smallest grid threshold, $R(\tau_{\min})$, from the same `curves.npz` files.
+That quantity decides *whether* a fit can be feasible. It says nothing about realised risk on held-out
+cases, which is the endpoint. It is disclosed here so a reader can judge. The floors it implies, for
+`neurovision`, are:
+
+| cohort · region | smallest feasible k at α = 0.05 | α = 0.10 | α = 0.20 |
+|---|---|---|---|
+| SSA · WT | 22 | 10 | 5 |
+| SSA · TC | 39 | 13 | 5 |
+| PED · WT | 26 | 11 | 5 |
+| PED · TC | **never** — $R(\tau_{\min}) = 0.356$ even at τ = 1e-4 | never | never |
+
+Independently of any data, the finite-sample correction $(k\,\hat R + 1)/(k+1) \le \alpha$ requires
+$k \ge 1/\alpha - 1$ even when $\hat R = 0$. That means k ≥ 19 at α = 0.05, k ≥ 9 at α = 0.10 and
+k ≥ 4 at α = 0.20. So **k = 5 is structurally infeasible at α ≤ 0.10**, and that is reported as such.
+The `baseline_unet3d` floors are computed by the driver and printed before any split is drawn.
+
+**Fixed now.**
+
+- **Status label.** Counterfactual, as registered. It answers "what would a new site need to restore
+  the bound?" and **never** "what is this cohort's coverage". It is never quoted as external
+  validation.
+- **Models.** `neurovision` is primary; `baseline_unet3d` is the robustness check.
+- **Cohorts.**
+  - SSA (n = 60) and PED (n = 99), from `outputs/conformal/<model>/eval_{ssa,ped}_<model>/curves.npz`.
+  - BraTS test (n = 189) as the **in-distribution control**.
+  - All curves already exist on disk. No inference.
+- **Regions and levels.** WT and TC; α ∈ {0.05, 0.10, 0.20}, the registered grid.
+- **k sweep.** k ∈ {5, 10, 15, 20, 30, half}, where half = ⌊n/2⌋ (SSA 30, PED 49, test 94). *half*
+  is the originally registered arm. When it coincides with a listed k (SSA), it is reported once,
+  labelled both ways.
+- **Splits.** **1000** random splits per (model, cohort, region, k), seed 42, via a
+  `numpy.random.Generator`. The same draws are shared across the three α so they are comparable.
+  The registered count was 100; it is raised to 1000 before any number exists, only to tighten the
+  Monte Carlo error on the endpoints. The half-split arm is otherwise exactly as registered.
+- **Per split.** Fit $\hat\tau$ on the k calibration cases with the unchanged
+  `conformal.fit_threshold`. If infeasible, the split is recorded as infeasible and **no** risk is
+  computed. Otherwise, compute the realised mean miss rate and the mask inflation on the n − k
+  held-out cases.
+- **Primary endpoint.** Per (model, cohort, region, α, k), the **mean realised held-out risk over
+  feasible splits**.
+  - **RESTORED** if the mean is ≤ α.
+  - **NOT RESTORED** if it exceeds α by more than twice its Monte Carlo standard error.
+  - Otherwise **BORDERLINE**, reported as such.
+
+  This estimates the expectation the theorem is about.
+- **Secondary endpoints.**
+  - The feasible rate.
+  - P(a single split's held-out risk > α), among feasible splits. It is reported descriptively
+    because the guarantee is marginal. It is an expectation over calibration draws, so a substantial
+    per-split violation rate is normal and not a failure. The note must explain this.
+  - The 2.5 / 97.5 percentiles of realised risk.
+  - The mean fitted $\hat\tau$.
+  - Mean mask inflation vs τ = 0.5. This keeps the registered cost-of-the-guarantee secondary
+    mandatory.
+
+**Predictions, stated now.**
+
+1. **Control (test).** RESTORED at every feasible (region, α, k), because exchangeability holds. If
+   the control fails at k = half, that falsifies **the implementation**, not the hypothesis. Nothing
+   downstream is reported until it is found.
+2. **SSA · WT, SSA · TC and PED · WT.** RESTORED wherever k is at or above the floor above, and the
+   feasible rate climbs toward 1 as k grows. This is the registered claim ("restores the guarantee
+   within each cohort").
+3. **PED · TC.** Infeasible at every k and every α. This is a registered outcome, not an error, and
+   it means **no amount of local recalibration fixes paediatric tumour core: the model itself has to
+   change.** That is the motivation for the D3 fine-tune (`master_plan.md` P2.5), and it is written
+   down before the number exists.
+4. **Cost.** Where RESTORED, inflation under shift exceeds inflation in distribution. Restoring the
+   bound costs more mask on a shifted cohort.
+
+**Code.**
+- `src/neurovision/analysis/local_recalibration.py` holds the pure functions.
+- `scripts/local_recalibration.py` is the driver.
+- The config block is `analysis.local_recalibration`.
+- It reuses `conformal.fit_threshold`, `realised_risk` and `band_inflation` unchanged.
+- Output goes to `outputs/local_recalibration/`.
+
+**Reporting.**
+- One numbered note in `docs/experiments.md`.
+- A result section appended **below** this amendment.
+- Claim C24 in `claims_and_evidence.md`, labelled *counterfactual*.
