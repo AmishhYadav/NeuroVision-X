@@ -404,3 +404,22 @@ The `baseline_unet3d` floors are computed by the driver and printed before any s
 - One numbered note in `docs/experiments.md`.
 - A result section appended **below** this amendment.
 - Claim C24 in `claims_and_evidence.md`, labelled *counterfactual*.
+
+### Result — Amendment 1 (local recalibration), 2026-09-26
+
+**Counterfactual.** Run with `scripts/local_recalibration.py` (`ff5b7dd`), 1000 splits per
+(model, cohort, region, k), seed 42, every number in `outputs/local_recalibration/`. Full table and
+reading: `docs/experiments.md` note 52.
+
+- **Prediction 1 (control) — held.** BraTS test at k = half: RESTORED at every (region, α), both
+  models. The implementation is not falsified.
+- **Prediction 2 — held.** SSA · WT, SSA · TC and PED · WT are RESTORED at every α wherever k is at
+  or above the disclosed floor, and the feasible rate climbs to 1 with k. One cell below its floor,
+  SSA · TC at α = 0.05, k = 30 (floor 39), is NOT RESTORED (0.054, MCSE 0.0008, 39% feasible):
+  below the floor, feasibility selects easy calibration draws and the held-out risk is biased up.
+- **Prediction 3 — held.** PED · TC is infeasible at every k for α 0.05 and 0.10. At α 0.20 a
+  handful of splits (0.2–0.9%, k ≤ 15) are feasible and still miss at 0.38–0.41: NOT RESTORED.
+  No local recalibration fixes paediatric tumour core.
+- **Prediction 4 — held.** Where restored under shift, mask inflation exceeds the in-distribution
+  inflation at the same (α, k).
+- **Robustness (`baseline_unet3d`)** — same pattern; PED · TC NOT RESTORED / infeasible everywhere.

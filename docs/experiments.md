@@ -2047,6 +2047,77 @@ sessions by resume is still ONE row — sum the GPU hours.
     Artifacts: `outputs/error_budget_p04_band_display_only/` (same layout as
     `outputs/error_budget/`, which is left untouched).
 
+52. **COUNTERFACTUAL (Milestone 5, P1.1): A NEW SITE CAN RESTORE THE
+    CONFORMAL BOUND WITH ITS OWN LABELLED CASES -- EXCEPT PAEDIATRIC TUMOUR
+    CORE, WHICH NO NUMBER OF LOCAL CASES FIXES.** Run 2026-09-26:
+    `python scripts/local_recalibration.py` (`ff5b7dd`), config
+    `analysis.local_recalibration`, registered first as
+    `preregistration_conformal.md` Amendment 1 (`f978022`). Reads the saved
+    `curves.npz` only; no inference; 81 s on the Mac.
+
+    **What it asks, and what it is not.** Frozen at the BraTS-val threshold,
+    the bound breaks on SSA and PED (C14). Here each cohort is split at random
+    1000 times: k of its own cases refit tau-hat with the unchanged
+    `conformal.fit_threshold`, and the realised miss rate is read on the other
+    n - k. It answers "what would a site need to restore the bound". It is
+    **never** external validation and never "this cohort's coverage".
+
+    **The control held.** BraTS test at k = half (94): RESTORED at every
+    (region, alpha), for both models; `control_failed: false`.
+
+    **`neurovision` (primary), mean realised held-out risk over feasible
+    splits, verdict per the registered rule:**
+
+    | cohort . region | alpha 0.05 | alpha 0.10 | alpha 0.20 |
+    |---|---|---|---|
+    | SSA . WT (n=60) | feasible from k=20 (47%), k=30: 0.025 RESTORED | from k=10 (83%): 0.026; k=30: 0.071 RESTORED | from k=5 (90%): 0.059; k=30: 0.161 RESTORED |
+    | SSA . TC | k=20: 3% feasible; **k=30: 39% feasible, 0.054 NOT RESTORED** | from k=10 (59%): 0.041; k=30: 0.071 RESTORED | from k=5 (85%): 0.076; k=30: 0.172 RESTORED |
+    | PED . WT (n=99) | from k=20 (22%); k=49: 0.034 RESTORED | from k=10 (60%); k=49: 0.082 RESTORED | from k=5 (94%); k=49: 0.173 RESTORED |
+    | **PED . TC** | **infeasible at every k** | **infeasible at every k** | feasible in 0.2-0.9% of splits at k 5-15; those few miss at 0.38-0.41: **NOT RESTORED**; k >= 20: 0% feasible |
+
+    For scale, the frozen BraTS-val threshold gives SSA TC 0.171 and PED TC
+    0.651 at alpha 0.10 (note 42).
+
+    **All four registered predictions held.** (1) Control RESTORED. (2) SSA WT,
+    SSA TC and PED WT RESTORED at or above the disclosed floors (SSA WT
+    22/10/5, SSA TC 39/13/5, PED WT 26/11/5), with the feasible rate climbing
+    to 1 as k grows. (3) PED TC infeasible -- and where a handful of lucky
+    splits are feasible at alpha 0.20 they still miss at ~0.4. (4) Cost:
+    restoring the bound under shift costs more mask than in distribution
+    (e.g. alpha 0.10, k=10: mean mask inflation 1.84x SSA WT, 3.17x SSA TC,
+    3.61x PED WT, vs 2.07x / 2.42x on test; at alpha 0.05 near the floor,
+    3-6x).
+
+    **The one NOT RESTORED outside PED TC is informative, not a bug.** SSA TC at
+    alpha 0.05 with k = 30 sits *below* its disclosed floor (39). Only 39% of
+    splits are feasible, and feasibility selects the calibration draws that
+    happened to look easy -- so the held-out risk of those splits is biased
+    upwards (0.054, MCSE 0.0008). Below the floor, "feasible" is not
+    "safe". A site needs *at least* the floor, not merely a draw that fits.
+
+    **Per-split violation is normal and reported.** The guarantee is an
+    average over calibration draws. At k = half, P(a single split's held-out
+    risk > alpha) is up to 30% on test itself (0 at alpha 0.20), and similar
+    on SSA/PED WT (up to 30%). This
+    is what a marginal guarantee looks like; it is not a failure.
+
+    **Robustness (`baseline_unet3d`).** Same shape: everything RESTORED where
+    feasible except PED TC (infeasible at 0.05/0.10; at 0.20 feasible in
+    0.2-4.2% of splits and missing at 0.29-0.33). Its floors are a little
+    lower (SSA TC 28/11/5, PED WT 22/10/5).
+
+    **What this means for the thesis.** A new site can restore the bound for
+    whole tumour and (adult-glioma) tumour core by labelling roughly 10-40 of
+    its own cases, depending on alpha -- a concrete recipe. Paediatric tumour
+    core cannot be rescued by recalibration at all: the model's own miss rate
+    there is 0.356 even at the most permissive threshold. That is the case
+    for the D3 fine-tune (`preregistration_finetune.md`), registered before
+    this number existed.
+
+    Artifacts: `outputs/local_recalibration/{floors.csv, splits.csv.gz,
+    summary.csv, run_meta.json}` (re-run after the review fixes: byte-identical
+    verdicts and risks).
+
 ---
 
 ## Planned
