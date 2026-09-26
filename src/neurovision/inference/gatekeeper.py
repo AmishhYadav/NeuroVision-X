@@ -229,10 +229,6 @@ class GateDecision:
         """Verdicts with `decision is Decision.REFUSE`."""
         return tuple(v for v in self.verdicts if v.decision is Decision.REFUSE)
 
-    def cautions(self) -> tuple[SignalVerdict, ...]:
-        """Verdicts with `decision is Decision.PROCEED_WITH_CAUTION`."""
-        return tuple(v for v in self.verdicts if v.decision is Decision.PROCEED_WITH_CAUTION)
-
     def to_dict(self) -> dict[str, Any]:
         """This decision as a plain, JSON-serialisable dict, for the job manifest and the UI."""
         return {

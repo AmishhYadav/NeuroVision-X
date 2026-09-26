@@ -322,25 +322,6 @@ def test_unmapped_ids_surface_and_are_not_background(tmp_path: Path) -> None:
     assert coverage["n_labelled_voxels"] == 2
 
 
-def test_tissue_mask_raises_when_no_tissue_loaded(tmp_path: Path) -> None:
-    lut_path = tmp_path / "lut.txt"
-    lut_path.write_text("1 StructA 0 0 0 0\n")
-    labels = parse_lut(lut_path, MERGE_PATTERNS, unmapped_name="unclassified")
-
-    case_atlas = Atlas(
-        parcellation=np.zeros((2, 2, 2), dtype=np.int16),
-        labels=labels,
-        tissue=None,
-        tissue_codes={"GM": 2},
-        name="t",
-        version="0",
-        source="t",
-        unmapped_ids=(),
-    )
-    with pytest.raises(ValueError, match="no tissue map"):
-        case_atlas.tissue_mask("GM")
-
-
 # --------------------------------------------------------------------------- #
 # 15. 4-D squeeze
 # --------------------------------------------------------------------------- #
@@ -426,7 +407,7 @@ def test_load_atlas_end_to_end_with_tissues_source(tmp_path: Path) -> None:
 
     assert np.array_equal(result.structure_mask("StructA"), expected_parc == 1)
     assert np.array_equal(result.structure_mask("StructB"), expected_parc == 2)
-    assert np.array_equal(result.tissue_mask("GM"), expected_tissue == 2)
+    assert np.array_equal(result.tissue == result.tissue_codes["GM"], expected_tissue == 2)
 
     coverage = result.coverage()
     assert coverage["n_structures"] == 2

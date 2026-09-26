@@ -739,22 +739,6 @@ def test_train_mode_no_aux_head_single_level_returns_tensor_unchanged() -> None:
     assert not isinstance(out, list)
 
 
-def test_forward_multitask_returns_multitask_output_in_both_modes() -> None:
-    model = _build_model_with_heads(deep_supervision_levels=2, confidence=True, boundary=True)
-    x = torch.randn(1, 4, 32, 32, 32)
-
-    model.train()
-    out_train = model.forward_multitask(x)
-    assert isinstance(out_train, MultiTaskOutput)
-
-    model.eval()
-    with torch.no_grad():
-        out_eval = model.forward_multitask(x)
-    assert isinstance(out_eval, MultiTaskOutput)
-    assert out_eval.confidence is not None
-    assert out_eval.boundary is not None
-
-
 def test_forward_with_gates_still_works_with_aux_heads_enabled() -> None:
     model = _build_model_with_heads(deep_supervision_levels=3, confidence=True, boundary=True)
     model.eval()

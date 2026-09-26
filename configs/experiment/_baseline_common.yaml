@@ -82,7 +82,7 @@ training:
   # single schedule.
   epochs: 80
 
-  batch_size: 1 # x samples_per_volume 4 = 4 patches of 96^3 per optimizer step
+  batch_size: 1 # x samples_per_volume 4 = 4 patches of 64^3 per optimizer step (patch_size above)
   grad_accum_steps: 1
   amp: true
 

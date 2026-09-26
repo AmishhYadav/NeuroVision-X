@@ -237,8 +237,8 @@ class NeuroVisionX(nn.Module):
     ) -> tuple[list[Tensor], list[tuple[Tensor, Tensor]] | None]:
         """Shared encoder -> fusion -> decoder body used by every forward path.
 
-        Factored out so `forward`, `forward_multitask`, and `forward_with_gates` do not each
-        duplicate the fusion loop; `forward_with_gates` additionally needs the per-block gate
+        Factored out so `forward` and `forward_with_gates` do not each duplicate the fusion
+        loop; `forward_with_gates` additionally needs the per-block gate
         maps, which this method does not return, so it has its own near-identical body
         instead of reusing this one (see that method's docstring).
 
@@ -370,27 +370,6 @@ class NeuroVisionX(nn.Module):
         if self.training and len(out.seg) > 1:
             return out.seg
         return out.seg[0]
-
-    def forward_multitask(self, x: Tensor) -> MultiTaskOutput:
-        """Runs the network and always returns a `MultiTaskOutput`, regardless of mode.
-
-        Unlike `forward`, this method never switches return type — it is the hook for
-        uncertainty and calibration code (not yet written) that always wants segmentation
-        logits alongside whatever auxiliary heads are enabled, whether the model is in train
-        or eval mode. Nothing consumes this yet.
-
-        Args:
-            x: Input MRI volume, shape `(B, in_channels, D, H, W)`.
-
-        Returns:
-            A `MultiTaskOutput` with `seg` of length `deep_supervision_levels` and
-            `confidence` / `boundary` populated according to which auxiliary heads are
-            enabled (`None` for a disabled one). `branch_logits` is always `None` here --
-            branch-logits collection is `forward`'s job only (see its docstring), since
-            nothing yet consumes them through this path.
-        """
-        feats, _branch_logits = self._encode_decode(x)
-        return self.heads(feats)
 
     def forward_with_gates(self, x: Tensor) -> tuple[Tensor, list[Tensor | None]]:
         """Runs the network and also returns each fusion block's gate map.

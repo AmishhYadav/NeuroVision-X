@@ -511,30 +511,6 @@ class Atlas:
         structure = self.labels.by_name(name)
         return np.isin(self.parcellation, structure.label_ids)
 
-    def tissue_mask(self, tissue: str) -> np.ndarray:
-        """Boolean mask of one tissue class.
-
-        Args:
-            tissue: A tissue name, e.g. `"GM"`.
-
-        Returns:
-            `(D, H, W)` boolean array.
-
-        Raises:
-            ValueError: If no tissue map was loaded, or `tissue` is not a
-                known tissue name.
-        """
-        if self.tissue is None:
-            raise ValueError(
-                "Atlas.tissue_mask: no tissue map was loaded for this atlas (tissue=None)."
-            )
-        if tissue not in self.tissue_codes:
-            raise ValueError(
-                f"Atlas.tissue_mask: unknown tissue '{tissue}'; valid tissues are "
-                f"{list(self.tissue_codes)}."
-            )
-        return self.tissue == self.tissue_codes[tissue]
-
     def coverage(self) -> dict[str, int]:
         """Coverage summary backing the report's "N of M structures classified" line.
 
