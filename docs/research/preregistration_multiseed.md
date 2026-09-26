@@ -180,3 +180,41 @@ this was a measurement, not a model candidate.
 - With two seeds there is still no seed-level variance estimate, only one difference, exactly as the
   Power statement above says. A third seed (`baseline_unet3d_seed43`, then `neurovision_seed44`)
   remains the next run in the queue if Kaggle quota allows, not started here.
+
+---
+
+## Amendment 1 — `baseline_unet3d_seed43`, fixed 2026-09-26 before the run is launched
+
+**Why.** The Power statement above registered `baseline_unet3d_seed43` as the next run, "first (the
+comparison needs both arms' noise)". The D1 result measured only the `neurovision` arm's seed noise.
+The headline +0.0267 is a *difference between two architectures*, each trained once, so its honest
+noise floor needs a second seed of the comparator too. Milestone 5 (`master_plan.md` P2.5, P4) queues
+it. Nothing above the `## Result` line is edited.
+
+**Arm.** `baseline_unet3d_seed43`: `configs/experiment/baseline_unet3d.yaml` **exactly**, with
+`seed: 43` and `data.num_workers=2` (as every Kaggle run). 64³, 80 epochs, current augmentation
+(D0 was NULL). One Kaggle T4 session (the U-Net costs roughly a tenth of `neurovision` per epoch,
+`experiments.md` probe row), `max_hours` 10.5, `GIT_REF` pinned. Checkpoint scored: `best.pt`, the
+same selection rule the seed-42 baseline used.
+
+**Evaluation.** `scripts/evaluate.py` on test (189), SSA (60), PED (99), `save_logits=true`, Mac CPU,
+then `scripts/replay_logits.py` for the lesion-wise columns — the same path as every other row.
+
+**Endpoints — descriptive, as above.**
+
+1. **Baseline noise floor**: the same 12-comparison family as D1 ({`dice_ET`, `dice_TC`, `dice_WT`,
+   `lwdice_ET`} × {test, SSA, PED}), `baseline_unet3d_seed43` − `baseline_unet3d`, one Holm family.
+2. **The headline, re-read at seed 43 — the one reading this run exists for.** Test `dice_ET`,
+   `neurovision_seed43` − `baseline_unet3d_seed43`, paired bootstrap CI (n_boot = 10000) and Wilcoxon,
+   reported beside the published seed-42 margin (+0.0267, CI 0.0166–0.0393).
+   - If its CI excludes zero with the same sign, C1 is stated as **replicated across two seed
+     pairs**.
+   - If its CI contains zero, C1 is weakened to **seed-dependent** in the paper and the claims table,
+     whatever Gate A says.
+   - If it is significant in the opposite direction, C1 is **withdrawn**.
+3. **Seed-averaged margin**, descriptive: per case, mean of the two `neurovision` seeds minus mean of
+   the two baseline seeds, test `dice_ET`, paired bootstrap CI. Printed; no decision rides on it.
+
+**Deployment consequence.** None. A second baseline seed is a measurement.
+
+**Abort.** If session 1's per-epoch time implies more than 10 GPU-h, or `NVX_HEALTH` is not OK.
