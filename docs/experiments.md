@@ -1934,6 +1934,74 @@ sessions by resume is still ONE row — sum the GPU hours.
     `outputs/compare_family/d1_seed_noise_floor/family.csv`, checkpoint at
     `outputs/neurovision_seed43/checkpoints/best.pt` (epoch 79).
 
+50. **PROVENANCE (Milestone 5, P0.3): BOTH REAL-DICOM DEMO STUDIES ARE
+    BraTS 2021 *TRAINING* PATIENTS. UPENN-GBM-00002 (the PROCEED demo) IS
+    `BraTS2021_01202`; UPENN-GBM-00001 (the REFUSE demo) IS PROBABLY
+    `BraTS2021_01034`. BOTH ARE IN OUR TRAIN SPLIT.** Run 2026-09-26 on the M4,
+    a few minutes of CPU, no inference.
+
+    *Why it was checked.* About 400 UPenn patients are part of BraTS 2021, and
+    this project's split is drawn from the BraTS 2021 training set. The
+    official BraTS 2021 ID mapping covers TCGA-GBM, TCGA-LGG, IvyGAP and
+    CPTAC-GBM only, **not** UPENN-GBM, so there is no lookup table. The check
+    had to be done from the images.
+
+    *Method.* All volumes are on the same 240x240x155 SRI24 grid. The
+    clinical job's `prep/<job>/meta.json` affine equals every BraTS
+    `meta.json` affine, and the probe asserted this for all 1,251 cases.
+
+    - **Test 1: tumour overlap.** Uncrop the job's predicted whole-tumour mask
+      (`cache/neurovision/<job>.npy`) and every BraTS ground-truth WT mask,
+      then rank the 1,251 cases by WT Dice.
+    - **Test 2: whole-brain image correlation.** Anatomy is patient-specific,
+      so the same patient registered twice to one atlas correlates far above
+      any other patient.
+      - Metric: mean over the 4 z-scored channels of the Pearson r, over
+        voxels nonzero in both.
+      - Candidates: the top-20 cases by tumour Dice.
+      - Baseline: 60 random cases (seed 42), as the "different patient"
+        reference.
+
+    | study (job) | best match | r | runner-up r | random baseline r, mean (max) | WT Dice best / runner-up | split |
+    |---|---|---|---|---|---|---|
+    | UPENN-GBM-00002 (`9c2cc294`, PROCEED) | `BraTS2021_01202` | **0.700** | 0.421 | 0.104 (0.303) | 0.833 / 0.748 | **train** |
+    | UPENN-GBM-00001 (`f4a4a754`, REFUSE) | `BraTS2021_01034` | **0.471** | 0.317 | 0.156 (0.320) | 0.732 / 0.670 | **train** |
+
+    00002 is unambiguous: r is 2.3x the best other patient, and the same case
+    also has the best tumour overlap. 00001 separates less. Its FLAIR has
+    3 mm slices (note 45), which degrades both the registration and the
+    correlation. But its best match is still the top case on both tests and
+    sits clear of the 60-case baseline maximum, so it is recorded as
+    "probable".
+
+    *What this changes.*
+
+    - **The PROCEED demo is a patient the model trained on** (in its curated
+      BraTS form). It demonstrates that the pipeline *runs* on raw scanner
+      DICOM. It is **no evidence of generalisation**, and the demo and the
+      report must say so.
+    - **The REFUSE demo is more interesting than it looked.** The model saw
+      this patient's curated volumes in training, yet the raw clinical
+      acquisition (3 mm FLAIR, our own registration) degrades the prediction
+      enough that the QC model predicts WT Dice 0.656 and the gate refuses. That
+      is an acquisition/preprocessing shift on a *known* patient. Keep it as
+      an illustration, and never as a detection claim (n=1).
+    - **Fixture choice for P1.2.** Real-DICOM validation must use cases
+      whose BraTS ID is known to be in the **test** split. The RSNA-MICCAI
+      IDs match BraTS directly, so that route has no provenance ambiguity.
+      The UPenn range (IDs above ~01010) is not in the RSNA training set, so
+      UPENN fixtures cannot be cross-checked that way anyway.
+    - **UCSF-PDGM (P0.3b).** Recorded, not resolved. TCIA states its
+      segmentations were produced as part of BraTS 2021, so some of its cases
+      may sit in the BraTS 2021 data this model trained on. This matters only
+      if IDH gets a "go" on 2027-01-15. The same two-test probe answers it
+      with no ID mapping.
+
+    Artifacts: none kept. The probe was a throwaway scratch script and the
+    method above is complete enough to rerun. If this check ever has to be
+    re-run as part of a result, it becomes a real script through the
+    normal `py-implementer` loop.
+
 ---
 
 ## Planned
