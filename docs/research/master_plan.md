@@ -201,8 +201,8 @@ and are archive-only; `tool_completion_plan.md`/`_log.md` join them once T0.4 cl
 | P0.2 | One live plan: this block; README doc-map fixed | `[x]` 2026-09-26 | README points here, not at a superseded plan |
 | P0.3 | Overlap checks: are UPENN-GBM-00001/00002 BraTS 2021 cases (which split)? Where did UCSF-PDGM cases go in BraTS 2021? | `[x]` 2026-09-26, **note 50**: 00002 = `BraTS2021_01202`, 00001 ≈ `BraTS2021_01034`, **both train split** — the demo PROCEED is a training patient; UCSF-PDGM recorded, resolved only if IDH goes | A note in `experiments.md`; the demo case labelled "may be a training case" if unresolvable |
 | P0.4 | `conformal_band` → display-only (drop from `enabled_signals`); re-run `scripts/error_budget.py` | `[x]` 2026-09-26, **note 51** (post-hoc): test usable 0.852→0.915, PED silent failure 49→53/99; author accepted, P1.3 scopes PED out | New note labelled **post-hoc deployment change**; note 47 stays the pre-registered number |
-| P0.5 | Honest guarantee wording (`Legend.tsx:70`, `GatekeeperPanel.tsx`, model card); backend band display tolerates a missing fit (`clinical_jobs.py:947`) | `[x]` 2026-09-26 frontend (`5a979dc`) + backend strict/non-strict loader; model-card line still to do | No UI string says "guaranteed" without "on average, in distribution, not per patient" |
-| P0.6 | Remove verified-dead code only (`forward_multitask`, `Atlas.tissue_mask`, `GateDecision.cautions`); fix stale "96^3" comment (`_baseline_common.yaml:85`) | `[ ]` | Suite green; nothing else from `simplification_review.md` |
+| P0.5 | Honest guarantee wording (`Legend.tsx:70`, `GatekeeperPanel.tsx`, model card); backend band display tolerates a missing fit (`clinical_jobs.py:947`) | `[x]` 2026-09-26 frontend (`5a979dc`) + backend strict/non-strict loader + model card (`f989138`) | No UI string says "guaranteed" without "on average, in distribution, not per patient" |
+| P0.6 | Remove verified-dead code only (`forward_multitask`, `Atlas.tissue_mask`, `GateDecision.cautions`); fix stale "96^3" comment (`_baseline_common.yaml:85`) | `[x]` 2026-09-26 `5bfffa6` (suite 2289 passed, 35 skipped) | Suite green; nothing else from `simplification_review.md` |
 | P0.7 | **Author:** eyeball the twin on job `9c2cc294` + the research viewer (brain crisp; patient-left on screen-right) | `[ ]` | Author says so |
 | **Phase 1 — CPU science (Oct 2 – Oct 22)** | | | |
 | P1.1 | **Local recalibration** (the pre-registered Mondrian arm + a k-sweep 5/10/15/20/30, 1000 seeded splits, α 0.05/0.10/0.20, WT/TC, both models, SSA/PED, test as control). Amendment committed first | `[~]` amendment `f978022`, library `34baf88`; driver + run next | A numbered note + claim C24, labelled **counterfactual** |
@@ -214,7 +214,7 @@ and are archive-only; `tool_completion_plan.md`/`_log.md` join them once T0.4 cl
 | P2.2 | Frozen cross-fit splits `configs/data/splits_{ssa,ped}_cf{0,1}.yaml` (seeded generator) | `[ ]` | Committed before any training; old SSA/PED split files untouched |
 | P2.3 | nnU-Net prediction importer → our metric path | `[ ]` | GT round-trip `np.array_equal` on a case with NCR+ED; mirrored import fails |
 | P2.4 | `scripts/gpu_session.py` (lifted from `kaggle_train.ipynb`) + `scripts/cluster/{run_tmux.sh,run.sbatch,nnunet.sh}` | `[~]` launcher `915e83c`; cluster wrappers + notebook switch-over to do | CPU dry run of `overfit2` prints `NVX_HEALTH: OK` |
-| P2.5 | Pre-registrations: Gate A amendment (dedicated card, abort bound restated, **full** 1000-epoch recipe, Auto3DSeg arm dropped with reason); D3 cross-fitted fine-tune; TTA measurement; `baseline_unet3d` seed 43 | `[ ]` | Each committed before its run |
+| P2.5 | Pre-registrations: Gate A amendment (dedicated card, abort bound restated, **full** 1000-epoch recipe, Auto3DSeg arm dropped with reason); D3 cross-fitted fine-tune; TTA measurement; `baseline_unet3d` seed 43 | `[~]` Gate A Amendment 1 `2644871` (**Kaggle chained**, fold all, 95 GPU-h bound — author decision 2026-09-26); baseline seed 43 = multiseed Amendment 1 `cdf4857`; D3 `preregistration_finetune.md` `391ab8c`; TTA to do | Each committed before its run |
 | P2.5b | Fresh-clone rehearsal (clean clone → venv → `reproduce.sh verify` → smoke → regenerate `thresholds.json`) | `[ ]` | Every stale instruction it finds is fixed |
 | P2.6 | `docs/research/gpu_request.md` — run list, measured T4-h, VRAM, disk, stack, internet | `[ ]` | Submitted to the college ~Nov 5 |
 | **Phase 3 — semester deliverables (Nov 6 – Nov 24)** | | | |
@@ -226,6 +226,18 @@ and are archive-only; `tool_completion_plan.md`/`_log.md` join them once T0.4 cl
 | P4 | Probe (must reach the failure condition) → **Gate A** nnU-Net fold 0, full recipe (~76 T4-h) → **D3** four fine-tunes (~8–10) → TTA (~2) → baseline seed 43 (~3.5). Core ≈ 90 T4-h. Stretch: D2 (+40), capacity control (+8) | `[ ]` | Each: Result section, note, claims, this board, push |
 | **Phase 5 — capstone + paper (Jan – Jun 2027)** | | | |
 | P5 | IDH go/no-go 2027-01-15 · MELBA draft Feb, submit ~Apr · capstone extension chosen after Phase 4 · release tag · capstone report + final demo May–Jun | `[ ]` | — |
+
+**GPU on Kaggle, decided 2026-09-26 (author):** every Phase 4 run moves to Kaggle T4 now instead of
+waiting for the college card. **Hard cap 30 GPU-h/week; plan to ≤ 28.** Ledger (update as sessions finish):
+
+| Week from | Planned sessions | ~GPU-h |
+|---|---|---|
+| 2026-09-26 | `baseline-seed43-s1` (launched 2026-09-26) · Gate A s1 · Gate A s2 | 5 + 11 + 11 |
+| 2026-10-03 | Gate A s3, s4 · D3 SSA cf0/cf1 | 22 + 3 |
+| 2026-10-10 | Gate A s5, s6 · D3 PED cf0/cf1 | 22 + 4 |
+| 2026-10-17 | Gate A s7 + test prediction session · TTA (if registered) | ~15 + 2 |
+
+The Gate A preprocessing ran as a **CPU** kernel (`neurovision-gatea-prep`), no GPU quota.
 
 **Binding notes from the 2026-09-24 code check — each goes into its item's spec:**
 
