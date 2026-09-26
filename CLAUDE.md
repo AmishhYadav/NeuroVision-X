@@ -25,14 +25,21 @@ Model: dual encoder (3D CNN + Swin Transformer) → adaptive gated cross-attenti
 decoder → three heads (segmentation, confidence, boundary). Plus MC-dropout uncertainty, calibration,
 explainability, an atlas-based anatomical report, and a demo viewer with live upload.
 
-**The thesis, as of Milestone 4:**
+**The thesis, as of Milestone 5 (rewritten 2026-09-26 to match the evidence):**
 
-> A tumour segmentation model wrapped in a pipeline that bounds its own error with a distribution-free
-> guarantee and refuses inputs it cannot handle, is safe to deploy on data it was not trained on —
-> and we measure exactly where that guarantee breaks.
+> A tumour segmentation model wrapped in a distribution-free error bound and a refusal gate: the
+> bound holds in distribution, fails under distribution shift in proportion to the shift, and the
+> gate cannot see cohort-level shift. We measure where it breaks, and what a new site needs in order
+> to restore it.
 
+**Not** "safe to deploy on data it was not trained on" — that was the Milestone 4 thesis and note 47
+refuted it (paediatric silent-failure rate 49.5%; the gate is nearly inert on SSA).
 **Not** "reliability, not raw accuracy" — that was the Milestone 1–3 framing and the data refuted it.
 **Not** a SOTA architecture claim — the founding hypothesis returned a pre-registered null.
+
+**What this is for:** a college course project (semester demo + report, late Nov 2026), then the
+author's capstone (summer 2027), plus a journal paper (MELBA). Not a product, not deployed, not for
+clinical use.
 
 The author is new to deep learning. Explain non-obvious choices in comments and in the chat response.
 Prefer clear code over clever code.
@@ -189,79 +196,40 @@ package's `__init__.py` for the decorator to run.
 
 ---
 
-## Current status — 2026-09-20
+## Current status — 2026-09-26
 
-**Phase: Milestone 4. Read `docs/research/master_plan.md` first.** It is the active plan and
-supersedes the sequencing and gates of `execution_plan.md` and `improvement_plan.md`.
+**Phase: Milestone 5. The live queue is `docs/research/master_plan.md` §4.3, the "Milestone 5" block
+at its top** — read it before planning anything. Why it changed shape:
+`docs/research/project_review_2026-09-24.md`. Everything else in `master_plan.md` §4.3 is history.
 
-**Where the science stands.** Eleven pre-registered or matched comparisons have resolved. One clean
-positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189), decomposing as ~79%
-architecture / ~21% capacity against a width-matched control. One MIXED positive: Gate C (the QC
-model) beats free entropy on exactly one of five family cells (PED·TC, ΔAUROC +0.1686, p_holm 0.006)
-but **loses to it, significantly, on two others** (SSA·TC, PED·WT) — and its bias turns more
-optimistic under distribution shift in every external cell measured, the opposite of what a safety
-gate should do. Nine null or negative, including the founding hypothesis — the content-only gate
-ablation **matched** the full model (+0.0022, CI −0.0067 to +0.0152), so the disagreement conditioning
-contributes nothing measurable, and branch disagreement is *worse* than free single-pass entropy as an
-error localiser. Single-pass entropy is statistically equivalent to 10-sample MC-dropout (paired TOST,
-margin 0.03). The accuracy gain does not transfer out of distribution (`dice_TC` −0.0333 pooled,
-p_holm 0.0132).
+**Where the science stands** (authority: `docs/paper/claims_and_evidence.md`, read it before writing
+anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189),
+~79% architecture / ~21% capacity, now checked against a measured seed noise floor (D1, note 49:
++0.0021) — but **never yet tested against nnU-Net** (Gate A, P4). Conformal risk control holds in
+distribution and breaks under shift in proportion to the shift (C13/C14). The pipeline returns a
+usable mask for 85% / 78% / 24% of test / SSA / PED studies, with silent failure 4.2% / 18.3% /
+49.5% (note 47). Gate C is MIXED (one cell of five). D0 heavy augmentation and D1 seed 43 are both
+12/12 inconclusive. The founding hypothesis is a pre-registered null.
 
-**Do not write:** better calibrated · better boundary accuracy · better uncertainty or risk-coverage ·
-"the disagreement-conditioned gate is what works" · better structured reports · "equal to MC-dropout
-at 1/10 the cost" · "the QC model detects bad segmentations" (unqualified — name all three Gate C
-cells) · "reliable under distribution shift" (any signal) · any claim on WT. Full table in
-`docs/paper/claims_and_evidence.md`.
+**What is built.** Everything through Milestone 3 (`docs/project_state.md`), plus lesion-wise
+metrics, TTA (wired, unmeasured), conformal risk control, the QC model, the end-to-end error budget,
+and the full clinical pipeline — DICOM zip in → ingest → input QC → co-registration / SRI24 /
+HD-BET → input QC → segmentation (deployed `neurovision` seed 42) → QC-model + conformal signals →
+PROCEED / CAUTION / REFUSE, at `/clinical`, with the 3D twin, atlas shells, report, entered-pathology
+molecular panel, DICOM-SEG and zip export. A `"refused"` job is a successful outcome, never a failure.
+2,230 tests passing, 35 skipped, ~60 s (verified 2026-09-24). Serving command:
+`docs/reproducibility.md` §5.
 
-**What is built.** Everything through Milestone 3 (see `docs/project_state.md`), plus, as of
-2026-08-26: lesion-wise metrics, TTA, confidence-head scoring, conformal risk control (in distribution
-and under shift), the QC model and Gate C, and — the headline addition — **the full clinical pipeline
-is live end to end**: a real DICOM study zip in, through ingest → input QC → co-registration/atlas
-registration/skull-stripping → input QC again → segmentation (always the deployed `neurovision`
-checkpoint) → the QC model's and conformal risk control's signals → the refusal gate, out to
-PROCEED / PROCEED_WITH_CAUTION / REFUSE — reachable in the browser at `/clinical`
-(`app/backend/clinical_jobs.py`, `/api/clinical/*`, `app/frontend/src/pages/clinical/`). A `"refused"`
-job is a distinct, successful outcome, never conflated with a failure. E6 (DICOM-SEG export) plus
-entropy / conformal / Grad-CAM are wired into live jobs as of `54c03a6` (2026-08-27).
-2,230 tests passing (35 skipped, ~85 s, verified 2026-09-19), frontend build/tests clean,
-`scripts/smoke_test.py` clean.
-
-**Phase D is moving again (Track 2 unparked 2026-09-18).** **D0 — heavy augmentation — is DONE and
-its verdict is NULL** (2026-09-20, note 48): 23.7 GPU-h over three T4 sessions, 80/80 epochs, and
-**12 of 12** pre-registered comparisons inconclusive under one Holm family; primary endpoint pooled
-SSA+PED `dice_TC` **+0.0117, CI [−0.0006, +0.0245]**, a near miss recorded as a near miss. The shared
-augmentation recipe therefore does **not** change, and the deployed checkpoint stays `neurovision`
-seed 42. Do not write "heavy augmentation helps PED" — the per-cohort split that suggests it was not
-pre-registered (C23 and its do-not-write row in `claims_and_evidence.md`). **D1 (seed 43, the noise
-floor every single-seed margin in this project needs) launches next on the current augmentation**, as
-D0's NULL prescribes; ~23 GPU-h over three chained Kaggle sessions.
-
-**What is next — direction changed 2026-09-15.** The CPU research track (Phases A, B, C, E) is
-done. **The GPU/model track is PARKED** (author decision, 2026-09-15): G0's nnU-Net probe ran but its
-number is unrecorded, A7/Gate A not started, and **D0 (heavy augmentation) is mid-flight on Kaggle —
-two of ~three sessions done, no third launched**. The exact resume state for each is in the PARKED
-box at the top of `docs/research/master_plan.md` §4.3 Track 2. Do not restart any of it from
-scratch, and do not start it at all without the author saying so.
-
-**The tool-completion queue T0–T6 is BUILT (2026-09-18, demo given).** Scope was
-`docs/research/tool_completion_plan.md`; the board with every commit and finding F1–F8 is
-`docs/research/tool_completion_log.md`; note 45 in `docs/experiments.md` records the first real-DICOM
-runs (UPENN-GBM-00002 `done`/PROCEED in 361 s on the M4; 00001 `refused` reproducibly). What exists
-on a clinical job now: 3D twin with uncertainty / Grad-CAM / conformal painted on it, atlas shells
-with structure detail, the report with an optional `geometry` block and a `molecular` panel (entered
-pathology → CNS5 name; AI slot literally "not available — model not trained"), markdown + zip export
-with a twin snapshot, job persistence across restarts, and E2E section 12 driving all of it on a real
-done job under SwiftShader. **Still open:** T0.4 (clinical-vs-research comparison on one BraTS
-patient — blocked on the author accepting the Kaggle RSNA-MICCAI competition rules so
-`train/00000` downloads); the by-eye L/R check is numerically confirmed (note 45 F3) but no human
-has looked at the twin on a real job yet. **T7 (Phase F, IDH) is not started** — GPU, gated on the
-author's explicit go, needs a TCIA-downloader dependency ask, ~3–4 weeks. The serving command for
-the clinical demo is in `docs/reproducibility.md` §5. Re-read `docs/research/master_plan.md` §4.2
-before assuming anything is or is not done — the filesystem is the ground truth.
+**Open author actions:** eyeball the twin on job `9c2cc294` (P0.7). The Kaggle RSNA-MICCAI rules
+are accepted (2026-09-26), so T0.4 is unblocked (P1.2).
 
 **Data on disk.** `data/preprocessed/{brats,brats_ssa,brats_ped}` — `brats` is backed only by the live
 Kaggle dataset `amishyadav123/neurovision-brats-prep`, so **do not delete it**. Raw data was deleted
-2026-08-19 with SHA-256 manifests committed to `docs/data_manifests/`. **Four** checkpoints survive
+2026-08-19; SHA-256 manifests are committed to `docs/data_manifests/` for SSA/PED only —
+**raw BraTS 2021 has no manifest**, so a re-download is verified by re-preprocessing it byte-identical
+to `data/preprocessed/brats`. **Five** checkpoints survive: `neurovision_seed43`
+(`outputs/neurovision_seed43/checkpoints/best.pt`, epoch 79, D1's arm — a noise-floor measurement,
+not a deployment candidate), plus four others
 — `neurovision`, `baseline_unet3d`, `ablation_content_only_gate`
 (`outputs/ablation_content_only_gate/checkpoints/checkpoints/best.pt`, epoch 79, val dice_mean
 0.8933, verified loadable 2026-08-23), and `neurovision_heavy_aug`
@@ -279,10 +247,11 @@ that `neurovision`'s live directories are nested one level deeper than the other
 | `neurovision` | `outputs/neurovision/eval_val/logits` | `outputs/neurovision/eval_test/logits` | `outputs/eval_ssa_neurovision/logits` | `outputs/eval_ped_neurovision/logits` |
 | `baseline_unet3d` | `outputs/eval_val_baseline_unet3d/logits` | `outputs/eval_test_baseline_unet3d/logits` | `outputs/eval_ssa_baseline_unet3d/logits` | `outputs/eval_ped_baseline_unet3d/logits` |
 | `neurovision_heavy_aug` | — | `outputs/eval_test_neurovision_heavy_aug/logits` | `outputs/eval_ssa_neurovision_heavy_aug/logits` | `outputs/eval_ped_neurovision_heavy_aug/logits` |
+| `neurovision_seed43` | — | `outputs/eval_test_neurovision_seed43/logits` | `outputs/eval_ssa_neurovision_seed43/logits` | `outputs/eval_ped_neurovision_seed43/logits` |
 | `ablation_content_only_gate` | — | — | — | — |
 | `capacity_control` | — | — | — | — |
 
-~25 GB in total (D0's three cohorts added ~6 GB on 2026-09-19); ~79 GiB free as of 2026-09-20,
+~31 GB in total (D0 and D1 each added ~6 GB); ~69 GiB free as of 2026-09-24,
 was 119 GiB after the 2026-09-15 reclaim (`docs/reproducibility.md` §11 lists
 exactly what went — every `ambiguity_*` and MC `uncertainty/` cache, `nnunet_raw`, `data/raw`). Both
 complete rows mean lesion-wise re-scoring and the whole conformal phase need **zero inference**. `ablation_content_only_gate` has no saved volume artifact at all but

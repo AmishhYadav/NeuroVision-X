@@ -173,7 +173,7 @@ Do not trust this document's status claims over the filesystem — it will drift
 | What was done recently? | `git log --oneline -25` |
 | Which experiments have results? | `ls outputs/` and the note titles in `docs/experiments.md` |
 | Which gates have fired? | `cat outputs/*/*verdict.json`, and the `## Result` section of each `docs/research/preregistration_*.md` |
-| Does the repo still build? | plain `pytest` (expect ~1,630 passing, ~35 s) and `python scripts/smoke_test.py` |
+| Does the repo still build? | plain `pytest` (expect ~2,230 passing + 35 skipped, ~60 s, as of 2026-09-24) and `python scripts/smoke_test.py` |
 
 **Then update the status board in §4.3 and commit it.** A queue that nobody ticks off is worse than no
 queue, because the next session trusts it.
@@ -181,6 +181,104 @@ queue, because the next session trusts it.
 ### 4.3 The queue
 
 `[ ]` not started · `[~]` in progress · `[x]` done. **Update these marks as you go.**
+
+#### Milestone 5 — THE LIVE QUEUE (from 2026-09-26). Everything below this block is history.
+
+Why it exists: `docs/research/project_review_2026-09-24.md` (the outside-view review). Deadlines: the
+**semester submission (live demo + written report in the college's Word/PDF template) ~2026-11-24**;
+the **college GPU request ~2026-11-05**, filed only once everything CPU-side is finished and every
+GPU run is pre-registered and launch-ready; the **capstone** in summer 2027; a **MELBA** journal
+submission ~April 2027. The college card is **≤16 GB — treat it as T4-class** until a probe says
+otherwise; access method (SLURM vs SSH) unknown. **IDH (Phase F): go/no-go on 2027-01-15**, parked
+until then. The superseded plans (`execution_plan.md`, `improvement_plan.md`,
+`interpretable_pipeline_plan.md`) stay where they are — too many code comments cite them to move —
+and are archive-only; `tool_completion_plan.md`/`_log.md` join them once T0.4 closes.
+
+| # | Item | State | Done when |
+|---|---|---|---|
+| **Phase 0 — truth and housekeeping (week of 2026-09-25)** | | | |
+| P0.1 | Thesis rewritten to match the evidence (`CLAUDE.md`) | `[x]` 2026-09-26 | No live doc says "safe to deploy on data it was not trained on" |
+| P0.2 | One live plan: this block; README doc-map fixed | `[x]` 2026-09-26 | README points here, not at a superseded plan |
+| P0.3 | Overlap checks: are UPENN-GBM-00001/00002 BraTS 2021 cases (which split)? Where did UCSF-PDGM cases go in BraTS 2021? | `[ ]` | A note in `experiments.md`; the demo case labelled "may be a training case" if unresolvable |
+| P0.4 | `conformal_band` → display-only (drop from `enabled_signals`); re-run `scripts/error_budget.py` | `[ ]` | New note labelled **post-hoc deployment change**; note 47 stays the pre-registered number |
+| P0.5 | Honest guarantee wording (`Legend.tsx:70`, `GatekeeperPanel.tsx`, model card); backend band display tolerates a missing fit (`clinical_jobs.py:947`) | `[ ]` | No UI string says "guaranteed" without "on average, in distribution, not per patient" |
+| P0.6 | Remove verified-dead code only (`forward_multitask`, `Atlas.tissue_mask`, `GateDecision.cautions`); fix stale "96^3" comment (`_baseline_common.yaml:85`) | `[ ]` | Suite green; nothing else from `simplification_review.md` |
+| P0.7 | **Author:** eyeball the twin on job `9c2cc294` + the research viewer (brain crisp; patient-left on screen-right) | `[ ]` | Author says so |
+| **Phase 1 — CPU science (Oct 2 – Oct 22)** | | | |
+| P1.1 | **Local recalibration** (the pre-registered Mondrian arm + a k-sweep 5/10/15/20/30, 1000 seeded splits, α 0.05/0.10/0.20, WT/TC, both models, SSA/PED, test as control). Amendment committed first | `[ ]` | Note 50, claim C24, labelled **counterfactual** |
+| P1.2 | T0.4 one-case pilot (RSNA `train/00000`) → real-DICOM validation with ground truth, ≤40 RSNA cases whose BraTS ID is in **test**. Protocol doc first | `[ ]` | Note 51; a real-DICOM stage row in the error budget |
+| P1.3 | Intended-use signal ("adult glioma only") from DICOM `PatientAge` | `[ ]` | Note 52, reported as **scoping, never detection** |
+| P1.4 | *Stretch:* pre-registered OOD score from input statistics (CPU) | `[ ]` | Only if P1.1–P1.3 land by Oct 22 |
+| **Phase 2 — GPU readiness (Oct 23 – Nov 5)** | | | |
+| P2.1 | `training.init_from` — weights-only, fresh optimizer | `[ ]` | CPU tests: loads weights; `last.pt` resume beats `init_from` |
+| P2.2 | Frozen cross-fit splits `configs/data/splits_{ssa,ped}_cf{0,1}.yaml` (seeded generator) | `[ ]` | Committed before any training; old SSA/PED split files untouched |
+| P2.3 | nnU-Net prediction importer → our metric path | `[ ]` | GT round-trip `np.array_equal` on a case with NCR+ED; mirrored import fails |
+| P2.4 | `scripts/gpu_session.py` (lifted from `kaggle_train.ipynb`) + `scripts/cluster/{run_tmux.sh,run.sbatch,nnunet.sh}` | `[ ]` | CPU dry run of `overfit2` prints `NVX_HEALTH: OK` |
+| P2.5 | Pre-registrations: Gate A amendment (dedicated card, abort bound restated, **full** 1000-epoch recipe, Auto3DSeg arm dropped with reason); D3 cross-fitted fine-tune; TTA measurement; `baseline_unet3d` seed 43 | `[ ]` | Each committed before its run |
+| P2.5b | Fresh-clone rehearsal (clean clone → venv → `reproduce.sh verify` → smoke → regenerate `thresholds.json`) | `[ ]` | Every stale instruction it finds is fixed |
+| P2.6 | `docs/research/gpu_request.md` — run list, measured T4-h, VRAM, disk, stack, internet | `[ ]` | Submitted to the college ~Nov 5 |
+| **Phase 3 — semester deliverables (Nov 6 – Nov 24)** | | | |
+| P3.1 | Written report, Markdown source in `docs/semester_report/` + PNG figures, pasted into the college template. **The author writes the introduction and methods** | `[ ]` | Submitted |
+| P3.2 | `docs/demo_runbook.md` — PROCEED / REFUSE-quality / REFUSE-intended-use stories, recalibration figure, E2E green the day before, fallback recording | `[ ]` | One full rehearsal from a cold start |
+| P3.3 | `docs/paper/related_work.md` — arXiv 2606.20115, 2608.10893, 2608.18193 + core refs; C14 loses "nobody has measured" | `[ ]` | C14 rewritten |
+| P3.4 | Freeze: tag `semester-2026` | `[ ]` | pytest, smoke, vitest, E2E all green |
+| **Phase 4 — GPU block (Dec – Feb, college card)** | | | |
+| P4 | Probe (must reach the failure condition) → **Gate A** nnU-Net fold 0, full recipe (~76 T4-h) → **D3** four fine-tunes (~8–10) → TTA (~2) → baseline seed 43 (~3.5). Core ≈ 90 T4-h. Stretch: D2 (+40), capacity control (+8) | `[ ]` | Each: Result section, note, claims, this board, push |
+| **Phase 5 — capstone + paper (Jan – Jun 2027)** | | | |
+| P5 | IDH go/no-go 2027-01-15 · MELBA draft Feb, submit ~Apr · capstone extension chosen after Phase 4 · release tag · capstone report + final demo May–Jun | `[ ]` | — |
+
+**Binding notes from the 2026-09-24 code check — each goes into its item's spec:**
+
+- **P1.1 — minimum feasible local k.**
+  - The minimum is (k·R(τ_min)+1)/(k+1) ≤ α. From the curves on disk, at α 0.05/0.10/0.20:
+    SSA·WT 22/10/5, SSA·TC 39/13/5, PED·WT 26/11/5.
+  - **PED·TC is infeasible at every k**, because R(τ_min) = 0.356 even at τ = 1e-4. State this in
+    the amendment before the run: no local recalibration fixes PED·TC, and that is what D3 is for.
+  - Handle `threshold=None` before calling `realised_risk`.
+  - Report P(realised risk > α) across splits, not only the mean.
+- **P1.2 — scoring grid.**
+  - Score on the full 240×240×155 SRI24 grid. Uncrop both the ground truth (`meta.json` bbox) and
+    the job's own crop (`clinical_jobs.py:1289-1291`).
+  - The scorer must not require `source_axcodes` (older `meta.json` files lack it).
+- **P1.2 — ingest and case selection.**
+  - RSNA's "T1wCE" series name is not a recognised token (`dicom_ingest.py:195,201`). Assign roles
+    from the RSNA folder names via `role_overrides`, stated openly. Do not add tokens tuned on
+    validation data.
+  - Record thick-slice refusals; never drop them.
+  - Case overlap comes from RSNA `train_labels.csv`. Only 93 of 189 test IDs are ≤01010.
+- **P1.2 — alignment check.** Never use brain-mask Dice as an alignment check (trap 3).
+- **P1.3 — reading age.**
+  - Parse `PatientAge` (UPENN: `'061Y'`). Birth date is empty after de-identification.
+  - Store age on `IngestResult` in years only.
+  - No calibration is needed; the signal behaves like `judge_input_qc`.
+- **P1.3 — policy conflict.** "CAUTION if age missing" conflicts with the rule that an enabled
+  signal arriving empty is a REFUSE (`configs/clinical/default.yaml:270`). Recommendation: a
+  documented exception. **Confirm with the author at spec time.**
+- **P1.3 — error-budget re-score.** No cohort on disk has ages, so the re-score uses a cohort
+  attribute (PED = paediatric).
+- **P2.3 — importer.**
+  - Load with nibabel.
+  - Assert affine and shape against `meta.json`.
+  - Apply `reorient_to_axcodes` (`preprocessing.py:233`), then `crop_to_bbox` (:131).
+  - **Swap labels 1↔2**: nnU-Net's 1 is ED and 2 is NCR (`export_nnunet_dataset.py:258-260`).
+  - Score via `replay_case` (`analysis/replay.py:245`) with ±20 pseudo-logits.
+  - Pre-register a hard-label post-processing convention.
+- **P2.3 — raw BraTS check.** Raw BraTS has **no** SHA manifest. Verify a re-download by
+  re-preprocessing it into a scratch directory; the result must be byte-identical to
+  `data/preprocessed/brats`.
+- **P2.1 / P2.2 — fine-tune precedence.**
+  - Precedence: explicit resume > `last.pt` > `init_from` > fresh.
+  - Refuse to start if the `init_from` directory is the run's own checkpoint directory.
+- **P2.1 / P2.2 — data root and labelling.**
+  - The data root is global (`train.py:74,95-96`), so a PED-only fine-tune is a config override.
+    D2 pooled training needs per-split roots.
+  - D3 held-out numbers are labelled **cross-fitted, not external validation**.
+- **P2.4 — launcher.** There is no SIGTERM handler, so keep `max_hours` below any SLURM wall limit.
+- **Order.**
+  - The P1.2 scorer is the first geometry code built. It carries its own ground-truth round-trip
+    self-test (Dice exactly 1.0), and P2.3 reuses that geometry.
+  - The P1.2 pilot comes before the 40-case run.
+  - P2.4 comes before any GPU fine-tune.
 
 #### Track 1 — CPU. No hardware needed. Start here.
 
@@ -668,7 +766,7 @@ frozen on creation like every existing split file.
 
 | Level | Check |
 |---|---|
-| Unit | plain `pytest` from the repo root (1,630 collected). `pyproject.toml` already sets `addopts = "-q"`; a second `-q` stacks to `-qq` and silently drops the pass count |
+| Unit | plain `pytest` from the repo root (~2,265 collected as of 2026-09-24). `pyproject.toml` already sets `addopts = "-q"`; a second `-q` stacks to `-qq` and silently drops the pass count |
 | Integration | `python scripts/smoke_test.py` exits 0 before every GPU session |
 | Frontend | `cd app/frontend && npm test`, then `npm run test:e2e` against a live backend before any demo |
 | New model code | CPU shape test on `(1, C, 32, 32, 32)` running under one second |
