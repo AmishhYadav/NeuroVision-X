@@ -11,6 +11,8 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
    behind it. A number not in this table does not go in the paper.
 2. **`experiments.md`** — every run and every measured result (numbered notes). The source of truth
    for any number `claims_and_evidence.md` cites.
+2b. **`project_history.md`** — the same project told in time order, with every GPU run and every
+   decision; read it to get the whole journey back.
 3. **`project_review_2026-09-24.md`** — outside-view review; why the thesis was rewritten for
    Milestone 5.
 4. **`related_work.md`** — where the conformal and refusal claims sit, and what novelty the paper
@@ -21,6 +23,7 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
 | File | What it is | Paper section it feeds |
 |---|---|---|
 | `status_2026-09-27.md` | Handoff: done / left / how to restart / why / end result | — (orientation) |
+| `project_history.md` | The whole project in time order: every build, GPU run, result, dead claim and major decision since 2026-07-31 | Introduction, Discussion (the story arc), Methods (why the schedule is what it is) |
 | `claims_and_evidence.md` | Claim table (C1…C25), each tied to an artifact | All — the gate |
 | `experiments.md` | Run log + numbered result notes | Results |
 | `contribution.md` | The original pre-registered claim, with a status update on what survived | Introduction, Discussion |

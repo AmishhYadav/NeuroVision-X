@@ -14,6 +14,7 @@ Project instructions for Claude Code. Read this before doing anything in this re
 | `docs/project_state.md` | The Milestone 1–3 build record, archived |
 | `docs/gpu_session_checklist.md` | Rules for a GPU session, each written against a loss already suffered |
 | `docs/research_docs/reproducibility.md` | Which artifacts are caches, and the exact command to rebuild each |
+| `docs/research_docs/project_history.md` | The whole journey in time order — every build, GPU run, result, dead claim and major decision. Add a line when a gate fires |
 
 ---
 
