@@ -697,3 +697,18 @@ and whose checkpoint (where one is needed to rebuild) still exists.
 **Kept on purpose:** all eight `logits/` directories (~19 GB — the re-scoring
 artifact from the table in `CLAUDE.md`), the three surviving checkpoints, the
 irreplaceable `outputs/eval_test/predictions`, and `outputs/conformal/*/curves.npz`.
+
+### What was deleted on 2026-09-27, and why
+
+Third reclaim: **~13 GiB** (free space 52 GiB → 65 GiB). Nothing here needs a
+rebuild to reproduce any published number.
+
+| Deleted | Size | Why it was safe | Rebuild |
+|---|---|---|---|
+| `outputs/kaggle_kernels/d0-run3/kernel_output/checkpoints/{best,last}.pt` | 0.8 GB | Byte-identical (`cmp`) to `outputs/neurovision_heavy_aug/checkpoints/{best,last}.pt`, which are kept | — |
+| `outputs/kaggle_kernels/d0-run2/kernel_output/checkpoints/*.pt` | 1.6 GB | D0 session-2 checkpoints (epoch 68/69), superseded by the epoch-79 final | — |
+| `outputs/kaggle_kernels/d1-seed43-s1/kernel_output/checkpoints/*.pt` | 1.6 GB | D1 session-1 checkpoints (epoch 32/33), superseded by `outputs/neurovision_seed43/checkpoints/best.pt` (epoch 79) | — |
+| `predictions/` under `eval_{test,ssa,ped}_{neurovision,baseline_unet3d}_seed43` | 5.9 GB | Each has its sibling `logits/`, so exactly reconstructible | `postprocess_logits` from `logits/` with that run's `eval_config.yaml` |
+| `outputs/clinical_jobs/` except `9c2cc294…` | 1.1 GB | Old demo upload jobs; `9c2cc294` kept for the P0.7 twin eyeball | Re-upload the DICOM zip at `/clinical` |
+
+Kernel logs, `repo/` and `wandb/` under each `kaggle_kernels/*` dir were kept.
