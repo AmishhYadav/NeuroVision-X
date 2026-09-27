@@ -1973,6 +1973,7 @@ def run_clinical_job(settings: Settings, job_id: str) -> ClinicalJob:
             predicted_dice=predicted_dice_map,
             conformal_band=conformal_band_map,
             ood_score=None,
+            patient_age_years=ingest_result.patient_age_years,
         )
         decision = run_gatekeeper(cfg, signals)
         _update_clinical_job(settings, job, gatekeeper_decision=decision.to_dict())
