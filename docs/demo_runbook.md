@@ -38,8 +38,8 @@ NVX_REPORT_DIR=outputs/report_neurovision/reports NVX_JOB_DIR=outputs/clinical_j
 Also check: jobs `9c2cc294` (PROCEED) and the regenerated UPENN-GBM-00001 REFUSE job (story B) still load at `/clinical` after a
 backend restart (T0.5 rehydration), and the 3D twin renders (P0.7).
 
-**Memory.** Memory accumulates across clinical jobs in one backend process; after many jobs the M4
-thrashes (`docs/research_docs/lessons.md`, 2026-09-27). If you do upload live, use a small study and restart the backend
+**Memory.** One clinical job peaks at ~12 GB on the 16 GB M4 (HD-BET/ANTs at native resolution), and
+many varied jobs in one backend process eventually thrash (`docs/research_docs/lessons.md`, 2026-09-27). If you do upload live, use a small study and restart the backend
 afterwards; never queue two uploads.
 
 **Fallback recording.** Once everything is green, screen-record stories A–C end to end (~6 min) and
