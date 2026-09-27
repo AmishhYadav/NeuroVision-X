@@ -832,3 +832,47 @@ crossfit_splits:
     ped: configs/data/splits_ped.yaml
   out_pattern: configs/data/splits_{cohort}_cf{fold}.yaml
 
+score_nnunet:
+  # Gate A (docs/research/preregistration_strong_baseline.md, Amendment 1
+  # item 8 "Scoring convention") -- scores nnU-Net's hard-label predictions
+  # through OUR metric path (neurovision.analysis.nnunet_import), so its
+  # numbers are directly comparable to every other arm in this project.
+  # Consumed by scripts/score_nnunet.py. Runs no model and needs no GPU.
+
+  # Folder of nnU-Net predictions, one <case_id>.nii.gz per case, on the
+  # ORIGINAL raw BraTS 2021 grid. null forces an explicit CLI override --
+  # same convention as analysis.replay.eval_dir above: never guess which
+  # nnU-Net run's output this is scoring.
+  pred_dir: null
+
+  # Root of the preprocessed tree (holds <case>/label.npy + <case>/meta.json).
+  prep_dir: ${data.preprocessing.out_dir}
+
+  # The frozen split file and the split name the case list comes from.
+  splits_path: ${data.splits.path}
+  split: test
+
+  # Where per_case_metrics.csv / summary.csv / score_config.yaml are
+  # written. null forces an explicit CLI override, same reason as pred_dir.
+  out_dir: null
+
+  # Pre-registered gate (Amendment 1 item 8): a ground-truth round trip
+  # through import_prediction must pass for this case BEFORE any real
+  # nnU-Net prediction is scored. BraTS2021_00000 has both NCR and ED --
+  # required, because a case missing either label cannot expose a missed
+  # 1<->2 swap (see nnunet_import.roundtrip_self_test's docstring).
+  selftest_case: BraTS2021_00000
+
+  # Same four lesion-wise parameters as analysis.replay.lesionwise above,
+  # copied rather than referenced by interpolation (this script may run
+  # without analysis.replay ever being composed). Needs panoptica, which
+  # lives only in .venv-analysis -- see analysis.replay.lesionwise's
+  # comment; the import happens lazily inside score_imported_case /
+  # replay_case, never at this script's module import time.
+  lesionwise:
+    enabled: false
+    min_lesion_voxels: 50
+    matching_threshold: 0.5
+    nsd_tolerance_mm: 1.0
+    connectivity: 26
+
