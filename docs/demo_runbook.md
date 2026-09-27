@@ -35,7 +35,7 @@ NVX_REPORT_DIR=outputs/report_neurovision/reports NVX_JOB_DIR=outputs/clinical_j
 (cd app/frontend && npm run test:e2e)              # rendered-pixel E2E, third terminal
 ```
 
-Also check: jobs `9c2cc294` (PROCEED) and `f4a4a754` (REFUSE) still load at `/clinical` after a
+Also check: jobs `9c2cc294` (PROCEED) and the regenerated UPENN-GBM-00001 REFUSE job (story B) still load at `/clinical` after a
 backend restart (T0.5 rehydration), and the 3D twin renders (P0.7).
 
 **Memory.** Memory accumulates across clinical jobs in one backend process; after many jobs the M4
@@ -63,7 +63,10 @@ debugging on stage.
 
 ### B. REFUSE on quality — the gate doing its job (2 min)
 
-- Open job **`f4a4a754`** (UPENN-GBM-00001): predicted Dice WT **0.656** below the calibrated cut →
+- Open the REFUSE job for UPENN-GBM-00001 (was `f4a4a754`; that job directory was deleted in the
+  2026-09-27 disk reclaim — regenerate it once with `.venv-clinical/bin/python
+  scripts/run_clinical_study.py +clinical.study_dir=data/fixtures/dicom/UPENN-GBM-00001
+  +clinical.out_dir=outputs/clinical_jobs`, ~6 min, and write the new job id here: ______): predicted Dice WT **0.656** below the calibrated cut →
   **REFUSE**, with the reason in the banner.
 - **Say it:** a refused study is a successful outcome, not a failure. The gate's thresholds are
   quantiles of the validation set, frozen before use.
