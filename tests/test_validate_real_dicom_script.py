@@ -2,27 +2,32 @@
 
 Everything here is synthetic, small, and CPU-only -- no real DICOM, no pydicom
 (`build_role_overrides`'s `read_series_headers` call is monkeypatched wherever it would
-otherwise run), no Hydra composition of the real clinical pipeline, no `.venv-clinical`.
-The `_run_case`-level tests monkeypatch `run_clinical_path_fn` -- the one seam that would
-otherwise reach the real clinical pipeline -- with a fake that writes a synthetic job
-directory (`prep/<job_id>/{image.npy,meta.json}`, `cache/neurovision/<job_id>.npy`,
-`summary.json`) and returns its `summary.json` path, so `_run_case`'s own uncrop/
-reference-grid/scoring/lateralisation logic still runs for real, against real (tiny)
-arrays.
+otherwise run), no `.venv-clinical`. The `_run_case`-level tests monkeypatch
+`run_clinical_path_fn` -- the one seam that would otherwise reach the real clinical
+pipeline -- with a fake that writes a synthetic job directory (`prep/<job_id>/
+{image.npy,meta.json}`, `cache/neurovision/<job_id>.npy`, `summary.json`) and returns
+its `summary.json` path, so `_run_case`'s own uncrop/reference-grid/scoring/
+lateralisation logic still runs for real, against real (tiny) arrays. The
+`release_hydra` tests below DO compose `app.backend.clinical_jobs`'s own
+`_compose_clinical_cfg` for real (CPU-only config composition, no model built), since
+that composition step is exactly the real condition being fixed.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import sys
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
+import hydra
 import numpy as np
 import pandas as pd
 import pytest
 import scripts.validate_real_dicom as validate_real_dicom
+from hydra.core.global_hydra import GlobalHydra
 
 from neurovision.utils.io import write_json
 
@@ -725,3 +730,128 @@ def test_process_case_treats_unparseable_result_as_absent(
     assert result_file.is_file()
     assert not (result_file.parent / f"{result_file.name}.tmp").exists()
     assert json.loads(result_file.read_text())["status"] == "done"
+
+
+# ---------------------------------------------------------------------------
+# sys.path -- the documented ".venv-clinical/bin/python scripts/validate_real_
+# dicom.py" command needs the repo root importable with no PYTHONPATH set.
+# ---------------------------------------------------------------------------
+
+
+def test_repo_root_is_on_sys_path_after_import() -> None:
+    assert str(validate_real_dicom._REPO_ROOT) in sys.path
+
+
+# ---------------------------------------------------------------------------
+# release_hydra: reproduces the real 2026-09-27 failure (GlobalHydra already
+# initialized) and proves the fix clears it for the clinical backend's own
+# per-job Hydra composition.
+# ---------------------------------------------------------------------------
+
+
+def test_release_hydra_clears_an_already_initialized_global_hydra() -> None:
+    """Mirrors `@hydra.main`'s own effect: `initialize_config_dir` used WITHOUT the
+    `with` form leaves `GlobalHydra` initialized for the rest of the process, exactly
+    as this script's `@hydra.main` does before `main()`'s body runs."""
+    assert not GlobalHydra.instance().is_initialized()
+    try:
+        hydra.initialize_config_dir(version_base="1.3", config_dir=validate_real_dicom._CONFIG_DIR)
+        assert GlobalHydra.instance().is_initialized()
+
+        validate_real_dicom.release_hydra()
+
+        assert not GlobalHydra.instance().is_initialized()
+    finally:
+        # Never leak this into another test regardless of how the assertions
+        # above went.
+        GlobalHydra.instance().clear()
+
+
+def test_release_hydra_lets_compose_clinical_cfg_succeed_after(tmp_path: Path) -> None:
+    """Reproduces the exact real-run condition and proves `release_hydra` fixes it.
+
+    `app.backend.clinical_jobs._compose_clinical_cfg` composes its own config via
+    `hydra.initialize_config_dir` used as a context manager. While an outer
+    `GlobalHydra` (standing in for this script's own `@hydra.main`) is still live,
+    that call raises exactly the observed `ValueError: GlobalHydra is already
+    initialized ...` -- calling `validate_real_dicom.release_hydra()` first is what
+    lets it succeed, without changing anything else about how `_compose_clinical_cfg`
+    composes its config.
+    """
+    from app.backend import clinical_jobs as clinical_jobs_module
+
+    assert not GlobalHydra.instance().is_initialized()
+    try:
+        with hydra.initialize_config_dir(
+            version_base="1.3", config_dir=validate_real_dicom._CONFIG_DIR
+        ):
+            assert GlobalHydra.instance().is_initialized()
+
+            with pytest.raises(ValueError, match="already initialized"):
+                clinical_jobs_module._compose_clinical_cfg()
+
+            validate_real_dicom.release_hydra()
+
+            cfg = clinical_jobs_module._compose_clinical_cfg()
+            assert cfg.device == "cpu"
+    finally:
+        # Never leak this into another test regardless of how the assertions
+        # above went.
+        GlobalHydra.instance().clear()
+
+
+# ---------------------------------------------------------------------------
+# Pilot must complete: a failed pilot aborts the whole run before any sample
+# case is processed.
+# ---------------------------------------------------------------------------
+
+
+def test_check_pilot_status_raises_on_failed_pilot() -> None:
+    pilot_spec = CaseSpec(case_id="PILOT", rsna_id="00000", pilot=True)
+    row = validate_real_dicom._blank_row(pilot_spec)
+    row["status"] = "failed"
+    row["error"] = "boom: ingest raised"
+
+    with pytest.raises(RuntimeError, match="did not complete"):
+        validate_real_dicom._check_pilot_status(pilot_spec, row)
+
+
+@pytest.mark.parametrize("status", ["done", "refused"])
+def test_check_pilot_status_noop_for_done_and_refused(status: str) -> None:
+    pilot_spec = CaseSpec(case_id="PILOT", rsna_id="00000", pilot=True)
+    row = validate_real_dicom._blank_row(pilot_spec)
+    row["status"] = status
+
+    validate_real_dicom._check_pilot_status(pilot_spec, row)  # must not raise
+
+
+def test_check_pilot_status_noop_for_non_pilot_even_when_failed() -> None:
+    spec = CaseSpec(case_id="X", rsna_id="00001", pilot=False)
+    row = validate_real_dicom._blank_row(spec)
+    row["status"] = "failed"
+
+    validate_real_dicom._check_pilot_status(spec, row)  # must not raise
+
+
+def test_score_all_cases_aborts_before_sample_cases_on_pilot_failure(tmp_path: Path) -> None:
+    ccfg = _make_ccfg(tmp_path)
+    pilot_spec = CaseSpec(case_id="PILOT", rsna_id="00000", pilot=True)
+    sample_spec = CaseSpec(case_id="SAMPLE", rsna_id="00001", pilot=False)
+
+    calls: list[str] = []
+
+    def _fake_run_case(spec_: CaseSpec, ccfg_: RealDicomValidationConfig) -> dict:
+        calls.append(spec_.case_id)
+        if spec_.pilot:
+            row = validate_real_dicom._blank_row(spec_)
+            row["status"] = "failed"
+            row["error"] = "boom: ingest raised"
+            return row
+        raise AssertionError("the sample case must never run after a failed pilot")
+
+    with pytest.raises(RuntimeError, match="PILOT"):
+        validate_real_dicom._score_all_cases(
+            [pilot_spec, sample_spec], ccfg, run_case_fn=_fake_run_case
+        )
+
+    assert calls == ["PILOT"]  # the sample case was never reached

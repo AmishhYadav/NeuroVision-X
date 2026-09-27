@@ -91,6 +91,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 import time
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
@@ -101,6 +102,7 @@ from typing import Any
 import hydra
 import numpy as np
 import pandas as pd
+from hydra.core.global_hydra import GlobalHydra
 from omegaconf import DictConfig, OmegaConf
 
 from neurovision.analysis.error_budget import bootstrap_rate_ci
@@ -122,6 +124,16 @@ logger = logging.getLogger(__name__)
 # Relative to this file, so the script works from any working directory and on any
 # machine -- no absolute paths. Same pattern as every other scripts/*.py.
 _CONFIG_DIR = str(Path(__file__).resolve().parent.parent / "configs")
+
+# scripts/validate_real_dicom.py -> scripts -> repo root. Same pattern as
+# scripts/run_clinical_study.py: `run_clinical_path` (below) lazily imports
+# `scripts.run_clinical_study` and `app.backend.clinical_jobs`, neither of which is
+# on sys.path merely by virtue of pyproject.toml's `pythonpath = ["src"]` pytest
+# setting -- so the documented `.venv-clinical/bin/python scripts/validate_real_
+# dicom.py` command needs this inserted here too, not just in run_clinical_study.py.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 # The header this protocol requires on every run -- see the module docstring's "Not
 # external validation" note and the spec's "Log header lines say ..." requirement.
@@ -943,6 +955,39 @@ def summarise(per_case: pd.DataFrame, ccfg: RealDicomValidationConfig) -> dict[s
 # ---------------------------------------------------------------------------
 
 
+def _check_pilot_status(spec: CaseSpec, row: Mapping[str, Any]) -> None:
+    """Aborts the whole run if the PILOT case itself did not complete ("done"/"refused").
+
+    A failed pilot (a pipeline exception, or `_run_case` recording `status="failed"`)
+    means this run cannot even reach the condition it exists to measure -- see
+    CLAUDE.md's "a probe must be built to reach the failure condition, not merely to
+    run" trap. Repeating that same failure across the 40 sample cases would waste
+    hours for nothing, so this is checked BEFORE `_check_pilot_geometry` -- a pilot
+    that never reached "done" has no `geometry_mismatch` worth reading either. The
+    pilot always runs first (`run_validation` orders it first when `include_pilot`),
+    so checking it alone catches this before any sample case runs.
+
+    Args:
+        spec: The case `row` belongs to. A no-op unless `spec.pilot`.
+        row: The case's row, from `_run_case` / `process_case`.
+
+    Raises:
+        RuntimeError: `spec.pilot` is `True` and `row["status"]` is neither `"done"`
+            nor `"refused"`.
+    """
+    if not spec.pilot:
+        return
+    if row["status"] not in ("done", "refused"):
+        raise RuntimeError(
+            f"validate_real_dicom: pilot case {spec.case_id} did not complete "
+            f"(status={row['status']!r}, error={row['error']!r}) -- this run cannot "
+            "reach the condition it measures, so it is aborted before the 40 sample "
+            "cases repeat the same failure 40 times. Fix the pilot's failure, then "
+            "re-run (already-scored sample cases, if any, resume from their own "
+            "result.json)."
+        )
+
+
 def _check_pilot_geometry(spec: CaseSpec, row: Mapping[str, Any]) -> None:
     """Aborts the whole run if the PILOT's clinical prediction failed `to_reference_grid`.
 
@@ -978,7 +1023,7 @@ def _score_all_cases(
     ccfg: RealDicomValidationConfig,
     run_case_fn: Callable[[CaseSpec, RealDicomValidationConfig], dict[str, Any]] = _run_case,
 ) -> list[dict[str, Any]]:
-    """`process_case` over every spec in order, aborting early on a pilot geometry mismatch.
+    """`process_case` over every spec in order, aborting early on a failed or mismatched pilot.
 
     Args:
         ordered_specs: Cases to run. When the pilot is included, `run_validation`
@@ -987,19 +1032,22 @@ def _score_all_cases(
         run_case_fn: Forwarded to `process_case`; see its own docstring.
 
     Returns:
-        One row per spec in `ordered_specs`, in order -- UNLESS a pilot geometry
-        mismatch aborts the run first, in which case only the rows computed so far
-        are lost (nothing is returned) but each one's `result.json` (already written
-        by `process_case`) survives on disk for the next, resumed run.
+        One row per spec in `ordered_specs`, in order -- UNLESS the pilot aborts the
+        run first (it never completed, or completed with a geometry mismatch), in
+        which case only the rows computed so far are lost (nothing is returned) but
+        each one's `result.json` (already written by `process_case`) survives on disk
+        for the next, resumed run.
 
     Raises:
-        RuntimeError: The pilot's row has a `geometry_mismatch` -- see
-            `_check_pilot_geometry`.
+        RuntimeError: The pilot's row never reached `"done"`/`"refused"` -- see
+            `_check_pilot_status` -- or reached `"done"` with a `geometry_mismatch`
+            -- see `_check_pilot_geometry`.
     """
     rows: list[dict[str, Any]] = []
     for spec in ordered_specs:
         row = process_case(spec, ccfg, run_case_fn=run_case_fn)
         rows.append(row)
+        _check_pilot_status(spec, row)
         _check_pilot_geometry(spec, row)
     return rows
 
@@ -1020,9 +1068,10 @@ def run_validation(cfg: DictConfig) -> dict[str, Path]:
 
     Raises:
         RuntimeError: The self-test (`run_self_tests`) failed -- nothing is scored --
-            or the pilot's own clinical prediction failed `to_reference_grid` with a
-            genuine geometry mismatch (`_check_pilot_geometry`) -- nothing beyond the
-            pilot is scored.
+            or the pilot itself never reached `"done"`/`"refused"` (`_check_pilot_
+            status`), or reached `"done"` with a genuine geometry mismatch
+            (`_check_pilot_geometry`) -- either way nothing beyond the pilot is
+            scored.
         ValueError: `cases_file` has zero sample cases.
     """
     ccfg = _resolve_config(cfg)
@@ -1059,11 +1108,43 @@ def run_validation(cfg: DictConfig) -> dict[str, Path]:
     return {"per_case_csv": per_case_path, "summary_json": summary_path}
 
 
+def release_hydra() -> None:
+    """Clears Hydra's process-global singleton so each clinical job can compose its own config.
+
+    Same fix, same reason, as `scripts.run_clinical_study.release_hydra`. `@hydra.main`
+    (below) initialises `GlobalHydra` once, for the whole process, so it can compose
+    `cfg`. But every case's clinical-path call reaches `app.backend.clinical_jobs
+    ._compose_clinical_cfg` / `_load_qc_model_and_cfg`, which each compose their OWN
+    config per job, independently, via `hydra.initialize_config_dir` (guarded by
+    `app.backend.inference._HYDRA_LOCK`, since it also mutates that same singleton) --
+    and `initialize_config_dir` refuses to run at all while a `GlobalHydra` instance is
+    already live (`ValueError: GlobalHydra is already initialized`). That is exactly
+    what happened in the 2026-09-27 real run: every one of the 41 cases failed at stage
+    "ingest" with that error, because `main` never released the singleton before
+    scoring began.
+
+    Calling `.clear()` ONCE here, before any case runs, is enough for every later job
+    in this same process: `initialize_config_dir.__exit__` always restores whatever
+    state it found at `__enter__` time, and that state is now "cleared" (`GlobalHydra
+    ().hydra is None`), not "uninitialised" (no singleton at all) -- so each job's own
+    `with hydra.initialize_config_dir(...):` block leaves the singleton exactly as
+    cleared as it found it, ready for the next job's block. This script needs nothing
+    more from `GlobalHydra` once `main` has its own composed `cfg` in hand -- it never
+    calls `HydraConfig.get()` or `hydra.utils.to_absolute_path` (which do need it)
+    anywhere in this module -- so `main` releases the singleton right after `cfg` is
+    composed and before the first case is processed.
+    """
+    GlobalHydra.instance().clear()
+
+
 @hydra.main(version_base="1.3", config_path=_CONFIG_DIR, config_name="config")
 def main(cfg: DictConfig) -> None:
     """Runs the P1.2 real-DICOM validation protocol, per the composed config."""
     setup_logging(level="INFO")
     set_seed(cfg.seed)
+    # Must happen before any case is processed, not inside run_validation -- see
+    # release_hydra's own docstring for why, and why this is safe here.
+    release_hydra()
     run_validation(cfg)
 
 
