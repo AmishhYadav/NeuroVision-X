@@ -776,42 +776,47 @@ compare_family:
   # note 48 -- it does not depend on this file staying as it was, so this
   # block is safe to repoint at the next pre-registered family.
   #
-  # Current contents: D1 (docs/research/preregistration_multiseed.md), the
-  # seed-to-seed noise floor. {dice_ET, dice_TC, dice_WT, lwdice_ET} x
-  # {test, SSA, PED} = 12 comparisons, fixed by the pre-registration, NOT
-  # pooled -- unlike D0, D1's family reads each cohort separately.
+  # D1's family is frozen likewise in outputs/compare_family/d1_seed_noise_floor
+  # and note 49.
+  #
+  # Current contents: multiseed Amendment 1 (docs/research/
+  # preregistration_multiseed.md), the BASELINE's seed-to-seed noise floor:
+  # baseline_unet3d_seed43 - baseline_unet3d, {dice_ET, dice_TC, dice_WT,
+  # lwdice_ET} x {test, SSA, PED} = 12 comparisons, one Holm family -- the same
+  # shape as D1. Endpoint 2 (the headline re-read at seed 43) is a separate
+  # single comparison, run with CLI overrides of name/name_a/name_b/comparisons.
   out_dir: outputs/compare_family/${analysis.compare_family.name}
-  name: d1_seed_noise_floor
-  name_a: neurovision_seed43
-  name_b: neurovision
+  name: multiseed_a1_baseline_noise_floor
+  name_a: baseline_unet3d_seed43
+  name_b: baseline_unet3d
   n_boot: 10000
   ci: 0.95
   alpha: 0.05
   practical_threshold: null
   comparisons:
     - cohort: test
-      a: outputs/eval_test_neurovision_seed43/per_case_metrics.csv
-      b: outputs/neurovision/eval_test/per_case_metrics.csv
+      a: outputs/eval_test_baseline_unet3d_seed43/per_case_metrics.csv
+      b: outputs/eval_test_baseline_unet3d/per_case_metrics.csv
       metrics: [dice_ET, dice_TC, dice_WT]
     - cohort: test_lesionwise
-      a: outputs/replay_lesionwise/eval_test_neurovision_seed43/per_case_default.csv
-      b: outputs/replay_lesionwise/eval_test/per_case_default.csv
+      a: outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43/per_case_default.csv
+      b: outputs/replay_lesionwise/eval_test_baseline_unet3d/per_case_default.csv
       metrics: [lwdice_ET]
     - cohort: ssa
-      a: outputs/eval_ssa_neurovision_seed43/per_case_metrics.csv
-      b: outputs/eval_ssa_neurovision/per_case_metrics.csv
+      a: outputs/eval_ssa_baseline_unet3d_seed43/per_case_metrics.csv
+      b: outputs/eval_ssa_baseline_unet3d/per_case_metrics.csv
       metrics: [dice_ET, dice_TC, dice_WT]
     - cohort: ssa_lesionwise
-      a: outputs/replay_lesionwise/eval_ssa_neurovision_seed43/per_case_default.csv
-      b: outputs/replay_lesionwise/eval_ssa_neurovision/per_case_default.csv
+      a: outputs/replay_lesionwise/eval_ssa_baseline_unet3d_seed43/per_case_default.csv
+      b: outputs/replay_lesionwise/eval_ssa_baseline_unet3d/per_case_default.csv
       metrics: [lwdice_ET]
     - cohort: ped
-      a: outputs/eval_ped_neurovision_seed43/per_case_metrics.csv
-      b: outputs/eval_ped_neurovision/per_case_metrics.csv
+      a: outputs/eval_ped_baseline_unet3d_seed43/per_case_metrics.csv
+      b: outputs/eval_ped_baseline_unet3d/per_case_metrics.csv
       metrics: [dice_ET, dice_TC, dice_WT]
     - cohort: ped_lesionwise
-      a: outputs/replay_lesionwise/eval_ped_neurovision_seed43/per_case_default.csv
-      b: outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
+      a: outputs/replay_lesionwise/eval_ped_baseline_unet3d_seed43/per_case_default.csv
+      b: outputs/replay_lesionwise/eval_ped_baseline_unet3d/per_case_default.csv
       metrics: [lwdice_ET]
 
 local_recalibration:
