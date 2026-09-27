@@ -654,6 +654,12 @@ def test_verdict_count_and_order_matches_signal_names() -> None:
 def test_config_block_is_reachable_at_the_composed_path() -> None:
     """The REAL project config, composed through Hydra, must expose the gatekeeper
     block at `cfg.clinical.gatekeeper` -- the exact path `run_gatekeeper` reads.
+
+    Every assertion here is about the composed CONFIG STRUCTURE only -- it needs no
+    file on disk, so it runs unconditionally, including on a fresh clone where
+    `outputs/` (gitignored) does not exist yet. See
+    `test_config_thresholds_produce_the_expected_decision` below for the part of
+    this check that needs the real, calibrated thresholds file.
     """
     hydra = pytest.importorskip("hydra")
     with hydra.initialize_config_dir(version_base="1.3", config_dir=_CONFIG_DIR):
@@ -674,14 +680,43 @@ def test_config_block_is_reachable_at_the_composed_path() -> None:
     }
     assert expected_keys <= set(gk_cfg.keys())
 
-    # run_gatekeeper must actually work against the real composed config, not just
-    # expose the right keys -- see CLAUDE.md's driver-whose-tests-passed-against-a-
-    # hand-built-fixture trap. Gate C fired POSITIVE 2026-08-26, so the real config
-    # now enables predicted_dice and conformal_band too (not just input_qc) -- a
-    # signal that is enabled but unmeasured is a REFUSE by design (see
-    # `_judge_region_signal`), so a case that should PROCEED must supply values for
-    # every region on the safe side of the real, calibrated thresholds.json this
-    # config now points at (scripts/calibrate_gatekeeper.py, 2026-08-26).
+
+def test_config_thresholds_produce_the_expected_decision() -> None:
+    """run_gatekeeper must actually work against the real composed config, not just
+    expose the right keys -- see CLAUDE.md's driver-whose-tests-passed-against-a-
+    hand-built-fixture trap.
+
+    This needs the real calibrated thresholds file that
+    `cfg.clinical.gatekeeper.thresholds` points at
+    (`outputs/gatekeeper/thresholds.json` as of this writing). `outputs/` is
+    gitignored (see `configs/clinical/default.yaml`'s comment on this block), so
+    that file does not travel with a fresh clone -- SKIPPED when it is absent.
+    Regenerate it with:
+
+        python scripts/calibrate_gatekeeper.py model=segqc
+
+    Gate C fired POSITIVE 2026-08-26, so the real config now enables predicted_dice
+    and conformal_band too (not just input_qc) -- a signal that is enabled but
+    unmeasured is a REFUSE by design (see `_judge_region_signal`), so a case that
+    should PROCEED must supply values for every region on the safe side of the
+    real, calibrated thresholds.json this config now points at
+    (scripts/calibrate_gatekeeper.py, 2026-08-26).
+    """
+    hydra = pytest.importorskip("hydra")
+    with hydra.initialize_config_dir(version_base="1.3", config_dir=_CONFIG_DIR):
+        cfg = hydra.compose(config_name="config")
+
+    gk_cfg = cfg.clinical.gatekeeper
+    # Resolve the thresholds path exactly the way `load_thresholds` does --
+    # `Path(raw)`, relative to the process cwd -- rather than hardcoding it here.
+    thresholds_path = Path(str(gk_cfg.thresholds))
+    if not thresholds_path.exists():
+        pytest.skip(
+            f"calibrated thresholds file not found at {thresholds_path} -- outputs/ "
+            "is gitignored, so it does not travel with a fresh clone; regenerate "
+            "with `python scripts/calibrate_gatekeeper.py model=segqc`."
+        )
+
     report = _report(Severity.OK)
     regions = list(gk_cfg.regions)
     decision = run_gatekeeper(

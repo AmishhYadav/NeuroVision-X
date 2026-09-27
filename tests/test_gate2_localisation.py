@@ -183,7 +183,8 @@ def test_fit_and_score_finds_nothing_when_the_second_feature_is_noise() -> None:
     """The null case must come back null -- a method that always finds an effect is useless."""
     fit = _synthetic_samples(20, seed=2, informative=False)
     baseline, combined = fit_both_arms(fit)
-    table = score_cohort(_synthetic_samples(15, seed=3, informative=False), baseline, combined, 0.05)
+    samples = _synthetic_samples(15, seed=3, informative=False)
+    table = score_cohort(samples, baseline, combined, 0.05)
 
     assert abs(table["delta_auroc"].mean()) < 0.05
 

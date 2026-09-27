@@ -560,9 +560,12 @@ must be fixed **before** looking at p-values. `verdict` is conservative:
 ```bash
 git clone https://github.com/AmishhYadav/NeuroVision-X.git
 cd NeuroVision-X
-uv venv --python 3.11 .venv && .venv/bin/pip install -r requirements.txt -e .
+uv venv --python 3.11 .venv
+# `uv venv` creates no pip, so install through uv. app/backend/requirements.txt
+# (FastAPI, uvicorn, python-multipart) is needed by the app tests in the suite.
+uv pip install --python .venv/bin/python -r requirements.txt -r app/backend/requirements.txt -e .
 
-./scripts/reproduce.sh verify     # 1373 tests ~25 s, smoke test ~4 s, ruff
+./scripts/reproduce.sh verify     # ~2,460 tests ~75 s, smoke test ~4 s, ruff
 ./scripts/reproduce.sh            # what has and has not been produced here
 
 # The interpretable pipeline, all CPU. `pipeline` runs once per segmentation.
@@ -572,6 +575,17 @@ PIPELINE_SOURCE=prediction PIPELINE_TAG=neurovision \
   PIPELINE_EVAL_DIR=outputs/neurovision/eval_test ./scripts/reproduce.sh pipeline
 ./scripts/reproduce.sh phase5     # report agreement + population anatomy
 ```
+
+**Rehearsed from a clean clone 2026-09-27 (P2.5b):** 2456 passed, 37
+skipped, smoke test passed, ruff clean -- after three stale points were fixed:
+the install line (no pip in a `uv venv`; the backend requirements were
+missing, so two app test modules failed to import), a gatekeeper test that
+read the gitignored calibrated `thresholds.json` (it now skips without it),
+and one E501 that failed `verify`'s ruff step. `thresholds.json` itself cannot
+be regenerated on a fresh clone -- it needs the QC-model checkpoint and saved
+val logits, which do not travel with the repository (§11); the clinical gate
+works on a fresh clone only after those are restored and
+`python scripts/calibrate_gatekeeper.py model=segqc` is re-run.
 
 `scripts/smoke_test.py` runs the real pipeline — real `Dataset`, real MONAI
 transforms, real registry-built model and loss, real `Trainer`, real
