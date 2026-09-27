@@ -5,7 +5,7 @@
 > written 2026-08-04 before any of it was measured. It is kept verbatim on
 > purpose: predictions that are edited after the fact are not predictions. What
 > actually happened is in `## Measured outcomes` near the bottom of this file,
-> and in `docs/experiments.md` notes 11–17 and 19–21.
+> and in `docs/research_docs/experiments.md` notes 11–17 and 19–21.
 >
 > The short version. The prediction that the benefit "should appear as improved
 > calibration and boundary accuracy rather than as a uniform Dice gain" is
@@ -18,7 +18,7 @@
 > the content-only gate matches the full gate on every metric, so the
 > disagreement conditioning is not what produces the gain. What survives is
 > the gated fusion itself, which is published territory. Read the P2 row and
-> `docs/experiments.md` note 38 before writing any sentence that credits the
+> `docs/research_docs/experiments.md` note 38 before writing any sentence that credits the
 > ambiguity signal.
 
 > **Status:** draft, 2026-08-04. Written *before* `related_work.md` existed. Every claim
@@ -99,21 +99,21 @@ chance. This is a bonus result, not load-bearing.
 ## Measured outcomes
 
 Added 2026-08-17. The predictions above are untouched; this section says what
-came back. Sources: `docs/experiments.md` notes 11–17 (the reliability
+came back. Sources: `docs/research_docs/experiments.md` notes 11–17 (the reliability
 measurements) and 19–21 (the capacity control).
 
 | Prediction | State | Outcome |
 |---|---|---|
-| **P1 — mechanism fires** | **MEASURED — fires, but not as predicted** | Measured 2026-08-20 over the full 189-case test split (`scripts/gate_boundary_profile.py`; `docs/experiments.md` note 32). The gate is strongly and monotonically organised by anatomy, with opposite polarity at adjacent fusion scales — but P1 as literally written (the gate peaking at the tumour margin) is **refuted**; what passed is the weaker claim that the gate carries a real, non-decorative spatial signal. See the subsection below |
-| **P2 — ambiguity conditioning is necessary** | **RESOLVED 2026-08-23 — THE NULL RESULT FIRED** | `ablation_content_only_gate` trained 80/80 epochs (24.16 GPU-h, `GIT_REF=7caacfa`, W&B `ddkbitjp`) and was evaluated on the test split on the GPU, the same device as `neurovision`'s own evaluation. Paired over 189 cases: **ET +0.0022 (CI −0.0067 to +0.0152, p_holm 0.17), TC +0.0003, WT −0.0012 — every metric inconclusive.** Meanwhile the ablation beats `baseline_unet3d` by **+0.0244 ET** (p_holm 3.9e-22) and the capacity control by **+0.0189** (p_holm 4.4e-20). **So rung 2 matches rung 3: the gate's INPUT does not matter, only its per-voxel spatial resolution does.** This is exactly the null this row declared in advance and it must be reported as the smaller claim it implies. Not proven identical — the CI admits up to +0.0152, single seed, no noise floor. `docs/experiments.md` note 38 |
+| **P1 — mechanism fires** | **MEASURED — fires, but not as predicted** | Measured 2026-08-20 over the full 189-case test split (`scripts/gate_boundary_profile.py`; `docs/research_docs/experiments.md` note 32). The gate is strongly and monotonically organised by anatomy, with opposite polarity at adjacent fusion scales — but P1 as literally written (the gate peaking at the tumour margin) is **refuted**; what passed is the weaker claim that the gate carries a real, non-decorative spatial signal. See the subsection below |
+| **P2 — ambiguity conditioning is necessary** | **RESOLVED 2026-08-23 — THE NULL RESULT FIRED** | `ablation_content_only_gate` trained 80/80 epochs (24.16 GPU-h, `GIT_REF=7caacfa`, W&B `ddkbitjp`) and was evaluated on the test split on the GPU, the same device as `neurovision`'s own evaluation. Paired over 189 cases: **ET +0.0022 (CI −0.0067 to +0.0152, p_holm 0.17), TC +0.0003, WT −0.0012 — every metric inconclusive.** Meanwhile the ablation beats `baseline_unet3d` by **+0.0244 ET** (p_holm 3.9e-22) and the capacity control by **+0.0189** (p_holm 4.4e-20). **So rung 2 matches rung 3: the gate's INPUT does not matter, only its per-voxel spatial resolution does.** This is exactly the null this row declared in advance and it must be reported as the smaller claim it implies. Not proven identical — the CI admits up to +0.0152, single seed, no noise floor. `docs/research_docs/experiments.md` note 38 |
 | **P3 — the gain is where the claim says it is** | **FAILED as stated** | Boundary-stratified error is within noise against the matched baseline. The improvement is a Dice improvement concentrated in ET, not a demonstrated near-boundary effect |
-| **P4 — gate as a cheap error predictor** | **MEASURED, exploratory** | `docs/experiments.md` note 34, 2026-08-20. A label-free gate read-out predicts per-case Dice after partialling out predictive entropy and two volume confounds. On PED — where the model is catastrophically worse and the free entropy baseline carries **no** usable signal (partial ρ 0.136, CI containing zero) — `gate1_fg` reaches +0.584 [0.380, 0.725], p_holm 0.013. On SSA no gate feature survives Holm. Not pre-registered, one patch per case, one external cohort out of two. Bonus result, still never load-bearing |
-| **P5 — the gain reaches the report** *(added post hoc, 2026-08-19)* | **FAILED** | Not pre-registered, and it should have been. 1 of 25 report-agreement metrics conclusive against the matched baseline, 0 of 25 for the capacity control. See the entry below and `docs/experiments.md` note 23 |
+| **P4 — gate as a cheap error predictor** | **MEASURED, exploratory** | `docs/research_docs/experiments.md` note 34, 2026-08-20. A label-free gate read-out predicts per-case Dice after partialling out predictive entropy and two volume confounds. On PED — where the model is catastrophically worse and the free entropy baseline carries **no** usable signal (partial ρ 0.136, CI containing zero) — `gate1_fg` reaches +0.584 [0.380, 0.725], p_holm 0.013. On SSA no gate feature survives Holm. Not pre-registered, one patch per case, one external cohort out of two. Bonus result, still never load-bearing |
+| **P5 — the gain reaches the report** *(added post hoc, 2026-08-19)* | **FAILED** | Not pre-registered, and it should have been. 1 of 25 report-agreement metrics conclusive against the matched baseline, 0 of 25 for the capacity control. See the entry below and `docs/research_docs/experiments.md` note 23 |
 
 ### The gate mechanism, measured (2026-08-20)
 
 - **The gate mechanism is measured, and it does not match the prediction.**
-  From `docs/experiments.md` note 32 (`scripts/gate_boundary_profile.py`, gate
+  From `docs/research_docs/experiments.md` note 32 (`scripts/gate_boundary_profile.py`, gate
   maps from `scripts/extract_gates.py`, full 189-case test split). The gate is
   the transformer weight — the fusion merge is `cnn + layer_scale * gate *
   attn` — and binned by signed distance to the ground-truth whole-tumour
@@ -178,7 +178,7 @@ rewrite of this document must account for:
   separate and which remains unmeasured.
 
 - **The accuracy gain does not reach the report.** Added 2026-08-19, from the
-  Phase 5 experiment (`docs/experiments.md` note 23). Over 189 paired cases and
+  Phase 5 experiment (`docs/research_docs/experiments.md` note 23). Over 189 paired cases and
   25 report-agreement metrics, Holm-corrected and with patch size controlled at
   64³ across all three models, `neurovision` vs `baseline_unet3d` produces
   **exactly one** conclusive improvement (`relerr_vol_TC`) and
@@ -202,7 +202,7 @@ cross-attention fusion beats both a matched-schedule U-Net and a
 parameter-matched wide U-Net on ET and TC Dice. The fusion gate's *existence
 and spatial organisation* are now measured, not merely argued from design: it
 is strongly and monotonically organised by anatomy, with a scale-dependent,
-opposite-polarity structure across fusion levels (`docs/experiments.md` note
+opposite-polarity structure across fusion levels (`docs/research_docs/experiments.md` note
 32). What is still argued from design and pre-registration rather than from an
 ablation is the gate's *causal dependence on the ambiguity conditioning* —
 whether that specific input, rather than the gate's mere existence and

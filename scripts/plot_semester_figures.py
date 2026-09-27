@@ -7,12 +7,12 @@ silently re-derive a number the semester report is supposed to be quoting
 verbatim.
 
 1. `fig_local_recalibration.png` -- from
-   `scripts/local_recalibration.py`'s `summary.csv` (docs/experiments.md note
+   `scripts/local_recalibration.py`'s `summary.csv` (docs/research_docs/experiments.md note
    52). A **counterfactual** ("what would a new site's own labelled cases
    buy back?"), never external validation -- see that note before reading
    the figure.
 2. `fig_realised_vs_nominal.png` -- from `scripts/conformal.py`'s
-   `realised_risk.csv` (docs/experiments.md note 42): the conformal bound's
+   `realised_risk.csv` (docs/research_docs/experiments.md note 42): the conformal bound's
    realised miss rate at the frozen BraTS-val threshold, applied to each
    cohort, against the nominal alpha it was supposed to control.
 
@@ -81,7 +81,7 @@ _CAPTION_LOCAL_RECALIBRATION = (
     "the held-out remainder. It answers 'what would a new site need to restore the bound', "
     "never 'this cohort's coverage'. A point marked with a black x has verdict NOT_RESTORED: "
     "the held-out risk misses alpha even though a local fit was feasible at that k. "
-    "Source: docs/experiments.md note 52."
+    "Source: docs/research_docs/experiments.md note 52."
 )
 
 # apply_dir -> cohort, keyed by the exact directory basename `scripts/conformal.py`
@@ -113,7 +113,7 @@ def plot_local_recalibration(
     """Held-out miss rate vs local-calibration budget `k`, one panel per alpha.
 
     Reads `scripts/local_recalibration.py`'s `summary.csv` directly (see that
-    script and `docs/experiments.md` note 52). Filters to `model` and the
+    script and `docs/research_docs/experiments.md` note 52). Filters to `model` and the
     requested `series` of `(cohort, region)` pairs -- deliberately NOT
     `is_half == False`: SSA's half point is k=30 and PED's is k=49, both of
     which sit exactly on the swept-k grid's high end and both of which note
@@ -306,7 +306,7 @@ def plot_realised_vs_nominal(
     Reads a table already carrying a `cohort` column (see `cohort_from_apply_dir`
     for how `main` derives it from `realised_risk.csv`'s `apply_dir`). One panel
     per region; a point above the `y = x` reference line is a violation of the
-    nominal guarantee (docs/experiments.md note 42).
+    nominal guarantee (docs/research_docs/experiments.md note 42).
 
     Args:
         df: Columns `cohort, region, alpha, mean_miss_rate` (realised risk).

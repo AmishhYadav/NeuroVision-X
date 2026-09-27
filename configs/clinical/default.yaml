@@ -242,7 +242,7 @@ gatekeeper:
   # that can detect a study the model must not see at all.
   #
   # WHICH OF THE OTHERS ARE ENABLED MUST FOLLOW GATE C'S OUTCOME
-  # (docs/research/preregistration_qc.md). Gate C fired POSITIVE on
+  # (docs/research_docs/preregistrations/preregistration_qc.md). Gate C fired POSITIVE on
   # 2026-08-26 (PED-TC delta AUROC +0.1686, CI [0.0686, 0.2747], p_holm
   # 0.006) so predicted_dice is enabled below -- but see that
   # pre-registration's Result section before trusting it on an
@@ -328,7 +328,7 @@ gatekeeper:
   # Calibrated 2026-08-26 (`python scripts/calibrate_gatekeeper.py
   # model=segqc`), n=187 val cases. outputs/ is gitignored, so this file
   # does not travel with a fresh clone -- rerun that exact command to
-  # regenerate it (see docs/reproducibility.md). Sanity-checked numbers:
+  # regenerate it (see docs/research_docs/reproducibility.md). Sanity-checked numbers:
   # predicted_dice refuse_below WT=0.7074 TC=0.4652; conformal_band
   # refuse_above WT=0.9793 TC=0.9943 (both <1 at this operating point,
   # consistent with the already-published C15 finding that alpha=0.10
@@ -342,7 +342,7 @@ validation:
   # P1.2 real-DICOM validation with ground truth (Milestone 5). RSNA-MICCAI
   # 2021 radiogenomic competition DICOMs share BraTS 2021's 5-digit IDs, so a
   # case whose BraTS ID is in OUR test split has raw scanner DICOM AND a
-  # published ground truth. Protocol: docs/research/real_dicom_validation_protocol.md
+  # published ground truth. Protocol: docs/research_docs/protocols/real_dicom_validation_protocol.md
   # (written and committed before the first scored case).
   competition: rsna-miccai-brain-tumor-radiogenomic-classification
   labels_csv: data/rsna_miccai/train_labels.csv

@@ -97,5 +97,5 @@ study once E2 has succeeded.
 
 `outputs/error_budget/` — `per_case_<cohort>.csv` (signals, decision, dice, usable, cell),
 `summary.csv` (one row per cohort × bar), `taxonomy.csv`, `coverage_curve.csv`,
-`stage_reliability.csv`, and `error_budget_config.yaml`. Then note 47 in `docs/experiments.md`
+`stage_reliability.csv`, and `error_budget_config.yaml`. Then note 47 in `docs/research_docs/experiments.md`
 and the Phase G table in the master plan.

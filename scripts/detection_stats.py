@@ -1,7 +1,7 @@
 """Gate 1 -- does inter-branch disagreement carry failure-detection signal entropy lacks?
 
 This is the driver for the pre-registered decision in
-`docs/research/preregistration_ambiguity.md` -- READ THAT FILE FIRST, its
+`docs/research_docs/preregistrations/preregistration_ambiguity.md` -- READ THAT FILE FIRST, its
 "Decision rule" table is reproduced (verbatim, not paraphrased) in
 `build_verdict`'s docstring below. It runs no model, loads no checkpoint,
 needs no GPU: every input is a cache `scripts/extract_ambiguity.py` and
@@ -851,7 +851,7 @@ def build_verdict(
 ) -> dict[str, Any]:
     """Applies the pre-registered Gate 1 decision rule, verbatim.
 
-    From `docs/research/preregistration_ambiguity.md`'s "Decision rule"
+    From `docs/research_docs/preregistrations/preregistration_ambiguity.md`'s "Decision rule"
     table:
 
     - **pass**: on at least one EXTERNAL cohort (`ssa` or `ped`),
@@ -887,7 +887,7 @@ def build_verdict(
         `{"verdict": "pass" | "partial" | "fail", "thresholds": {...},
         "external_cohorts": [...], "passed_cohorts": [...],
         "partial_cohorts": [...], "per_cohort": {...},
-        "preregistration": "docs/research/preregistration_ambiguity.md"}`.
+        "preregistration": "docs/research_docs/preregistrations/preregistration_ambiguity.md"}`.
     """
     common = sorted(set(case_rows) & set(voxel_any_rows))
     per_cohort: dict[str, dict[str, Any]] = {}
@@ -938,7 +938,7 @@ def build_verdict(
         "passed_cohorts": passed,
         "partial_cohorts": partial_hit,
         "per_cohort": per_cohort,
-        "preregistration": "docs/research/preregistration_ambiguity.md",
+        "preregistration": "docs/research_docs/preregistrations/preregistration_ambiguity.md",
     }
 
 

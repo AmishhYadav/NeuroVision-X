@@ -7,8 +7,8 @@
 **Relationship to other documents.** This supersedes the *sequencing and gates* of
 `execution_plan.md` and `improvement_plan.md`. Their measurements, cost tables, pre-registrations and
 fallback analyses remain valid and are cited here rather than repeated. The authoritative record of
-what was measured is `docs/experiments.md`; the gate on what may be written is
-`docs/paper/claims_and_evidence.md`; the traps that cost real money are `docs/lessons.md`; the
+what was measured is `docs/research_docs/experiments.md`; the gate on what may be written is
+`docs/research_docs/claims_and_evidence.md`; the traps that cost real money are `docs/research_docs/lessons.md`; the
 Milestone 1–3 build record is `docs/project_state.md`.
 
 > **Starting a session cold, with no context? Go straight to §4, *Execution order*.** It carries
@@ -66,7 +66,7 @@ separation), or deterministic engineering (DICOM ingest, skull-stripping, co-reg
 
 ## 1. Evidence ledger — what is settled
 
-Authority: `docs/paper/claims_and_evidence.md`.
+Authority: `docs/research_docs/claims_and_evidence.md`.
 
 **Proven, keep.** ET +0.0267 vs the matched baseline (p_holm 1.4e-21, n=189 paired). 79% architecture
 / 21% capacity, via a width-matched control (34.83M vs 34.91M params). The interpretable report layer
@@ -101,7 +101,7 @@ real distribution shift?
 5. **An analysis fix is verified by re-running the real analysis**, not by its unit tests. This
    project has already shipped a commit whose message, memory note and 1,000 green tests all claimed
    a circular-mask bug was fixed while every reported number stayed circular.
-6. **Pre-register before measuring.** One `docs/research/preregistration_*.md` per gate, committed
+6. **Pre-register before measuring.** One `docs/research_docs/preregistrations/preregistration_*.md` per gate, committed
    with a git timestamp before the first number exists.
 7. **Dependency isolation.** The training environment stays clean. New stacks live in
    `requirements-analysis.txt` (CPU/stats) and `requirements-clinical.txt` (registration,
@@ -156,12 +156,12 @@ Read in this order, and stop when you have enough to act:
 
 1. `CLAUDE.md` — constraints, conventions, the ten traps. Short by design.
 2. This file, §0 to §3 — why the project changed shape, and what was cut.
-3. `docs/paper/claims_and_evidence.md` — the gate on what may be asserted. **Nothing is written into
+3. `docs/research_docs/claims_and_evidence.md` — the gate on what may be asserted. **Nothing is written into
    the paper that is not in that table.**
 4. §4.3 below — the queue. Find the first unfinished item.
 5. Only then: the phase detail in §5 for whatever you are about to build.
 
-`docs/lessons.md` is not read front to back. It is read *by subsystem*, immediately before touching
+`docs/research_docs/lessons.md` is not read front to back. It is read *by subsystem*, immediately before touching
 that subsystem, using the ten-trap index in `CLAUDE.md` to find the right entry.
 
 ### 4.2 How to tell what is already done
@@ -171,8 +171,8 @@ Do not trust this document's status claims over the filesystem — it will drift
 | Question | Command |
 |---|---|
 | What was done recently? | `git log --oneline -25` |
-| Which experiments have results? | `ls outputs/` and the note titles in `docs/experiments.md` |
-| Which gates have fired? | `cat outputs/*/*verdict.json`, and the `## Result` section of each `docs/research/preregistration_*.md` |
+| Which experiments have results? | `ls outputs/` and the note titles in `docs/research_docs/experiments.md` |
+| Which gates have fired? | `cat outputs/*/*verdict.json`, and the `## Result` section of each `docs/research_docs/preregistrations/preregistration_*.md` |
 | Does the repo still build? | plain `pytest` (expect ~2,230 passing + 35 skipped, ~60 s, as of 2026-09-24) and `python scripts/smoke_test.py` |
 
 **Then update the status board in §4.3 and commit it.** A queue that nobody ticks off is worse than no
@@ -184,7 +184,7 @@ queue, because the next session trusts it.
 
 #### Milestone 5 — THE LIVE QUEUE (from 2026-09-26). Everything below this block is history.
 
-Why it exists: `docs/research/project_review_2026-09-24.md` (the outside-view review). Deadlines: the
+Why it exists: `docs/research_docs/project_review_2026-09-24.md` (the outside-view review). Deadlines: the
 **semester submission (live demo + written report in the college's Word/PDF template) ~2026-11-24**;
 the **college GPU request ~2026-11-05**, filed only once everything CPU-side is finished and every
 GPU run is pre-registered and launch-ready; the **capstone** in summer 2027; a **MELBA** journal
@@ -218,9 +218,9 @@ and are archive-only; `tool_completion_plan.md`/`_log.md` join them once T0.4 cl
 | P2.5b | Fresh-clone rehearsal (clean clone → venv → `reproduce.sh verify` → smoke → regenerate `thresholds.json`) | `[ ]` | Every stale instruction it finds is fixed |
 | P2.6 | `docs/research/gpu_request.md` — run list, measured T4-h, VRAM, disk, stack, internet | `[~]` draft `1cf453b` (~60 GPU-h: D2 + capacity control + contingency); submit ~Nov 5 | Submitted to the college ~Nov 5 |
 | **Phase 3 — semester deliverables (Nov 6 – Nov 24)** | | | |
-| P3.1 | Written report, Markdown source in `docs/semester_report/` + PNG figures, pasted into the college template. **The author writes the introduction and methods** | `[ ]` | Submitted |
+| P3.1 | Written report, Markdown source in `docs/research_docs/semester_report/` + PNG figures, pasted into the college template. **The author writes the introduction and methods** | `[ ]` | Submitted |
 | P3.2 | `docs/demo_runbook.md` — PROCEED / REFUSE-quality / REFUSE-intended-use stories, recalibration figure, E2E green the day before, fallback recording | `[ ]` | One full rehearsal from a cold start |
-| P3.3 | `docs/paper/related_work.md` — arXiv 2606.20115, 2608.10893, 2608.18193 + core refs; C14 loses "nobody has measured" | `[x]` 2026-09-27 `bc1c32f` (abstract-level; read full PDFs before the MELBA draft) | C14 rewritten |
+| P3.3 | `docs/research_docs/related_work.md` — arXiv 2606.20115, 2608.10893, 2608.18193 + core refs; C14 loses "nobody has measured" | `[x]` 2026-09-27 `bc1c32f` (abstract-level; read full PDFs before the MELBA draft) | C14 rewritten |
 | P3.4 | Freeze: tag `semester-2026` | `[ ]` | pytest, smoke, vitest, E2E all green |
 | **Phase 4 — GPU block (Dec – Feb, college card)** | | | |
 | P4 | Probe (must reach the failure condition) → **Gate A** nnU-Net fold 0, full recipe (~76 T4-h) → **D3** four fine-tunes (~8–10) → TTA (~2) → baseline seed 43 (~3.5). Core ≈ 90 T4-h. Stretch: D2 (+40), capacity control (+8) | `[ ]` | Each: Result section, note, claims, this board, push |
@@ -296,12 +296,12 @@ The Gate A preprocessing ran as a **CPU** kernel (`neurovision-gatea-prep`), no 
 
 | # | Item | State | Done when |
 |---|---|---|---|
-| A1 | Dependency files: `requirements-analysis.txt`, `requirements-clinical.txt` | `[x]` | Both files exist, pinned; root `requirements.txt` untouched; `docs/reproducibility.md` says which env is for what |
+| A1 | Dependency files: `requirements-analysis.txt`, `requirements-clinical.txt` | `[x]` | Both files exist, pinned; root `requirements.txt` untouched; `docs/research_docs/reproducibility.md` says which env is for what |
 | A2 | `src/neurovision/metrics/lesionwise.py` + additive wiring into `scripts/evaluate.py` | `[x]` | Lesion-wise columns appear in `per_case_metrics.csv` when enabled, and an additivity test proves no existing column moved |
 | A3 | Re-score every existing run lesion-wise via `scripts/replay_logits.py` | `[x]` | A lesion-wise row exists for `neurovision`, `baseline_unet3d`, `capacity_control`, `ablation_content_only_gate`, on test and val |
 | A4 | Wire flip TTA into `scripts/evaluate.py` | `[x]` wired + tested; **measurement moved to Track 2** — 8x inference is ~34 h on the Mac, minutes on a card. See note 43 | `cfg.inference.tta` exists; measured on val then test; result recorded as its own note |
-| A5 | Score the confidence head | `[x]` — beaten by free entropy on all three regions; note 44 | A number exists, and `docs/experiments.md` says whether the head learned anything |
-| A6 | Resolve the BraTS 2026 Challenge-3 deadline from a logged-in Synapse session | `[x]` | Note 40 in `docs/experiments.md` carries a date instead of an uncertainty |
+| A5 | Score the confidence head | `[x]` — beaten by free entropy on all three regions; note 44 | A number exists, and `docs/research_docs/experiments.md` says whether the head learned anything |
+| A6 | Resolve the BraTS 2026 Challenge-3 deadline from a logged-in Synapse session | `[x]` | Note 40 in `docs/research_docs/experiments.md` carries a date instead of an uncertainty |
 | B1 | `src/neurovision/uncertainty/conformal.py` + `scripts/conformal.py` | `[x]` | λ̂ fitted on val, applied frozen to test, realised risk ≤ α on test |
 | B2 | Apply the frozen λ̂ to SSA and PED; weighted/Mondrian variant | `[x]` (Mondrian arm deferred — registered as a counterfactual, see prereg) | A table of nominal α vs realised risk per cohort, with CIs |
 
@@ -321,7 +321,7 @@ The Gate A preprocessing ran as a **CPU** kernel (`neurovision-gatea-prep`), no 
 >
 > | Item | State at parking | To resume |
 > |---|---|---|
-> | G0 — nnU-Net v2 timing probe | Ran on Kaggle T4 (`amishyadav123/neurovision-nnunet-probe`, COMPLETE, 2026-09-02). `nnUNetTrainer_5epochs` on a subset of `Dataset901_NeuroVisionXBraTS21`. Log lives in that kernel's output; the local pull broke on a `BrokenPipeError` and only `nnUNet_preprocessed` came back (since deleted as a cache) | `kaggle kernels output amishyadav123/neurovision-nnunet-probe`, read the *Extrapolated cost report* cell, write the number into `docs/experiments.md` before spending any A7 hours |
+> | G0 — nnU-Net v2 timing probe | Ran on Kaggle T4 (`amishyadav123/neurovision-nnunet-probe`, COMPLETE, 2026-09-02). `nnUNetTrainer_5epochs` on a subset of `Dataset901_NeuroVisionXBraTS21`. Log lives in that kernel's output; the local pull broke on a `BrokenPipeError` and only `nnUNet_preprocessed` came back (since deleted as a cache) | `kaggle kernels output amishyadav123/neurovision-nnunet-probe`, read the *Extrapolated cost report* cell, write the number into `docs/research_docs/experiments.md` before spending any A7 hours |
 > | G1 — nnU-Net export | Done (`b255c82`). `outputs/nnunet_raw` **deleted 2026-09-15** (10 GB cache); `data/raw/brats2021_dl` (12 GB, re-downloaded for it) also deleted | Re-download raw BraTS 2021 (SHA manifests in `docs/data_manifests/`), rerun `scripts/export_nnunet_dataset.py` — minutes |
 > | A7 / Gate A | Not started | Needs G0's cost number first — the 1000-epoch default is ~250k steps |
 > | **D0 — heavy-augmentation run** (`preregistration_augmentation.md`) | **SUPERSEDED — D0 finished 2026-09-20, verdict NULL; this row is history.** Was: mid-flight, 2 of ~3 Kaggle sessions done. s1 `neurovision-d0-s1` trained epochs 0–33 (best 29, health OK, ~998 s/epoch on T4, `GIT_REF=54c03a6`). s2 `neurovision-d0-s2` COMPLETE on Kaggle; its output pulled 2026-09-15 into `outputs/kaggle_kernels/d0-run2/kernel_output` (see that dir for the epoch reached). No s3 launched | Prepare `d0-run3` exactly as `d0-run2` was: `kernel_sources` = the s2 slug, `EXPECT_CKPT_EPOCH` = s2's final epoch, same `GIT_REF`. 80 epochs total. Then `scripts/evaluate.py` on test + SSA + PED and the pre-registered paired comparison |
@@ -335,11 +335,11 @@ The Gate A preprocessing ran as a **CPU** kernel (`neurovision-gatea-prep`), no 
 | A7 | nnU-Net v2 `3d_fullres` single fold + Auto3DSeg SegResNet single fold | `[-]` **unaffordable on Kaggle under the pre-registration** (75.5 GPU-h > 60 abort bound; fewer epochs forbidden — note 46). Needs the college card or an explicit amendment | Both scored through **our** `scripts/evaluate.py` metric path on the same 189 test cases |
 | D0 | Heavy-augmentation ablation, 3 chained T4 sessions + CPU evaluation of 3 cohorts | `[x]` **NULL 2026-09-20** — 23.7 GPU-h, 80/80 epochs, 12/12 comparisons inconclusive (note 48). Recipe unchanged | Its pre-registration has a `## Result` section and `claims_and_evidence.md` carries C23 |
 | D1 | Second seed of `neurovision` (seed 43), 3 chained T4 sessions | `[x]` **RESOLVED 2026-09-24** (`preregistration_multiseed.md`). Training: s1 epoch 33, s2 epoch 70, s3 epoch 79 (best 79), `NVX_HEALTH: OK`, `nonfinite=[]`, W&B run `iriee13d`, `GIT_REF=9c770ce`. Eval (`evaluate.py`, `save_logits=true`): test dice_mean 0.9070 (ET 0.8730/TC 0.9145/WT 0.9336, n=189), SSA dice_mean 0.8212 (ET 0.7894/TC 0.7723/WT 0.9018, n=60), PED dice_mean 0.6246 (ET 0.5590/TC 0.4647/WT 0.8501, n=99). Lesion-wise replay clean on all three (self-consistency deltas ~1e-17). The pre-registered 12-comparison family (`scripts/compare_family.py`, `outputs/compare_family/d1_seed_noise_floor/family.csv`) is **12/12 INCONCLUSIVE** under family Holm (m=12) — every seed43-vs-seed42 difference is noise. **Reading #1** (headline ET Dice): test `dice_ET` diff **+0.0021, CI [-0.0018, +0.0068]** — ~13x smaller than the published **+0.0267** architecture-vs-baseline margin, so that headline **stands**, noise floor printed beside it. **Reading #2** (D0's pooled `dice_TC`): a descriptive-only (not Holm-family) pooled SSA+PED `dice_TC` seed-to-seed read gives **+0.0111, CI [-0.0056, +0.0276]** — essentially the same magnitude as D0's own pooled result of **+0.0117, CI [-0.0006, +0.0245]**. D0's result is **not distinguishable from seed noise**; this independently reinforces D0's own NULL verdict rather than contradicting it | Done — training, eval, lesion-wise replay, and the 12-comparison family all complete |
-| — | **GATE A** | `[ ]` stays open — see A7 | `docs/research/preregistration_strong_baseline.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
+| — | **GATE A** | `[ ]` stays open — see A7 | `docs/research_docs/preregistrations/preregistration_strong_baseline.md` has a `## Result` section, and `claims_and_evidence.md` is updated to match |
 
 #### Track 1 continued — Phase C, the QC model. CPU. In progress.
 
-Registered in `docs/research/preregistration_qc.md` on 2026-08-24, before the model had trained once.
+Registered in `docs/research_docs/preregistrations/preregistration_qc.md` on 2026-08-24, before the model had trained once.
 
 | # | Item | State | Done when |
 |---|---|---|---|
@@ -431,9 +431,9 @@ bookkeeping rather than judgement:
 
 1. Write the `## Result` section of that gate's pre-registration. **Nothing above that line may be
    edited** — a prediction edited after the fact is not a prediction.
-2. Add a numbered note to `docs/experiments.md` with the numbers, the CIs, and the caveats that must
+2. Add a numbered note to `docs/research_docs/experiments.md` with the numbers, the CIs, and the caveats that must
    travel with them.
-3. Update `docs/paper/claims_and_evidence.md` — move claims between the "supported" and "do not
+3. Update `docs/research_docs/claims_and_evidence.md` — move claims between the "supported" and "do not
    write" tables as the result requires.
 4. Update the status board in §4.3 and the `Current status` block in `CLAUDE.md`.
 5. Commit all of it together, so the result and its consequences share one timestamp.
@@ -504,15 +504,15 @@ on top of them.
 
 | # | Task | Files |
 |---|---|---|
-| A1 | Add `requirements-analysis.txt` (panoptica, statsmodels) and `requirements-clinical.txt` (brainles-preprocessing, antspyx, HD-BET, dcm2niix, highdicom). Root `requirements.txt` untouched | new files; document in `docs/reproducibility.md` |
+| A1 | Add `requirements-analysis.txt` (panoptica, statsmodels) and `requirements-clinical.txt` (brainles-preprocessing, antspyx, HD-BET, dcm2niix, highdicom). Root `requirements.txt` untouched | new files; document in `docs/research_docs/reproducibility.md` |
 | A2 | `src/neurovision/metrics/lesionwise.py` — wrap `panoptica` to emit lesion-wise Dice / NSD / F1 / TP / FP / FN per region per case, in the exact column shape `per_case_metrics.csv` already uses, so `analysis/statistics.compare_models`, `visualization/tables.py` and the forest plot all work unchanged | new module; wire into `scripts/evaluate.py` behind `cfg.inference.evaluation.lesionwise`, default **off**, strictly additive |
 | A3 | Re-score every existing run lesion-wise from saved logits using `scripts/replay_logits.py`, which already exists and has already been used on four eval directories. No GPU, no re-inference | `outputs/replay/*` |
 | A4 | Wire flip TTA: add `cfg.inference.tta`, call `tta_predict` in `scripts/evaluate.py`. Measure on val first, then test | `src/neurovision/inference/tta.py` (exists, unwired), `scripts/evaluate.py` |
 | A5 | Score the confidence head for the first time | new `scripts/score_confidence.py` |
-| A6 | Resolve the BraTS 2026 Challenge-3 deadline from a logged-in Synapse session; record the answer in `docs/experiments.md` | — |
+| A6 | Resolve the BraTS 2026 Challenge-3 deadline from a logged-in Synapse session; record the answer in `docs/research_docs/experiments.md` | — |
 | A7 | **GPU: nnU-Net v2, `3d_fullres`, single fold, on our exact frozen split** (`configs/data/splits.yaml` exported to nnU-Net's `splits_final.json`, so the comparison is paired on the same 189 test cases). Plus MONAI Auto3DSeg SegResNet, single fold, as a second modern comparator | new `scripts/export_nnunet_dataset.py` |
 
-**Pre-registration, committed before A7 runs:** `docs/research/preregistration_strong_baseline.md`.
+**Pre-registration, committed before A7 runs:** `docs/research_docs/preregistrations/preregistration_strong_baseline.md`.
 
 **Gate A — the credibility gate.**
 
@@ -558,7 +558,7 @@ exchangeability and these cohorts violate it by construction, so this is a genui
 Then implement and compare a **weighted / Mondrian** variant that recalibrates per cohort on a
 held-out slice.
 
-**Pre-registration:** `docs/research/preregistration_conformal.md`, fixing α ∈ {0.05, 0.10, 0.20}, the
+**Pre-registration:** `docs/research_docs/preregistrations/preregistration_conformal.md`, fixing α ∈ {0.05, 0.10, 0.20}, the
 loss definition, the cohorts and the reporting rule before any number exists.
 
 **Why this phase is structurally different from every previous one.** B1 *cannot* fail — it is a
@@ -604,7 +604,7 @@ prior in the plan — the sub-Saharan literature replicates this result.
 
 | # | Run | Cost | Purpose |
 |---|---|---|---|
-| D0 | **Heavier augmentation ablation**: `neurovision_heavy_aug` (seed 42, 64³, 80 epochs, identical to the existing `neurovision` checkpoint except `data.augment` gains small-angle rotation, gamma, simulated bias field, elastic deformation) vs the existing checkpoint | ~23–30 GPU-h, one run | Attacks `dice_TC` −0.0333 pooled shift (note 30) without needing target-domain data. Pre-registered in `docs/research/preregistration_augmentation.md`, single-seed and explicitly flagged as underpowered — a cheap first probe, not a substitute for D2/D3 |
+| D0 | **Heavier augmentation ablation**: `neurovision_heavy_aug` (seed 42, 64³, 80 epochs, identical to the existing `neurovision` checkpoint except `data.augment` gains small-angle rotation, gamma, simulated bias field, elastic deformation) vs the existing checkpoint | ~23–30 GPU-h, one run | Attacks `dice_TC` −0.0333 pooled shift (note 30) without needing target-domain data. Pre-registered in `docs/research_docs/preregistrations/preregistration_augmentation.md`, single-seed and explicitly flagged as underpowered — a cheap first probe, not a substitute for D2/D3 |
 | D1 | **Multi-seed**: 3 seeds × {`neurovision`, `baseline_unet3d`, `capacity_control_unet3d`} at 64³ | ~70 GPU-h | A noise floor for every number in the project; restores the lost capacity-control checkpoint; yields the deep ensemble for B3 |
 | D2 | **Pooled multi-cohort**: BraTS + SSA + PED, one seed, with a held-out slice of each external cohort | ~40 GPU-h | Attacks `dice_TC` −0.0333 directly. Needs a new `configs/data/splits_pooled.yaml`, **frozen before training** like every other split file |
 | D3 | **Fine-tune-on-SSA arm**: start from the BraTS checkpoint, fine-tune on the SSA training slice | ~8 GPU-h | The cheap, deployable answer; the literature says this recovers most of the gap |

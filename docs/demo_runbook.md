@@ -2,7 +2,7 @@
 
 `master_plan.md` P3.2. Written 2026-09-27; **rehearse it once from a cold start before the day,
 and run the checks in §2 the day before.** Every claim spoken in the demo must be in
-`docs/paper/claims_and_evidence.md` — this runbook quotes only rows from there.
+`docs/research_docs/claims_and_evidence.md` — this runbook quotes only rows from there.
 
 ---
 
@@ -25,7 +25,7 @@ art". The bound is an **average over studies, in distribution, not per patient**
 .venv/bin/python scripts/smoke_test.py             # SMOKE TEST PASSED
 (cd app/frontend && npm test)                      # vitest green
 
-# serve (two terminals) -- exactly as docs/reproducibility.md §5
+# serve (two terminals) -- exactly as docs/research_docs/reproducibility.md §5
 NVX_EXPERIMENT=neurovision NVX_EVAL_DIR=outputs/neurovision/eval_test \
 NVX_CHECKPOINT=outputs/neurovision/checkpoints/best.pt \
 NVX_REPORT_DIR=outputs/report_neurovision/reports NVX_JOB_DIR=outputs/clinical_jobs \
@@ -39,7 +39,7 @@ Also check: jobs `9c2cc294` (PROCEED) and `f4a4a754` (REFUSE) still load at `/cl
 backend restart (T0.5 rehydration), and the 3D twin renders (P0.7).
 
 **Memory.** Memory accumulates across clinical jobs in one backend process; after many jobs the M4
-thrashes (`docs/lessons.md`, 2026-09-27). If you do upload live, use a small study and restart the backend
+thrashes (`docs/research_docs/lessons.md`, 2026-09-27). If you do upload live, use a small study and restart the backend
 afterwards; never queue two uploads.
 
 **Fallback recording.** Once everything is green, screen-record stories A–C end to end (~6 min) and

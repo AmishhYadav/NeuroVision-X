@@ -551,7 +551,7 @@ def generate_one_pair(
     degrade and every earlier region already consumed. Skipping those calls
     would leave `generator` in a DIFFERENT state than `generate_pairs`
     would have reached, and the two would silently stop agreeing --
-    exactly the kind of drift `docs/lessons.md` exists to catalogue. So
+    exactly the kind of drift `docs/research_docs/lessons.md` exists to catalogue. So
     this function performs the SAME `degrade_mask` calls, in the SAME
     order, for the SAME reason (consuming `generator` identically): only
     `_dice_tuple` -- the Dice computation, never the degradation itself --

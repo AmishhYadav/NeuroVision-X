@@ -15,7 +15,7 @@ Two things live here:
    built on top of already-saved predictions.
 
 Everything reported below is measured on this repo's frozen test split and
-recorded run-by-run in [`docs/experiments.md`](docs/experiments.md).
+recorded run-by-run in [`docs/research_docs/experiments.md`](docs/research_docs/experiments.md).
 
 ---
 
@@ -80,7 +80,7 @@ against a matched baseline and none supports an advantage:
   noise. The baseline's own MC-dropout uncertainty is genuinely informative, which
   is exactly why "our model can flag its own failures" is not a claim.
 
-Full numbers and the statistics: `docs/experiments.md` notes 11–17 and 19–21.
+Full numbers and the statistics: `docs/research_docs/experiments.md` notes 11–17 and 19–21.
 
 ---
 
@@ -113,7 +113,7 @@ for dual-branch medical segmentation is heavily published; a gate conditioned on
 explicit inter-branch *disagreement* is not. `configs/experiment/ablation_content_only_gate.yaml`
 is the one-key ablation that isolates it (parameter-matched to 0.018%). It is
 specified, tested, and **not yet trained** — see *Status*. Rationale:
-[`docs/research/contribution.md`](docs/research/contribution.md).
+[`docs/research_docs/contribution.md`](docs/research_docs/contribution.md).
 
 ---
 
@@ -141,7 +141,7 @@ Jaccard is 0.9074 / 0.9122 / 0.9108 across the three models and 16 of 25 metrics
 share a median. The report is dominated by *which structures the tumour overlaps*,
 and a few voxels at a margin rarely change whether a structure is involved at all —
 so the interpretable layer is **stable** with respect to segmentation quality across
-this range. `docs/experiments.md` notes 22–25.
+this range. `docs/research_docs/experiments.md` notes 22–25.
 
 A second finding, about the layer rather than the models: **the eloquence field is
 degenerate on this dataset.** Every one of the 1,251 cases is within 10 mm of a
@@ -159,7 +159,7 @@ Two design decisions worth knowing before reading the code:
 - **Brain-mask Dice cannot detect a left–right flip** — it scores *higher* on the
   mirrored atlas (0.9416 vs 0.9394). Laterality is proved content-wise from 56
   `_L`/`_R` structure pairs instead. See
-  [`docs/research/phase0_atlas_findings.md`](docs/research/phase0_atlas_findings.md),
+  [`docs/research_docs/phase0_atlas_findings.md`](docs/research_docs/phase0_atlas_findings.md),
   which supersedes the plan document wherever they disagree.
 
 **Midline shift is declined, not deferred.** The atlas says where a healthy
@@ -310,13 +310,13 @@ Read in this order depending on what you came for.
 
 | Question | File |
 |---|---|
-| What was run, what came out, what failed | [`docs/experiments.md`](docs/experiments.md) — the authoritative results record |
-| Can I re-derive a number? Seeds, versions, hardware, runtimes | [`docs/reproducibility.md`](docs/reproducibility.md) |
+| What was run, what came out, what failed | [`docs/research_docs/experiments.md`](docs/research_docs/experiments.md) — the authoritative results record |
+| Can I re-derive a number? Seeds, versions, hardware, runtimes | [`docs/research_docs/reproducibility.md`](docs/research_docs/reproducibility.md) |
 | How do I train on Kaggle and survive the 12-hour cap | [`docs/kaggle_workflow.md`](docs/kaggle_workflow.md) |
-| What is the actual research contribution | [`docs/research/contribution.md`](docs/research/contribution.md) |
+| What is the actual research contribution | [`docs/research_docs/contribution.md`](docs/research_docs/contribution.md) |
 | What is being done next, and in what order | [`docs/research/master_plan.md`](docs/research/master_plan.md) §4.3 — the one live plan |
-| What may and may not be claimed | [`docs/paper/claims_and_evidence.md`](docs/paper/claims_and_evidence.md) |
-| What the atlas actually does (supersedes the plan) | [`docs/research/phase0_atlas_findings.md`](docs/research/phase0_atlas_findings.md) |
+| What may and may not be claimed | [`docs/research_docs/claims_and_evidence.md`](docs/research_docs/claims_and_evidence.md) |
+| What the atlas actually does (supersedes the plan) | [`docs/research_docs/phase0_atlas_findings.md`](docs/research_docs/phase0_atlas_findings.md) |
 | Every non-obvious design decision and the bug that motivated it | [`CLAUDE.md`](CLAUDE.md) |
 
 ---

@@ -5,7 +5,7 @@ produce a report that agrees more with the report generated from ground
 truth?** That is the one place the model's contribution to report quality can
 be measured, and it is what connects the interpretable pipeline
 (`scripts/localize.py`, `scripts/burden.py`, `scripts/report.py`) to the
-+0.0267 ET Dice result in `docs/experiments.md` note 12.
++0.0267 ET Dice result in `docs/research_docs/experiments.md` note 12.
 
 It runs no model, loads no checkpoint, no atlas and no volume: every input is
 a directory of report JSONs that `scripts/report.py` already wrote. CPU-only,
@@ -20,7 +20,7 @@ Example usage:
         output_dir=outputs/report_agreement
 
 **Patch size is a controlled variable here, not an incidental one.**
-`docs/experiments.md` note 18 measured that report agreement is NOT monotonic
+`docs/research_docs/experiments.md` note 18 measured that report agreement is NOT monotonic
 in Dice: the superseded 96^3/200-epoch U-Net has lower ET Dice than
 `neurovision` and still produced the better report on ET-volume agreement. The
 candidate mechanism is patch size -- the failure being measured is

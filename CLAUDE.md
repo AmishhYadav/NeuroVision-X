@@ -7,12 +7,13 @@ Project instructions for Claude Code. Read this before doing anything in this re
 | File | What it holds |
 |---|---|
 | `docs/research/master_plan.md` | **THE ACTIVE PLAN.** Read it before planning any work. Starting cold? Its §4 *Execution order* is the queue, the dependency arrows and the working agreement |
-| `docs/experiments.md` | Every run and every measured result, notes 1–44 |
-| `docs/paper/claims_and_evidence.md` | The gate on what may be written. A claim not in that table does not go in the paper |
-| `docs/lessons.md` | The traps, with evidence. Each one already cost GPU hours, a wrong number, or a silent bug |
+| `docs/research_docs/` | **Everything the paper is written from** — results, claims, pre-registrations, protocols, reproducibility. Index: its `README.md` |
+| `docs/research_docs/experiments.md` | Every run and every measured result, notes 1–44 |
+| `docs/research_docs/claims_and_evidence.md` | The gate on what may be written. A claim not in that table does not go in the paper |
+| `docs/research_docs/lessons.md` | The traps, with evidence. Each one already cost GPU hours, a wrong number, or a silent bug |
 | `docs/project_state.md` | The Milestone 1–3 build record, archived |
 | `docs/gpu_session_checklist.md` | Rules for a GPU session, each written against a loss already suffered |
-| `docs/reproducibility.md` | Which artifacts are caches, and the exact command to rebuild each |
+| `docs/research_docs/reproducibility.md` | Which artifacts are caches, and the exact command to rebuild each |
 
 ---
 
@@ -55,7 +56,7 @@ Prefer clear code over clever code.
 | Architecture and research decisions, trade-off analysis | `py-implementer` (Sonnet) — any new module, any substantial refactor, any file over ~40 lines |
 | Reading and interpreting results, metrics, failure modes | `test-runner` — pytest, smoke test, lint. Ask for failures only, not the full log |
 | Writing the **spec** a subagent implements | `code-reviewer` — read-only review after implementation, before the user sees it |
-| Reviewing what comes back, and **explaining it back to me** — I am learning, this is not optional | `docs-writer` — docstrings, MkDocs, README, appending to `docs/experiments.md` |
+| Reviewing what comes back, and **explaining it back to me** — I am learning, this is not optional | `docs-writer` — docstrings, MkDocs, README, appending to `docs/research_docs/experiments.md` |
 | Judgement about the research claim, statistics, the paper | |
 | Config, requirements files, docs, plan and status updates | |
 
@@ -96,7 +97,7 @@ need to read and understand each piece.
    global step, RNG states, W&B run ID. A shared cluster preempts jobs; resume is the foundation.
 5. **AMP on by default** for CUDA, off for CPU/MPS.
 6. **Default patch size is 96³.** Do not raise it without being asked. (The trained comparison family
-   is at 64³ — see `docs/experiments.md`.)
+   is at 64³ — see `docs/research_docs/experiments.md`.)
 7. **No new dependency without asking first.** The stack below is fixed. Approved additions for
    Milestone 4 are isolated in `requirements-analysis.txt` and `requirements-clinical.txt`; the root
    `requirements.txt` stays unchanged.
@@ -200,9 +201,9 @@ package's `__init__.py` for the decorator to run.
 
 **Phase: Milestone 5. The live queue is `docs/research/master_plan.md` §4.3, the "Milestone 5" block
 at its top** — read it before planning anything. Why it changed shape:
-`docs/research/project_review_2026-09-24.md`. Everything else in `master_plan.md` §4.3 is history.
+`docs/research_docs/project_review_2026-09-24.md`. Everything else in `master_plan.md` §4.3 is history.
 
-**Where the science stands** (authority: `docs/paper/claims_and_evidence.md`, read it before writing
+**Where the science stands** (authority: `docs/research_docs/claims_and_evidence.md`, read it before writing
 anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189),
 ~79% architecture / ~21% capacity, now checked against a measured seed noise floor (D1, note 49:
 +0.0021) — but **never yet tested against nnU-Net** (Gate A, P4). Conformal risk control holds in
@@ -218,7 +219,7 @@ HD-BET → input QC → segmentation (deployed `neurovision` seed 42) → QC-mod
 PROCEED / CAUTION / REFUSE, at `/clinical`, with the 3D twin, atlas shells, report, entered-pathology
 molecular panel, DICOM-SEG and zip export. A `"refused"` job is a successful outcome, never a failure.
 2,230 tests passing, 35 skipped, ~60 s (verified 2026-09-24). Serving command:
-`docs/reproducibility.md` §5.
+`docs/research_docs/reproducibility.md` §5.
 
 **Open author actions:** eyeball the twin on job `9c2cc294` (P0.7). The Kaggle RSNA-MICCAI rules
 are accepted (2026-09-26), so T0.4 is unblocked (P1.2).
@@ -252,7 +253,7 @@ that `neurovision`'s live directories are nested one level deeper than the other
 | `capacity_control` | — | — | — | — |
 
 ~31 GB in total (D0 and D1 each added ~6 GB); ~69 GiB free as of 2026-09-24,
-was 119 GiB after the 2026-09-15 reclaim (`docs/reproducibility.md` §11 lists
+was 119 GiB after the 2026-09-15 reclaim (`docs/research_docs/reproducibility.md` §11 lists
 exactly what went — every `ambiguity_*` and MC `uncertainty/` cache, `nnunet_raw`, `data/raw`). Both
 complete rows mean lesion-wise re-scoring and the whole conformal phase need **zero inference**. `ablation_content_only_gate` has no saved volume artifact at all but
 its checkpoint survives, so it costs one CPU pass per split to bring back — at the measured ~1.4 min/case that is ~4.5 h for
@@ -266,7 +267,7 @@ Two traps in that table. `outputs/eval_test` is **not** `neurovision` — it is 
 
 ## The ten traps that cost the most
 
-One line each. **The evidence for every one is in `docs/lessons.md` — read that file before touching
+One line each. **The evidence for every one is in `docs/research_docs/lessons.md` — read that file before touching
 the subsystem it names.** Do not delete an entry there because it looks obvious; each already fooled
 someone.
 

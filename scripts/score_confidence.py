@@ -18,7 +18,7 @@ AUTHORITY on this: the training target is `correct = (predicted_positive == targ
 Every AUROC computed below is against an "error" event, so this script uses
 `1 - sigmoid(confidence_logits)` throughout -- getting this backwards inverts every result
 while producing entirely plausible-looking numbers, with nothing that raises. See
-`docs/lessons.md` and CLAUDE.md's trap list; this is exactly that shape of bug.
+`docs/research_docs/lessons.md` and CLAUDE.md's trap list; this is exactly that shape of bug.
 
 ## Why a wrapper module, like scripts/extract_ambiguity.py
 
@@ -341,7 +341,7 @@ def bernoulli_entropy_nats(logits: Tensor) -> Tensor:
     input, unlike `log(sigmoid(z).clamp(eps, 1-eps))`. That clamp is sized for fp32 and is a
     NO-OP in fp16 (`1.0 - 1e-6` rounds to exactly `1.0` in fp16 arithmetic), which silently gave
     `log(0) = NaN` and cost this project 10.5 GPU-hours of training on NaN with nothing raising
-    (see `docs/lessons.md`). Mirrors
+    (see `docs/research_docs/lessons.md`). Mirrors
     `neurovision.models.fusion.adaptive_fusion.BranchAmbiguity._entropy_from_logits`'s formula
     exactly, except UNNORMALISED (in nats, not divided by `ln(2)` into `[0, 1]`) -- AUROC only
     depends on rank order, so the normalisation would not change any result here, but this

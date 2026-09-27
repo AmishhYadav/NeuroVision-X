@@ -24,13 +24,13 @@ run) on 2026-08-06. Everything marked *estimate* is arithmetic, and says so.
 | Test metrics for all three runs | **Reproducible from the checkpoint.** Inference is deterministic |
 | Calibration / temperature scaling, MC-dropout risk-coverage, boundary-stratified error, fusion gate maps, explainability | **Produced.** `scripts/calibrate.py`, `scripts/evaluate.py` (`mc_dropout`, `boundary_bands`), `scripts/extract_gates.py`, `scripts/explain.py` — all CPU |
 | Anatomical localisation, involvement layer, burden profile, per-case report | **Produced.** `scripts/validate_atlas.py`, `scripts/localize.py` (Phases 1 and 3b), `scripts/burden.py`, `scripts/report.py` — all CPU. Five report sets exist over the test split: ground truth plus `neurovision`, `baseline_unet3d`, `capacity_control_unet3d` and the superseded 96³ run |
-| Report agreement and population anatomy (Phase 5) | **Produced.** `scripts/report_agreement.py` (GT-derived vs prediction-derived reports, paired statistics) and `scripts/population_stats.py` (all 1,251 cases) — all CPU. Results in `docs/experiments.md` notes 22–25 |
-| `baseline_swinunetr`, `ablation_content_only_gate`, the 6-row ablation grid | **Not run.** Cut or unstarted for GPU budget — see `docs/experiments.md` § Planned |
+| Report agreement and population anatomy (Phase 5) | **Produced.** `scripts/report_agreement.py` (GT-derived vs prediction-derived reports, paired statistics) and `scripts/population_stats.py` (all 1,251 cases) — all CPU. Results in `docs/research_docs/experiments.md` notes 22–25 |
+| `baseline_swinunetr`, `ablation_content_only_gate`, the 6-row ablation grid | **Not run.** Cut or unstarted for GPU budget — see `docs/research_docs/experiments.md` § Planned |
 
 Four training runs of record now exist: the superseded 200-epoch/96³ U-Net,
 and the three 80-epoch/64³ runs `baseline_unet3d`, `neurovision`, and
 `capacity_control_unet3d`. §8 documents the first one and where it diverges
-from the checked-in config, and every run's row lives in `docs/experiments.md`.
+from the checked-in config, and every run's row lives in `docs/research_docs/experiments.md`.
 
 ---
 
@@ -437,7 +437,7 @@ evaluation therefore does not need a GPU session; MC-dropout at N=10 does
 
 Free-tier Kaggle is ~30 GPU-hours per week, and the 60-hour budget for this
 milestone is spent (~62 h including 10.5 h lost to the fp16-entropy NaN — see
-`docs/experiments.md` § Abandoned / failed runs).
+`docs/research_docs/experiments.md` § Abandoned / failed runs).
 
 ---
 
@@ -445,10 +445,10 @@ milestone is spent (~62 h including 10.5 h lost to the fp16-entropy NaN — see
 
 **Read this before comparing anything to it. This run is superseded** — it is
 the 200-epoch / 96³ U-Net, and the comparison baseline for every current result
-is the 80-epoch / 64³ `baseline_unet3d` row in `docs/experiments.md`. The
+is the 80-epoch / 64³ `baseline_unet3d` row in `docs/research_docs/experiments.md`. The
 section is kept because the divergence documented below is exactly why that
 re-run was necessary, and because the superseded run still appears in the
-report-agreement analysis (`docs/experiments.md` note 18).
+report-agreement analysis (`docs/research_docs/experiments.md` note 18).
 
 | | |
 |---|---|
@@ -669,7 +669,7 @@ The two surviving checkpoints:
 
 **One deliberate exception: `outputs/eval_test/predictions` was kept.** It has
 no sibling `logits/` and its checkpoint is gone, so it is irreplaceable — and
-it backs the patch-size hypothesis recorded in `docs/experiments.md` note 18
+it backs the patch-size hypothesis recorded in `docs/research_docs/experiments.md` note 18
 (the superseded 96³ U-Net produces the better structured report despite lower
 Dice).
 

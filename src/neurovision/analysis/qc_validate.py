@@ -2,7 +2,7 @@
 
 This is the statistics half of Phase C4 (per-cohort validation) and C5 (the
 silent-failure test), backing the decision pre-registered in
-`docs/research/preregistration_qc.md` -- READ THAT FILE FIRST. Nothing here
+`docs/research_docs/preregistrations/preregistration_qc.md` -- READ THAT FILE FIRST. Nothing here
 may reinterpret its endpoints, its family, or its decision rule; every
 function below implements one paragraph of that document, named in its
 docstring.

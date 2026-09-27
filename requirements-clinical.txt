@@ -72,7 +72,7 @@ einops==0.8.2
 # (Milestone 4 Phase E wiring) composes cfg.clinical.* / cfg.analysis.* via
 # hydra.compose() in THIS env -- it is the one process that needs both this
 # stack's ingest/preprocess packages AND Hydra's config machinery together
-# (see docs/reproducibility.md's "which env runs which command"). Without
+# (see docs/research_docs/reproducibility.md's "which env runs which command"). Without
 # this pin, `import app.backend.clinical_jobs` fails on
 # ModuleNotFoundError: omegaconf inside this venv specifically, while passing
 # in .venv. Verified 2026-08-26: installs into the resolved clinical stack

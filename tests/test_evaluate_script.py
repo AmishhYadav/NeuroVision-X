@@ -526,7 +526,7 @@ def test_run_evaluation_writes_per_case_and_summary_csv(tmp_path: Path):
 def test_run_evaluation_boundary_bands_add_columns_and_null_omits_them(tmp_path: Path):
     """Boundary stratification is ADDITIVE -- it must not move an existing metric.
 
-    An already-published results row (docs/experiments.md's baseline_unet3d)
+    An already-published results row (docs/research_docs/experiments.md's baseline_unet3d)
     stays valid only if turning this on changes nothing but the column set.
     """
     prep_dir = tmp_path / "prep"

@@ -88,7 +88,7 @@ predicted Dice, the conformal band width) → the refusal gate, and always
 segments with the **`neurovision`** checkpoint (`NVX_CLINICAL_CHECKPOINT`),
 never whatever `NVX_EXPERIMENT` the rest of the demo is showing. **Requires
 `.venv-clinical`** (`pydicom`, `dcm2niix`, `brainles-preprocessing`, `HD-BET`
-— see `docs/reproducibility.md`); the plain `/api/upload` path above does not.
+— see `docs/research_docs/reproducibility.md`); the plain `/api/upload` path above does not.
 
 | Route | |
 |---|---|

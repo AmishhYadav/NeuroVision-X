@@ -184,7 +184,7 @@ refuse to write results unless all four pass:
    project's own postprocessing reproduces that run's committed `per_case_metrics.csv`. This is the
    check `scripts/replay_logits.py` already performs, and it is what proves the logits on disk belong
    to the published numbers. Cited precedent: replay reproduced `neurovision` ET **0.870859 vs
-   0.870859, delta 0** (`docs/experiments.md` note 223).
+   0.870859, delta 0** (`docs/research_docs/experiments.md` note 223).
 4. **Fit/apply separation.** The script raises if the calibration directory and the evaluation
    directory resolve to the same path — copied from `scripts/calibrate.py`, which already enforces
    this, because a convention documented only in a docstring is one CLI override away from being
@@ -195,7 +195,7 @@ refuse to write results unless all four pass:
 ## What this pre-registration does not license
 
 - Any claim that the model is **better calibrated** than a comparator. That claim is dead
-  (`docs/paper/claims_and_evidence.md`) and conformal risk control does not revive it: the guarantee
+  (`docs/research_docs/claims_and_evidence.md`) and conformal risk control does not revive it: the guarantee
   is a property of the *procedure*, and it holds for an arbitrarily bad model.
 - Any claim about **risk–coverage** or uncertainty quality. Also dead, also not revived.
 - Any comparison of `neurovision` against `baseline_unet3d` on realised risk framed as an accuracy
@@ -308,7 +308,7 @@ risk control does not revive them, because the guarantee holds for an arbitraril
 `baseline_unet3d` arm is a robustness check on whether the finding is model-specific, not an accuracy
 comparison.
 
-Full numbers, all caveats: `docs/experiments.md` note 42. Artifacts: `outputs/conformal/neurovision/`
+Full numbers, all caveats: `docs/research_docs/experiments.md` note 42. Artifacts: `outputs/conformal/neurovision/`
 (`fit.json`, `realised_risk.csv`, `inflation.csv`, per-split `curves.npz`).
 
 ---
@@ -401,7 +401,7 @@ The `baseline_unet3d` floors are computed by the driver and printed before any s
 - Output goes to `outputs/local_recalibration/`.
 
 **Reporting.**
-- One numbered note in `docs/experiments.md`.
+- One numbered note in `docs/research_docs/experiments.md`.
 - A result section appended **below** this amendment.
 - Claim C24 in `claims_and_evidence.md`, labelled *counterfactual*.
 
@@ -409,7 +409,7 @@ The `baseline_unet3d` floors are computed by the driver and printed before any s
 
 **Counterfactual.** Run with `scripts/local_recalibration.py` (`ff5b7dd`), 1000 splits per
 (model, cohort, region, k), seed 42, every number in `outputs/local_recalibration/`. Full table and
-reading: `docs/experiments.md` note 52.
+reading: `docs/research_docs/experiments.md` note 52.
 
 - **Prediction 1 (control) — held.** BraTS test at k = half: RESTORED at every (region, α), both
   models. The implementation is not falsified.

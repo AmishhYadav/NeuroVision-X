@@ -17,7 +17,7 @@ Redefining them here would let the two modules silently drift about what "REFUSE
 
 **Whether the QC-model and conformal signals may drive a REFUSE is a *scientific*
 question, not an engineering one**, and it is answered in
-`docs/research/preregistration_qc.md` and `configs/clinical/default.yaml`'s
+`docs/research_docs/preregistrations/preregistration_qc.md` and `configs/clinical/default.yaml`'s
 `gatekeeper.enabled_signals` comment: those signals are wired in (or left out) by
 config, from the *measured* result of Gate C, never from the hope that they will work.
 This module enforces the mechanics of that decision -- an enabled signal that could not
@@ -791,7 +791,7 @@ def judge_intended_use(
     case the tool was validated for at all. That distinction matters because a
     rule that simply refuses every child scores 100% on a paediatric cohort BY
     CONSTRUCTION, which would look like a safety win while measuring nothing;
-    see the module docstring's link to `docs/research/preregistration_qc.md`
+    see the module docstring's link to `docs/research_docs/preregistrations/preregistration_qc.md`
     for the same reasoning applied to the other signals.
 
     `missing_age` governs the DOCUMENTED EXCEPTION (author decision

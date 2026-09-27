@@ -1,6 +1,6 @@
 """Hydra entry point for Phase G, the end-to-end error budget.
 
-`docs/research/error_budget_protocol.md` fixes every definition this script uses --
+`docs/research_docs/protocols/error_budget_protocol.md` fixes every definition this script uses --
 read it FIRST, before touching anything here. `neurovision.analysis.error_budget` is
 the pure-arithmetic half (no file I/O, no model, no torch); this script is exactly the
 other half: it reads artifacts already on disk (saved logits, the trained QC model's
@@ -580,7 +580,7 @@ def _print_summary(
 def run_error_budget(cfg: DictConfig) -> dict[str, Path]:
     """Runs Phase G end to end: per-cohort signals -> gate decisions -> the error-budget tables.
 
-    See `docs/research/error_budget_protocol.md` for the fixed definitions this
+    See `docs/research_docs/protocols/error_budget_protocol.md` for the fixed definitions this
     function implements, and `neurovision.analysis.error_budget`'s own module
     docstring for the pure-arithmetic half this script assembles inputs for.
 

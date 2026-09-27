@@ -23,7 +23,7 @@ Every finding below was verified by reading the code or by grep, not guessed. Wh
 The library is 36k lines but only 14k of it is code. **87 docstrings are longer than 40 lines and
 together are 5,325 lines.** 208 lines of code docstrings reference plan documents, milestone
 numbers, task ids (`T4.3`, `Phase E5`) or GPU-hour losses — history that already lives in
-`docs/lessons.md` and `docs/experiments.md`.
+`docs/research_docs/lessons.md` and `docs/research_docs/experiments.md`.
 
 Tests are 1.4× the size of the library. That ratio is not wrong by itself, but §4 shows where the
 test bulk is boilerplate rather than assertions.
@@ -74,7 +74,7 @@ Removing it: delete `jobs.py`, the seven routes, the two test files, move `job_r
 `detection_stats.py`, `gate2_localisation.py`, `mc_comparison.py`, `extract_ambiguity.py`,
 `extract_ambiguity_serial.py`, `run_ablation_grid.py`, `export_nnunet_dataset.py`.
 
-Each produced a number recorded in `docs/experiments.md` (notes 20–35 region) for an experiment
+Each produced a number recorded in `docs/research_docs/experiments.md` (notes 20–35 region) for an experiment
 that has resolved — most of them null. They are reproducibility artifacts, so **do not delete
 them**. But they will never be run again unless a reviewer asks, and they are 44% of `scripts/`
 by line count. Option: `scripts/archive/` with a README naming the note each one backs. Author's
@@ -227,10 +227,10 @@ docstring describes exactly this problem) exist as copies. The simpler route was
 Examples: `clinical_jobs._generate_report` (101-line docstring on a private function, citing
 T4.3, `scripts/report.py`'s CSV round-trip, and `_export_dicom_seg`'s "philosophy");
 `scripts/train_qc.py` module docstring (135 lines); `inference/tta.py::tta_predict` (108 lines).
-CLAUDE.md asks that non-obvious *choices* be explained. It does not ask that `docs/lessons.md` be
+CLAUDE.md asks that non-obvious *choices* be explained. It does not ask that `docs/research_docs/lessons.md` be
 pasted into every function that touched the lesson. Rule that would halve the prose without losing
 a fact: a docstring states **what** and the one-sentence **why**; history, task ids and GPU-hour
-costs get a single `See docs/lessons.md §N` pointer. Estimated saving 8–10k lines across
+costs get a single `See docs/research_docs/lessons.md §N` pointer. Estimated saving 8–10k lines across
 `src/` + `scripts/` + `app/backend`. This is prose, not risk — but it is the single biggest
 contributor to "the repository is large".
 

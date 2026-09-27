@@ -7,8 +7,8 @@
 **Relationship to other documents.** This supersedes the *sequencing and gates* of
 `docs/research/improvement_plan.md` wherever the two disagree; that document's
 measurements, cost table and fallback analysis remain valid and are cited here
-rather than repeated. Read `docs/experiments.md` notes 11–30 for the numbers
-behind every claim below. `docs/research/contribution.md` holds the P1–P5
+rather than repeated. Read `docs/research_docs/experiments.md` notes 11–30 for the numbers
+behind every claim below. `docs/research_docs/contribution.md` holds the P1–P5
 ablation ladder definitions this plan schedules.
 
 ---
@@ -26,9 +26,9 @@ Phases 0–5" refers to the *interpretable pipeline* plan, not this one.**
 | 1.2 — `scripts/extract_ambiguity.py` | **Done**, whole-volume sliding window as specified |
 | 1.3 Test A — is it flat? | **Done.** Not flat, and not a re-encoding of entropy (note 31) |
 | 1.3 Test B — does it beat entropy? | **DONE 2026-08-23.** All 348 cases extracted on CPU (~7 h, zero GPU hours) and the pre-registered family run once, on complete data |
-| **Gate 1** | **PARTIAL, 2026-08-23.** Voxel-level residualised AUROC clears 0.5 on all three cohorts (p_holm 0.0025) and the pre-registered 0.60 on PED (0.677, CI 0.655–0.698); case-level partial Spearman is −0.393 in distribution but **null on both external cohorts**. So the signal is spatial, not case-ranking. Proceed under the rule's *Partial* row — efficiency and localisation, never superiority. Full result: `preregistration_ambiguity.md` §Result, `docs/experiments.md` note 35 |
-| 2 — referral system | **DONE 2026-08-23. Gate 2 = PARTIAL by the rule, negative in substance.** Respecified in `docs/research/preregistration_gate2.md`, then run once on complete data: adding disagreement to entropy makes voxel-level error localisation WORSE in distribution on both endpoints, worse on SSA recall, and better only on PED AUROC (+0.0121). `passed_cohorts` empty. **2.1/2.2/2.3 are DECLINED, not pending** — all three are case-level referral, the endpoint Gate 1 measured as null externally; running them would be running a known-null test. **2.5 (demo overlay) is DECLINED too**: a trust banner implying the layer improves detection is contradicted by Gate 2. See notes 35 and 37 |
-| 2.4 — inference-ROI sweep | **DONE 2026-08-23, REFUTED.** ROI 96³ does not improve multifocality agreement (over-reporting rises 33.9% → 41.3% against a true 22.8%; paired Δ agreement CI straddles zero) and significantly WORSENS `dice_WT` (−0.0045, p_holm 0.0090). ROI 128³ declined: 13.7 GiB peak RSS at 96³ on a 16 GiB machine, and the trend already points the wrong way. Inference ROI is **not** the mechanism behind the report-agreement anomaly — see `docs/experiments.md` note 36 |
+| **Gate 1** | **PARTIAL, 2026-08-23.** Voxel-level residualised AUROC clears 0.5 on all three cohorts (p_holm 0.0025) and the pre-registered 0.60 on PED (0.677, CI 0.655–0.698); case-level partial Spearman is −0.393 in distribution but **null on both external cohorts**. So the signal is spatial, not case-ranking. Proceed under the rule's *Partial* row — efficiency and localisation, never superiority. Full result: `preregistration_ambiguity.md` §Result, `docs/research_docs/experiments.md` note 35 |
+| 2 — referral system | **DONE 2026-08-23. Gate 2 = PARTIAL by the rule, negative in substance.** Respecified in `docs/research_docs/preregistrations/preregistration_gate2.md`, then run once on complete data: adding disagreement to entropy makes voxel-level error localisation WORSE in distribution on both endpoints, worse on SSA recall, and better only on PED AUROC (+0.0121). `passed_cohorts` empty. **2.1/2.2/2.3 are DECLINED, not pending** — all three are case-level referral, the endpoint Gate 1 measured as null externally; running them would be running a known-null test. **2.5 (demo overlay) is DECLINED too**: a trust banner implying the layer improves detection is contradicted by Gate 2. See notes 35 and 37 |
+| 2.4 — inference-ROI sweep | **DONE 2026-08-23, REFUTED.** ROI 96³ does not improve multifocality agreement (over-reporting rises 33.9% → 41.3% against a true 22.8%; paired Δ agreement CI straddles zero) and significantly WORSENS `dice_WT` (−0.0045, p_holm 0.0090). ROI 128³ declined: 13.7 GiB peak RSS at 96³ on a 16 GiB machine, and the trend already points the wrong way. Inference ROI is **not** the mechanism behind the report-agreement anomaly — see `docs/research_docs/experiments.md` note 36 |
 | 3.1 — multi-seed | Not started. Needs ~70 T4-h that do not exist |
 | 3.2 — ablation ladder | **1 of 5 rungs DONE, and it fired the pre-registered NULL.** `ablation_content_only_gate` trained 80/80 in 24.16 GPU-h and is inconclusive against `neurovision` on every metric while beating the baseline by +0.0244 ET. The ambiguity conditioning contributes +0.0022, indistinguishable from zero — note 38. The other four rungs have no hours behind them, and after this result they are also **low value**: the mechanism they would dissect has been shown not to carry the gain |
 | 4 — closing the named gaps | Not started; ~170 T4-h |
@@ -274,7 +274,7 @@ destroyed two checkpoints.
 | 0.2 | Verify every small CSV in `eval_test_capacity_control/`, `baseline_unet3d_e130/`, `eval_test/` is present and readable, then execute Tier 1–3 deletions | `outputs/` |
 | 0.3 | Publish `data/preprocessed/{brats_ssa,brats_ped}` as a Kaggle dataset | reuse `scripts/package_for_kaggle.py` |
 | 0.4 | Encode the four migration rules as a checklist | new `docs/gpu_session_checklist.md` |
-| 0.5 | Document the regenerable-cache list with the exact rebuild command for each | `docs/reproducibility.md` |
+| 0.5 | Document the regenerable-cache list with the exact rebuild command for each | `docs/research_docs/reproducibility.md` |
 
 **Verification:** `df -h` shows ≥ 130 GiB free; `pytest` green (1,373 tests,
 ~25 s); `python scripts/smoke_test.py` exits 0.
@@ -371,7 +371,7 @@ Both use `src/neurovision/analysis/statistics.py` (`paired_bootstrap_ci`,
 | **Partial** | Adds signal over entropy but weakly (CI excludes zero, magnitude below threshold) | Proceed, but reframe the claim as *efficiency* — equal detection at 1 pass instead of 10 — not superiority |
 | **Fail** | Flat, or no incremental signal over entropy | **Stop the uncertainty line.** Fall back to §Fallback. Cost: two days |
 
-**Write these thresholds into `docs/research/preregistration_ambiguity.md` and
+**Write these thresholds into `docs/research_docs/preregistrations/preregistration_ambiguity.md` and
 commit before running the test.** Ten minutes of work; it is the difference
 between "we fixed the criteria in advance" being a claim and being a fact with a
 git timestamp.
@@ -405,7 +405,7 @@ estimates**: *"AUROC CI lower bound excludes 0.70"*, not *"AUROC ≥ 0.80"*.
 
 ### Gate 2
 
-> **SUPERSEDED 2026-08-23 by `docs/research/preregistration_gate2.md`.** The text
+> **SUPERSEDED 2026-08-23 by `docs/research_docs/preregistrations/preregistration_gate2.md`.** The text
 > below is kept because it is what was pre-registered first, and a gate that
 > gets replaced must show what it was replaced with and why. The reason is
 > Gate 1's result: referral is case-level, and case-level came back null on
@@ -587,7 +587,7 @@ load-bearing for the floor.**
 ## Immediate next actions
 
 1. Phase 0.1–0.2 — manifests, then Tier 1–3 deletions (~77 GB freed)
-2. Write and commit `docs/research/preregistration_ambiguity.md` with Gate 1's
+2. Write and commit `docs/research_docs/preregistrations/preregistration_ambiguity.md` with Gate 1's
    thresholds
 3. Spec and delegate the `forward_with_ambiguity` model change
 4. Spec and delegate `scripts/extract_ambiguity.py`

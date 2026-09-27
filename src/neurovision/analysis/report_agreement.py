@@ -3,7 +3,7 @@
 `scripts/report.py` (not yet written) will produce one JSON report per case
 from ground truth and, separately, one per case from a model's prediction --
 both through `neurovision.reporting.report.build_report`. Dice alone cannot
-say whether those two reports actually agree: `docs/experiments.md` note 18
+say whether those two reports actually agree: `docs/research_docs/experiments.md` note 18
 and the entry in CLAUDE.md under "Report agreement is NOT monotonic in
 Dice" record a real case where a LOWER-Dice model produced the BETTER
 report. This module is the instrument that turns "agree" into a number --
@@ -336,7 +336,7 @@ def compare_reports(gt: Mapping, pred: Mapping) -> dict[str, float]:
     pred_n_components_wt = _burden_value(pred_burden, "multifocality", "n_components_WT")
     abserr_n_components_WT = _abs_diff(gt_n_components_wt, pred_n_components_wt)
     # All three models over-report multifocality against ground truth
-    # (30.7-40.7% vs a true 22.8%, docs/experiments.md note 18), which makes
+    # (30.7-40.7% vs a true 22.8%, docs/research_docs/experiments.md note 18), which makes
     # this the least reliable field in the burden profile and the one most
     # worth measuring here rather than the component COUNT (agree_* is about
     # the multifocal/unifocal call, not the count -- see abserr_n_components

@@ -2,7 +2,7 @@
 // distribution-free *average-case* guarantee over in-distribution studies
 // (deployed alpha = 0.10), never a per-patient one, and it is measured to
 // fail under distribution shift (SSA, paediatric cohorts) - see
-// docs/experiments.md and CLAUDE.md's "external validation on BraTS-Africa
+// docs/research_docs/experiments.md and CLAUDE.md's "external validation on BraTS-Africa
 // came back negative" note. The short on-screen line must not overclaim, and
 // the full caveat must still be reachable via the native `title` tooltip.
 //

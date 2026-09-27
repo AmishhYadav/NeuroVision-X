@@ -66,7 +66,7 @@ involvement, eloquence, provenance). Job states `queued|running|done|refused|fai
   `null` on the twin's WebGL canvas.** Twin assertions need `<Canvas gl={{preserveDrawingBuffer:
   true}}>` + `toDataURL()`, and headless Chrome needs `--use-angle=swiftshader
   --enable-unsafe-swiftshader`.
-- Lessons that bind: `docs/lessons.md:26` (verify orientation by eye), `:29` (label layers only from
+- Lessons that bind: `docs/research_docs/lessons.md:26` (verify orientation by eye), `:29` (label layers only from
   `X-Uncertainty-Kind`), `:31` (scope absent-phrase assertions to the claiming element), and trap 3
   (a mirrored atlas scores *higher* on brain-mask Dice — only eyes catch L/R).
 
@@ -75,7 +75,7 @@ involvement, eloquence, provenance). Job states `queued|running|done|refused|fai
 1. **`docs/research/tool_completion_plan.md`** — this plan in `master_plan.md` §4 form
    (orientation, how to tell what is done, queue with `[x]/[ ]`, dependency arrows, verification).
    Markdown, so Opus writes it directly. Committed together with the six docs left uncommitted
-   since 2026-09-15 (`CLAUDE.md`, `docs/reproducibility.md`, four `docs/research/*.md`), then
+   since 2026-09-15 (`CLAUDE.md`, `docs/research_docs/reproducibility.md`, four `docs/research/*.md`), then
    pushed. `CLAUDE.md` "What is next", `master_plan.md` §4.3 Track 1 and memory
    `gpu-track-parked-tool-first` get a pointer.
 2. **The build**, one module per turn through `py-implementer` → `test-runner` → `code-reviewer`,
@@ -92,8 +92,8 @@ on this Mac under `.venv-clinical`, reproducibly.
 |---|---|---|
 | T0.1 | Fetch `train/00000/{FLAIR,T1w,T1wCE,T2w}` from the RSNA-MICCAI Kaggle competition into `data/fixtures/dicom/` (gitignored via `/data/`), zip it, SHA-256 manifest in `docs/data_manifests/` | If `kaggle competitions download` returns 403, accept the competition rules once on the Kaggle page. Never commit the data |
 | T0.2 | `scripts/run_clinical_study.py` (new; Hydra off `configs/config.yaml`, `+clinical.study_dir=… +clinical.out_dir=…`): zips the folder, calls `create_clinical_job` + `run_clinical_job` synchronously, writes `summary.json` {state, per-stage wall time, gatekeeper decision, which artifacts landed}. Test `tests/test_run_clinical_study_script.py` with the same monkeypatches `test_app_clinical_jobs.py::_wire_full_pipeline_to_gatekeeper` uses | Makes T0 a command, not a story |
-| T0.3 | Pre-warm HD-BET once from `.venv-clinical` (weights download on first `HDBetExtractor()`); record the resolved weights dir in `docs/reproducibility.md`. Then run T0.2 on the fixture. Fix what breaks, each fix its own module turn (`clinical_preprocess.py`, `input_qc.py` likely) | Expect: input-QC `anisotropy_refuse_ratio: 6.0` may fire on raw spacing *before* E2 resamples; E1 series naming may not match the rule table; DICOM-SEG geometry refusal. Each is a **finding** to record, and any relaxation is a design decision to flag, not a silent edit |
-| T0.4 | Compare the clinical-path prediction on `train/00000` with the research-path prediction on `BraTS2021_00000` (both on the SRI24 grid): Dice per region + burden block side by side. **Note 45** in `docs/experiments.md` | The "preprocessing sensitivity" number — how far our own registration/skull-strip moves the answer from BraTS's. Expected well below 1.0 |
+| T0.3 | Pre-warm HD-BET once from `.venv-clinical` (weights download on first `HDBetExtractor()`); record the resolved weights dir in `docs/research_docs/reproducibility.md`. Then run T0.2 on the fixture. Fix what breaks, each fix its own module turn (`clinical_preprocess.py`, `input_qc.py` likely) | Expect: input-QC `anisotropy_refuse_ratio: 6.0` may fire on raw spacing *before* E2 resamples; E1 series naming may not match the rule table; DICOM-SEG geometry refusal. Each is a **finding** to record, and any relaxation is a design decision to flag, not a silent edit |
+| T0.4 | Compare the clinical-path prediction on `train/00000` with the research-path prediction on `BraTS2021_00000` (both on the SRI24 grid): Dice per region + burden block side by side. **Note 45** in `docs/research_docs/experiments.md` | The "preprocessing sensitivity" number — how far our own registration/skull-strip moves the answer from BraTS's. Expected well below 1.0 |
 | T0.5 | **Job persistence** — `clinical_jobs.py` (mod): write `<job_dir>/job.json` on every `_update_clinical_job`; rehydrate `_CLINICAL_JOBS` from `job_root(settings)/*/job.json` at startup; `DELETE` removes the dir. Test: create → new store → still listed as `done` | Needed by T5 and by any demo that restarts the server |
 
 Verify: `summary.json` verdict; `report/<id>.json`, `dicom_seg/<id>.dcm` (opens in `pydicom`),
@@ -181,7 +181,7 @@ Decision: **no PDF dependency.** Markdown + PNG + DICOM-SEG is v1.
 
 ### T7 — Phase F, IDH  *(GPU, gated — author's go/no-go; exactly `master_plan.md` §5 Phase F)*
 
-Pre-registration first: `docs/research/preregistration_idh.md` (design principle 6). Then F1
+Pre-registration first: `docs/research_docs/preregistrations/preregistration_idh.md` (design principle 6). Then F1
 UCSF-PDGM filtered to four sequences + seg (≈30–40 GB; 113 GiB free; `df -h` before/after —
 **TCIA downloader is a dependency ask**) → F2 through the same pipeline, freeze
 `configs/data/splits_ucsf.yaml` → F3 tumour-cropped 3D CNN on image + **predicted** mask → F4 age
@@ -196,7 +196,7 @@ rewritten to "IDH estimated from imaging on in-distribution data only".
 ### T-docs — close the loop
 `docs/research/tool_completion_plan.md` · `CLAUDE.md` "What is next" · `master_plan.md` §4.3
 Track 1 gains the T-queue · memory `gpu-track-parked-tool-first` points at the plan ·
-`docs/experiments.md` note 45 · `docs/reproducibility.md` HD-BET weights + fixture manifest.
+`docs/research_docs/experiments.md` note 45 · `docs/research_docs/reproducibility.md` HD-BET weights + fixture manifest.
 
 ## Dependency arrows
 

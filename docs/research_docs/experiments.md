@@ -59,7 +59,7 @@ sessions by resume is still ONE row — sum the GPU hours.
    `val_interval` 2 vs 5, `scheduler.warmup_epochs` 10 vs 5, and validation
    `sliding_window.overlap` 0.5 vs 0.25 (monitoring only — the reported
    numbers here come from `scripts/evaluate.py` at overlap 0.5 either way).
-   The recommendation in `docs/reproducibility.md` §8 is to re-run at 100
+   The recommendation in `docs/research_docs/reproducibility.md` §8 is to re-run at 100
    epochs under the experiment file and retire this row, so that the baseline
    table is internally consistent with `baseline_swinunetr` and `neurovision`,
    which will both inherit `_baseline_common`. Until then: a 200-epoch
@@ -82,7 +82,7 @@ sessions by resume is still ONE row — sum the GPU hours.
    run pins `GIT_REF` to a SHA.
 5. W&B ran in `offline` mode and was synced afterwards; the run id is the same
    across both sessions because it lives in the checkpoint. Full environment,
-   seeds and runtimes: `docs/reproducibility.md`.
+   seeds and runtimes: `docs/research_docs/reproducibility.md`.
 
 
 **Notes for `baseline_unet3d` (80ep/64³) / `pzu8y5fo`**
@@ -723,7 +723,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     **Not flat.** Mean in-predicted-foreground disagreement varies roughly 2x
     across cases: `amb_dis_mean_fg_mean` spans **0.1405 to 0.2632** over ten
     in-distribution cases, with per-case maxima of 0.48-0.85. The mechanical
-    worry stated in advance in `docs/research/preregistration_ambiguity.md` --
+    worry stated in advance in `docs/research_docs/preregistrations/preregistration_ambiguity.md` --
     that the branch-supervision term (weight 0.1), which trains both probes
     toward the same label, may have driven the branches to agree everywhere --
     did not happen.
@@ -782,7 +782,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     | 2 | +0.0550 [0.0411, 0.0698] | **-0.7307 [-0.7456, -0.7154]** |
     | 3 | +0.0152 [0.0118, 0.0188] | -0.0975 [-0.1064, -0.0892] |
 
-    **What this settles.** `docs/research/contribution.md` recorded P1
+    **What this settles.** `docs/research_docs/contribution.md` recorded P1
     ("the mechanism fires") as **undecided** -- the producer and the reducer
     both existed and no number had ever been written down. The gate is not
     decoration: at stride 4 it runs from 0.98 deep inside the tumour to 0.33
@@ -862,7 +862,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     over all three cohorts (`outputs/gate_detection/`), from the gate maps
     `scripts/extract_gates.py` wrote in `center_on: prediction` mode. **Not
     pre-registered.** The pre-registered Gate 1 test
-    (`docs/research/preregistration_ambiguity.md`) is about the whole-volume
+    (`docs/research_docs/preregistrations/preregistration_ambiguity.md`) is about the whole-volume
     inter-branch DISAGREEMENT map and is a different quantity; read everything
     here as a hypothesis for that run to confirm or refute.
 
@@ -919,7 +919,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 35. **GATE 1 IS DECIDED, AND THE VERDICT IS PARTIAL: DISAGREEMENT LOCALISES
     ERROR OUT OF DISTRIBUTION, BUT DOES NOT RANK CASES.** Run 2026-08-23 by
     `scripts/detection_stats.py` over all 348 cases (BraTS test 189, SSA 60,
-    PED 99) against `docs/research/preregistration_ambiguity.md`. Every
+    PED 99) against `docs/research_docs/preregistrations/preregistration_ambiguity.md`. Every
     threshold, mask, column and the 6-test Holm family were fixed before any
     number existed, and the family was run **once**, on complete data. Full
     tables live in that file's Result section and in
@@ -1019,7 +1019,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     DISAGREEMENT TO ENTROPY DOES NOT LOCALISE ERROR BETTER.** Run 2026-08-23,
     zero GPU hours. Combiner fitted once on the 187-case val split (3,740,000
     voxels) and applied FROZEN to all three cohorts, per
-    `docs/research/preregistration_gate2.md`. Fitted weights:
+    `docs/research_docs/preregistrations/preregistration_gate2.md`. Fitted weights:
     `[-8.700, 7.351, 0.952]` -- disagreement does get a positive weight, ~13%
     of entropy's, so the combiner genuinely uses it.
 
@@ -1078,7 +1078,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     ever seeing inter-branch disagreement. **So ~92% of the architectural gain
     is the dual-encoder gated fusion, and the ambiguity conditioning -- the
     part this project claimed as its novelty -- contributes an amount
-    indistinguishable from zero.** `docs/research/contribution.md` P2 declared
+    indistinguishable from zero.** `docs/research_docs/contribution.md` P2 declared
     this outcome in advance and requires it be reported: the contribution is
     the gate's per-voxel spatial resolution, not the signal it is conditioned
     on. That is a smaller and much more ordinary claim, and gated cross-
@@ -1327,7 +1327,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     names lesion-wise ET as a co-primary endpoint, and that gate has not run.
     Holm correction was applied within each cohort's three regions but NOT
     across the four cohorts. These rows enter
-    `docs/paper/claims_and_evidence.md` as secondary/exploratory and must be
+    `docs/research_docs/claims_and_evidence.md` as secondary/exploratory and must be
     labelled as such wherever they appear.
 
     **Two cells that can never be filled.** `capacity_control` has no
@@ -1345,7 +1345,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     UNDER SHIFT BY AN AMOUNT THAT TRACKS HOW FAR THE SHIFT IS. Both models,
     same pattern, so it is a property of the setting rather than of an
     architecture.** Run 2026-08-24, Phase B, pre-registered in
-    `docs/research/preregistration_conformal.md` (result section filled there;
+    `docs/research_docs/preregistrations/preregistration_conformal.md` (result section filled there;
     nothing above its Result line was edited). Zero GPU: calibrated on val
     (n=187), applied **frozen** to test (n=189), BraTS-Africa (n=60) and
     BraTS-PEDs (n=99), for `neurovision` and again for `baseline_unet3d`.
@@ -1613,7 +1613,7 @@ sessions by resume is still ONE row — sum the GPU hours.
        `clinical.preprocess.hd_bet_mode: fast`, `hd_bet_tta: false` -- HD-BET's
        own documented CPU setting; a GPU deployment opts back in. 250 s on the
        M4. Weights live inside `.venv-clinical`'s `brainles_hd_bet/model_weights/`
-       (5 x 65 MB), see `docs/reproducibility.md`.
+       (5 x 65 MB), see `docs/research_docs/reproducibility.md`.
     3. **The shipped 3D twin was geometrically wrong twice over** and nobody had
        seen it: the worker passed `[D,H,W]` dims to an x-fastest surface-nets
        over a w-fastest buffer (wrong strides on every real case with D != W),
@@ -1645,7 +1645,7 @@ sessions by resume is still ONE row — sum the GPU hours.
        FLAIR is 3 mm-slice (61 slices) -- the most out-of-distribution input of
        the three fixtures -- and the QC model puts its WT at 0.656 against a
        refuse cut of 0.707. Under the Gate C caveat (the QC model is
-       optimistic under shift — C5/C19 in `docs/paper/claims_and_evidence.md`), a refusal here is the conservative
+       optimistic under shift — C5/C19 in `docs/research_docs/claims_and_evidence.md`), a refusal here is the conservative
        outcome, and it is the demo's "refused job is the pipeline working"
        beat.
 
@@ -1690,7 +1690,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     | `nnUNetTrainer_500epochs`, fold 0 | ~37.8 GPU-h (3.6 sessions) |
     | **`nnUNetTrainer` default 1000 epochs, fold 0** | **~75.5 GPU-h (7.2 sessions)** |
 
-    **Consequence, read against `docs/research/preregistration_strong_baseline.md`
+    **Consequence, read against `docs/research_docs/preregistrations/preregistration_strong_baseline.md`
     as written.** The pre-registration's abort condition is "more than 60 GPU-h
     for the pair" and its invalidity list forbids "any tuning of nnU-Net
     *downward* (fewer epochs, ...) to fit the compute budget -- if the full
@@ -1718,7 +1718,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     THE REFUSAL GATE, AS DEPLOYED, IS NEARLY INERT ON SSA AND CATCHES ONE THIRD
     OF PED'S UNUSABLE OUTPUTS. SILENT-FAILURE RATE 4.2% / 18.3% / 49.5%.**
     Run 2026-09-19, `python scripts/error_budget.py model=segqc`, 6 min on the
-    M4. Protocol fixed first in `docs/research/error_budget_protocol.md`
+    M4. Protocol fixed first in `docs/research_docs/protocols/error_budget_protocol.md`
     (commit `8a28783`): usable = `dice_WT >= 0.7 AND dice_TC >= 0.7` (Gate C's
     own bar, reused not tuned); gate = the deployed `neurovision` refusal gate
     with the FROZEN val-fitted `outputs/gatekeeper/thresholds.json`
@@ -1822,7 +1822,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 
 48. **D0 -- HEAVY AUGMENTATION DOES NOT CLOSE THE SHIFT GAP: 12 OF 12
     COMPARISONS INCONCLUSIVE, VERDICT NULL, RECIPE UNCHANGED.** Pre-registered
-    2026-08-27 in `docs/research/preregistration_augmentation.md`; that file's
+    2026-08-27 in `docs/research_docs/preregistrations/preregistration_augmentation.md`; that file's
     `## Result` section carries the full 12-row family and is the authoritative
     record. Summary here.
 
@@ -1879,7 +1879,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 
 49. **D1 -- THE SEED NOISE FLOOR IS MEASURED: 12 OF 12 COMPARISONS
     INCONCLUSIVE, AND BOTH MARGINS IT WAS BUILT TO CHECK SURVIVE.**
-    Pre-registered 2026-09-18 in `docs/research/preregistration_multiseed.md`;
+    Pre-registered 2026-09-18 in `docs/research_docs/preregistrations/preregistration_multiseed.md`;
     that file's `## Result` section carries the full 12-row family and is the
     authoritative record. Summary here.
 
@@ -2131,7 +2131,7 @@ retrofitted to whatever came out.
 2026-08-06. Every cut below follows from that number and from one ranking
 decision: **the contribution ablation outranks baseline breadth.**
 
-The reasoning. `docs/research/contribution.md` says the claim is not "we gated
+The reasoning. `docs/research_docs/contribution.md` says the claim is not "we gated
 the fusion" — it is that the gate conditions on inter-branch *disagreement*.
 Rung 2 of its P2 ladder, the content-only gate, is the only run that can
 distinguish those two claims. Without it the paper reduces to "we built a fusion

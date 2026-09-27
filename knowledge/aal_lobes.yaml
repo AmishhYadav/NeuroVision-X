@@ -12,7 +12,7 @@
 # mapping is a THIRD confound in it, alongside the two the planning document
 # already pre-registered (BraTS 2021 is overwhelmingly high-grade, and we
 # measure voxel overlap where the reference counts tumours). See
-# docs/research/phase0_atlas_findings.md, Finding G.
+# docs/research_docs/phase0_atlas_findings.md, Finding G.
 #
 # Keyed on the BASE structure name, i.e. the merged parent with any `_L`/`_R`
 # suffix removed. 66 base names cover all 122 merged structures.

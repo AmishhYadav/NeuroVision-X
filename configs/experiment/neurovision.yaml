@@ -12,7 +12,7 @@
 # ONLY difference is the architecture. That is what makes the comparison in the
 # paper a fair one.
 #
-# Record the result in docs/experiments.md before starting the next run.
+# Record the result in docs/research_docs/experiments.md before starting the next run.
 
 defaults:
   - _baseline_common

@@ -3,7 +3,7 @@
 # from source configs/data/splits_ssa.yaml.
 #
 # FROZEN -- committed before any D3 fine-tune; never regenerate
-# (docs/research/preregistration_finetune.md).
+# (docs/research_docs/preregistrations/preregistration_finetune.md).
 #
 # These numbers are cross-fitted, NOT external validation: this
 # fold's model is fine-tuned on cases from the SAME cohort it is

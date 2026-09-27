@@ -1,6 +1,6 @@
 """Does the fusion gate open and close with anatomy? (prediction P1)
 
-`docs/research/contribution.md` states P1 -- "the mechanism fires" -- as the
+`docs/research_docs/contribution.md` states P1 -- "the mechanism fires" -- as the
 claim that the adaptive gate is not a decorative extra parameter block but a
 spatially organised signal. Until now P1 was recorded as **undecided**: the
 producer existed (`scripts/extract_gates.py` writes one tumour-centred patch

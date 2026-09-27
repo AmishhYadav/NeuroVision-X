@@ -1,7 +1,7 @@
 """Phase 0's gate: proves the SRI24 atlas actually lands on our BraTS cases.
 
 Three checks, of very different strength, measured against the real atlas in
-`docs/research/phase0_atlas_findings.md`:
+`docs/research_docs/phase0_atlas_findings.md`:
 
     1. Brain-mask Dice (`brain_mask_check`) -- the widest-margin check
        (0.9394 correct vs 0.7334 A-P mirrored), and GATING. But it is
@@ -243,7 +243,7 @@ def atlas_brain_mask(atlas: Atlas, source: str = "tissue") -> np.ndarray:
             f"atlas_brain_mask: unsupported source '{source}'; only 'tissue' is supported. "
             "The parcellation is NOT a valid brain mask -- AAL parcellates grey matter only "
             "and covers a fraction of true brain extent (measured Dice 0.80 against a real "
-            "brain mask); see docs/research/phase0_atlas_findings.md."
+            "brain mask); see docs/research_docs/phase0_atlas_findings.md."
         )
     if atlas.tissue is None:
         raise ValueError(
@@ -522,7 +522,7 @@ def lobe_distribution_check(
     `reference_pct`, never by rank correlation: measured on the real atlas,
     Spearman rank correlation scores a left-right MIRRORED atlas higher
     (+0.975) than the correctly oriented one (+0.872) -- see
-    `docs/research/phase0_atlas_findings.md` Finding K. A gate built on
+    `docs/research_docs/phase0_atlas_findings.md` Finding K. A gate built on
     that statistic would prefer the wrong orientation, which is why this
     check reports a deviation instead and never gates at all.
 
@@ -631,7 +631,7 @@ def lobe_distribution_check(
         )
     detail = (
         "ADVISORY ONLY -- never gates (rank correlation on this check scores a MIRRORED "
-        "atlas higher than the correct one, see docs/research/phase0_atlas_findings.md "
+        "atlas higher than the correct one, see docs/research_docs/phase0_atlas_findings.md "
         f"Finding K). Attributed {n_attributed_cases}/{n_total_cases} case(s) a dominant "
         f"lobe. Mean absolute deviation = {value:.2f}pp. Per-lobe: {per_lobe_str}."
     )

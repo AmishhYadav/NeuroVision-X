@@ -3,7 +3,7 @@
 `src/neurovision/uncertainty/conformal.py` implements the statistical procedure
 (`case_loss_curve`, `fit_threshold`, `realised_risk`, `band_inflation`) and is
 fully tested. This script is the driver that runs it over this project's saved
-fp16 logits, per `docs/research/preregistration_conformal.md` (read that file
+fp16 logits, per `docs/research_docs/preregistrations/preregistration_conformal.md` (read that file
 first -- it is the contract this script implements, and it must never be
 edited from here).
 

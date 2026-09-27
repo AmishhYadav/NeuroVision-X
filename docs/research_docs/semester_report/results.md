@@ -2,7 +2,7 @@
 
 `master_plan.md` P3.1. **Draft by Claude, 2026-09-27, for the author to edit.** The author writes the
 Introduction and Methods (see `README.md` in this folder). Every number below is a row of
-`docs/paper/claims_and_evidence.md` (claim id in brackets) — do not add a number that is not
+`docs/research_docs/claims_and_evidence.md` (claim id in brackets) — do not add a number that is not
 there. `[PENDING: …]` marks a result still being produced; fill it or delete the sentence before
 submission.
 
@@ -96,7 +96,7 @@ there, only changing the model (fine-tuning, D3, planned) could help.
 
 These findings sit beside recent work: coverage failure under shift has been reported between
 brain-tumour sites within one population and for CT organs, with similar local sample sizes
-(`docs/paper/related_work.md`). What this project adds is a graded cross-population shift, a
+(`docs/research_docs/related_work.md`). What this project adds is a graded cross-population shift, a
 sub-region shown in advance to be unrecoverable, and an end-to-end DICOM-in pipeline measured
 against the bound.
 

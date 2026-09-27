@@ -46,7 +46,7 @@ mc_dropout:
   # "deterministic" (default): saved predictions and reported Dice/IoU/HD95
   # always come from the single deterministic pass, so turning MC-dropout on
   # never silently moves a number that is already reported elsewhere (e.g.
-  # docs/experiments.md). "mc_mean" re-derives the prediction from the
+  # docs/research_docs/experiments.md). "mc_mean" re-derives the prediction from the
   # MC-dropout mean probability instead -- an explicit opt-in for comparing
   # against the mean-pass prediction, which makes metrics from that run NOT
   # comparable to a deterministic-pass evaluation.
@@ -165,7 +165,7 @@ evaluation:
   # Why default OFF, unlike boundary_bands: panoptica CANNOT be installed in
   # the training environment. It declares numpy<2.3 / pandas<3.0 against our
   # numpy==2.4.6 / pandas==3.0.5 pins, so it lives in a separate virtualenv
-  # (see requirements-analysis.txt and docs/reproducibility.md §5). Turning
+  # (see requirements-analysis.txt and docs/research_docs/reproducibility.md §5). Turning
   # this on inside `.venv` raises an ImportError naming that file. Run
   # evaluation from `.venv-analysis` when you want these columns.
   #

@@ -228,7 +228,7 @@ def build_train_transforms(cfg: Any) -> Compose:
         # nearest is what keeps the label's {0.0, 1.0} region mask binary
         # after resampling -- bilinear on the label would leave fractional
         # "half in this region" voxels, corrupting the training target
-        # silently (see docs/lessons.md on silent label corruption).
+        # silently (see docs/research_docs/lessons.md on silent label corruption).
         # padding_mode="zeros" is a valid "background"/"not in this region"
         # fill for the label, and close enough to neutral for the z-scored
         # image too.

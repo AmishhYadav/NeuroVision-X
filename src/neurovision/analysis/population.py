@@ -373,7 +373,7 @@ def laterality_distribution(anatomy: pd.DataFrame, *, region: str = "WT") -> pd.
     The population-scale sanity check that would catch a left-right flipped
     atlas: a real cohort should show `L` and `R` sharing tumour burden
     roughly symmetrically, and a systematic imbalance is exactly the signal
-    `docs/research/phase0_atlas_findings.md` used to find the atlas's own
+    `docs/research_docs/phase0_atlas_findings.md` used to find the atlas's own
     laterality bug (see CLAUDE.md's "brain-mask Dice cannot detect a
     left-right flipped atlas" entry) -- this is that same class of check, run
     on tumour location instead of the atlas's own anatomy.

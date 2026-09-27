@@ -2,7 +2,7 @@
 
 `predictions/` (`<eval_dir>/predictions/<case_id>.npy`, uint8 class maps
 `{0,1,2,3}` in ORIGINAL, uncropped BraTS geometry) is a volume-sized cache,
-not a result -- see `docs/reproducibility.md` §11. It was deliberately
+not a result -- see `docs/research_docs/reproducibility.md` §11. It was deliberately
 deleted on 2026-08-19 to reclaim disk, and the demo viewer
 (`app/backend/volumes.py::list_cases`) needs it back for any eval directory
 someone wants to browse in the clinical/demo UI.
@@ -24,7 +24,7 @@ Like `scripts/replay_logits.py`'s self-consistency check, this script
 recomputes Dice for a handful of cases from the rebuilt prediction and
 compares it against the eval directory's own published
 `per_case_metrics.csv`. This is the project's standing rule for any rebuild
-(`docs/reproducibility.md` §11, CLAUDE.md's testing rules): a cache is only
+(`docs/research_docs/reproducibility.md` §11, CLAUDE.md's testing rules): a cache is only
 trustworthy once it has been checked against something independently known,
 never merely "the code ran without raising".
 

@@ -7,7 +7,7 @@ an anatomical structure by plain boolean indexing -- no registration and no
 resampling.
 
 The reorientation is a **pure index transform**: an axis permutation with,
-per axis, an optional exact reversal. `docs/research/phase0_atlas_findings.md`
+per axis, an optional exact reversal. `docs/research_docs/phase0_atlas_findings.md`
 measured this by solving each SRI24 file's own affine against the BraTS
 target affine and confirmed the required transform is always one of these --
 never a rotation, shear, or non-unit scale. That measurement is why
@@ -543,7 +543,7 @@ def load_atlas(cfg: DictConfig) -> Atlas:
     """Loads the SRI24 atlas per `configs/anatomy/sri24.yaml` and reorients it to BraTS.
 
     Every path is resolved from `cfg`; nothing here is hardcoded. See
-    `docs/research/phase0_atlas_findings.md` for the measurements this
+    `docs/research_docs/phase0_atlas_findings.md` for the measurements this
     function implements against.
 
     Args:

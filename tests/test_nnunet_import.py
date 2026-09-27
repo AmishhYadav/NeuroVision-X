@@ -28,7 +28,7 @@ from neurovision.analysis.nnunet_import import (
 _ORIGINAL_SHAPE = (12, 10, 8)
 _BBOX = [[2, 8], [1, 7], [0, 5]]  # cropped shape (6, 6, 5)
 # BraTS 2021's own convention (matches neurovision.data.preprocessing's
-# default target_axcodes), used exactly as docs/lessons.md and
+# default target_axcodes), used exactly as docs/research_docs/lessons.md and
 # real_dicom_scoring's own tests do.
 _AFFINE = np.diag([-1.0, -1.0, 1.0, 1.0])
 _TARGET_AXCODES = ("L", "P", "S")
@@ -146,7 +146,7 @@ def test_mirrored_header_does_not_silently_pass(tmp_path: Path) -> None:
     # Header lies: claims RAS (identity) when the true grid is LPS. This
     # coincidentally reorients to an affine equal to meta["affine"] here
     # (both have zero translation), so the affine check alone cannot catch
-    # it -- exactly the sneaky failure mode docs/lessons.md trap 3 warns
+    # it -- exactly the sneaky failure mode docs/research_docs/lessons.md trap 3 warns
     # about for a symmetric geometric check.
     wrong_affine = np.diag([1.0, 1.0, 1.0, 1.0])
     wrong_path = tmp_path / "wrong.nii.gz"

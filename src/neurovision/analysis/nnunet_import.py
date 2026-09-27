@@ -1,6 +1,6 @@
 """Imports nnU-Net's raw NIfTI predictions into our scoring path (Gate A).
 
-Gate A (`docs/research/preregistration_strong_baseline.md`, Amendment 1 item
+Gate A (`docs/research_docs/preregistrations/preregistration_strong_baseline.md`, Amendment 1 item
 8 "Scoring convention") compares our model against nnU-Net. nnU-Net writes
 one hard-label NIfTI per case (e.g. `BraTS2021_01417.nii.gz`) on the
 ORIGINAL raw BraTS 2021 grid (240x240x155) -- not on our cropped grid, and
@@ -28,7 +28,7 @@ also converts OUR convention to nnU-Net's convention (used by
 
 A prediction written on the wrong grid -- most dangerously, a left-right
 mirrored one -- must never be scored as if it were correct. Trap 3 in
-`docs/lessons.md`: brain-mask Dice actually scores *higher* on a mirrored
+`docs/research_docs/lessons.md`: brain-mask Dice actually scores *higher* on a mirrored
 volume (0.9416 vs 0.9394), so a coarse sanity check on the output content
 cannot catch this. The only thing that can is checking GEOMETRY, before any
 scoring happens: read the NIfTI's own affine, reorient it to the project's
@@ -159,7 +159,7 @@ def import_prediction(
             f"import_prediction: reoriented affine for {nifti_path} does not match "
             f"meta['affine'] within atol={atol}. This is the geometry gate that catches a "
             "prediction written on the wrong grid (e.g. mirrored); a brain-mask Dice check "
-            "cannot catch a mirror (docs/lessons.md trap 3), so this affine equality is the "
+            "cannot catch a mirror (docs/research_docs/lessons.md trap 3), so this affine equality is the "
             f"actual gate.\nreoriented affine:\n{updated_affine}\n"
             f"expected affine (meta['affine']):\n{expected_affine}"
         )

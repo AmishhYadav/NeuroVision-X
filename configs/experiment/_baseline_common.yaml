@@ -23,9 +23,9 @@ seed: 42
 data:
   # Explicitly restated rather than inherited, so that a later edit to
   # configs/data/brats.yaml cannot silently change what "the baseline" meant
-  # halfway through the experiment table in docs/experiments.md.
+  # halfway through the experiment table in docs/research_docs/experiments.md.
   # 64^3, not the repo default 96^3, and this is a BUDGET decision forced by
-  # measurement -- see the probe_neurovision rows in docs/experiments.md.
+  # measurement -- see the probe_neurovision rows in docs/research_docs/experiments.md.
   # Measured on a real T4: `neurovision` runs at 3.6 s/step at 96^3, i.e.
   # 0.875 h/epoch over 875 steps, so 100 epochs costs ~91 h. The plan needs
   # that cost TWICE (the model and its parameter-matched P2 ablation) inside a

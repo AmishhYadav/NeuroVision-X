@@ -66,7 +66,7 @@ tqdm==4.70.0
 matplotlib==3.11.1
 
 # --- Gate A: strong-baseline comparator (Phase A, A7) ----------------------
-# docs/research/preregistration_strong_baseline.md's `nnunet_v2_3dfullres`
+# docs/research_docs/preregistrations/preregistration_strong_baseline.md's `nnunet_v2_3dfullres`
 # arm. Used two ways: (1) here, on the Mac/CPU, for
 # scripts/export_nnunet_dataset.py -- pure dataset-format conversion plus its
 # CLI's `nnUNetv2_plan_and_preprocess` (also CPU); (2) inside the Kaggle

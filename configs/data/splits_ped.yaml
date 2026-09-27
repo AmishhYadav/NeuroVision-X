@@ -1,7 +1,7 @@
 # External validation split #2 -- BraTS-PED (ASNR-MICCAI BraTS2023 Pediatric).
 #
 # CONFIRMATORY cohort for the HD95-under-shift hypothesis pre-registered in
-# docs/research/preregistration_external_hd95.md. Every case is in `test`;
+# docs/research_docs/preregistrations/preregistration_external_hd95.md. Every case is in `test`;
 # `train` and `val` are deliberately EMPTY and must stay empty.
 #
 # Pediatric high-grade glioma is a different DISEASE ENTITY from adult glioma,

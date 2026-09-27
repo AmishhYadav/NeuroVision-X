@@ -110,7 +110,7 @@ risk_coverage:
   coverage_points: [1.0, 0.9, 0.8, 0.7, 0.6, 0.5]
 
 # Conformal risk control (scripts/conformal.py). Pre-registered in
-# docs/research/preregistration_conformal.md -- read that file before
+# docs/research_docs/preregistrations/preregistration_conformal.md -- read that file before
 # changing anything below it changes the meaning of, it is the contract this
 # driver implements.
 conformal:

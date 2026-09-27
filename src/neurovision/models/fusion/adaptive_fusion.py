@@ -16,7 +16,7 @@ variant ran.
 - `AdaptiveGatedFusion` — the novel module. A learned adapter projects the
   Swin branch into the CNN branch's channel width, an explicit local
   ambiguity signal (`BranchAmbiguity`: per-branch region logits, their
-  disagreement, and their entropy — see `docs/research/contribution.md` for
+  disagreement, and their entropy — see `docs/research_docs/contribution.md` for
   why this, not branch content alone, is the actual contribution) feeds a
   small conv-net that predicts a spatially-varying gate from both branches
   plus that signal, windowed cross-attention lets every CNN voxel query the
@@ -417,7 +417,7 @@ class WindowedCrossAttention(nn.Module):
 class BranchAmbiguity(nn.Module):
     """Computes the explicit local ambiguity signal the gate conditions on.
 
-    This is the project's actual contribution (see `docs/research/contribution.md`):
+    This is the project's actual contribution (see `docs/research_docs/contribution.md`):
     prior gated fusion derives its mixing weight from branch *content* alone: the
     gate here additionally sees how much the CNN branch and the Swin branch
     *disagree* about this voxel's region labels. Each branch gets a lightweight
@@ -489,7 +489,7 @@ class BranchAmbiguity(nn.Module):
         #   2. The segmentation loss could reach the ambiguity map through the
         #      encoders and shape it into whatever makes segmentation easiest. The
         #      disagreement would stop being a measurement and become a free latent
-        #      quantity -- which is exactly the thing docs/research/contribution.md
+        #      quantity -- which is exactly the thing docs/research_docs/contribution.md
         #      says prior content-only gates do and that this module is claimed to
         #      improve on.
         #
@@ -720,7 +720,7 @@ class AdaptiveGatedFusion(FusionBlock):
         use_ambiguity: If True (the default), condition the gate on the
             explicit inter-branch ambiguity signal (`BranchAmbiguity`) --
             this is the project's actual contribution, see
-            `docs/research/contribution.md`. If False, the gate sees only
+            `docs/research_docs/contribution.md`. If False, the gate sees only
             `[cnn_feat, swin_proj]`, i.e. the content-only ablation
             (rung 2 of the P2 ablation ladder); `BranchAmbiguity` is not
             constructed at all in that case, so the ablation is genuinely

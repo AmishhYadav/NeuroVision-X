@@ -2,7 +2,7 @@
 #
 # D0: does heavier training augmentation close part of the SSA/PED
 # generalisation gap? Pre-registered in
-# docs/research/preregistration_augmentation.md -- read that file before
+# docs/research_docs/preregistrations/preregistration_augmentation.md -- read that file before
 # changing anything below. Nothing here may be edited once the run starts.
 #
 #   python scripts/train.py +experiment=neurovision_heavy_aug data.root_dir=/path/to/prep

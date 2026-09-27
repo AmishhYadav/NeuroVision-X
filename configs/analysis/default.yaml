@@ -162,7 +162,7 @@ report_agreement:
   # each run's own eval_config.yaml), so they may share a family. The
   # superseded 96^3/200-epoch run differs in BOTH patch size and epochs and is
   # a confounded probe: report it separately, never inside a family with the
-  # controlled three. docs/experiments.md note 18 measured that report
+  # controlled three. docs/research_docs/experiments.md note 18 measured that report
   # agreement is not monotonic in Dice, which is why this matters.
   comparisons: []
 
@@ -197,7 +197,7 @@ detection:
   # Gate 1 of docs/research/execution_plan.md -- does per-voxel inter-branch
   # disagreement carry failure-detection signal that single-pass predictive
   # entropy does not already have? Registered in
-  # docs/research/preregistration_ambiguity.md BEFORE any of this ran; read
+  # docs/research_docs/preregistrations/preregistration_ambiguity.md BEFORE any of this ran; read
   # that file before changing a threshold here. Runs no model and needs no
   # GPU -- every input is a cache scripts/extract_ambiguity.py and
   # scripts/evaluate.py already wrote.
@@ -284,7 +284,7 @@ detection:
 # ---------------------------------------------------------------------------
 # Gate 2 -- does entropy PLUS inter-branch disagreement localise per-voxel
 # error better than entropy alone? Pre-registered in
-# docs/research/preregistration_gate2.md BEFORE any number was computed; read
+# docs/research_docs/preregistrations/preregistration_gate2.md BEFORE any number was computed; read
 # that file before changing a threshold, the budget, or the fit split.
 #
 # Gate 1 settled two things that shape this block. Disagreement carries error
@@ -584,7 +584,7 @@ qc_validate:
   # Phase C4/C5 -- Gate C. Scores the trained SegQC checkpoint against the
   # FREE baseline (mean predicted-foreground entropy) on every cohort.
   # Endpoints, family and decision rule are fixed in
-  # docs/research/preregistration_qc.md; read it before changing anything
+  # docs/research_docs/preregistrations/preregistration_qc.md; read it before changing anything
   # here. Runs no segmentation model: every input is a cache
   # scripts/evaluate.py already wrote, plus one small CNN forward per case
   # per region.
@@ -650,7 +650,7 @@ qc_validate:
 
 error_budget:
   # Phase G -- the end-to-end error budget. Every definition here is fixed by
-  # docs/research/error_budget_protocol.md BEFORE any number was produced; do
+  # docs/research_docs/protocols/error_budget_protocol.md BEFORE any number was produced; do
   # not change a bar, a quantile or the alpha after seeing a table. Consumed by
   # scripts/error_budget.py, computed by analysis/error_budget.py. Reads the
   # deployed gate's frozen thresholds from clinical.gatekeeper.thresholds, the
@@ -719,7 +719,7 @@ error_budget:
   max_cases: null
 
 real_dicom_validation:
-  # P1.2 -- docs/research/real_dicom_validation_protocol.md. Consumed by
+  # P1.2 -- docs/research_docs/protocols/real_dicom_validation_protocol.md. Consumed by
   # scripts/validate_real_dicom.py. Front-end isolation on BraTS 2021 TEST-split
   # patients via their original RSNA-MICCAI DICOM, NOT external validation (every
   # case is in-distribution) -- see that protocol's "What this is not" section.
@@ -771,8 +771,8 @@ compare_family:
   # Holm ONCE across the union of every p-value, so the family is corrected
   # exactly as the pre-registration declares it, never per table.
   #
-  # D0's family (docs/research/preregistration_augmentation.md) is frozen in
-  # outputs/compare_family/d0_heavy_aug/family.csv and docs/experiments.md
+  # D0's family (docs/research_docs/preregistrations/preregistration_augmentation.md) is frozen in
+  # outputs/compare_family/d0_heavy_aug/family.csv and docs/research_docs/experiments.md
   # note 48 -- it does not depend on this file staying as it was, so this
   # block is safe to repoint at the next pre-registered family.
   #
@@ -820,7 +820,7 @@ compare_family:
       metrics: [lwdice_ET]
 
 local_recalibration:
-  # Milestone 5 P1.1 -- docs/research/preregistration_conformal.md Amendment 1.
+  # Milestone 5 P1.1 -- docs/research_docs/preregistrations/preregistration_conformal.md Amendment 1.
   # A COUNTERFACTUAL ("what would a new site need to restore the bound?"),
   # never external validation. Reads the per-case curves Phase B already
   # saved; no inference.
@@ -855,7 +855,7 @@ crossfit_splits:
   out_pattern: configs/data/splits_{cohort}_cf{fold}.yaml
 
 score_nnunet:
-  # Gate A (docs/research/preregistration_strong_baseline.md, Amendment 1
+  # Gate A (docs/research_docs/preregistrations/preregistration_strong_baseline.md, Amendment 1
   # item 8 "Scoring convention") -- scores nnU-Net's hard-label predictions
   # through OUR metric path (neurovision.analysis.nnunet_import), so its
   # numbers are directly comparable to every other arm in this project.
@@ -900,9 +900,9 @@ score_nnunet:
 
 semester_figures:
   # scripts/plot_semester_figures.py -- the two Milestone 5 figures the
-  # semester report cites (docs/experiments.md notes 42 and 52). Reads
+  # semester report cites (docs/research_docs/experiments.md notes 42 and 52). Reads
   # already-committed analysis outputs only; runs no model, needs no GPU.
-  out_dir: docs/semester_report/figures
+  out_dir: docs/research_docs/semester_report/figures
 
   # scripts/local_recalibration.py's output (note 52).
   local_recalibration_summary: outputs/local_recalibration/summary.csv

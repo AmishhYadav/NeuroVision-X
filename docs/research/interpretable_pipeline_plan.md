@@ -6,7 +6,7 @@ Planning document for the project's second contribution attempt: an end-to-end,
 interpretable pipeline from scan to structured anatomical report.
 
 Written 2026-08-16, after the original reliability claim was measured and did
-not hold. Read `docs/experiments.md` notes 11–17 before this file: the numbers
+not hold. Read `docs/research_docs/experiments.md` notes 11–17 before this file: the numbers
 that forced the pivot are there, not here.
 
 **Revised the same day**, after a literature and resource review triggered by a
@@ -98,7 +98,7 @@ search, that determine the entire implementation.
 
 > **Findings A–F below were written before the atlas was downloaded. Two of
 > them turned out to be wrong, and Phase 0 was executed on 2026-08-16.**
-> `docs/research/phase0_atlas_findings.md` supersedes this section wherever
+> `docs/research_docs/phase0_atlas_findings.md` supersedes this section wherever
 > they disagree. In brief: the grid claim in Finding A is exactly right, but
 > SRI24 is **anterior–posterior mirrored** relative to BraTS voxel indexing and
 > needs one exact index reversal (still no registration, still no resampling);
@@ -269,7 +269,7 @@ config through Hydra, no hardcoded paths).
 > (`scripts/fetch_atlas.py`, `configs/anatomy/sri24.yaml`,
 > `src/neurovision/anatomy/atlas.py`), plus `anatomy/alignment.py` and the
 > `scripts/validate_atlas.py` driver. Read
-> `docs/research/phase0_atlas_findings.md` — it supersedes Findings A–F above
+> `docs/research_docs/phase0_atlas_findings.md` — it supersedes Findings A–F above
 > wherever they disagree, and two of them were wrong.
 
 **The gate for everything else.** If the atlas does not provably align, nothing
@@ -485,7 +485,7 @@ source. That was designed and costed; it was cut on scope, not on feasibility.
 > **3a (shipped):** `src/neurovision/anatomy/burden.py` + `scripts/burden.py` —
 > volumes, component fractions, multifocality, shape (surface area, sphericity,
 > surface-to-volume), midline *crossing* laterality, centroids. Run over the
-> test split against ground truth and three models; see `docs/experiments.md`
+> test split against ground truth and three models; see `docs/research_docs/experiments.md`
 > note 18.
 >
 > **3b SHIPPED, 2026-08-19:** `src/neurovision/anatomy/involvement.py` plus
@@ -622,7 +622,7 @@ Presentation requirements, non-negotiable and enforced by tests:
 > that is robust to boundary-level differences — a few voxels at a margin
 > rarely change whether a structure is involved at all. The interpretable
 > layer is stable with respect to segmentation quality across this range.
-> Full numbers: `docs/experiments.md` note 23.
+> Full numbers: `docs/research_docs/experiments.md` note 23.
 >
 > Population statistics ran over all 1,251 cases; note 25. The eloquence
 > layer turned out degenerate on this cohort — every case is "near eloquent" —

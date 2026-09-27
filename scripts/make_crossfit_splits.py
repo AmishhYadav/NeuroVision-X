@@ -1,6 +1,6 @@
 """Generate the frozen cross-fit split files for the D3 external-cohort fine-tune.
 
-D3 (`docs/research/preregistration_finetune.md`, "Design -> Cross-fitting") fine-tunes
+D3 (`docs/research_docs/preregistrations/preregistration_finetune.md`, "Design -> Cross-fitting") fine-tunes
 on each external cohort (SSA, PED) using two-fold cross-fitting: each cohort is split
 once into two halves, a model is fine-tuned on each half in turn, and scored on the
 OTHER half. Pooling both folds' held-out predictions scores every case in the cohort
@@ -18,7 +18,7 @@ so `data.root_dir` is a mandatory `???` in `configs/data/brats.yaml` and must be
 on the command line for the config to compose at all -- even though this script never
 reads it (it only reads `cfg.analysis.crossfit_splits`).
 
-Per `docs/research/preregistration_finetune.md`, every split file written here is FROZEN
+Per `docs/research_docs/preregistrations/preregistration_finetune.md`, every split file written here is FROZEN
 the moment it is committed: never regenerate it once a fine-tune has used it. Re-running
 this script requires the explicit `analysis.crossfit_splits.overwrite=true` flag.
 
@@ -163,7 +163,7 @@ def _fold_header(
         f"# from source {source_path.as_posix()}.\n"
         "#\n"
         "# FROZEN -- committed before any D3 fine-tune; never regenerate\n"
-        "# (docs/research/preregistration_finetune.md).\n"
+        "# (docs/research_docs/preregistrations/preregistration_finetune.md).\n"
         "#\n"
         "# These numbers are cross-fitted, NOT external validation: this\n"
         "# fold's model is fine-tuned on cases from the SAME cohort it is\n"
@@ -199,7 +199,7 @@ def _write_summary(
         f"# (seed={seed}, n_folds={n_folds}, val_n={val_n}).\n"
         "#\n"
         "# FROZEN -- committed before any D3 fine-tune; never regenerate\n"
-        "# (docs/research/preregistration_finetune.md).\n"
+        "# (docs/research_docs/preregistrations/preregistration_finetune.md).\n"
         "#\n"
         "# `epochs` is the pre-registered budget rule round(3000 / n_train)\n"
         "# (preregistration_finetune.md, 'Fine-tune recipe, fixed now') -- the\n"

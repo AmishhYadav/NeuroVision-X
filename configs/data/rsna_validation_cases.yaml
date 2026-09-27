@@ -1,4 +1,4 @@
-# P1.2 real-DICOM validation sample -- docs/research/real_dicom_validation_protocol.md.
+# P1.2 real-DICOM validation sample -- docs/research_docs/protocols/real_dicom_validation_protocol.md.
 # Eligible: BraTS 2021 test-split IDs present in RSNA-MICCAI train_labels.csv (90 on 2026-09-26).
 # Sample: numpy.random.default_rng(42).choice(sorted(eligible), 40, replace=False), then sorted.
 # FROZEN -- committed before any of these studies was downloaded. Never regenerate.

@@ -8,5 +8,5 @@
 | 1 Introduction, 2 Related work, 3 Methods | **Author** | *(to write)* |
 | 4 Results, 5 Discussion, 6 Limitations | Draft by Claude, author edits | `results.md` |
 
-Rules: every number must be a row of `docs/paper/claims_and_evidence.md`; `[PENDING: …]` markers
+Rules: every number must be a row of `docs/research_docs/claims_and_evidence.md`; `[PENDING: …]` markers
 are filled or deleted before submission; the thesis sentence is the one in `CLAUDE.md`.

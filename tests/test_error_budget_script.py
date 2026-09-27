@@ -9,7 +9,7 @@ These tests only exercise the three pieces of plumbing that do not need real
 artifacts (a saved QC checkpoint, saved logits, a conformal `curves.npz`, a frozen
 `thresholds.json`) -- a full run against `outputs/` is a real analysis run, done
 separately, never inside the test suite (`CLAUDE.md`'s testing rules; a run against
-real BraTS-derived artifacts belongs to Phase G's own note in `docs/experiments.md`,
+real BraTS-derived artifacts belongs to Phase G's own note in `docs/research_docs/experiments.md`,
 not to this file). Everything here is tiny, synthetic and CPU-only, well under a
 second.
 """

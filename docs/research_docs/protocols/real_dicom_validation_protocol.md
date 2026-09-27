@@ -77,4 +77,4 @@ front end adds error that the BraTS-preprocessed path never saw.
 
 ## Reporting
 
-One numbered note in `docs/experiments.md`; the error-budget row; `master_plan.md` P1.2 ticked.
+One numbered note in `docs/research_docs/experiments.md`; the error-budget row; `master_plan.md` P1.2 ticked.

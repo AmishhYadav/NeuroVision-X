@@ -1,7 +1,7 @@
 """Is inter-branch disagreement as good an error localiser as MC-dropout, at 1/10 the cost?
 
 **Secondary analysis, explicitly outside the pre-registered Gate 1 and Gate 2
-families.** `docs/research/preregistration_gate2.md` states that the
+families.** `docs/research_docs/preregistrations/preregistration_gate2.md` states that the
 "matches MC-dropout at 1/10 the cost" claim is NOT made, because the per-voxel
 MC mutual-information maps did not exist for the external cohorts. This script
 is what makes it measurable: the maps were generated on 2026-08-23

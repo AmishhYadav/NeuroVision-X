@@ -2,7 +2,7 @@
 
 ## Why this exists
 
-`docs/research/contribution.md` records prediction P2 -- "the ambiguity conditioning is
+`docs/research_docs/contribution.md` records prediction P2 -- "the ambiguity conditioning is
 necessary, not decorative" -- as **NOT RUN**. The registered way to test it is a full
 retraining ablation (`configs/experiment/ablation_content_only_gate.yaml`, ~23 GPU-hours),
 which is not currently available.

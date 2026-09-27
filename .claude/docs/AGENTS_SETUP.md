@@ -57,7 +57,7 @@ findings grouped as Critical / Should fix / Consider.
 
 .claude/agents/docs-writer.md — model sonnet, tools Read/Write/Edit/Grep/Glob. Writes
 docstrings, MkDocs pages, README sections, and appends append-only rows to
-docs/experiments.md. Never modifies code, never invents numbers.
+docs/research_docs/experiments.md. Never modifies code, never invents numbers.
 
 Then restart yourself so the new agents directory is picked up.
 ```

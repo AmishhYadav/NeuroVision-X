@@ -702,7 +702,7 @@ def test_ambiguity_probes_send_no_gradient_into_branch_features() -> None:
     `swin_feat` (the encoder outputs), the branch-supervision objective would push both
     encoders toward agreeing with each other -- collapsing the very disagreement signal the
     gate is supposed to read (see `BranchAmbiguity`'s module-level comment and
-    `docs/research/contribution.md`). Verified by temporarily removing the two `.detach()`
+    `docs/research_docs/contribution.md`). Verified by temporarily removing the two `.detach()`
     calls in `BranchAmbiguity.forward` and confirming this test then fails; restored
     afterwards.
     """

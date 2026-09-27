@@ -1,6 +1,6 @@
 """Gate 2 — does entropy PLUS inter-branch disagreement localise error better than entropy alone?
 
-Pre-registered in `docs/research/preregistration_gate2.md`; read that first.
+Pre-registered in `docs/research_docs/preregistrations/preregistration_gate2.md`; read that first.
 This module holds the statistics, with no IO and no Hydra: the driver is
 `scripts/gate2_localisation.py`.
 

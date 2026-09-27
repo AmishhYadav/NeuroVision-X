@@ -5,7 +5,7 @@
 #   python scripts/train.py +experiment=ablation_content_only_gate data.root_dir=/path/to/prep
 #
 # This is the single most important ablation in the project. Read
-# docs/research/contribution.md before running it.
+# docs/research_docs/contribution.md before running it.
 #
 # ## What it isolates
 #

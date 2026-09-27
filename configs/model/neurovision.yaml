@@ -68,7 +68,7 @@ fusion:
   layer_scale_init: 1.0e-4
   use_checkpoint: false
   # This single key is what isolates the project's actual contribution (see
-  # docs/research/contribution.md): the gate is conditioned on an explicit
+  # docs/research_docs/contribution.md): the gate is conditioned on an explicit
   # inter-branch ambiguity signal, not on branch content alone. true -> the
   # full gate (ours). false -> the content-only gate -- same architecture,
   # disagreement/entropy channels removed -- which is rung 2 of the P2

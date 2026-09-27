@@ -41,7 +41,7 @@ DST_AFFINE = [
     [0.0, 0.0, 0.0, 1.0],
 ]
 
-# The two real orientations measured in docs/research/phase0_atlas_findings.md.
+# The two real orientations measured in docs/research_docs/phase0_atlas_findings.md.
 AP_MIRROR_AFFINE = [
     [-1.0, 0.0, 0.0, 0.0],
     [0.0, 1.0, 0.0, 0.0],

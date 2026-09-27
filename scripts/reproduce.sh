@@ -3,7 +3,7 @@
 # reproduce.sh — the exact command sequence from raw BraTS to every number in
 # the paper.
 #
-# This is the executable half of docs/reproducibility.md. That document says
+# This is the executable half of docs/research_docs/reproducibility.md. That document says
 # WHICH versions, seeds, hardware and runtimes; this script says WHAT to run,
 # in what order, and refuses to let a step run before the step it depends on
 # has produced its output.
@@ -120,7 +120,7 @@ print(f"python {sys.version.split()[0]}  {platform.platform()}")
 for pkg in ("torch", "monai", "numpy", "hydra-core", "wandb"):
     print(f"  {pkg} {md.version(pkg)}")
 EOF
-  echo "Compare against the pinned table in docs/reproducibility.md."
+  echo "Compare against the pinned table in docs/research_docs/reproducibility.md."
 }
 
 # ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ step_preprocess() {
 # make_splits raises rather than overwriting: regenerating changes which cases
 # are in val/test and silently invalidates every number already measured. If
 # you genuinely mean it, add data.splits.overwrite=true and understand that
-# every result in docs/experiments.md must then be recomputed.
+# every result in docs/research_docs/experiments.md must then be recomputed.
 step_splits() {
   step_banner "splits (LOCAL, seconds)"
   require_file "$PREP_DIR" "No preprocessed cache at $PREP_DIR. Run: ./scripts/reproduce.sh preprocess"
@@ -270,7 +270,7 @@ Open notebooks/kaggle_train.ipynb on Kaggle. Cell 1 is the ONLY cell you edit.
   REPO_URL   = "$REPO_URL"
   GIT_REF    = "main"          # pin to a COMMIT SHA for a reproducible run --
                                # see the "known gaps" section of
-                               # docs/reproducibility.md, the run of record did
+                               # docs/research_docs/reproducibility.md, the run of record did
                                # not record which commit it trained
   DATA_SLUG  = "$DATA_SLUG"
   CKPT_SLUG  = None            # None = fresh; else the previous session's
@@ -301,7 +301,7 @@ check the log's first line: it says "FRESH:" or "RESUME: ... from epoch N".
 max_hours: 11.0 makes the trainer stop cleanly under Kaggle's 12 h kill.
 
 Repeat until epochs_done == epochs_planned, then record the row in
-docs/experiments.md (GPU hours SUMMED across every session — one run is one
+docs/research_docs/experiments.md (GPU hours SUMMED across every session — one run is one
 row, however many sessions it took).
 EOF
 }
@@ -347,7 +347,7 @@ HD95 is in MILLIMETRES here because evaluate.py passes spacing from meta.json.
 Do not turn on inference.postprocess.et_min_volume to lift ET Dice. On BraTS
 2021 only 2.6% of cases have no enhancing tumor, so it buys almost nothing and
 it launders exactly the overconfidence the calibration claim exists to expose.
-If a number was ever produced with it on, say so in docs/experiments.md.
+If a number was ever produced with it on, say so in docs/research_docs/experiments.md.
 EOF
 }
 
@@ -557,7 +557,7 @@ status() {
   echo "Steps:       env fetch preprocess splits verify package upload train evaluate pull"
   echo "             atlas pipeline phase5 figures"
   echo "             all   (every LOCAL step up to and including package)"
-  echo "Full detail: docs/reproducibility.md"
+  echo "Full detail: docs/research_docs/reproducibility.md"
 }
 
 usage() { sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }

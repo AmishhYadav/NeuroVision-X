@@ -4,7 +4,7 @@ Runs `neurovision.anatomy.alignment.run_checks` against the real preprocessed
 BraTS tree -- brain-mask Dice, `_L`/`_R` laterality, and the (advisory)
 population lobe distribution -- and writes every result to disk, plus a
 visual QC overlay figure. CPU-only: no model, no checkpoint, no GPU. See
-`docs/research/phase0_atlas_findings.md` for why each check exists and what
+`docs/research_docs/phase0_atlas_findings.md` for why each check exists and what
 the real atlas measured.
 
 Cost asymmetry this script is built around: brain masks come from

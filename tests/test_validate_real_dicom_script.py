@@ -300,7 +300,7 @@ def test_completion_counts_keeps_refused_and_failed_in_denominator() -> None:
 def test_usable_rate_stats_arithmetic_matches_hand_computation() -> None:
     # 4 correct_accept, 1 silent_failure (accepted, unusable), 1 over_refusal
     # (not accepted, usable), 1 correct_refusal -- n=7, matching the G5 taxonomy's
-    # four cells (docs/research/error_budget_protocol.md).
+    # four cells (docs/research_docs/protocols/error_budget_protocol.md).
     rows = (
         [{"accepted": True, "usable": True}] * 4
         + [{"accepted": True, "usable": False}] * 1

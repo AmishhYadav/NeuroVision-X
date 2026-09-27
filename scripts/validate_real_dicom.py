@@ -1,6 +1,6 @@
 """Hydra entry point for P1.2, the real-DICOM validation of the clinical path.
 
-Binding design: `docs/research/real_dicom_validation_protocol.md` -- read it FIRST.
+Binding design: `docs/research_docs/protocols/real_dicom_validation_protocol.md` -- read it FIRST.
 `neurovision.analysis.real_dicom_scoring` is the pure scoring half (no file I/O, no
 pipeline, no Hydra); this script is the other half: it locates each RSNA study's zip,
 runs it through the REAL clinical pipeline exactly as `scripts/run_clinical_study.py`

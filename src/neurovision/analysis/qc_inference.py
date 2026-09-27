@@ -86,7 +86,7 @@ def entropy_from_logits(logits: Tensor) -> Tensor:
     complete no-op in fp16, whose own epsilon is ~9.8e-4 -- `1.0 - 1e-6`
     rounds to exactly `1.0`, so `log(1 - p)` becomes `log(0)` -> `-inf`, and
     `0 * -inf` is `NaN`. That exact bug cost this project 10.5 GPU-hours on a
-    real training run (see CLAUDE.md's traps list, `docs/lessons.md`, and
+    real training run (see CLAUDE.md's traps list, `docs/research_docs/lessons.md`, and
     `neurovision.models.fusion.adaptive_fusion.BranchAmbiguity`, whose fix
     this mirrors). `softplus` is finite for any finite input, so a saturated
     logit gives `0 * finite = 0` -- the correct entropy of a certain

@@ -1,6 +1,6 @@
 """Gate 2 — does entropy PLUS disagreement localise per-voxel error better than entropy alone?
 
-Driver for `docs/research/preregistration_gate2.md`. **Read that file before
+Driver for `docs/research_docs/preregistrations/preregistration_gate2.md`. **Read that file before
 changing anything here**: the combiner, the fit split, the two endpoints, the
 budget, the thresholds and the six-test Holm family were all fixed in writing
 before a single number was computed.
@@ -305,7 +305,7 @@ def _endpoint_row(
 def build_verdict(family: pd.DataFrame, thresholds: Any, external: list[str]) -> dict[str, Any]:
     """Applies the pre-registered decision rule verbatim.
 
-    From `docs/research/preregistration_gate2.md`:
+    From `docs/research_docs/preregistrations/preregistration_gate2.md`:
 
     | Pass | On at least one EXTERNAL cohort: delta_auroc >= 0.01 with a CI
       excluding zero, AND delta_recall@5% >= 0.02 with a CI excluding zero |
@@ -360,7 +360,7 @@ def build_verdict(family: pd.DataFrame, thresholds: Any, external: list[str]) ->
         "passed_cohorts": passed,
         "partial_cohorts": partial,
         "per_cohort": per_cohort,
-        "preregistration": "docs/research/preregistration_gate2.md",
+        "preregistration": "docs/research_docs/preregistrations/preregistration_gate2.md",
     }
 
 

@@ -32,7 +32,7 @@
 #     the outcome that makes running THIS experiment first worth 4 GPU-hours
 #     against the ablation's 23.
 #
-# Record the result in docs/experiments.md before starting the next run.
+# Record the result in docs/research_docs/experiments.md before starting the next run.
 
 defaults:
   - _baseline_common

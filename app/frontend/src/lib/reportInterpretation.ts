@@ -5,7 +5,7 @@
 // raw-key panel.
 //
 // This is a RESEARCH ARTIFACT under a strict claims gate (see CLAUDE.md and
-// docs/paper/claims_and_evidence.md): every string built here is purely
+// docs/research_docs/claims_and_evidence.md): every string built here is purely
 // DESCRIPTIVE. Nothing here may say or imply grade, prognosis, malignancy,
 // aggressiveness, treatability, symptoms, deficits, invasion, compression,
 // mass effect, midline shift, or that anything is dangerous/concerning/

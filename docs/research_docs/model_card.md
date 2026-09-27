@@ -1,8 +1,8 @@
 # Model card — NeuroVision-X (`neurovision`, seed 42)
 
 **Status:** research artifact. **Not a medical device. Not for diagnosis.**
-**Last updated:** 2026-09-19 · **Authoritative numbers:** `docs/paper/claims_and_evidence.md`
-(a claim not in that table does not belong here either) · **Runs:** `docs/experiments.md`
+**Last updated:** 2026-09-19 · **Authoritative numbers:** `docs/research_docs/claims_and_evidence.md`
+(a claim not in that table does not belong here either) · **Runs:** `docs/research_docs/experiments.md`
 
 ---
 
@@ -167,10 +167,10 @@ where the segmentation is least trustworthy.
 |---|---|
 | Deployed checkpoint | `outputs/neurovision/checkpoints/best.pt` |
 | Saved fp16 logits (val / test / SSA / PED) | the table in `CLAUDE.md`; every re-scoring runs off these with zero inference |
-| Exact rebuild commands | `docs/reproducibility.md` (§5 for the clinical demo) |
-| Every measured result | `docs/experiments.md`, notes 1–47 |
-| What may be asserted | `docs/paper/claims_and_evidence.md` |
-| Traps that already cost real money | `docs/lessons.md` |
+| Exact rebuild commands | `docs/research_docs/reproducibility.md` (§5 for the clinical demo) |
+| Every measured result | `docs/research_docs/experiments.md`, notes 1–47 |
+| What may be asserted | `docs/research_docs/claims_and_evidence.md` |
+| Traps that already cost real money | `docs/research_docs/lessons.md` |
 
 Only three checkpoints survive: `neurovision`, `baseline_unet3d` and `ablation_content_only_gate`.
 `capacity_control` is permanently lost and no capacity-control number can be re-scored under a new

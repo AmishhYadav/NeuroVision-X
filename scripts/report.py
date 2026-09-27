@@ -6,7 +6,7 @@ written their tables to disk; this script's only job is to JOIN those two
 tables, per case, and call `neurovision.reporting.report.build_report` /
 `write_report`. Recomputing either table here would duplicate both drivers,
 take minutes instead of seconds, and risk a report disagreeing with the CSVs
-already published in `docs/experiments.md` -- the report library
+already published in `docs/research_docs/experiments.md` -- the report library
 (`src/neurovision/reporting/report.py`) is a pure function of already-computed
 artifacts, and this driver is the thin thing that finds those artifacts on
 disk and feeds them in.

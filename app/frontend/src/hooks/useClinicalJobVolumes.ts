@@ -45,7 +45,7 @@ export interface ClinicalJobVolumesState {
    * twin (T3.4). `null` while loading, if the job has no saved case meta
    * (404), or if the response's `X-Uncertainty-Kind` was not
    * `ATLAS_STRUCTURE_INDEX` - a mislabelled volume is never painted (see
-   * `docs/lessons.md` lesson 29: label layers only from the header, never
+   * `docs/research_docs/lessons.md` lesson 29: label layers only from the header, never
    * assume what a volume is).
    */
   atlas: AtlasBuffer | null;
@@ -223,7 +223,7 @@ export function useClinicalJobVolumes(
           warnings,
         ).then((result) => {
           if (signal.aborted) return;
-          // Guard against a mislabelled volume (docs/lessons.md lesson 29):
+          // Guard against a mislabelled volume (docs/research_docs/lessons.md lesson 29):
           // only ever store this buffer as atlas data when the backend's
           // own header confirms it - a 200 response is not, by itself,
           // proof of what it contains.

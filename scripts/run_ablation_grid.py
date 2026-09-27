@@ -571,7 +571,7 @@ def format_report_markdown(
 
     Same content as `format_report_text`, formatted as a Markdown table plus
     a fenced code block for the commands, so it can be pasted directly into
-    `docs/experiments.md`.
+    `docs/research_docs/experiments.md`.
 
     Args: see `format_report_text`.
 

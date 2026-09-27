@@ -11,7 +11,7 @@ target).backward()` exactly as it does for the plain `dice_ce` loss.
 A fourth, optional **branch** term supervises the per-branch region-logit probes exposed by
 `neurovision.models.fusion.adaptive_fusion.BranchAmbiguity` (surfaced on `MultiTaskOutput` as
 `branch_logits`). Those probes are the read-out the fusion gate conditions on -- see
-`docs/research/contribution.md` -- and are otherwise unsupervised, which makes "disagreement"
+`docs/research_docs/contribution.md` -- and are otherwise unsupervised, which makes "disagreement"
 mean "two arbitrary learned projections differ" rather than "the two branches disagree about
 the label". `BranchAmbiguity.forward` already `.detach()`es the branch features before the
 probes see them, so this term trains only the probe convs, never the encoders.

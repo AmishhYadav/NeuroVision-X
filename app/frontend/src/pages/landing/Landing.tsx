@@ -8,7 +8,7 @@
 // alternation), and a cinematic dark scroll story is that moment here.
 //
 // Copy is scoped to what is actually built as of this writing - checked
-// against CLAUDE.md's "do not write" list and docs/paper/claims_and_evidence.md
+// against CLAUDE.md's "do not write" list and docs/research_docs/claims_and_evidence.md
 // so the page never claims more than the pipeline does. The "what this does
 // not claim" section below quotes the pipeline's own NOT_CLAIMED block
 // (src/neurovision/reporting/report.py) rather than writing new limitations

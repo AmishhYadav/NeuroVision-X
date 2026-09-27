@@ -1,7 +1,7 @@
 # SRI24 atlas — the anatomical reference for the interpretable pipeline.
 #
 # Measured facts behind every value here live in
-# docs/research/phase0_atlas_findings.md. Read it before changing anything:
+# docs/research_docs/phase0_atlas_findings.md. Read it before changing anything:
 # two of the planning document's assumptions about this atlas were wrong.
 
 # Where fetch_atlas.py puts the extracted tree. Relative on purpose, like

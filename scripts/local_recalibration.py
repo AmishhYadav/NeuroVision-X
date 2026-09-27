@@ -4,7 +4,7 @@
 (`draw_split`, `evaluate_split`, `run_local_recalibration`, `min_feasible_k`,
 `summarise`) and is fully tested on its own. This script is the driver that runs it
 over this project's ALREADY-SAVED conformal loss curves, per
-`docs/research/preregistration_conformal.md`'s "Amendment 1" (read that section
+`docs/research_docs/preregistrations/preregistration_conformal.md`'s "Amendment 1" (read that section
 first -- it is the contract this script implements, and it must never be edited
 from here). No inference, no GPU: every `curves.npz` this script reads was already
 written by `scripts/conformal.py`.

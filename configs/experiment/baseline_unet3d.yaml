@@ -8,7 +8,7 @@
 # data, augmentation, optimizer, LR schedule, seed, and stopping rule are
 # identical by construction and the ONLY difference is the architecture.
 #
-# Record the result in docs/experiments.md before starting the next run.
+# Record the result in docs/research_docs/experiments.md before starting the next run.
 
 defaults:
   - _baseline_common

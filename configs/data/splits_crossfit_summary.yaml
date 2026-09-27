@@ -2,7 +2,7 @@
 # (seed=42, n_folds=2, val_n=5).
 #
 # FROZEN -- committed before any D3 fine-tune; never regenerate
-# (docs/research/preregistration_finetune.md).
+# (docs/research_docs/preregistrations/preregistration_finetune.md).
 #
 # `epochs` is the pre-registered budget rule round(3000 / n_train)
 # (preregistration_finetune.md, 'Fine-tune recipe, fixed now') -- the

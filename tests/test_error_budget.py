@@ -1,6 +1,6 @@
 """Tests for `neurovision.analysis.error_budget`.
 
-Phase G's end-to-end error budget (`docs/research/error_budget_protocol.md`). Every
+Phase G's end-to-end error budget (`docs/research_docs/protocols/error_budget_protocol.md`). Every
 table here is small and synthetic -- never real BraTS data -- and every test runs in
 well under a second on CPU. Config is a minimal `OmegaConf.create` object exposing
 exactly `cfg.clinical.gatekeeper.{enabled_signals,regions}`, the same path

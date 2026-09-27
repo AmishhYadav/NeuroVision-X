@@ -69,7 +69,7 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
             {/* This is an average-case, in-distribution calibration result,
                 not a per-patient guarantee - it does not hold on data unlike
                 what the model was trained on (measured to fail on the SSA and
-                paediatric cohorts, see docs/experiments.md). The short line
+                paediatric cohorts, see docs/research_docs/experiments.md). The short line
                 stays visible; the full explanation is a native `title`
                 tooltip rather than more on-screen text, so the legend does
                 not grow every time a caveat is added. */}

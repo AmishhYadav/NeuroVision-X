@@ -35,7 +35,7 @@ samples_per_volume: 4
 # manufactures anatomy that does not occur.
 #
 # The four keys below (rotate_*, gamma_*, bias_field_*, elastic_*) exist for
-# exactly one experiment: docs/research/preregistration_augmentation.md (D0),
+# exactly one experiment: docs/research_docs/preregistrations/preregistration_augmentation.md (D0),
 # testing whether simulating scanner/anatomy variation recovers some of the
 # measured SSA/PED generalisation gap. They default to prob 0.0 here -- a
 # complete no-op -- so every existing experiment config is unaffected.

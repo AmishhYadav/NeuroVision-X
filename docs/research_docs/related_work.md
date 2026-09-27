@@ -2,7 +2,7 @@
 
 **Written 2026-09-27** (`master_plan.md` P3.3). The job of this file is to stop the paper claiming
 novelty it does not have. It was triggered by the outside-view review (§6.3,
-`docs/research/project_review_2026-09-24.md`), which found three close neighbours to C14 that had
+`docs/research_docs/project_review_2026-09-24.md`), which found three close neighbours to C14 that had
 not been read. They have now been read at abstract level; each entry says what it does, how it
 overlaps with us, and what that forces us to write. **Read the full PDFs before the MELBA draft** —
 the abstract-level reading here is enough to retire an overclaim, not to describe their methods in

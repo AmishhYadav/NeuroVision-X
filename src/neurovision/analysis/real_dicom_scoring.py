@@ -1,6 +1,6 @@
 """Scoring for the real-DICOM validation protocol (P1.2).
 
-Binding design: `docs/research/real_dicom_validation_protocol.md`, section
+Binding design: `docs/research_docs/protocols/real_dicom_validation_protocol.md`, section
 "Scoring -- fixed now". Read that file first; this module implements only
 what it fixes, with no IO and no Hydra -- the driver that locates a job's
 `meta.json`/prediction and the matching `data/preprocessed/brats/<case>/`
@@ -18,11 +18,11 @@ cropped `(D, H, W)` integer array in the project's label convention
 `neurovision.data.preprocessing.remap_labels`). Every function below is pure
 numpy in, numpy out, CPU only -- HD95 is computed by
 `neurovision.metrics.segmentation.hd95`, which must never see a CUDA tensor
-(trap 8 in `docs/lessons.md`).
+(trap 8 in `docs/research_docs/lessons.md`).
 
 ## Why the lateralisation check does not use brain-mask Dice
 
-Trap 3 (`docs/lessons.md`): a brain is nearly left-right symmetric, so
+Trap 3 (`docs/research_docs/lessons.md`): a brain is nearly left-right symmetric, so
 brain-mask Dice scores *higher* on a left-right mirrored atlas (0.9416)
 than on the correctly oriented one (0.9394) -- it is structurally blind to
 the exact failure it would need to catch. `lateralisation_check` instead

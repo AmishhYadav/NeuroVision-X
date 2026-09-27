@@ -2,8 +2,8 @@
 
 > **SUPERSEDED 2026-08-23 by `master_plan.md`.** Kept for its cost tables and the reasoning behind Milestone 4's cut list. Do not plan from this file.
 
-Written 2026-08-19. Supersedes nothing; read alongside `docs/experiments.md`
-notes 11–25 and `docs/research/contribution.md`.
+Written 2026-08-19. Supersedes nothing; read alongside `docs/research_docs/experiments.md`
+notes 11–25 and `docs/research_docs/contribution.md`.
 
 ---
 
@@ -103,7 +103,7 @@ and the pooled n=159 comparison came back inconclusive on every HD95 metric
 (`hd95_ET` +1.459 mm, CI [-3.942, 0.700]; `hd95_mean` +1.003, CI [-2.699,
 0.633]). The n=60 SSA pattern was noise. Worse, `dice_TC` is conclusively
 **worse** for `neurovision` under shift (-0.0333 pooled, p_holm 0.0132; -0.0595
-on PED alone, p_holm 0.0002). See `docs/experiments.md` note 30 and
+on PED alone, p_holm 0.0002). See `docs/research_docs/experiments.md` note 30 and
 `outputs/compare_shift/`. **The boundary-robustness claim is dropped.** A1 and A2
 are done; A3/A4 and Gate A-2 are unaffected and remain the project's live bet —
 a model that degrades off-distribution without signalling it is precisely the
@@ -169,7 +169,7 @@ Core (C1+C2) = 180 T4-h. Core + high = 310. Everything but CV = 350.
 At ~4× T4 on a 24 GB card, core ≈ 45 h wall-clock — under a week at 10 h/night.
 
 **C1 is the highest-value spend and is not optional.** Every number in the repo
-comes from a single seed; `docs/experiments.md` already records that no claim may
+comes from a single seed; `docs/research_docs/experiments.md` already records that no claim may
 rest on a margin smaller than noise we cannot measure. Three seeds turns every
 result into mean ± std. The same runs also yield a **deep ensemble** — the
 gold-standard uncertainty baseline and the strongest comparator for Phase A's

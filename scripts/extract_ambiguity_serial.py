@@ -66,7 +66,7 @@ class Cohort:
     # Which split inside `splits_path` to read. The external cohorts put all
     # their cases in "test"; "val" exists so the Gate 2 combiner can be fitted
     # on data no reported number comes from (see
-    # docs/research/preregistration_gate2.md).
+    # docs/research_docs/preregistrations/preregistration_gate2.md).
     split: str = "test"
     extra: list[str] = field(default_factory=list)
 

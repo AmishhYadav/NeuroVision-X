@@ -2,7 +2,7 @@
 
 `neurovision.analysis.statistics.compare_models` Holm-corrects the p-values it
 sees in ONE call -- i.e. one pair of per-case tables, one set of metrics. But
-a pre-registration such as `docs/research/preregistration_augmentation.md` or
+a pre-registration such as `docs/research_docs/preregistrations/preregistration_augmentation.md` or
 `preregistration_multiseed.md` typically declares a SINGLE family spanning
 several cohorts and metrics at once, e.g. {dice_ET, dice_TC, dice_WT} on
 BraTS test (n=189) AND on pooled SSA+PED (n=159). Running `compare_models`

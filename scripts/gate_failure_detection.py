@@ -1,7 +1,7 @@
 """Can a label-free read-out of the fusion gate predict a case's own Dice?
 
 **Status: exploratory.** The pre-registered Gate 1 test
-(`docs/research/preregistration_ambiguity.md`, run by
+(`docs/research_docs/preregistrations/preregistration_ambiguity.md`, run by
 `scripts/detection_stats.py`) is about the inter-branch DISAGREEMENT map over
 the whole volume. This script asks a cheaper, adjacent question about the
 FUSION GATE, from the single tumour-centred patch `scripts/extract_gates.py`

@@ -505,7 +505,7 @@ def evaluate_case(
     Always runs the deterministic `sliding_window_predict` pass first, and
     `CaseOutput.regions` comes from THAT pass by default: turning on
     MC-dropout uncertainty must never silently move a Dice number that is
-    already reported elsewhere (e.g. `docs/experiments.md`). The only
+    already reported elsewhere (e.g. `docs/research_docs/experiments.md`). The only
     exception is `cfg.inference.mc_dropout.predictions_from == "mc_mean"`, an
     explicit opt-in that re-derives `regions` from the MC-dropout mean
     prediction instead -- `run_evaluation` logs a one-time warning when this
@@ -776,7 +776,7 @@ def run_evaluation(cfg: DictConfig) -> pd.DataFrame:
                 "prediction and reported segmentation metrics (Dice/IoU/HD95) come from the "
                 "MC-dropout mean pass, not the deterministic single pass. These numbers are "
                 "NOT comparable to a deterministic-pass evaluation run -- e.g. an "
-                "already-reported baseline row in docs/experiments.md."
+                "already-reported baseline row in docs/research_docs/experiments.md."
             )
 
     per_case_csv_path = out_dir / "per_case_metrics.csv"

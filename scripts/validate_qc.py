@@ -3,7 +3,7 @@
 This is the driver half of Phase C4 (per-cohort validation) and C5 (the
 silent-failure test) -- the statistics are already built and tested in
 `neurovision.analysis.qc_validate`; this script only wires them to the
-project's saved artifacts. Read `docs/research/preregistration_qc.md`
+project's saved artifacts. Read `docs/research_docs/preregistrations/preregistration_qc.md`
 FIRST -- it fixes the endpoints, the family and the decision rule, and
 nothing here may reinterpret them.
 
@@ -141,7 +141,7 @@ def resolve_checkpoint(cfg: DictConfig) -> Path:
     if not path.is_file():
         raise FileNotFoundError(
             f"validate_qc: no checkpoint at {path.resolve()}. Run scripts/train_qc.py first to "
-            "train a SegQC checkpoint (see docs/research/preregistration_qc.md) before scoring "
+            "train a SegQC checkpoint (see docs/research_docs/preregistrations/preregistration_qc.md) before scoring "
             "Gate C."
         )
     return path

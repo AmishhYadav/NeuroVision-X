@@ -1,6 +1,6 @@
 """Phase G, the end-to-end error budget: pure analysis on top of the frozen gatekeeper.
 
-`docs/research/error_budget_protocol.md` is the fixed pre-registration this module
+`docs/research_docs/protocols/error_budget_protocol.md` is the fixed pre-registration this module
 implements — read it before touching anything here. It answers one question the
 project's own principle states but has never measured: the master plan's principle 2
 says "five stages at 95% each is 77% end to end"; every stage has been measured in

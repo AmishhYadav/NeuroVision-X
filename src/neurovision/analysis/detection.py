@@ -1,7 +1,7 @@
 """Does inter-branch disagreement carry signal entropy does not already have?
 
 This backs the pre-registered decision in
-`docs/research/preregistration_ambiguity.md`. Single-pass predictive
+`docs/research_docs/preregistrations/preregistration_ambiguity.md`. Single-pass predictive
 entropy is available for free from ANY model, including a plain U-Net, so a
 disagreement score that merely reproduces entropy is worthless for the
 claim this module exists to test. Every function here measures the

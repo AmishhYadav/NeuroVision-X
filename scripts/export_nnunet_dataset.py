@@ -16,7 +16,7 @@ re-implementing scikit-learn's KFold by hand.
 Raw BraTS2021 case directories (once downloaded from Kaggle
 `dschettler8845/brats-2021-task1`) hold five **uncompressed** `.nii` files per case,
 2020-style suffixes (`<case_id>_t1.nii`, `_t1ce`, `_t2`, `_flair`, `_seg` -- confirmed
-in `docs/lessons.md`), and the exact nesting depth under `--raw-dir` is not something to
+in `docs/research_docs/lessons.md`), and the exact nesting depth under `--raw-dir` is not something to
 assume: this project's own `notebooks/kaggle_train.ipynb` cell 9 already had to stop
 assuming a fixed `/kaggle/input/<slug>` depth after a real Kaggle download put
 everything one level deeper than expected. `discover_case_dir` does the equivalent
@@ -88,7 +88,7 @@ logger = logging.getLogger(__name__)
 _DATASET_NAME_RE = re.compile(r"^Dataset(\d{3})_(\S+)$")
 
 # Raw BraTS2021 filenames use 2020-style suffixes ("<case_id>_t1.nii", not
-# "_0000.nii.gz", and uncompressed -- see docs/lessons.md). Every pattern
+# "_0000.nii.gz", and uncompressed -- see docs/research_docs/lessons.md). Every pattern
 # below is anchored with the "." that follows the modality token specifically
 # so "<case_id>_t1.nii*" can never match "<case_id>_t1ce.nii*" as a substring
 # -- CLAUDE.md's own trap: a short token matched against a path is a

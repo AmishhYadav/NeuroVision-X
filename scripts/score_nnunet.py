@@ -1,6 +1,6 @@
 """Hydra entry point that scores nnU-Net's hard-label predictions through our own metric path.
 
-Gate A (`docs/research/preregistration_strong_baseline.md`, Amendment 1
+Gate A (`docs/research_docs/preregistrations/preregistration_strong_baseline.md`, Amendment 1
 item 8 "Scoring convention") compares our model against nnU-Net -- but
 nnU-Net's own prediction files disagree with ours on grid, label
 convention and format (hard labels vs logits). The pure functions that
