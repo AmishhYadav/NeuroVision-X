@@ -925,3 +925,52 @@ semester_figures:
 
   dpi: 200
 
+
+ood:
+  # Milestone 5 P1.4 -- docs/research_docs/preregistrations/preregistration_ood.md.
+  # Consumed by scripts/ood_score.py; the statistics live in
+  # src/neurovision/analysis/ood.py. Every value below is FIXED by the
+  # pre-registration before any score existed: do not change the shrinkage,
+  # the quantiles or the fit/threshold splits after seeing a number.
+  out_dir: outputs/ood
+
+  # The model is fitted on `fit_split` ONLY and the CAUTION/REFUSE cuts are
+  # read off `threshold_split` ONLY -- both from the frozen BraTS split file
+  # (cfg.data.splits.path). Anything else invalidates the pre-registration.
+  fit_split: train
+  threshold_split: val
+  shrinkage: 0.1          # lambda in (1 - lambda) * S + lambda * diag(S)
+  caution_quantile: 0.10  # top 10% of val -> CAUTION-or-worse
+  refuse_quantile: 0.02   # top 2% of val -> REFUSE
+
+  # Scored AFTER model.json and thresholds.json are written. `name` becomes
+  # the <name>_ood_score.csv filename that scripts/error_budget.py reads via
+  # analysis.error_budget.ood_dir, so it must match that config's cohort
+  # names (test / ssa / ped). `split` selects a split of the BraTS split
+  # file; `split: null` means "every case directory under prep_dir".
+  # `eval_dir` supplies per_case_metrics.csv for the descriptive
+  # "unusable" AUROC (WT or TC Dice < usable_bar); null skips it.
+  score_cohorts:
+    - name: test
+      prep_dir: data/preprocessed/brats
+      split: test
+      eval_dir: outputs/neurovision/eval_test
+    - name: ssa
+      prep_dir: data/preprocessed/brats_ssa
+      split: null
+      eval_dir: outputs/eval_ssa_neurovision
+    - name: ped
+      prep_dir: data/preprocessed/brats_ped
+      split: null
+      eval_dir: outputs/eval_ped_neurovision
+
+  # train and val are read from here (the same volumes the model trained on).
+  brats_prep_dir: data/preprocessed/brats
+
+  # The "usable" bar, note 47 / error_budget_protocol.md: WT and TC Dice >= 0.7.
+  usable_bar: 0.7
+  usable_regions: [WT, TC]
+
+  n_boot: 10000
+  ci: 0.95
+  seed: ${seed}
