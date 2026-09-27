@@ -79,7 +79,12 @@ model behind the gate becomes *more optimistic* under shift in all six external 
 An age-based intended-use rule (adults only) removes every paediatric study from the accepted set —
 by construction, as a scoping rule, not as detection (note 53).
 
-[PENDING: real-DICOM front-end cost on BraTS test patients — P1.2.]
+On real DICOM of 40 test-split patients (RSNA-MICCAI originals, not external data), the clinical
+front end refuses 40% of studies for thick slices; of the 22 it accepts, only 36% are usable against
+BraTS ground truth, and whole-tumour Dice falls by a median 0.23 relative to the research path [C25].
+Most of that loss is a per-patient registration disagreement (median 5.9 mm) between our alignment to
+the SRI24 atlas and BraTS's own — counted against us by design, because the report's anatomy is read
+in atlas space (note 55).
 
 ---
 
