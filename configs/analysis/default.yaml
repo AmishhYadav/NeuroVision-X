@@ -898,3 +898,20 @@ score_nnunet:
     nsd_tolerance_mm: 1.0
     connectivity: 26
 
+semester_figures:
+  # scripts/plot_semester_figures.py -- the two Milestone 5 figures the
+  # semester report cites (docs/experiments.md notes 42 and 52). Reads
+  # already-committed analysis outputs only; runs no model, needs no GPU.
+  out_dir: docs/semester_report/figures
+
+  # scripts/local_recalibration.py's output (note 52).
+  local_recalibration_summary: outputs/local_recalibration/summary.csv
+
+  # Directory holding realised_risk.csv (note 42), scripts/conformal.py's
+  # output for one model. Named by directory, not by the CSV directly,
+  # because that is the convention analysis.local_recalibration.models above
+  # already uses for the same tree.
+  conformal_dir: outputs/conformal/neurovision
+
+  dpi: 200
+
