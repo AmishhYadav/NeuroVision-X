@@ -5,6 +5,8 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
 
 ## Read in this order
 
+0. **`status_2026-09-27.md`** — start here when picking the project up cold: what is done,
+   what is left (with the exact command to restart each open thread), and why the project exists.
 1. **`claims_and_evidence.md`** — the gate. Every claim the paper may make, with the artifact
    behind it. A number not in this table does not go in the paper.
 2. **`experiments.md`** — every run and every measured result (numbered notes). The source of truth
@@ -18,7 +20,8 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
 
 | File | What it is | Paper section it feeds |
 |---|---|---|
-| `claims_and_evidence.md` | Claim table (C1…C14), each tied to an artifact | All — the gate |
+| `status_2026-09-27.md` | Handoff: done / left / how to restart / why / end result | — (orientation) |
+| `claims_and_evidence.md` | Claim table (C1…C25), each tied to an artifact | All — the gate |
 | `experiments.md` | Run log + numbered result notes | Results |
 | `contribution.md` | The original pre-registered claim, with a status update on what survived | Introduction, Discussion |
 | `related_work.md` | Nearest prior work to C14 and the refusal gate | Related work |
@@ -27,7 +30,7 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
 | `reproducibility.md` | Seeds, versions, hardware, runtimes, data provenance, rebuild commands | Methods, reproducibility statement |
 | `phase0_atlas_findings.md` | Measured SRI24 atlas properties (incl. the mirrored-atlas trap) | Methods (anatomy/atlas) |
 | `lessons.md` | Engineering traps with evidence | Limitations, "pitfalls" discussion |
-| `preregistrations/` | The 10 pre-registrations, each written before its data existed | Methods (hypotheses + decision rules) |
+| `preregistrations/` | The 11 pre-registrations, each written before its data existed | Methods (hypotheses + decision rules) |
 | `protocols/` | Fixed-definition protocols: end-to-end error budget, real-DICOM validation | Methods |
 | `semester_report/` | Semester report draft (Results/Discussion/Limitations) and its figures | Course report; figure source |
 
@@ -45,12 +48,15 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
 | `preregistration_multiseed.md` | Second seed: how much of every number is noise? (D1) |
 | `preregistration_finetune.md` | Cross-fitted fine-tuning on the external cohorts (D3) |
 | `preregistration_tta.md` | Flip test-time augmentation measurement |
+| `preregistration_ood.md` | Input-statistics OOD score for the gate, and its switch-on rule (P1.4) |
 
 ## Stayed outside this folder
 
 Some pre-registrations cite these, so they are listed here too:
 
 - `docs/research/master_plan.md` — the active plan and queue (not paper content)
+- `docs/research/gpu_request.md` — the college GPU request draft
+- `docs/demo_runbook.md` — the semester demo script and day-before checks
 - `docs/research/execution_plan.md`, `docs/research/interpretable_pipeline_plan.md` — earlier plans
 - `docs/project_state.md` — Milestone 1–3 build record (useful for the Methods section)
 - `docs/data_manifests/` — SHA-256 manifests for the SSA/PED raw data
