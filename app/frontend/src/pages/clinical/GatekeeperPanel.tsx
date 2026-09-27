@@ -8,12 +8,13 @@ interface GatekeeperPanelProps {
 // module always emits them - not every deployment necessarily enables every
 // signal (see `configs/clinical/default.yaml`'s `gatekeeper.enabled_signals`
 // - `ood_score` is measured but not yet trusted), so a label is supplied for
-// all four regardless of which are enabled here.
+// every signal regardless of which are enabled here.
 const SIGNAL_LABEL: Record<string, string> = {
   input_qc: "Input QC",
   predicted_dice: "Predicted Dice (QC estimate)",
   conformal_band: "Conformal band width",
   ood_score: "Out-of-distribution score",
+  intended_use: "Intended use (adults only)",
 };
 
 function formatDetailValue(value: unknown): string {

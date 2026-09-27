@@ -61,11 +61,26 @@ from neurovision.inference.input_qc import InputQCReport, Severity
 
 logger = logging.getLogger(__name__)
 
-# The four signals this gate knows how to judge. `run_gatekeeper` only ever
-# consults these; an unrecognised name in `cfg.clinical.gatekeeper.enabled_signals`
-# is simply never looked at, rather than raising, since a typo in a config that
-# has not been re-run through calibration yet should not crash a demo session.
-SIGNAL_NAMES: tuple[str, ...] = ("input_qc", "predicted_dice", "conformal_band", "ood_score")
+# The five signals this gate knows how to judge, in the order `run_gatekeeper`
+# judges and reports them (the frontend lists signals in this order, so it is
+# significant and never re-sorted). An unrecognised name in
+# `cfg.clinical.gatekeeper.enabled_signals` is simply never looked at, rather
+# than raising, since a typo in a config that has not been re-run through
+# calibration yet should not crash a demo session.
+#
+# `intended_use` is appended LAST, deliberately: it is a SCOPING rule ("is
+# this study within what the tool was validated for"), not a quality
+# measurement like the other four -- see `judge_intended_use`'s docstring for
+# why that distinction matters. It is not yet in
+# `configs/clinical/default.yaml`'s `enabled_signals`; wiring it in is a
+# separate, later step (P1.3, Milestone 5).
+SIGNAL_NAMES: tuple[str, ...] = (
+    "input_qc",
+    "predicted_dice",
+    "conformal_band",
+    "ood_score",
+    "intended_use",
+)
 
 # `calibrate_thresholds` warns (does not raise) when the surviving calibration
 # count is at or below this -- "a handful of cases" per the spec this module was
@@ -177,12 +192,17 @@ class GateSignals:
             (Phase B), or `None` if unavailable. HIGH is bad.
         ood_score: A single case-level out-of-distribution score, higher meaning more
             unlike the calibration set, or `None` if unavailable. HIGH is bad.
+        patient_age_years: The patient's age in years, from the DICOM `PatientAge`
+            tag (`neurovision.data.dicom_ingest.IngestResult.patient_age_years`), or
+            `None` if the study has no recorded age (e.g. stripped by
+            de-identification). Not a quality measurement -- see `judge_intended_use`.
     """
 
     input_qc: InputQCReport | None = None
     predicted_dice: Mapping[str, float] | None = None
     conformal_band: Mapping[str, float] | None = None
     ood_score: float | None = None
+    patient_age_years: float | None = None
 
 
 @dataclass(frozen=True)
@@ -757,6 +777,110 @@ def judge_ood_score(
     )
 
 
+def judge_intended_use(
+    age_years: float | None,
+    *,
+    min_age_years: float,
+    missing_age: str,
+    enabled: bool,
+) -> SignalVerdict:
+    """Judge whether this study is within the tool's intended use: adult glioma only.
+
+    This is a SCOPING rule, never a detection rule -- it does not measure the
+    quality of a mask or an input, it labels whether the case is the kind of
+    case the tool was validated for at all. That distinction matters because a
+    rule that simply refuses every child scores 100% on a paediatric cohort BY
+    CONSTRUCTION, which would look like a safety win while measuring nothing;
+    see the module docstring's link to `docs/research/preregistration_qc.md`
+    for the same reasoning applied to the other signals.
+
+    `missing_age` governs the DOCUMENTED EXCEPTION (author decision
+    2026-09-26) to this module's general "an enabled signal that arrives as
+    `None` is a REFUSE" rule: age is routinely stripped by de-identification,
+    and refusing every anonymised study for a labelling rule would make the
+    tool unusable on public data, so a missing age defaults to CAUTION rather
+    than REFUSE. Both policies are supported so a deployment that must be
+    strict about scope (`"refuse"`) is not blocked by this module.
+
+    Args:
+        age_years: The patient's age in years (`GateSignals.patient_age_years`),
+            or `None` if not recorded. A NaN or infinite value is treated the
+            same as `None` -- see `_is_bad_number`.
+        min_age_years: The youngest age counted as "adult", e.g. `18`, from
+            `cfg.clinical.gatekeeper.intended_use.min_age_years`.
+        missing_age: The policy for a missing/non-finite age: `"caution"` or
+            `"refuse"`, from `cfg.clinical.gatekeeper.intended_use.missing_age`.
+        enabled: Whether this signal is consulted.
+
+    Returns:
+        A `"intended_use"` `SignalVerdict`. PROCEED if `age_years >=
+        min_age_years`; REFUSE if `age_years < min_age_years`; on a missing or
+        non-finite age, CAUTION or REFUSE per `missing_age`.
+
+    Raises:
+        ValueError: If `enabled` and `missing_age` is neither `"caution"` nor
+            `"refuse"` -- an unrecognised policy is never silently treated as
+            either one.
+    """
+    signal = "intended_use"
+    if not enabled:
+        return SignalVerdict(
+            signal=signal,
+            decision=Decision.PROCEED,
+            available=age_years is not None,
+            enabled=False,
+            message=f"{signal} was not enabled; not consulted.",
+            detail={},
+        )
+    if missing_age not in ("caution", "refuse"):
+        raise ValueError(
+            f"{signal}: missing_age must be 'caution' or 'refuse', got {missing_age!r}."
+        )
+
+    # NaN/inf is not a real age either, so it is folded into the same "missing"
+    # branch as None rather than silently comparing false against min_age_years
+    # (the same trap `_is_bad_number` exists to guard against elsewhere).
+    if _is_bad_number(age_years):
+        decision = Decision.PROCEED_WITH_CAUTION if missing_age == "caution" else Decision.REFUSE
+        return SignalVerdict(
+            signal=signal,
+            decision=decision,
+            available=False,
+            enabled=True,
+            message=(
+                "patient age not recorded in the DICOM header; the tool is validated "
+                f"for adults only, so a missing age is a {decision.value} under the "
+                f"configured '{missing_age}' policy."
+            ),
+            detail={
+                "age_years": None,
+                "min_age_years": float(min_age_years),
+                "missing_age_policy": missing_age,
+            },
+        )
+
+    age = float(age_years)
+    if age < min_age_years:
+        decision = Decision.REFUSE
+        message = f"outside intended use: adult glioma only (age {age:g} y < {min_age_years:g} y)."
+    else:
+        decision = Decision.PROCEED
+        message = f"{signal}: age {age:g} y meets the adult minimum of {min_age_years:g} y."
+
+    return SignalVerdict(
+        signal=signal,
+        decision=decision,
+        available=True,
+        enabled=True,
+        message=message,
+        detail={
+            "age_years": age,
+            "min_age_years": float(min_age_years),
+            "missing_age_policy": missing_age,
+        },
+    )
+
+
 def load_thresholds(cfg: Any) -> Thresholds | None:
     """Load calibrated `Thresholds` from `cfg.clinical.gatekeeper.thresholds`.
 
@@ -817,7 +941,7 @@ def run_gatekeeper(
             entirely (e.g. in a test, or a calibration dry run).
 
     Returns:
-        The combined `GateDecision`: `decision` is the worst across all four
+        The combined `GateDecision`: `decision` is the worst across all
         signals' `SignalVerdict`s, `verdicts` holds one per signal in
         `SIGNAL_NAMES` order.
 
@@ -843,6 +967,27 @@ def run_gatekeeper(
     cb_thresholds = thresholds.conformal_band if thresholds is not None else None
     ood_thresholds = thresholds.ood_score if thresholds is not None else None
 
+    intended_use_enabled = "intended_use" in configured
+    intended_use_cfg = getattr(gk_cfg, "intended_use", None)
+    if intended_use_cfg is None:
+        if intended_use_enabled:
+            # Same philosophy as the numeric signals' thresholds: an enabled
+            # signal with no configured operating point is never given a
+            # made-up one, it raises. Only a DISABLED signal may fall back to
+            # a safe default, since that default is then never actually used
+            # to judge anything.
+            raise ValueError(
+                "run_gatekeeper: 'intended_use' is in enabled_signals but "
+                "cfg.clinical.gatekeeper.intended_use is missing; add the "
+                "min_age_years/missing_age block to config -- a threshold is "
+                "never invented at inference time."
+            )
+        min_age_years = 18.0
+        missing_age_policy = "caution"
+    else:
+        min_age_years = float(intended_use_cfg.min_age_years)
+        missing_age_policy = str(intended_use_cfg.missing_age)
+
     verdicts = (
         judge_input_qc(signals.input_qc, enabled=True),
         judge_predicted_dice(
@@ -861,6 +1006,12 @@ def run_gatekeeper(
             signals.ood_score,
             ood_thresholds,
             enabled="ood_score" in configured,
+        ),
+        judge_intended_use(
+            signals.patient_age_years,
+            min_age_years=min_age_years,
+            missing_age=missing_age_policy,
+            enabled=intended_use_enabled,
         ),
     )
 

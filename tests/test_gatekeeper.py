@@ -29,6 +29,7 @@ from neurovision.inference.gatekeeper import (
     calibrate_thresholds,
     judge_conformal_band,
     judge_input_qc,
+    judge_intended_use,
     judge_ood_score,
     judge_predicted_dice,
     load_thresholds,
@@ -52,12 +53,20 @@ def _make_cfg(
     enabled_signals: list[str],
     regions: list[str],
     thresholds: object = None,
+    intended_use: SimpleNamespace | None = None,
 ) -> SimpleNamespace:
-    """A minimal stand-in for the real config, exposing exactly `cfg.clinical.gatekeeper`."""
+    """A minimal stand-in for the real config, exposing exactly `cfg.clinical.gatekeeper`.
+
+    `intended_use` defaults to `None` -- absent entirely, the same shape a
+    config predating P1.3 has -- and `run_gatekeeper` must not crash on that
+    as long as `"intended_use"` is not in `enabled_signals` (see
+    `test_intended_use_disabled_and_no_config_block_never_crashes`).
+    """
     gk = SimpleNamespace(
         enabled_signals=list(enabled_signals),
         regions=list(regions),
         thresholds=thresholds,
+        intended_use=intended_use,
     )
     return SimpleNamespace(clinical=SimpleNamespace(gatekeeper=gk))
 
@@ -285,7 +294,13 @@ def test_disabled_signal_is_reported_not_omitted() -> None:
 
     assert decision.decision is Decision.PROCEED  # the disabled REFUSE-shaped data changes nothing
     by_signal = {v.signal: v for v in decision.verdicts}
-    assert set(by_signal) == {"input_qc", "predicted_dice", "conformal_band", "ood_score"}
+    assert set(by_signal) == {
+        "input_qc",
+        "predicted_dice",
+        "conformal_band",
+        "ood_score",
+        "intended_use",
+    }
     cb = by_signal["conformal_band"]
     assert cb.enabled is False
     assert cb.decision is Decision.PROCEED
@@ -352,12 +367,14 @@ def test_judge_region_signal_rejects_empty_regions() -> None:
 def test_decision_is_the_worst_severity() -> None:
     """The overall decision is the worst across signals, not whichever sorts last by name.
 
-    `SIGNAL_NAMES` sorted alphabetically is `conformal_band, input_qc, ood_score,
-    predicted_dice` -- `predicted_dice` is alphabetically LAST. This case makes
-    `predicted_dice` PROCEED (good) while `conformal_band` (alphabetically FIRST)
-    REFUSEs, so an implementation that mistakenly took "whichever signal sorts
-    last" as the overall verdict would report PROCEED instead of the correct
-    REFUSE -- a string-ordering bug this test would catch even though, as
+    `SIGNAL_NAMES` sorted alphabetically is `conformal_band, input_qc,
+    intended_use, ood_score, predicted_dice` -- `predicted_dice` is
+    alphabetically LAST (this case does not enable `intended_use`, so it
+    stays PROCEED regardless). This case makes `predicted_dice` PROCEED (good)
+    while `conformal_band` (alphabetically FIRST) REFUSEs, so an
+    implementation that mistakenly took "whichever signal sorts last" as the
+    overall verdict would report PROCEED instead of the correct REFUSE -- a
+    string-ordering bug this test would catch even though, as
     `Decision`'s docstring notes, the three `Decision` *values* themselves do not
     happen to invert under plain string comparison.
     """
@@ -473,6 +490,160 @@ def test_load_thresholds_none_and_path_and_mapping(tmp_path: Path) -> None:
 def re_escape_path(path: Path) -> str:
     """`re.escape` a path for use as a `pytest.raises(match=...)` pattern."""
     return re.escape(str(path))
+
+
+# ---------------------------------------------------------------------------
+# 20. judge_intended_use -- a SCOPING rule, not detection (P1.3, Milestone 5)
+# ---------------------------------------------------------------------------
+
+
+def test_judge_intended_use_disabled_is_proceed_but_reports_availability() -> None:
+    """Disabled: PROCEED, `enabled=False`, but `available` still reflects the raw data."""
+    verdict = judge_intended_use(65.0, min_age_years=18, missing_age="caution", enabled=False)
+    assert verdict.decision is Decision.PROCEED
+    assert verdict.enabled is False
+    assert verdict.available is True
+    assert "not consulted" in verdict.message
+
+    verdict_missing = judge_intended_use(
+        None, min_age_years=18, missing_age="caution", enabled=False
+    )
+    assert verdict_missing.available is False
+
+
+def test_judge_intended_use_missing_age_caution() -> None:
+    verdict = judge_intended_use(None, min_age_years=18, missing_age="caution", enabled=True)
+    assert verdict.decision is Decision.PROCEED_WITH_CAUTION
+    assert verdict.available is False
+    assert verdict.enabled is True
+    assert "not recorded" in verdict.message
+    assert verdict.detail["age_years"] is None
+    assert verdict.detail["missing_age_policy"] == "caution"
+
+
+def test_judge_intended_use_missing_age_refuse() -> None:
+    verdict = judge_intended_use(None, min_age_years=18, missing_age="refuse", enabled=True)
+    assert verdict.decision is Decision.REFUSE
+    assert verdict.available is False
+
+
+def test_judge_intended_use_bad_missing_age_policy_raises() -> None:
+    with pytest.raises(ValueError, match="missing_age"):
+        judge_intended_use(None, min_age_years=18, missing_age="ignore", enabled=True)
+
+
+def test_judge_intended_use_nan_is_treated_as_missing() -> None:
+    """NaN/inf age is folded into the same branch as `None` -- the silent-pass trap."""
+    verdict_nan = judge_intended_use(
+        float("nan"), min_age_years=18, missing_age="caution", enabled=True
+    )
+    assert verdict_nan.decision is Decision.PROCEED_WITH_CAUTION
+    assert verdict_nan.available is False
+
+    verdict_inf = judge_intended_use(
+        float("inf"), min_age_years=18, missing_age="refuse", enabled=True
+    )
+    assert verdict_inf.decision is Decision.REFUSE
+    assert verdict_inf.available is False
+
+
+def test_judge_intended_use_child_refuses() -> None:
+    verdict = judge_intended_use(10.0, min_age_years=18, missing_age="caution", enabled=True)
+    assert verdict.decision is Decision.REFUSE
+    assert verdict.available is True
+    assert "10" in verdict.message
+    assert "18" in verdict.message
+    assert verdict.detail["age_years"] == pytest.approx(10.0)
+
+
+def test_judge_intended_use_boundary_age_exactly_min_proceeds() -> None:
+    """`age_years == min_age_years` PROCEEDs -- the cut is `<`, not `<=`."""
+    verdict = judge_intended_use(18.0, min_age_years=18, missing_age="caution", enabled=True)
+    assert verdict.decision is Decision.PROCEED
+
+
+def test_judge_intended_use_adult_proceeds() -> None:
+    verdict = judge_intended_use(65.0, min_age_years=18, missing_age="caution", enabled=True)
+    assert verdict.decision is Decision.PROCEED
+    assert verdict.available is True
+    assert verdict.detail["age_years"] == pytest.approx(65.0)
+
+
+# ---------------------------------------------------------------------------
+# 21. intended_use wired through run_gatekeeper -- SCOPING, never detection
+# ---------------------------------------------------------------------------
+
+
+def _intended_use_block(
+    *, min_age_years: float = 18, missing_age: str = "caution"
+) -> SimpleNamespace:
+    return SimpleNamespace(min_age_years=min_age_years, missing_age=missing_age)
+
+
+def test_run_gatekeeper_intended_use_child_refuses_overall() -> None:
+    cfg = _make_cfg(
+        enabled_signals=["input_qc", "intended_use"],
+        regions=["WT"],
+        intended_use=_intended_use_block(),
+    )
+    signals = GateSignals(input_qc=_report(Severity.OK), patient_age_years=10.0)
+    decision = run_gatekeeper(cfg, signals)
+
+    assert decision.decision is Decision.REFUSE
+    refusing_signals = {v.signal for v in decision.refusals()}
+    assert refusing_signals == {"intended_use"}
+
+
+def test_run_gatekeeper_intended_use_missing_age_is_caution_not_refuse() -> None:
+    cfg = _make_cfg(
+        enabled_signals=["input_qc", "intended_use"],
+        regions=["WT"],
+        intended_use=_intended_use_block(),
+    )
+    signals = GateSignals(input_qc=_report(Severity.OK), patient_age_years=None)
+    decision = run_gatekeeper(cfg, signals)
+
+    assert decision.decision is Decision.PROCEED_WITH_CAUTION
+
+
+def test_run_gatekeeper_intended_use_disabled_never_changes_the_decision() -> None:
+    """Disabled (the current default): a child's age is reported but changes nothing."""
+    cfg = _make_cfg(enabled_signals=["input_qc"], regions=["WT"])  # intended_use not enabled
+    signals = GateSignals(input_qc=_report(Severity.OK), patient_age_years=10.0)
+    decision = run_gatekeeper(cfg, signals)
+
+    assert decision.decision is Decision.PROCEED
+    by_signal = {v.signal: v for v in decision.verdicts}
+    assert by_signal["intended_use"].enabled is False
+    assert by_signal["intended_use"].decision is Decision.PROCEED
+
+
+def test_run_gatekeeper_intended_use_enabled_without_config_block_raises() -> None:
+    """An enabled signal with no configured operating point is never given one made up."""
+    cfg = _make_cfg(enabled_signals=["input_qc", "intended_use"], regions=["WT"], intended_use=None)
+    signals = GateSignals(input_qc=_report(Severity.OK), patient_age_years=40.0)
+    with pytest.raises(ValueError, match="intended_use"):
+        run_gatekeeper(cfg, signals)
+
+
+def test_run_gatekeeper_intended_use_missing_config_but_disabled_never_crashes() -> None:
+    """A config predating P1.3, with no `intended_use` block at all, must not crash."""
+    cfg = _make_cfg(enabled_signals=["input_qc"], regions=["WT"], intended_use=None)
+    signals = GateSignals(input_qc=_report(Severity.OK))
+    decision = run_gatekeeper(cfg, signals)
+    assert decision.decision is Decision.PROCEED
+
+
+# ---------------------------------------------------------------------------
+# 22. Verdict count and order matches SIGNAL_NAMES
+# ---------------------------------------------------------------------------
+
+
+def test_verdict_count_and_order_matches_signal_names() -> None:
+    cfg = _make_cfg(enabled_signals=["input_qc"], regions=["WT"])
+    decision = run_gatekeeper(cfg, GateSignals(input_qc=_report(Severity.OK)))
+    assert tuple(v.signal for v in decision.verdicts) == gatekeeper.SIGNAL_NAMES
+    assert len(decision.verdicts) == len(gatekeeper.SIGNAL_NAMES) == 5
 
 
 # ---------------------------------------------------------------------------
