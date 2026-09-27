@@ -88,3 +88,47 @@ CPU only. It reads ~1,410 preprocessed volumes once (train, val, test, SSA, PED)
 
 *(To be completed after the run. Nothing above this line may be edited once the first number
 exists.)*
+
+**Run 2026-09-27**, driver `scripts/ood_score.py` (`d5150a6`), outputs `outputs/ood/`. 1,410 volumes
+(train 875, val 187, test 189, SSA 60, PED 99), 0 skipped. Nothing above was changed. Cuts from val:
+`caution_cut` 7.557, `refuse_cut` 9.935. Experiment note 56, claim C26.
+
+**Endpoint 1 — flag rates** (95% bootstrap CI):
+
+| Cohort | n | CAUTION-or-worse | REFUSE |
+|---|---|---|---|
+| test | 189 | 0.095 [0.058, 0.138] | 0.037 [0.011, 0.064] |
+| SSA | 60 | **0.600** [0.483, 0.717] | 0.150 [0.067, 0.250] |
+| PED | 99 | **0.505** [0.404, 0.606] | 0.101 [0.040, 0.162] |
+
+**Endpoint 2 — AUROC for "unusable"** (descriptive): test 0.565 [0.367, 0.763] (12 unusable),
+SSA 0.589 [0.422, 0.748] (12), PED 0.600 [0.461, 0.734] (72).
+
+**Endpoint 3 (primary) — error budget at bar 0.7**, `[input_qc, predicted_dice, intended_use]` →
+`+ ood_score` (`outputs/error_budget_ood_baseline` → `outputs/error_budget_ood`; the baseline
+reproduces `outputs/error_budget_intended_use` exactly):
+
+| Cohort | accepted | P(accepted AND usable) | silent failure | over-refusal |
+|---|---|---|---|---|
+| test | 0.958 → 0.926 | 0.915 → **0.884** (−0.032) | 8 → 8 | 4 → 10 |
+| SSA | 0.967 → 0.817 | 0.783 → 0.683 | **11 → 8** (−3) | 1 → 7 |
+| PED | 0 → 0 | 0 → 0 | 0 → 0 | unchanged (`intended_use` refuses all) |
+
+Only REFUSE removes a study; CAUTION is still accepted. The score's REFUSE newly removed 6 test
+studies (0 unusable) and 9 SSA studies (3 unusable, 6 usable).
+
+**Predictions.** (a) control near 10% / 2% — **held** (REFUSE 3.7%, CI covers 2%). (b) PED ≥ 50% —
+**held**, barely (0.505); detection of paediatric *input*, not failure. (c) SSA above test with CIs
+separated — **held** (0.60 vs 0.095). (d) AUROC ≤ 0.65 in SSA and PED — **held** on the point
+estimates (0.59, 0.60); the upper CI bounds reach 0.75.
+
+**Decision rule.** (1) SSA silent failure falls by ≥ 4 of 11 — **FAILED** (3 of 11). (2) test
+P(accepted AND usable) falls by ≤ 0.05 — held (0.032). Both are required, so **`ood_score` stays
+display-only**, like `conformal_band`. Not tuned: λ, features and quantiles are unchanged.
+
+**Reading.** The score sees the cohort-level shift the QC model misses (60% of SSA flagged vs 9.5%
+of test), which is the thing C21 says the gate cannot see. It does not tell good SSA masks from bad
+ones (AUROC 0.59), so as a per-study REFUSE it throws away two usable studies for each failure it
+catches. It is useful as a **cohort-level alarm** (a site whose studies are flagged at 6× the
+in-distribution rate is out of distribution), not as a per-study gate.
+

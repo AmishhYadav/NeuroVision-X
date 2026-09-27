@@ -2399,3 +2399,51 @@ evidence about the setup, and forgetting it means repeating it.
     **Error-budget stage row (note 47 G-table layout):** `RSNA DICOM, n = 40,
     test-split cases` -- refused at input 16 (0.40), refused at gate 2
     (0.05), accepted 22 (0.55); usable | accepted 0.36; silent failure 0.35.
+
+56. **PRE-REGISTERED NEGATIVE (Milestone 5, P1.4): AN INPUT-STATISTICS OOD
+    SCORE SEES THE SSA SHIFT (60% FLAGGED vs 9.5% OF TEST) BUT CANNOT PICK
+    THE FAILED MASKS, SO IT MISSES THE SWITCH-ON RULE (3 OF 11 SSA SILENT
+    FAILURES REMOVED, 4 REQUIRED) AND STAYS DISPLAY-ONLY.** Run 2026-09-27
+    (driver `d5150a6`, pre-registration
+    `preregistrations/preregistration_ood.md`, committed `c4e0b43` before any
+    feature existed). 46 label-free features per preprocessed volume
+    (percentiles, skew/kurtosis, inter-modality correlations, brain size and
+    extents), shrinkage Gaussian (λ 0.1) fitted on **train** (875),
+    Mahalanobis distance as the score, CAUTION/REFUSE cuts at the val 90th /
+    98th percentiles (7.557 / 9.935). 1,410 volumes, 0 skipped, 5 min CPU.
+
+    | Cohort | n | CAUTION-or-worse | REFUSE | AUROC for unusable |
+    |---|---|---|---|---|
+    | test | 189 | 0.095 [0.058, 0.138] | 0.037 [0.011, 0.064] | 0.565 [0.367, 0.763] |
+    | SSA | 60 | **0.600** [0.483, 0.717] | 0.150 [0.067, 0.250] | 0.589 [0.422, 0.748] |
+    | PED | 99 | **0.505** [0.404, 0.606] | 0.101 [0.040, 0.162] | 0.600 [0.461, 0.734] |
+
+    **Primary endpoint (error budget, bar 0.7),** live signals
+    `[input_qc, predicted_dice, intended_use]` vs the same plus `ood_score`:
+    test P(accepted AND usable) 0.915 → 0.884 (6 newly refused, **all
+    usable**); SSA silent failure **11 → 8** (9 newly refused: 3 unusable, 6
+    usable), SSA over-refusal 1 → 7; PED unchanged (`intended_use` already
+    refuses all 99). The baseline arm reproduces note 53's
+    `outputs/error_budget_intended_use` exactly.
+
+    **Predictions** (a) control ~10%/2%, (b) PED ≥ 50%, (c) SSA above test
+    with separated CIs, (d) AUROC ≤ 0.65 — **all four held** ((b) barely at
+    0.505; (d) on point estimates, upper CIs reach 0.75). **Decision rule:**
+    SSA silent failure −3 < the required −4 → **fails**; test cost 0.032 ≤
+    0.05 passes. Both needed, so `ood_score` is **not** added to
+    `enabled_signals`. Nothing was tuned after the numbers.
+
+    **What this means.** The input score sees exactly what C21 says the
+    output-side gate cannot: SSA is flagged at ~6× the in-distribution rate.
+    But the shift it sees is a property of the *cohort*, not of which
+    masks fail (AUROC ~0.59), so as a per-study REFUSE it discards two good
+    SSA studies per failure caught, and in distribution it catches nothing
+    (0 of 8 test silent failures). The honest use is a **site-level
+    alarm** — the fraction of a site's studies flagged, compared with the
+    ~10% expected — which is the signal that should trigger C24's local
+    recalibration, not a per-patient refusal. That use is a post-hoc
+    reading and is not pre-registered.
+
+    Artifacts: `outputs/ood/{features_*.csv, *_ood_score.csv, model.json,
+    thresholds.json, flag_rates.csv, auroc.csv, skipped.csv, run_meta.json}`,
+    `outputs/error_budget_ood{,_baseline}/`.

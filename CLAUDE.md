@@ -207,7 +207,8 @@ at its top** — read it before planning anything. Why it changed shape:
 **Since 2026-09-26:** C1 replicated at a second seed pair (note 54); real-DICOM front-end run done
 (note 55, C25: 40% thick-slice refusals, WT −0.23, mostly registration disagreement); `intended_use`
 (adults only) live in the gate (note 53); nnU-Net importer/scorer built; Gate A on Kaggle at session 2
-of ~7 (209 s/epoch); P1.4 OOD score built, not yet run.
+of ~7 (209 s/epoch); P1.4 OOD score run (note 56, C26): sees the SSA shift (60% flagged vs 9.5% test)
+but not which masks fail — misses its switch-on rule, stays display-only.
 
 **Where the science stands** (authority: `docs/research_docs/claims_and_evidence.md`, read it before writing
 anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189),
