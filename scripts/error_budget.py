@@ -41,6 +41,17 @@ pre-registered quantile grid -- see `neurovision.analysis.error_budget.coverage_
 own docstring for why that is a description of the deployed operating point, not a new
 calibration.
 
+## P1.4: the real input-statistics OOD score
+
+`cfg.analysis.error_budget.ood_dir` (default `null`) lets this script consume the
+real OOD scorer `docs/research_docs/preregistrations/preregistration_ood.md`
+builds, instead of `gatekeeper_calibration.ood_score_table`'s structural
+placeholder. Set, every cohort's `ood_score` column is read from
+`<ood_dir>/<cohort>_ood_score.csv` and the deployed gate's `ood_score` cut
+points are replaced -- ONLY that one `Thresholds` field -- by
+`<ood_dir>/thresholds.json`'s own frozen `caution_cut`/`refuse_cut`. Nothing is
+fitted here either way; see `_resolve_ood_table` / `_resolve_thresholds`.
+
 ## CPU only, every path from config
 
 `qc_predicted_dice_table` is already hard-pinned to CPU internally (see its own
@@ -52,6 +63,7 @@ input and output location comes from `cfg.analysis.error_budget`,
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 from collections.abc import Mapping, Sequence
@@ -66,7 +78,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from neurovision.analysis import error_budget, gatekeeper_calibration
 from neurovision.analysis.statistics import load_per_case
-from neurovision.inference.gatekeeper import load_thresholds
+from neurovision.inference.gatekeeper import Thresholds, load_thresholds
 from neurovision.uncertainty.conformal import CaseLossCurve, load_curves_npz
 from neurovision.utils.io import ensure_dir, write_yaml
 from neurovision.utils.logging import setup_logging
@@ -252,6 +264,131 @@ def _case_ids(eval_dir: Path, max_cases: int | None, cohort_name: str) -> list[s
         shared = shared[: int(max_cases)]
     logger.info("error_budget: cohort %s -- %d case id(s) to score.", cohort_name, len(shared))
     return shared
+
+
+# ---------------------------------------------------------------------------
+# P1.4: the real input-statistics OOD score, read instead of the placeholder
+# ---------------------------------------------------------------------------
+
+
+def _load_ood_table(ood_dir: Path, cohort_name: str) -> pd.DataFrame:
+    """Reads one cohort's real OOD score from `<ood_dir>/<cohort_name>_ood_score.csv`.
+
+    Only used when `cfg.analysis.error_budget.ood_dir` is set (P1.4) --
+    `docs/research_docs/preregistrations/preregistration_ood.md` fixes the
+    scorer this file is expected to hold. Case-id coverage against the other
+    per-cohort signal tables is left to `_inner_join_signals`'s existing
+    drop-and-log, not checked here.
+
+    Args:
+        ood_dir: `cfg.analysis.error_budget.ood_dir`, the OOD run's own `out_dir`.
+        cohort_name: This cohort's name, e.g. `"test"`, `"ssa"`, `"ped"` -- used
+            only to build the expected filename.
+
+    Returns:
+        The file's `case_id`, `ood_score` columns.
+
+    Raises:
+        FileNotFoundError: No such file, named in the message.
+    """
+    path = ood_dir / f"{cohort_name}_ood_score.csv"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"error_budget: cfg.analysis.error_budget.ood_dir is set but cohort "
+            f"{cohort_name!r} has no OOD score file at {path}."
+        )
+    return pd.read_csv(path)[["case_id", "ood_score"]]
+
+
+def _load_ood_thresholds(ood_dir: Path, deployed: Thresholds) -> Thresholds:
+    """Swaps `deployed.ood_score` for the real OOD run's own frozen cuts (P1.4).
+
+    Reads `<ood_dir>/thresholds.json`'s `caution_cut` / `refuse_cut` -- the
+    val-quantile cuts the OOD pre-registration fits and freezes, never refitted
+    here -- and returns a COPY of `deployed` (`dataclasses.replace`) with only
+    its `ood_score` field replaced. Every other field of `deployed`, and the
+    file it was loaded from (`outputs/gatekeeper/thresholds.json`), are left
+    untouched.
+
+    Args:
+        ood_dir: `cfg.analysis.error_budget.ood_dir`, the OOD run's own `out_dir`.
+        deployed: The deployed gate's frozen `Thresholds`
+            (`neurovision.inference.gatekeeper.load_thresholds`).
+
+    Returns:
+        A copy of `deployed` with `ood_score` replaced by
+        `(caution_cut, refuse_cut)`.
+
+    Raises:
+        FileNotFoundError: No `thresholds.json` under `ood_dir`.
+        ValueError: `caution_cut > refuse_cut` -- HIGH is bad for `ood_score`
+            (same reading as `conformal_band`), so caution must cut in first.
+    """
+    path = ood_dir / "thresholds.json"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"error_budget: cfg.analysis.error_budget.ood_dir is set but no "
+            f"thresholds.json exists at {path}."
+        )
+    payload = json.loads(path.read_text())
+    caution_cut = float(payload["caution_cut"])
+    refuse_cut = float(payload["refuse_cut"])
+    if caution_cut > refuse_cut:
+        raise ValueError(
+            f"error_budget: {path} has caution_cut={caution_cut} > refuse_cut="
+            f"{refuse_cut}; ood_score reads HIGH as bad, so caution must cut in "
+            "at or before refuse."
+        )
+    logger.info(
+        "error_budget: ood_score thresholds -- deployed=%s, real OOD run (%s)=%s.",
+        deployed.ood_score,
+        path,
+        (caution_cut, refuse_cut),
+    )
+    return dataclasses.replace(deployed, ood_score=(caution_cut, refuse_cut))
+
+
+def _resolve_ood_table(
+    ood_dir: Path | None,
+    eval_dir: Path,
+    cohort_name: str,
+    case_ids: Sequence[str],
+) -> pd.DataFrame:
+    """One cohort's `ood_score` table: the real OOD run's CSV, or the placeholder.
+
+    `ood_dir is None` (the default) reproduces the exact call this script made
+    before P1.4 existed, byte-identical -- see
+    `neurovision.analysis.gatekeeper_calibration.ood_score_table`'s own
+    docstring for why it is a structural placeholder, not a validated detector.
+
+    Args:
+        ood_dir: `cfg.analysis.error_budget.ood_dir`, or `None`.
+        eval_dir: This cohort's eval directory -- passed to the placeholder only.
+        cohort_name: Used only to build the real OOD run's expected filename.
+        case_ids: Passed to the placeholder only.
+
+    Returns:
+        A `case_id`, `ood_score` table.
+    """
+    if ood_dir is not None:
+        return _load_ood_table(ood_dir, cohort_name)
+    return gatekeeper_calibration.ood_score_table(eval_dir, case_ids)
+
+
+def _resolve_thresholds(ood_dir: Path | None, deployed: Thresholds) -> Thresholds:
+    """The `Thresholds` to judge every cohort against: deployed, or deployed with a real ood_score.
+
+    Args:
+        ood_dir: `cfg.analysis.error_budget.ood_dir`, or `None`.
+        deployed: The deployed gate's frozen `Thresholds`.
+
+    Returns:
+        `deployed` unchanged when `ood_dir is None`; otherwise
+        `_load_ood_thresholds(ood_dir, deployed)`.
+    """
+    if ood_dir is None:
+        return deployed
+    return _load_ood_thresholds(ood_dir, deployed)
 
 
 # ---------------------------------------------------------------------------
@@ -631,6 +768,13 @@ def run_error_budget(cfg: DictConfig) -> dict[str, Path]:
             "clinical.gatekeeper.thresholds at the written thresholds.json."
         )
 
+    # P1.4 -- null (default) leaves `thresholds` byte-identical to before this
+    # key existed; set, it swaps in the real input-statistics OOD run's own
+    # frozen ood_score cuts. See _resolve_thresholds / _resolve_ood_table.
+    raw_ood_dir = eb_cfg.get("ood_dir", None)
+    ood_dir = Path(str(raw_ood_dir)) if raw_ood_dir is not None else None
+    thresholds = _resolve_thresholds(ood_dir, thresholds)
+
     conformal_dir = Path(str(gk_cfg.conformal_dir))
     fit_path = conformal_dir / "fit.json"
     if not fit_path.is_file():
@@ -671,7 +815,7 @@ def run_error_budget(cfg: DictConfig) -> dict[str, Path]:
             curves_by_region, fitted_thresholds
         )
         conformal_table = _reshape_per_region_case_values(band_widths, "conformal_band")
-        ood_table = gatekeeper_calibration.ood_score_table(cohort.eval_dir, case_ids)
+        ood_table = _resolve_ood_table(ood_dir, cohort.eval_dir, cohort.name, case_ids)
 
         signals = _inner_join_signals(dice_table, conformal_table, ood_table, cohort.name)
         signals = signals[signals["case_id"].isin(case_ids)].reset_index(drop=True)

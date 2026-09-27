@@ -5,7 +5,7 @@ The script lives under scripts/, not src/, so it is loaded via
 `tests/test_calibrate_gatekeeper.py` and `tests/test_validate_qc_script.py` already
 use for their own sibling scripts.
 
-These tests only exercise the three pieces of plumbing that do not need real
+These tests only exercise the pieces of plumbing that do not need real
 artifacts (a saved QC checkpoint, saved logits, a conformal `curves.npz`, a frozen
 `thresholds.json`) -- a full run against `outputs/` is a real analysis run, done
 separately, never inside the test suite (`CLAUDE.md`'s testing rules; a run against
@@ -16,12 +16,15 @@ second.
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from omegaconf import OmegaConf
 
+from neurovision.inference.gatekeeper import Thresholds
 from neurovision.uncertainty.conformal import CaseLossCurve
 from tests.script_loader import load_script
 
@@ -31,6 +34,10 @@ _miss_rate_at_threshold = error_budget_script._miss_rate_at_threshold
 _stage_reliability_rows = error_budget_script._stage_reliability_rows
 _ensure_bar_included = error_budget_script._ensure_bar_included
 resolve_cohorts = error_budget_script.resolve_cohorts
+_load_ood_table = error_budget_script._load_ood_table
+_load_ood_thresholds = error_budget_script._load_ood_thresholds
+_resolve_ood_table = error_budget_script._resolve_ood_table
+_resolve_thresholds = error_budget_script._resolve_thresholds
 
 
 # ---------------------------------------------------------------------------
@@ -237,3 +244,127 @@ def test_resolve_cohorts_stand_in_age_years_defaults_to_none_when_absent(
     cfg = _cohort_cfg(tmp_path, [{"name": "test"}])
     cohorts = resolve_cohorts(cfg)
     assert cohorts[0].stand_in_age_years is None
+
+
+# ---------------------------------------------------------------------------
+# 5. P1.4 -- the real input-statistics OOD score (ood_dir)
+# ---------------------------------------------------------------------------
+
+
+def _deployed_thresholds() -> Thresholds:
+    """A hand-built deployed `Thresholds`, standing in for `load_thresholds`'s output."""
+    return Thresholds(
+        predicted_dice={"WT": (0.3, 0.6), "TC": (0.2, 0.5)},
+        conformal_band={"WT": (0.1, 0.2), "TC": (0.15, 0.3)},
+        ood_score=(0.5, 0.9),
+        calibration_n=187,
+        caution_quantile=0.1,
+        refuse_quantile=0.02,
+    )
+
+
+def test_resolve_ood_table_null_dir_calls_placeholder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ood_dir=None` must call `gatekeeper_calibration.ood_score_table`, unchanged."""
+    calls: list[tuple[Path, object]] = []
+
+    def _fake_ood_score_table(eval_dir: Path, case_ids: object) -> pd.DataFrame:
+        calls.append((eval_dir, case_ids))
+        return pd.DataFrame({"case_id": ["a", "b"], "ood_score": [0.1, 0.2]})
+
+    monkeypatch.setattr(
+        error_budget_script.gatekeeper_calibration, "ood_score_table", _fake_ood_score_table
+    )
+
+    eval_dir = Path("some/eval_dir")
+    case_ids = ["a", "b"]
+    table = _resolve_ood_table(None, eval_dir, "test", case_ids)
+
+    assert calls == [(eval_dir, case_ids)]
+    assert list(table["case_id"]) == ["a", "b"]
+
+
+def test_resolve_thresholds_null_dir_returns_deployed_unchanged() -> None:
+    deployed = _deployed_thresholds()
+    result = _resolve_thresholds(None, deployed)
+    assert result is deployed
+
+
+def test_load_ood_table_reads_csv(tmp_path: Path) -> None:
+    ood_dir = tmp_path / "ood_run"
+    ood_dir.mkdir()
+    pd.DataFrame({"case_id": ["x", "y"], "ood_score": [1.5, 2.5]}).to_csv(
+        ood_dir / "test_ood_score.csv", index=False
+    )
+
+    table = _load_ood_table(ood_dir, "test")
+
+    assert list(table.columns) == ["case_id", "ood_score"]
+    assert list(table["case_id"]) == ["x", "y"]
+    assert list(table["ood_score"]) == pytest.approx([1.5, 2.5])
+
+
+def test_load_ood_table_missing_file_raises(tmp_path: Path) -> None:
+    ood_dir = tmp_path / "ood_run"
+    ood_dir.mkdir()
+    with pytest.raises(FileNotFoundError, match="ssa_ood_score.csv"):
+        _load_ood_table(ood_dir, "ssa")
+
+
+def test_resolve_ood_table_set_dir_reads_real_csv(tmp_path: Path) -> None:
+    ood_dir = tmp_path / "ood_run"
+    ood_dir.mkdir()
+    pd.DataFrame({"case_id": ["x"], "ood_score": [3.0]}).to_csv(
+        ood_dir / "ped_ood_score.csv", index=False
+    )
+
+    table = _resolve_ood_table(ood_dir, Path("unused"), "ped", ["x"])
+
+    assert list(table["case_id"]) == ["x"]
+    assert list(table["ood_score"]) == pytest.approx([3.0])
+
+
+def test_load_ood_thresholds_replaces_only_ood_score(tmp_path: Path) -> None:
+    ood_dir = tmp_path / "ood_run"
+    ood_dir.mkdir()
+    (ood_dir / "thresholds.json").write_text(json.dumps({"caution_cut": 1.2, "refuse_cut": 2.4}))
+
+    deployed = _deployed_thresholds()
+    result = _load_ood_thresholds(ood_dir, deployed)
+
+    assert result.ood_score == pytest.approx((1.2, 2.4))
+    # Every other field is untouched.
+    assert result.predicted_dice == deployed.predicted_dice
+    assert result.conformal_band == deployed.conformal_band
+    assert result.calibration_n == deployed.calibration_n
+    assert result.caution_quantile == deployed.caution_quantile
+    assert result.refuse_quantile == deployed.refuse_quantile
+    # The original object is not mutated.
+    assert deployed.ood_score == (0.5, 0.9)
+
+
+def test_load_ood_thresholds_missing_file_raises(tmp_path: Path) -> None:
+    ood_dir = tmp_path / "ood_run"
+    ood_dir.mkdir()
+    with pytest.raises(FileNotFoundError, match="thresholds.json"):
+        _load_ood_thresholds(ood_dir, _deployed_thresholds())
+
+
+def test_load_ood_thresholds_bad_cut_order_raises(tmp_path: Path) -> None:
+    ood_dir = tmp_path / "ood_run"
+    ood_dir.mkdir()
+    (ood_dir / "thresholds.json").write_text(json.dumps({"caution_cut": 5.0, "refuse_cut": 1.0}))
+
+    with pytest.raises(ValueError, match="caution_cut"):
+        _load_ood_thresholds(ood_dir, _deployed_thresholds())
+
+
+def test_resolve_thresholds_set_dir_delegates_to_load_ood_thresholds(tmp_path: Path) -> None:
+    ood_dir = tmp_path / "ood_run"
+    ood_dir.mkdir()
+    (ood_dir / "thresholds.json").write_text(json.dumps({"caution_cut": 0.1, "refuse_cut": 0.2}))
+
+    deployed = _deployed_thresholds()
+    result = _resolve_thresholds(ood_dir, deployed)
+
+    assert result.ood_score == pytest.approx((0.1, 0.2))
+    assert result.predicted_dice == deployed.predicted_dice

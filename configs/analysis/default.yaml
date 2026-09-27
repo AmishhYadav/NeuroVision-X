@@ -659,6 +659,16 @@ error_budget:
   # analysis.qc_validate.checkpoint -- nothing is refitted here.
   out_dir: outputs/error_budget
 
+  # P1.4 -- docs/research_docs/preregistrations/preregistration_ood.md. null (default) means
+  # "no real OOD run yet": every cohort's ood_score comes from
+  # neurovision.analysis.gatekeeper_calibration.ood_score_table, the STRUCTURAL
+  # PLACEHOLDER (entropy from saved logits), and the deployed gate's frozen
+  # ood_score cuts are used unchanged -- byte-identical to before this key
+  # existed. Set to the OOD run's own out_dir to instead read
+  # <ood_dir>/<cohort.name>_ood_score.csv and <ood_dir>/thresholds.json
+  # (caution_cut, refuse_cut) for every cohort -- see scripts/error_budget.py.
+  ood_dir: null
+
   # The three cohorts with ground truth. Same trio as qc_validate above; the
   # conformal curves are the ones scripts/conformal.py already extracted for
   # each cohort (B2), so no inference runs.
