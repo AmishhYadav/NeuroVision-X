@@ -2253,3 +2253,52 @@ evidence about the setup, and forgetting it means repeating it.
 | `neurovision` run 2, session 1 | `+experiment=neurovision data.num_workers=2`, `GIT_REF=7caacfa` | 10.34 | **HEALTHY — the entropy fix holds on the real run.** Epochs 0–35, clean `max_hours` stop before epoch 36 (`elapsed 10.3360h plus a predicted 0.2865h ... would exceed 10.5000h`). `train/loss_epoch` **0.5372** (finite), grad-norm median **0.714** and stable across every epoch, **no `loss=nan` anywhere**. `best.pt` at **epoch 29** — the latest validation was the best, where attempt 1 was frozen at epoch 9. Peak VRAM 6.16 GiB of 14.56, no OOM. Grad-norm max spikes 17–57 with ~1.4% of steps clipped: exactly the intended behaviour of `grad_clip_norm: 5.0`, and the justification for having raised it from 1.0 — the median is 0.71, so clipping catches genuine spikes rather than rescaling routine steps. 44 epochs remain, ~12.8 h, so two further sessions. NOT a finished run: no numbers from it may be reported until all 80 epochs complete. |
 | `neurovision` run 2, session 2 | `+experiment=neurovision data.num_workers=2`, `GIT_REF=7caacfa` | 10.5 | **HEALTHY.** Epochs 36–72, clean `max_hours` stop before epoch 73 (`elapsed 10.4363h plus a predicted 0.2815h ... would exceed 10.5000h`). `train/loss_epoch` **0.4549** (down from 0.5372), grad-norm median **0.689** stable across every epoch, ~1% of steps clipped, `nonfinite=[]`. `best.pt` advanced to **epoch 69** at `val/dice_mean` **0.8938**; epoch 59 also improved, so validation was still climbing at the end of the session. Peak VRAM 6.17 GiB of 14.56. Two log observations worth recording so they are not re-investigated later: the `RESUME:` line is **absent from the saved log** because Kaggle truncates the head of a long log (it begins mid-epoch-56) — the resume is instead proved by the epoch numbering and by `best_metric` carrying forward; and the 8 `nan` mentions are all MONAI HD95 warnings of the form *"the ground truth of class 0 is all 0, this may result in nan/inf distance"*, i.e. the empty-ET cases `hd95()` deliberately returns NaN for, not divergence. |
 | `neurovision` run 2, session 3 | `+experiment=neurovision data.num_workers=2`, `GIT_REF=7caacfa` | 2.3 | **TRAINING COMPLETE — 80/80 epochs — but the kernel is marked ERROR, and the error is in the verification cell, not the run.** Epochs 73–79 trained normally (`train/loss_epoch` **0.4591**, grad-norm median **0.680**, ~1% clipped, peak VRAM 6.17 GiB), `last.pt` written at **epoch 79** with `global_step` **70000** = 80 x 875, which is the arithmetic proof every epoch ran. The final cell then raised `FileNotFoundError: /kaggle/working/checkpoints/best.pt missing`. Cause: the resume cell copied only `last.pt` out of the read-only mount, and `save_checkpoint` writes `best.pt` **only when validation improves**. This session resumed at epoch 72 with the run's best already at epoch 69, validated once at epoch 79, did not beat it, and therefore never created a `best.pt` in its own working directory. Nothing was lost — Kaggle **does** persist a failed version's output, verified by downloading `last.pt` (epoch 79) afterwards, and the run's `best.pt` (epoch 69) is intact in session 2's output. Fixed in `8045f49`: the resume cell now carries `best.pt` forward so a final session's output is self-sufficient, and the verification cell requires only `last.pt`. Lesson, and it is the same shape as the `git clone -b` failure: **a guard written for the common case will eventually meet the legitimate uncommon one, and failing a session whose work is already complete is worse than not checking at all.** |
+
+53. **SCOPING, NOT DETECTION (Milestone 5, P1.3): THE `intended_use` SIGNAL
+    REFUSES EVERY PAEDIATRIC STUDY -- BY CONSTRUCTION -- AND MOVES NOTHING
+    ELSE.** Run 2026-09-27:
+    `.venv/bin/python scripts/error_budget.py model=segqc
+    'clinical.gatekeeper.enabled_signals=[input_qc,predicted_dice,intended_use]'
+    analysis.error_budget.out_dir=outputs/error_budget_intended_use`
+    (`f6b3cbf`; gate signal `395a247`, live wiring `P1.3c`). Saved signals
+    only; no inference; ~4 min.
+
+    **What was built.** Ingest reads DICOM `PatientAge` into
+    `IngestResult.patient_age_years` (P1.3a). The gate's new `intended_use`
+    signal REFUSEs an age below `clinical.gatekeeper.intended_use.min_age_years`
+    (18) and CAUTIONs a missing age -- the documented exception (author,
+    2026-09-26) to "an enabled signal that arrives empty is a REFUSE", because
+    de-identification routinely strips age. The signal is implemented and
+    wired into the live pipeline but **not yet in `enabled_signals`**: it is
+    switched on only after the P1.2 real-DICOM run, which was frozen against
+    the current gate.
+
+    **How the re-score was done.** No cohort on disk carries ages, so each
+    cohort gets a stand-in age from its population (`stand_in_age_years`:
+    BraTS 2021 40, BraTS-Africa 40, BraTS-PEDs 10). This is a cohort label,
+    not a measurement.
+
+    **Result, bar 0.7, against note 51's run (`error_budget_p04_band_display_only`,
+    the same gate minus `intended_use`):**
+
+    | cohort | accepted before -> after | silent failure before -> after |
+    |---|---|---|
+    | test (189) | 0.958 -> 0.958 (identical) | 8 -> 8 |
+    | SSA (60) | 0.967 -> 0.967 (identical) | 11 -> 11 |
+    | PED (99) | 0.798 -> **0.000** | 53 -> **0** |
+
+    Test and SSA are bit-for-bit identical. Every PED study is refused with
+    `intended_use: outside intended use: adult glioma only (age 10 y < 18 y)`:
+    72 correct refusals and **27 over-refusals** (PED masks that were usable,
+    refused for being paediatric).
+
+    **How to read it -- and how not to.** This is **scoping**: the tool now
+    declines a population it was never validated on. It is **not** a detector
+    and its 100% PED refusal is **not** evidence that the gate works -- a rule
+    that refuses every child scores 100% on a paediatric cohort by
+    construction. It says nothing about SSA, where the shift is real, the
+    population is adult, and this signal never fires (silent failure stays
+    11/60). The finding the thesis cares about is unchanged: the learned gate
+    cannot see cohort-level shift (C22); a labelling rule can only exclude a
+    cohort it can name. And the rule is only as good as the header: an
+    anonymised child study arrives with no age and is CAUTIONed, not refused.
