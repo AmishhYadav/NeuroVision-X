@@ -86,6 +86,13 @@ Most of that loss is a per-patient registration disagreement (median 5.9 mm) bet
 the SRI24 atlas and BraTS's own — counted against us by design, because the report's anatomy is read
 in atlas space (note 55).
 
+A pre-registered out-of-distribution score, computed from input statistics alone (no labels), does
+see the cohort shift the gate misses: it flags 60% of SSA studies against 9.5% of test studies. It
+does not see *which* studies fail — it ranks unusable masks barely above chance (AUROC 0.56–0.60).
+Used as a per-study refusal it would remove 3 of SSA's 11 silent failures, short of the 4 required
+in advance, at the cost of 6 usable studies in each of SSA and test, so it stays a display-only
+signal [C26, note 56]. It detects the shifted cohort, not the failed study.
+
 ---
 
 ## 5. Discussion
