@@ -17,8 +17,10 @@ second.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import pytest
+from omegaconf import OmegaConf
 
 from neurovision.uncertainty.conformal import CaseLossCurve
 from tests.script_loader import load_script
@@ -28,6 +30,7 @@ error_budget_script = load_script("error_budget")
 _miss_rate_at_threshold = error_budget_script._miss_rate_at_threshold
 _stage_reliability_rows = error_budget_script._stage_reliability_rows
 _ensure_bar_included = error_budget_script._ensure_bar_included
+resolve_cohorts = error_budget_script.resolve_cohorts
 
 
 # ---------------------------------------------------------------------------
@@ -191,3 +194,46 @@ def test_ensure_bar_included_no_duplicate_when_already_present() -> None:
 def test_ensure_bar_included_sorts_unsorted_input() -> None:
     result = _ensure_bar_included([0.9, 0.5, 0.7], 0.6)
     assert result == [0.5, 0.6, 0.7, 0.9]
+
+
+# ---------------------------------------------------------------------------
+# 4. resolve_cohorts -- stand_in_age_years (P1.3)
+# ---------------------------------------------------------------------------
+
+
+def _cohort_cfg(tmp_path: Path, entries: list[dict]) -> OmegaConf:
+    """A minimal `cfg.analysis.error_budget.cohorts`, with real files under `tmp_path`
+    so `resolve_cohorts`' own `eval_dir/logits` and `conformal_curves` existence
+    checks pass -- `entries` is a list of dicts, each at least `{"name": ...}`,
+    optionally with `"stand_in_age_years"`."""
+    cohorts = []
+    for entry in entries:
+        eval_dir = tmp_path / entry["name"] / "eval"
+        (eval_dir / "logits").mkdir(parents=True)
+        conformal_curves = tmp_path / entry["name"] / "curves.npz"
+        conformal_curves.touch()
+
+        cohort_entry = {
+            "name": entry["name"],
+            "eval_dir": str(eval_dir),
+            "prep_dir": str(tmp_path / entry["name"] / "prep"),
+            "conformal_curves": str(conformal_curves),
+        }
+        if "stand_in_age_years" in entry:
+            cohort_entry["stand_in_age_years"] = entry["stand_in_age_years"]
+        cohorts.append(cohort_entry)
+    return OmegaConf.create({"analysis": {"error_budget": {"cohorts": cohorts}}})
+
+
+def test_resolve_cohorts_reads_stand_in_age_years(tmp_path: Path) -> None:
+    cfg = _cohort_cfg(tmp_path, [{"name": "ped", "stand_in_age_years": 10}])
+    cohorts = resolve_cohorts(cfg)
+    assert cohorts[0].stand_in_age_years == 10.0
+
+
+def test_resolve_cohorts_stand_in_age_years_defaults_to_none_when_absent(
+    tmp_path: Path,
+) -> None:
+    cfg = _cohort_cfg(tmp_path, [{"name": "test"}])
+    cohorts = resolve_cohorts(cfg)
+    assert cohorts[0].stand_in_age_years is None

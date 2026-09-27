@@ -119,7 +119,12 @@ def decide_cases(
             by this function. Must agree with `regions` below, since `run_gatekeeper`
             reads regions from `cfg`, not from this function's `regions` argument.
         signals: One row per case, with columns `case_id`, `predicted_dice_<R>` and
-            `conformal_band_<R>` for every `R` in `regions`, and optionally `ood_score`.
+            `conformal_band_<R>` for every `R` in `regions`, and optionally
+            `ood_score` and `patient_age_years` (the `intended_use` signal --
+            see `GateSignals.patient_age_years`; absent or `NaN` is read as "not
+            recorded", the same as `None`, via `judge_intended_use`'s own
+            `_is_bad_number` check, and is a no-op unless `"intended_use"` is in
+            `cfg.clinical.gatekeeper.enabled_signals`).
         thresholds: The frozen, calibrated `Thresholds` to judge every case against.
         regions: The regions to pull `predicted_dice_<R>` / `conformal_band_<R>` values
             for, e.g. `("WT", "TC")`.
@@ -153,6 +158,12 @@ def decide_cases(
             predicted_dice=predicted_dice,
             conformal_band=conformal_band,
             ood_score=row.get("ood_score"),
+            # `row.get` returns `None` when `signals` has no `patient_age_years`
+            # column at all, and a NaN when the column exists but this row's
+            # value is missing -- `judge_intended_use`'s own `_is_bad_number`
+            # check already treats both the same as "not recorded", so no
+            # NaN-to-None conversion is needed here.
+            patient_age_years=row.get("patient_age_years"),
         )
         decision = run_gatekeeper(cfg, case_signals, thresholds)
         refusing = ";".join(v.signal for v in decision.verdicts if v.decision is Decision.REFUSE)

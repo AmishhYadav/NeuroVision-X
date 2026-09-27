@@ -53,6 +53,31 @@ def _cfg(regions: tuple[str, ...] = REGIONS) -> OmegaConf:
     )
 
 
+def _cfg_with_intended_use(
+    regions: tuple[str, ...] = REGIONS,
+    *,
+    min_age_years: float = 18,
+    missing_age: str = "caution",
+) -> OmegaConf:
+    """`_cfg`, plus `"intended_use"` enabled with an explicit `min_age_years`/`missing_age`.
+
+    Same shape as `configs/clinical/default.yaml`'s own `intended_use` block --
+    see `run_gatekeeper`'s reading of `cfg.clinical.gatekeeper.intended_use`.
+    """
+    cfg = _cfg(regions)
+    cfg.clinical.gatekeeper.enabled_signals = [
+        "input_qc",
+        "predicted_dice",
+        "conformal_band",
+        "intended_use",
+    ]
+    cfg.clinical.gatekeeper.intended_use = {
+        "min_age_years": min_age_years,
+        "missing_age": missing_age,
+    }
+    return cfg
+
+
 def _thresholds(regions: tuple[str, ...] = REGIONS) -> Thresholds:
     """A hand-built `Thresholds`: predicted_dice refuse<0.5, caution<0.7; conformal_band
     caution>0.1, refuse>0.3 -- same shape as `tests/test_gatekeeper.py`'s own fixture."""
@@ -124,6 +149,53 @@ def test_decide_cases_cautions_on_band() -> None:
     assert decided.loc[0, "decision"] == "proceed_with_caution"
     assert "conformal_band" in decided.loc[0, "cautioning_signals"].split(";")
     assert decided.loc[0, "refusing_signals"] == ""
+
+
+# ---------------------------------------------------------------------------
+# 3b. intended_use (patient_age_years) -- the P1.3 cohort-attribute stand-in signal
+# ---------------------------------------------------------------------------
+
+
+def test_decide_cases_intended_use_refuses_child() -> None:
+    """`age < min_age_years` REFUSEs, with `intended_use` in `refusing_signals`."""
+    signals = pd.DataFrame([_row("case_0", patient_age_years=10)])
+    decided = decide_cases(_cfg_with_intended_use(), signals, _thresholds(), regions=REGIONS)
+
+    assert decided.loc[0, "decision"] == "refuse"
+    assert bool(decided.loc[0, "accepted"]) is False
+    assert "intended_use" in decided.loc[0, "refusing_signals"].split(";")
+
+
+def test_decide_cases_intended_use_unaffected_adult() -> None:
+    """`age >= min_age_years` is a plain PROCEED -- unaffected by `intended_use`."""
+    signals = pd.DataFrame([_row("case_0", patient_age_years=40)])
+    decided = decide_cases(_cfg_with_intended_use(), signals, _thresholds(), regions=REGIONS)
+
+    assert decided.loc[0, "decision"] == "proceed"
+    assert bool(decided.loc[0, "accepted"]) is True
+    assert decided.loc[0, "refusing_signals"] == ""
+    assert decided.loc[0, "cautioning_signals"] == ""
+
+
+def test_decide_cases_intended_use_missing_age_cautions() -> None:
+    """A missing age (no `patient_age_years` column) CAUTIONs under the `"caution"` policy."""
+    signals = pd.DataFrame([_row("case_0")])  # no patient_age_years column at all
+    decided = decide_cases(_cfg_with_intended_use(), signals, _thresholds(), regions=REGIONS)
+
+    assert decided.loc[0, "decision"] == "proceed_with_caution"
+    assert "intended_use" in decided.loc[0, "cautioning_signals"].split(";")
+    assert decided.loc[0, "refusing_signals"] == ""
+
+
+def test_decide_cases_intended_use_disabled_is_byte_identical() -> None:
+    """With `intended_use` NOT enabled, adding the column changes nothing (note 51's numbers)."""
+    signals_no_age = pd.DataFrame([_row("case_0")])
+    signals_with_age = pd.DataFrame([_row("case_0", patient_age_years=10)])
+
+    without = decide_cases(_cfg(), signals_no_age, _thresholds(), regions=REGIONS)
+    with_column = decide_cases(_cfg(), signals_with_age, _thresholds(), regions=REGIONS)
+
+    pd.testing.assert_frame_equal(without, with_column)
 
 
 # ---------------------------------------------------------------------------

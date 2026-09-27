@@ -135,12 +135,19 @@ class CohortSpec:
         prep_dir: Root of the preprocessed BraTS data for this cohort.
         conformal_curves: Path to this cohort's already-extracted
             `curves.npz` (`scripts/conformal.py`'s own output).
+        stand_in_age_years: The cohort-attribute age stand-in from
+            `cfg.analysis.error_budget.cohorts[*].stand_in_age_years`
+            (`configs/analysis/default.yaml`'s own comment there explains why
+            this is a cohort attribute, not a measured age), or `None` if the
+            config entry omits the key -- see `run_error_budget`'s use of this
+            field for the `intended_use` gate signal.
     """
 
     name: str
     eval_dir: Path
     prep_dir: Path
     conformal_curves: Path
+    stand_in_age_years: float | None = None
 
 
 def resolve_cohorts(cfg: DictConfig) -> list[CohortSpec]:
@@ -165,6 +172,12 @@ def resolve_cohorts(cfg: DictConfig) -> list[CohortSpec]:
         eval_dir = Path(str(entry.eval_dir))
         prep_dir = Path(str(entry.prep_dir))
         conformal_curves = Path(str(entry.conformal_curves))
+        # `stand_in_age_years` is optional so a config written before this key
+        # existed still composes: `entry.get` returns `None` when the key is
+        # absent, the same "not recorded" meaning `None` already has for a
+        # config entry that spells it out as `null`.
+        raw_age = entry.get("stand_in_age_years", None)
+        stand_in_age_years = float(raw_age) if raw_age is not None else None
 
         logits_dir = eval_dir / "logits"
         if not logits_dir.is_dir():
@@ -180,7 +193,11 @@ def resolve_cohorts(cfg: DictConfig) -> list[CohortSpec]:
             )
         cohorts.append(
             CohortSpec(
-                name=name, eval_dir=eval_dir, prep_dir=prep_dir, conformal_curves=conformal_curves
+                name=name,
+                eval_dir=eval_dir,
+                prep_dir=prep_dir,
+                conformal_curves=conformal_curves,
+                stand_in_age_years=stand_in_age_years,
             )
         )
     return cohorts
@@ -660,6 +677,18 @@ def run_error_budget(cfg: DictConfig) -> dict[str, Path]:
         signals = signals[signals["case_id"].isin(case_ids)].reset_index(drop=True)
 
         miss_rate_table = _miss_rate_table(curves_by_region, fitted_thresholds, regions)
+
+        # No cohort on disk carries a real DICOM PatientAge (BraTS 2021/-Africa/
+        # -PEDs strip it during de-identification), so `intended_use` is judged
+        # here against a COHORT ATTRIBUTE stand-in (PED = paediatric), never a
+        # measured age -- this is SCOPING, not detection: a rule that refuses
+        # every child scores 100% on PED BY CONSTRUCTION. See
+        # `configs/analysis/default.yaml`'s `stand_in_age_years` comment and
+        # `docs/research/master_plan.md` P1.3. Broadcasting one scalar (or
+        # `None`) to every row is enough -- `intended_use` only fires at all
+        # when it is in `cfg.clinical.gatekeeper.enabled_signals`, which is not
+        # the deployed default.
+        signals["patient_age_years"] = cohort.stand_in_age_years
 
         # --- Step 3: decisions, through run_gatekeeper unmodified ----------
         decisions = error_budget.decide_cases(cfg, signals, thresholds, regions=regions)

@@ -662,19 +662,36 @@ error_budget:
   # The three cohorts with ground truth. Same trio as qc_validate above; the
   # conformal curves are the ones scripts/conformal.py already extracted for
   # each cohort (B2), so no inference runs.
+  #
+  # `stand_in_age_years` is a COHORT-ATTRIBUTE stand-in, never a measured
+  # age: no cohort on disk carries a real DICOM PatientAge (BraTS 2021,
+  # BraTS-Africa and BraTS-PEDs all strip it during de-identification), so
+  # the master plan (P1.3) specifies re-scoring the `intended_use` gate
+  # signal against what each cohort actually IS -- test and ssa are adult-
+  # glioma cohorts, ped is paediatric by name. This is SCOPING, never
+  # detection: a rule that refuses every child scores 100% on PED BY
+  # CONSTRUCTION, and the code that uses this value says so too
+  # (`scripts/error_budget.py`). It only changes anything once
+  # `"intended_use"` is added to `clinical.gatekeeper.enabled_signals`
+  # (it is NOT, by default -- see `configs/clinical/default.yaml`).
+  # `null` means "age not recorded", exercising the gate's missing-age
+  # policy instead of an age comparison.
   cohorts:
     - name: test
       eval_dir: outputs/neurovision/eval_test
       prep_dir: data/preprocessed/brats
       conformal_curves: outputs/conformal/neurovision/eval_test/curves.npz
+      stand_in_age_years: 40
     - name: ssa
       eval_dir: outputs/eval_ssa_neurovision
       prep_dir: data/preprocessed/brats_ssa
       conformal_curves: outputs/conformal/neurovision/eval_ssa_neurovision/curves.npz
+      stand_in_age_years: 40
     - name: ped
       eval_dir: outputs/eval_ped_neurovision
       prep_dir: data/preprocessed/brats_ped
       conformal_curves: outputs/conformal/neurovision/eval_ped_neurovision/curves.npz
+      stand_in_age_years: 10
 
   # "Usable" = dice_<R> >= usable_bar for every region here. 0.7 is
   # qc_validate.bad_dice_threshold reused, not tuned. ET is deliberately not
