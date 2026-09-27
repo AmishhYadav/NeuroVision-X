@@ -2328,3 +2328,74 @@ evidence about the setup, and forgetting it means repeating it.
     **Verdict (pre-registered rule): C1 replicated across two seed pairs.**
     The architecture margin is ~6x the largest test-ET seed shift of either
     model. Still not tested against nnU-Net (Gate A, running).
+
+55. **REAL DICOM, SAME PATIENTS (Milestone 5, P1.2): THE CLINICAL FRONT END
+    REFUSES 40% OF RSNA STUDIES FOR THICK SLICES, AND ON THE REST COSTS A
+    MEDIAN 0.23 WT DICE -- MOSTLY REGISTRATION DISAGREEMENT WITH BRATS, WHICH
+    THE PROTOCOL COUNTS AGAINST US.** Run 2026-09-27 (driver `b3f9edf`,
+    protocol `docs/research_docs/protocols/real_dicom_validation_protocol.md`, frozen sample
+    `44bffa9`). 40 BraTS 2021 **test-split** patients, their original
+    RSNA-MICCAI DICOM through the real clinical path (ingest → input QC →
+    ANTs rigid co-registration to SRI24 → HD-BET → deployed `neurovision`
+    → deployed gate), scored against BraTS ground truth on the SRI24 grid.
+    **Not external validation**: same patients, same distribution; it
+    isolates the front end. Pilot (`BraTS2021_00000`, a training case) is
+    excluded from every statistic; it was refused at input QC.
+
+    **Completion (n = 40).** 22 accepted (all PROCEED), **16 refused at input
+    QC** (15 for voxel spacing > 3 mm *and* anisotropy ≥ 6, 1 for anisotropy
+    alone -- thick-slice acquisitions; BraTS resampled these to 1 mm
+    isotropic, our front end declines them), 2 refused by the gate on
+    predicted Dice. 0 failed, 0 scoring failures. Lateralisation check: 22/22
+    ok, none mirrored.
+
+    **Endpoints as registered:**
+
+    | | value [95% CI] |
+    |---|---|
+    | P(accepted AND usable) | **0.20** [0.075, 0.325] |
+    | P(usable \| accepted) | **0.36** [0.18, 0.55] |
+    | silent failure (accepted AND unusable) | **0.35** [0.20, 0.50] |
+    | front-end cost, WT (clinical − research), median | **−0.232** [−0.379, −0.182] |
+    | front-end cost, TC, median | −0.367 [−0.500, −0.222] |
+    | front-end cost, ET, median | −0.456 [−0.563, −0.350] |
+
+    Wilcoxon p = 4.8e-07 for every region (22/22 cases lose Dice). Usable
+    bar is note 47's (WT and TC ≥ 0.7). In-distribution comparison (note 47,
+    research path): usable 0.852, silent failure 0.042.
+
+    **Predictions.** (a) median WT loss ≤ 0.05 -- **FAILED**, by ~5x.
+    (b) some thick-slice refusals -- **held**, and far more than expected
+    (40%). (c) usable rate below 0.852 -- **held**.
+
+    **Why the loss is so large -- post-hoc, descriptive, not registered.**
+    For each accepted study, the translation that best aligns the clinical
+    WT mask with the BraTS WT label (FFT cross-correlation on the SRI24
+    grid; `outputs/real_dicom_validation/posthoc_shift_diagnostic.csv`) is
+    case-specific, median **5.9 mm** (up to ~15 voxels, mostly along A-P).
+    Undoing that translation alone moves the medians WT 0.66 → **0.83**,
+    TC 0.58 → **0.86**, ET 0.43 → **0.75**, and usable 8/22 → **14/22**.
+    So most of the registered "front-end cost" is **our SRI24 registration
+    disagreeing with BraTS's own** for the same patient -- both place the
+    tumour in the patient's anatomy, but not in the same atlas voxels. The
+    protocol fixed in advance that this counts against us, because the
+    report's anatomy (lobes, eloquence) is read in that atlas space; the
+    diagnostic only says where the loss comes from. The residual gap to the
+    research path (~0.93 WT) is rotation / non-rigid disagreement plus real
+    front-end differences (skull stripping, intensity handling), which this
+    diagnostic cannot separate.
+
+    **What this means.** (1) The research numbers (C1, note 47) describe the
+    model on BraTS-preprocessed input; on real DICOM of the same patients,
+    the pipeline accepts a much smaller, less reliable set, and **its gate
+    does not notice**: 22 of 24 studies that reached the gate were accepted,
+    and 14 of those are unusable against BraTS's ground truth. This is the
+    front-end analogue of C21. (2) Thick-slice refusal is the pipeline
+    working as designed, but at 40% it is the dominant outcome on real
+    RSNA DICOM. (3) Any anatomical statement in the report inherits a ~6 mm
+    registration disagreement with BraTS's alignment; it should be stated
+    as registration-dependent.
+
+    **Error-budget stage row (note 47 G-table layout):** `RSNA DICOM, n = 40,
+    test-split cases` -- refused at input 16 (0.40), refused at gate 2
+    (0.05), accepted 22 (0.55); usable | accepted 0.36; silent failure 0.35.
