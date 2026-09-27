@@ -725,6 +725,9 @@ def test_config_thresholds_produce_the_expected_decision() -> None:
             input_qc=report,
             predicted_dice=dict.fromkeys(regions, 0.95),
             conformal_band=dict.fromkeys(regions, 0.5),
+            # intended_use is enabled in the real config (2026-09-27); an adult age is
+            # part of a clean study, since a missing age is a CAUTION by design.
+            patient_age_years=40.0,
         ),
     )
     assert isinstance(decision, GateDecision)

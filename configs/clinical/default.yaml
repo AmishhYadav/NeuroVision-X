@@ -263,7 +263,9 @@ gatekeeper:
   # DISPLAYED on every job (clinical_jobs.py reads conformal_dir /
   # conformal_alpha below regardless) -- it is just no longer allowed to
   # refuse a study.
-  enabled_signals: [input_qc, predicted_dice]
+  # intended_use added 2026-09-27 after the P1.2 real-DICOM run (note 55), which was
+  # frozen against the gate without it. Scoping, never detection (note 53).
+  enabled_signals: [input_qc, predicted_dice, intended_use]
 
   # Root of the deployed model's Phase B conformal run -- holds fit.json and
   # eval_val/curves.npz. Fixed to the neurovision run specifically, same
@@ -289,8 +291,8 @@ gatekeeper:
   # Read from the DICOM study's PatientAge tag at ingest. A labelling rule,
   # not a quality measurement: it is reported as SCOPING, never as detection
   # (a rule that refuses every child scores 100% on a paediatric cohort by
-  # construction). Wired in only once the `intended_use` signal exists --
-  # add it to enabled_signals above at that point, not before.
+  # construction). Enabled 2026-09-27 (note 53 for the re-score, note 55 for
+  # the P1.2 run it had to wait for).
   #
   # missing_age: DOCUMENTED EXCEPTION to the "an enabled signal that arrives
   # as None is a REFUSE" rule above (author decision 2026-09-26). Age is
