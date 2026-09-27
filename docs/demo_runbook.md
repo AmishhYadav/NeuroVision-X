@@ -66,7 +66,7 @@ debugging on stage.
 - Open the REFUSE job for UPENN-GBM-00001 (was `f4a4a754`; that job directory was deleted in the
   2026-09-27 disk reclaim — regenerate it once with `.venv-clinical/bin/python
   scripts/run_clinical_study.py +clinical.study_dir=data/fixtures/dicom/UPENN-GBM-00001
-  +clinical.out_dir=outputs/clinical_jobs`, ~6 min, and regenerated 2026-09-27 as job **`67b67b1d`**): predicted Dice WT **0.656** below the calibrated cut →
+  +clinical.out_dir=outputs/clinical_jobs`, ~6 min, and regenerated 2026-09-27 as job **`67b67b1d`**): predicted Dice WT **0.626** (job `67b67b1d`; 0.656 in the deleted `f4a4a754` — registration is not bit-deterministic) below the calibrated cut 0.707 →
   **REFUSE**, with the reason in the banner.
 - **Say it:** a refused study is a successful outcome, not a failure. The gate's thresholds are
   quantiles of the validation set, frozen before use.
