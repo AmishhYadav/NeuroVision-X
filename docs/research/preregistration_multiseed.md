@@ -218,3 +218,39 @@ then `scripts/replay_logits.py` for the lesion-wise columns — the same path as
 **Deployment consequence.** None. A second baseline seed is a measurement.
 
 **Abort.** If session 1's per-epoch time implies more than 10 GPU-h, or `NVX_HEALTH` is not OK.
+
+### Amendment 1 — Result (2026-09-27)
+
+Written after every number below existed; nothing above this heading was edited.
+
+**Run.** `baseline_unet3d_seed43`, one Kaggle T4 session (`neurovision-baseline-seed43-s1`), 80/80
+epochs, `best.pt` epoch 79 (val `dice_mean` 0.8855 vs seed 42's 0.8854). The session's health line
+read `NAN` only because `grad_norm_max` was inf on 3 AMP-overflow steps that GradScaler skipped by
+design; weights and optimizer state were finite, so the run was judged valid rather than aborted
+(`master_plan.md` ledger, `38a83d5`). Evaluated on the Mac with `scripts/evaluate.py`
+(`save_logits=true`, `sw_batch_size=1`), lesion-wise via `scripts/replay_logits.py`.
+
+**Endpoint 1 — baseline noise floor** (`outputs/compare_family/multiseed_a1_baseline_noise_floor`,
+m = 12, one Holm family), seed 43 − seed 42:
+
+| cohort | dice_ET | dice_TC | dice_WT | lwdice_ET |
+|---|---|---|---|---|
+| test (189) | **+0.0041 [+0.0016, +0.0072] BETTER** | +0.0030 [−0.0010, +0.0070] | +0.0018 [−0.0001, +0.0041] | +0.0128 [−0.0105, +0.0375] |
+| SSA (60) | −0.0003 [−0.0093, +0.0097] | +0.0117 [−0.0072, +0.0395] | +0.0034 [−0.0018, +0.0086] | +0.0147 [−0.0339, +0.0645] |
+| PED (99) | −0.0263 [−0.0527, −0.0064] (p_holm 0.79) | **+0.0140 [+0.0019, +0.0258] BETTER** | −0.0066 [−0.0154, +0.0012] | +0.0003 [−0.0410, +0.0415] |
+
+10 of 12 inconclusive; **2 of 12 resolve** (test ET, PED TC). Two seeds of the same U-Net are
+therefore *measurably* different on some cells — seed noise here is small but not zero, and not
+always below resolution. PED ET moves −0.026 with a CI excluding 0 but does not survive Holm.
+
+**Endpoint 2 — the headline re-read at seed 43** (`multiseed_a1_headline_seed43`), test `dice_ET`,
+`neurovision_seed43` − `baseline_unet3d_seed43`: **+0.0247, CI [+0.0116, +0.0420],
+p = 1.8e-18, n = 189 → same sign, CI excludes 0.** Beside the seed-42 margin +0.0267
+[0.0166, 0.0393]. By the rule fixed above: **C1 is replicated across two seed pairs.**
+
+**Endpoint 3 — seed-averaged margin** (descriptive; `multiseed_a1_seed_averaged`, per-case mean of
+the two seeds of each model): **+0.0257, CI [+0.0133, +0.0423].**
+
+**Reading.** The headline is not a seed accident: it reproduces at a second seed of *both* arms with
+nearly the same size, and it is ~6× the largest seed-to-seed shift either model shows on test ET
+(baseline +0.0041, `neurovision` +0.0021). It is still untested against nnU-Net (Gate A).

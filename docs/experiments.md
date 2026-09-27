@@ -2302,3 +2302,29 @@ evidence about the setup, and forgetting it means repeating it.
     cannot see cohort-level shift (C22); a labelling rule can only exclude a
     cohort it can name. And the rule is only as good as the header: an
     anonymised child study arrives with no age and is CAUTIONed, not refused.
+
+54. **THE HEADLINE REPLICATES ACROSS TWO SEED PAIRS (Milestone 5, P2.5 /
+    multiseed Amendment 1).** Run 2026-09-27. `baseline_unet3d_seed43`
+    (Kaggle, 80/80 epochs, `best.pt` epoch 79) evaluated on the Mac on test /
+    SSA / PED at ~5.4 s/case, then lesion-wise replay; families via
+    `scripts/compare_family.py` (config `analysis.compare_family`,
+    `multiseed_a1_*`). Full tables: `preregistration_multiseed.md`,
+    "Amendment 1 — Result".
+
+    | reading | test `dice_ET` |
+    |---|---|
+    | seed-42 pair (published, C1) | +0.0267 [+0.0166, +0.0393] |
+    | **seed-43 pair** | **+0.0247 [+0.0116, +0.0420]**, p 1.8e-18 |
+    | seed-averaged (descriptive) | +0.0257 [+0.0133, +0.0423] |
+    | `neurovision` seed noise (note 49) | +0.0021 [−0.0018, +0.0068] |
+    | **baseline seed noise** | **+0.0041 [+0.0016, +0.0072]**, resolves |
+
+    **Baseline noise floor: 2 of 12 cells resolve** (test ET +0.0041, PED TC
+    +0.0140); 10 inconclusive. So a second seed of the U-Net is measurably
+    different on some cells -- the paired test at n = 189 is sensitive
+    enough to see seed-to-seed shifts of ~0.004. Any future margin of that
+    size is not claimable from one seed pair.
+
+    **Verdict (pre-registered rule): C1 replicated across two seed pairs.**
+    The architecture margin is ~6x the largest test-ET seed shift of either
+    model. Still not tested against nnU-Net (Gate A, running).
