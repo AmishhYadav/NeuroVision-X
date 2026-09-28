@@ -141,7 +141,8 @@ def resolve_checkpoint(cfg: DictConfig) -> Path:
     if not path.is_file():
         raise FileNotFoundError(
             f"validate_qc: no checkpoint at {path.resolve()}. Run scripts/train_qc.py first to "
-            "train a SegQC checkpoint (see docs/research_docs/preregistrations/preregistration_qc.md) before scoring "
+            "train a SegQC checkpoint (see "
+            "docs/research_docs/preregistrations/preregistration_qc.md) before scoring "
             "Gate C."
         )
     return path

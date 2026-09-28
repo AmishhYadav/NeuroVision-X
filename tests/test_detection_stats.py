@@ -397,7 +397,10 @@ def test_build_verdict_strong_external_signal_gives_pass() -> None:
     verdict = build_verdict(case_rows, voxel_any_rows)
     assert verdict["verdict"] == "pass"
     assert verdict["passed_cohorts"] == ["ssa"]
-    assert verdict["preregistration"] == "docs/research_docs/preregistrations/preregistration_ambiguity.md"
+    assert (
+        verdict["preregistration"]
+        == "docs/research_docs/preregistrations/preregistration_ambiguity.md"
+    )
 
 
 def test_build_verdict_in_distribution_only_signal_is_not_a_pass() -> None:

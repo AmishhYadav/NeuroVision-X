@@ -1,8 +1,9 @@
 """Generate the frozen cross-fit split files for the D3 external-cohort fine-tune.
 
-D3 (`docs/research_docs/preregistrations/preregistration_finetune.md`, "Design -> Cross-fitting") fine-tunes
-on each external cohort (SSA, PED) using two-fold cross-fitting: each cohort is split
-once into two halves, a model is fine-tuned on each half in turn, and scored on the
+D3 (`docs/research_docs/preregistrations/preregistration_finetune.md`, "Design ->
+Cross-fitting") fine-tunes on each external cohort (SSA, PED) using two-fold
+cross-fitting: each cohort is split once into two halves, a model is fine-tuned on each
+half in turn, and scored on the
 OTHER half. Pooling both folds' held-out predictions scores every case in the cohort
 exactly once, by a model that never trained on it.
 
@@ -18,9 +19,10 @@ so `data.root_dir` is a mandatory `???` in `configs/data/brats.yaml` and must be
 on the command line for the config to compose at all -- even though this script never
 reads it (it only reads `cfg.analysis.crossfit_splits`).
 
-Per `docs/research_docs/preregistrations/preregistration_finetune.md`, every split file written here is FROZEN
-the moment it is committed: never regenerate it once a fine-tune has used it. Re-running
-this script requires the explicit `analysis.crossfit_splits.overwrite=true` flag.
+Per `docs/research_docs/preregistrations/preregistration_finetune.md`, every split file
+written here is FROZEN the moment it is committed: never regenerate it once a fine-tune
+has used it. Re-running this script requires the explicit
+`analysis.crossfit_splits.overwrite=true` flag.
 
 Example usage:
 

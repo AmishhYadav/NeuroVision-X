@@ -216,9 +216,9 @@ def tumour_mask_iter(
 def axial_display_slice(volume: np.ndarray, index: int) -> np.ndarray:
     """Extracts one axial slice from a `(D, H, W)` volume for on-screen display.
 
-    Matches the radiological display convention pinned in
-    `app/frontend/src/lib/slicing.ts`, which fixed exactly this class of bug
-    for the demo viewer: under the BraTS affine, axis 0 (d) runs
+    Matches the radiological display convention the (now removed, commit
+    2843e81) demo viewer pinned in its `slicing.ts`, which fixed exactly this
+    class of bug: under the BraTS affine, axis 0 (d) runs
     right -> left and axis 1 (h) runs anterior -> posterior, so a naive
     "rows = the first remaining axis, columns = the second" slice puts
     anterior sideways -- every voxel is correct and the picture is still

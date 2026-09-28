@@ -5,9 +5,10 @@
 `neurovision.uncertainty.conformal.fit_threshold` picks a mask threshold `tau_hat` on a
 calibration set so that, for a FRESH case EXCHANGEABLE with that calibration set, the
 expected miss rate is bounded by `alpha`. The pre-registration's primary result (see
-`docs/research_docs/preregistrations/preregistration_conformal.md`) fits `tau_hat` on BraTS val and applies it
-FROZEN to two external cohorts, SSA and PED -- and the bound breaks, because a case from a
-different scanner population, age group or protocol is not exchangeable with val.
+`docs/research_docs/preregistrations/preregistration_conformal.md`) fits `tau_hat` on
+BraTS val and applies it FROZEN to two external cohorts, SSA and PED -- and the bound
+breaks, because a case from a different scanner population, age group or protocol is
+not exchangeable with val.
 
 This module asks a different, narrower question: **if a new site labelled `k` of its OWN
 cases and recalibrated `tau_hat` on exactly those, would the bound hold on that site's

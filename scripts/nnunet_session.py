@@ -1,6 +1,7 @@
 """Runs one ~11 h Kaggle-T4 slice of nnU-Net v2's DEFAULT training recipe.
 
-Implements Gate A Amendment 1 (`docs/research_docs/preregistrations/preregistration_strong_baseline.md`):
+Implements Gate A Amendment 1
+(`docs/research_docs/preregistrations/preregistration_strong_baseline.md`):
 `nnUNetTrainer`, `nnUNetPlans`, `3d_fullres`, fold `all`, 1000 epochs, unmodified
 optimisation -- chained across several Kaggle sessions, each stopping cleanly
 BETWEEN epochs when its wall-clock budget runs out, and resuming the next session

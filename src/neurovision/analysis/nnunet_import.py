@@ -159,7 +159,8 @@ def import_prediction(
             f"import_prediction: reoriented affine for {nifti_path} does not match "
             f"meta['affine'] within atol={atol}. This is the geometry gate that catches a "
             "prediction written on the wrong grid (e.g. mirrored); a brain-mask Dice check "
-            "cannot catch a mirror (docs/research_docs/lessons.md trap 3), so this affine equality is the "
+            "cannot catch a mirror (docs/research_docs/lessons.md "
+            "trap 3), so this affine equality is the "
             f"actual gate.\nreoriented affine:\n{updated_affine}\n"
             f"expected affine (meta['affine']):\n{expected_affine}"
         )

@@ -15,8 +15,8 @@ re-implementing scikit-learn's KFold by hand.
 
 Raw BraTS2021 case directories (once downloaded from Kaggle
 `dschettler8845/brats-2021-task1`) hold five **uncompressed** `.nii` files per case,
-2020-style suffixes (`<case_id>_t1.nii`, `_t1ce`, `_t2`, `_flair`, `_seg` -- confirmed
-in `docs/research_docs/lessons.md`), and the exact nesting depth under `--raw-dir` is not something to
+2020-style suffixes (`<case_id>_t1.nii`, `_t1ce`, `_t2`, `_flair`, `_seg` -- confirmed in
+`docs/research_docs/lessons.md`), and the exact nesting depth under `--raw-dir` is not something to
 assume: this project's own `notebooks/kaggle_train.ipynb` cell 9 already had to stop
 assuming a fixed `/kaggle/input/<slug>` depth after a real Kaggle download put
 everything one level deeper than expected. `discover_case_dir` does the equivalent
