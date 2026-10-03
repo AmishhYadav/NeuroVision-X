@@ -1044,7 +1044,11 @@ confidence_diag:
   # region's errors (a channel swap would show up off the diagonal) and to
   # report each channel's spread inside vs outside the predicted WT.
   # Model, checkpoint, split and voxel sampling come from analysis.confidence,
-  # so the diagnostic samples exactly as the scorer did.
+  # so the diagnostic samples exactly as the scorer did. Run (Mac, ~4 min):
+  #   python scripts/confidence_diag.py +experiment=neurovision \
+  #     inference.sliding_window.sw_batch_size=1 data.num_workers=0
+  # Without +experiment=neurovision the baseline (no confidence head) is built
+  # and the script raises.
   out_dir: outputs/confidence/r8
   per_case_csv: outputs/confidence/neurovision_test/per_case_confidence.csv
   # The first three test cases in loader order -- the ones the hand-run check used.
