@@ -2,7 +2,7 @@
 name: py-implementer
 description: Implements a single Python module from a precise specification, together with its pytest tests. Use for any new file or substantial refactor in src/neurovision/ or scripts/. Not for design decisions, not for interpreting results.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
+model: claude-sonnet-5-5
 color: blue
 ---
 

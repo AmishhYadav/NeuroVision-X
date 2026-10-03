@@ -2,7 +2,7 @@
 name: test-runner
 description: Runs pytest, the smoke test, or lint, and reports only what failed and why. Use whenever test or lint output would otherwise fill the main conversation.
 tools: Read, Bash, Grep, Glob
-model: sonnet
+model: claude-sonnet-5-5
 color: green
 ---
 

@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Read-only review of a freshly implemented module against its spec and the project's hard constraints. Use after py-implementer finishes and before the result is shown to the user.
 tools: Read, Grep, Glob, Bash
-model: sonnet
+model: claude-sonnet-5-5
 color: purple
 ---
 
