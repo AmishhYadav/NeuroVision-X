@@ -789,44 +789,40 @@ compare_family:
   # D1's family is frozen likewise in outputs/compare_family/d1_seed_noise_floor
   # and note 49.
   #
-  # Current contents: multiseed Amendment 1 (docs/research/
-  # preregistration_multiseed.md), the BASELINE's seed-to-seed noise floor:
-  # baseline_unet3d_seed43 - baseline_unet3d, {dice_ET, dice_TC, dice_WT,
-  # lwdice_ET} x {test, SSA, PED} = 12 comparisons, one Holm family -- the same
-  # shape as D1. Endpoint 2 (the headline re-read at seed 43) is a separate
-  # single comparison, run with CLI overrides of name/name_a/name_b/comparisons.
+  # The multiseed Amendment 1 families are frozen likewise in
+  # outputs/compare_family/multiseed_a1_* and note 54.
+  #
+  # Current contents: D3 (docs/research_docs/preregistrations/
+  # preregistration_finetune.md), cross-fitted fine-tune vs the frozen
+  # deployed model. {dice_ET, dice_TC, dice_WT, lwdice_ET} x {SSA, PED} = 8
+  # comparisons, one Holm family. Primary: dice_TC per cohort. `a` pools the
+  # two folds' HELD-OUT halves (every case scored exactly once); `b` is the
+  # frozen model's existing row on the same cases. CROSS-FITTED, NOT
+  # EXTERNAL VALIDATION -- each fine-tune saw half of its own cohort.
   out_dir: outputs/compare_family/${analysis.compare_family.name}
-  name: multiseed_a1_baseline_noise_floor
-  name_a: baseline_unet3d_seed43
-  name_b: baseline_unet3d
+  name: d3_finetune_crossfit
+  name_a: neurovision_ft_crossfit
+  name_b: neurovision
   n_boot: 10000
   ci: 0.95
   alpha: 0.05
   practical_threshold: null
   comparisons:
-    - cohort: test
-      a: outputs/eval_test_baseline_unet3d_seed43/per_case_metrics.csv
-      b: outputs/eval_test_baseline_unet3d/per_case_metrics.csv
-      metrics: [dice_ET, dice_TC, dice_WT]
-    - cohort: test_lesionwise
-      a: outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43/per_case_default.csv
-      b: outputs/replay_lesionwise/eval_test_baseline_unet3d/per_case_default.csv
-      metrics: [lwdice_ET]
     - cohort: ssa
-      a: outputs/eval_ssa_baseline_unet3d_seed43/per_case_metrics.csv
-      b: outputs/eval_ssa_baseline_unet3d/per_case_metrics.csv
+      a: [outputs/eval_ft_ssa_cf0/per_case_metrics.csv, outputs/eval_ft_ssa_cf1/per_case_metrics.csv]
+      b: outputs/eval_ssa_neurovision/per_case_metrics.csv
       metrics: [dice_ET, dice_TC, dice_WT]
     - cohort: ssa_lesionwise
-      a: outputs/replay_lesionwise/eval_ssa_baseline_unet3d_seed43/per_case_default.csv
-      b: outputs/replay_lesionwise/eval_ssa_baseline_unet3d/per_case_default.csv
+      a: [outputs/replay_lesionwise/eval_ft_ssa_cf0/per_case_default.csv, outputs/replay_lesionwise/eval_ft_ssa_cf1/per_case_default.csv]
+      b: outputs/replay_lesionwise/eval_ssa_neurovision/per_case_default.csv
       metrics: [lwdice_ET]
     - cohort: ped
-      a: outputs/eval_ped_baseline_unet3d_seed43/per_case_metrics.csv
-      b: outputs/eval_ped_baseline_unet3d/per_case_metrics.csv
+      a: [outputs/eval_ft_ped_cf0/per_case_metrics.csv, outputs/eval_ft_ped_cf1/per_case_metrics.csv]
+      b: outputs/eval_ped_neurovision/per_case_metrics.csv
       metrics: [dice_ET, dice_TC, dice_WT]
     - cohort: ped_lesionwise
-      a: outputs/replay_lesionwise/eval_ped_baseline_unet3d_seed43/per_case_default.csv
-      b: outputs/replay_lesionwise/eval_ped_baseline_unet3d/per_case_default.csv
+      a: [outputs/replay_lesionwise/eval_ft_ped_cf0/per_case_default.csv, outputs/replay_lesionwise/eval_ft_ped_cf1/per_case_default.csv]
+      b: outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
       metrics: [lwdice_ET]
 
 local_recalibration:
@@ -1006,3 +1002,50 @@ ref_et:
     - [neurovision_seed43, baseline_unet3d_seed43]
     - [neurovision_seed43, neurovision]
     - [baseline_unet3d_seed43, baseline_unet3d]
+
+real_dicom_offsets:
+  # Exploratory, post-review check R3 (2026-10-03; experiments note 57; ledger
+  # C25; paper Section IX-E). Why does the real-DICOM clinical path lose ~0.23
+  # WT Dice against BraTS ground truth? scripts/real_dicom_offsets.py measures,
+  # per accepted study, the translation that best aligns our atlas-space
+  # tumour mask with the BraTS label, and the translation that best aligns
+  # BraTS's OWN skull-stripped brain with the SRI24 template the front end
+  # registers to. A convention bug would give one shared offset; the measured
+  # offsets instead mirror BraTS's brain-to-atlas offset case by case.
+  # Reads note 55's outputs; runs nothing through the pipeline.
+  out_dir: ${analysis.real_dicom_validation.out_dir}/r3
+  # cases/<id>/result.json, jobs/<job_id>/dicom_seg_work/atlas_space_mask.nii.gz,
+  # and run.log (the only record linking a case to its job id).
+  work_dir: ${analysis.real_dicom_validation.work_dir}
+  gt_root: ${analysis.real_dicom_validation.gt_root}
+  # The skull-stripped BRATS_SRI24 template the front end registers to
+  # (configs/clinical/default.yaml `atlas: BRATS_SRI24`). It ships inside the
+  # brainles-preprocessing package, so this path depends on the clinical venv;
+  # repoint it if that venv lives elsewhere.
+  atlas_brain: .venv-clinical/lib/python3.11/site-packages/brainles_preprocessing/registration/atlases/15236131_v2.0.0/brats_sri24_skullstripped.nii
+  # Case list for the cohort-wide brain-to-atlas distribution (all 189 test cases).
+  test_cases_from: ${analysis.real_dicom_validation.research_per_case}
+  max_shift_vox: 20
+  # Note 55's accepted, scored, non-pilot studies. The script refuses to report
+  # statistics on any other count (a partial work_dir must fail loudly).
+  expected_n_cases: 22
+  usable_threshold: ${analysis.real_dicom_validation.usable_threshold}
+  # Rescored WT Dice must match each case's result.json to this tolerance, or
+  # the case-to-job mapping is wrong and the script refuses to continue.
+  dice_match_atol: 1.0e-4
+
+confidence_diag:
+  # Exploratory, post-review check R8 (2026-10-03; experiments note 57; ledger
+  # C16; paper Section VII / Table VIII). Is the confidence head's WT AUROC of
+  # 0.477 a sign/channel bug or a genuinely uninformative channel?
+  # scripts/confidence_diag.py (1) summarises the per-case AUROC distribution
+  # already written by scripts/score_confidence.py, and (2) re-runs the model
+  # on a few test cases to score EVERY confidence channel against EVERY
+  # region's errors (a channel swap would show up off the diagonal) and to
+  # report each channel's spread inside vs outside the predicted WT.
+  # Model, checkpoint, split and voxel sampling come from analysis.confidence,
+  # so the diagnostic samples exactly as the scorer did.
+  out_dir: outputs/confidence/r8
+  per_case_csv: outputs/confidence/neurovision_test/per_case_confidence.csv
+  # The first three test cases in loader order -- the ones the hand-run check used.
+  cases: [BraTS2021_01092, BraTS2021_00098, BraTS2021_00194]

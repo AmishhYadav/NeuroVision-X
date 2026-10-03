@@ -2487,6 +2487,12 @@ evidence about the setup, and forgetting it means repeating it.
     Artifacts: `outputs/real_dicom_validation/r3/` (`r3_offsets.csv`,
     `r3_dice.csv`, `brats_brain_vs_atlas.csv`,
     `brats_test189_brain_vs_atlas.csv`, `job_map.json`).
+    **Scripted 2026-10-04:** `python scripts/real_dicom_offsets.py` (config
+    `analysis.real_dicom_offsets`) regenerates all of the above into
+    `outputs/real_dicom_validation/r3/` (`offsets_per_case.csv`,
+    `brain_vs_atlas_test.csv`, `summary.json`), with identical per-case offsets.
+    It refuses to run unless all 22 cases resolve and each rescored WT Dice
+    matches its logged value.
 
     **R8, confidence head WT AUROC 0.477 (C16).** Per-case WT AUROC is
     centred at chance (median 0.484, IQR 0.40–0.56, range 0.16–0.85; 57% of
