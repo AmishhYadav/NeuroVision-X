@@ -2528,6 +2528,17 @@ evidence about the setup, and forgetting it means repeating it.
     near-constant output. It is a genuine negative, not a bug, so the WT
     value may be quoted with that explanation.
     Artifacts: `outputs/confidence/r8/r8_diag.py` (the scratch diagnostic).
+    **Scripted 2026-10-04:** `python scripts/confidence_diag.py +experiment=neurovision
+    inference.sliding_window.sw_batch_size=1 data.num_workers=0` (config
+    `analysis.confidence_diag`, ~4 min CPU) regenerates both parts into
+    `outputs/confidence/r8/`. It uses the scorer's 5 mm dilation, where the hand
+    run used 10 mm. WT channel std is 0.016–0.018 (mean 0.785), and the
+    inside/outside predicted-WT means differ by ≤ 0.014. The WT channel's
+    AUROC on WT errors is 0.43–0.58. ET/TC channels score 0.92–0.98 on
+    their own errors in 01092 and 00194, and 0.75–0.76 in 00098. Nuance: on
+    01092 the ET and TC channels are *anti*-informative for WT errors
+    (0.13, 0.19). This is not a swap (a swap would be high), and it does not
+    change the reading.
 
     **Ref-ET column now scripted (2026-10-04).** `python scripts/ref_et_comparison.py`
     (config `analysis.ref_et`) regenerates the paper's Table IV ref-ET column and
