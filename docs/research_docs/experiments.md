@@ -2494,6 +2494,22 @@ evidence about the setup, and forgetting it means repeating it.
     It refuses to run unless all 22 cases resolve and each rescored WT Dice
     matches its logged value.
 
+    **R6, SSA TC at α = 0.05 at or above its floor (2026-10-04, exploratory,
+    post-review).** `python scripts/local_recalibration.py
+    'analysis.local_recalibration.ks=[39,45]'
+    analysis.local_recalibration.out_dir=outputs/local_recalibration_r6`
+    (37 s CPU; same 1,000 seeded splits per cell as Amendment 1).
+    `neurovision`: at k = 39, feasible in 43.5% of splits, with held-out risk
+    0.0578 (CI 0.024–0.114, P(violation) 0.58), NOT RESTORED. At k = 45
+    (15 held out), feasible in 45.6%, risk 0.0653, NOT RESTORED.
+    `baseline_unet3d`: RESTORED at both (0.0269 and 0.0300; feasible in 100%).
+    **Reading:** the floor from (12) uses the *cohort's* R_min, so it is
+    necessary, not sufficient. Individual 39-case draws often have a higher
+    R_min, and when such a draw is feasible its threshold is too permissive
+    for the held-out cases. For the proposed model, SSA TC at α = 0.05 cannot
+    be restored from a 60-case site; for the baseline it can. The other
+    SSA/PED rows at k = 39/45 agree with Table XI.
+
     **R8, confidence head WT AUROC 0.477 (C16).** Per-case WT AUROC is
     centred at chance (median 0.484, IQR 0.40–0.56, range 0.16–0.85; 57% of
     cases below 0.5). A sign error would cluster far below 0.5, and ET/TC
