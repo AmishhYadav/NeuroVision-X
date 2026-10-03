@@ -423,3 +423,12 @@ reading: `docs/research_docs/experiments.md` note 52.
 - **Prediction 4 — held.** Where restored under shift, mask inflation exceeds the in-distribution
   inflation at the same (α, k).
 - **Robustness (`baseline_unet3d`)** — same pattern; PED · TC NOT RESTORED / infeasible everywhere.
+
+**Post-hoc addendum (2026-10-04, exploratory, NOT part of the registered result).** The registered k
+grid never reached SSA · TC's α = 0.05 floor (39), so Prediction 2 was never tested for that cell.
+Run off-grid at k = 39 and 45 (same driver, same 1,000 seeded splits; experiments note 57, R6),
+`neurovision` SSA · TC α = 0.05 is **NOT RESTORED at or above its floor**: feasible in 43.5% / 45.6%
+of splits, held-out risk 0.0578 / 0.0653. `baseline_unet3d` is RESTORED at both (0.027 / 0.030).
+So the floor (12) is necessary, not sufficient — it uses the cohort's R_min, and individual
+39-case draws often have a higher one. The registered verdicts above are unchanged; this addendum
+qualifies Prediction 2 for one cell and must be quoted with it.
