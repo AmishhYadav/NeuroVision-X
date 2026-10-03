@@ -974,3 +974,35 @@ ood:
   n_boot: 10000
   ci: 0.95
   seed: ${seed}
+
+ref_et:
+  # Exploratory, post-review (2026-10-03): the ET comparison restricted to test
+  # cases WITH reference enhancing tumour. Two of the five empty-ET test cases
+  # score Dice 1 for neurovision and 0 for the baseline at BOTH seeds, carrying
+  # ~40% of the headline +0.0267 (claims ledger C1, experiments note 57, paper
+  # Section VI-A and the "ref-ET" column of Table IV). scripts/ref_et_comparison.py
+  # regenerates that column. Not pre-registered -- never bold it under the
+  # Section III-B rule.
+  out_dir: outputs/ref_et
+  metric: dice_ET
+  empty_flag_column: gt_empty_ET
+  n_boot: 10000
+  ci: 0.95
+  seed: ${seed}
+  arms:
+    neurovision: outputs/neurovision/eval_test/per_case_metrics.csv
+    baseline_unet3d: outputs/eval_test_baseline_unet3d/per_case_metrics.csv
+    capacity_control: outputs/eval_test_capacity_control/per_case_metrics.csv
+    ablation_content_only_gate: outputs/eval_test_ablation_content_only_gate/per_case_metrics.csv
+    neurovision_seed43: outputs/eval_test_neurovision_seed43/per_case_metrics.csv
+    baseline_unet3d_seed43: outputs/eval_test_baseline_unet3d_seed43/per_case_metrics.csv
+  # Each item is [a, b]; reported as a - b. Order = Table IV row order.
+  comparisons:
+    - [neurovision, baseline_unet3d]
+    - [capacity_control, baseline_unet3d]
+    - [neurovision, capacity_control]
+    - [ablation_content_only_gate, capacity_control]
+    - [neurovision, ablation_content_only_gate]
+    - [neurovision_seed43, baseline_unet3d_seed43]
+    - [neurovision_seed43, neurovision]
+    - [baseline_unet3d_seed43, baseline_unet3d]

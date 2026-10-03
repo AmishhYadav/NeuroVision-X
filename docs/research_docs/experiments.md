@@ -2506,3 +2506,10 @@ evidence about the setup, and forgetting it means repeating it.
     near-constant output. It is a genuine negative, not a bug, so the WT
     value may be quoted with that explanation.
     Artifacts: `outputs/confidence/r8/r8_diag.py` (the scratch diagnostic).
+
+    **Ref-ET column now scripted (2026-10-04).** `python scripts/ref_et_comparison.py`
+    (config `analysis.ref_et`) regenerates the paper's Table IV ref-ET column and
+    the empty-ET breakdown from the saved per-case CSVs into `outputs/ref_et/`. It
+    reproduces all 8 values and CIs to 4 decimals. Its "all"-case CIs use a
+    fresh per-row generator, so they differ from the headline CIs of the original
+    registered comparison ([0.0166, 0.0393]); the paper keeps the registered ones.
