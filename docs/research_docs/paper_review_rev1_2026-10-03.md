@@ -17,6 +17,54 @@ review 1 (A2). Both need text changes.
 
 ## Part A — Must fix
 
+### A0. R3 and R8 are done (later on 2026-10-03). Put the results in the paper
+
+Both checks were run on saved artifacts, with no GPU. Full write-up: `experiments.md` note 57.
+Ledger rows C16 and C25 are updated. Outputs: `outputs/real_dicom_validation/r3/` and
+`outputs/confidence/r8/`.
+
+**R3 (registration offsets). Result: no convention bug. The offset mirrors BraTS's own deviation
+from the atlas.**
+- The front end registers to brainles' `brats_sri24.nii`, whose affine is **identical** to the
+  BraTS 2021 grid. No axis or origin convention differs.
+- The per-case tumour offsets **do not share a sign** (A-P: 7 positive, 12 negative, 3 zero). A
+  convention bug would give the same offset in every case.
+- BraTS's own skull-stripped brains sit off the SRI24 template: the median whole-brain shift is
+  **3.3 mm over all 189 test cases**, and 36% are 5 mm or more. Case by case, our tumour offset
+  is the mirror image of that brain offset: **Pearson r = −0.86 along A-P** (p = 2.5 × 10⁻⁷), −0.47
+  L-R, −0.52 S-I.
+- Shifting our mask by the **brain-only** offset (no tumour information) raises median WT from
+  0.658 to 0.708 (16 of 22 improve, Wilcoxon p = 0.017), TC from 0.579 to 0.665, and usable cases
+  from 8/22 to 9/22. The tumour-fitted shift (0.83, 14/22) is the optimistic upper bound.
+- Reading: this is disagreement between **two rigid registrations** (ours is brainles' default
+  ANTs `Rigid`), measured against a reference that is itself several mm off the atlas. It is not a
+  defect, and nothing needs fixing or re-running. H9 stays "refuted as measured", now without the
+  "check outstanding" qualifier.
+
+**R8 (confidence head WT). Result: not a bug. The WT channel is flat.**
+- The per-case WT AUROC is centred at chance: median 0.484, IQR 0.40–0.56, range 0.16–0.85. A sign
+  flip would cluster far below 0.5, and ET and TC run through the same code and score 0.855 and
+  0.871.
+- On 3 re-run test cases, the WT confidence channel was near-constant (σ ≈ 0.79, std 0.02–0.03),
+  identical inside and outside the predicted tumour. No channel predicted WT errors, so it is not a
+  channel swap. The training target and the scoring split both keep the (ET, TC, WT) order.
+
+| # | Location | Find | Replace with |
+|---|---|---|---|
+| A0a | §IX-E | `A displacement concentrated on one axis can, however, also arise from a coordinate or template convention mismatch between our SRI24 target and the one used to build BraTS, in which case it is a correctable defect rather than a cost of the front end.` | `A convention mismatch is ruled out: our SRI24 target and the BraTS grid have identical affines, and the per-case offsets do not share a sign (anterior–posterior: 7 positive, 12 negative, 3 zero; post-review, exploratory). Instead, the offset mirrors the reference's own alignment. BraTS's skull-stripped brains sit a median 3.3 mm from the SRI24 template across the 189 test cases (36% at 5 mm or more), and our per-case tumour offset is the mirror image of that brain offset (Pearson r = −0.86 along the anterior–posterior axis). Shifting our masks by the brain-only offset, with no tumour information, raises the median whole-tumour Dice from 0.66 to 0.71.` |
+| A0b | §IX-E | `The signed per-axis offsets of the 22 studies, which would separate the two explanations, have not yet been examined; until they are, Table XV is the cost of this front end as built, not an established cost of registering real DICOM.` | `Table XV therefore measures disagreement between two rigid registrations of the same patient, ours and the reference's, against a reference that is itself several millimetres from the atlas; it is not evidence that either registration is the worse one.` |
+| A0c | §X | `The largest single loss measured in this study, pending a check of the registration convention, is the passage from DICOM to atlas space:` | `The largest single loss measured in this study is the passage from DICOM to atlas space:` |
+| A0d | §X (same paragraph) | `whose origin, genuine registration disagreement or a convention mismatch, has not yet been determined.` | `which tracks how far the reference's own alignment departs from the atlas rather than a defect in either pipeline.` |
+| A0e | Table XVI, H9, Verdict | `Refuted as measured; registration-convention check outstanding` | `Refuted as measured; reference alignment itself varies (Section IX-E)` |
+| A0f | §XI, "not run" list | `the signed per-axis registration offsets on real DICOM, on which the reading of H9 depends; and the check of the confidence head's whole-tumour output.` | Delete both clauses (both have been run). Fix the list's grammar so the item before ends with `.` |
+| A0g | §XI, real-DICOM sentence | `is scored in atlas space against a reference alignment that is itself a choice,` | `is scored in atlas space against a reference alignment that itself lies a median 3.3 mm from the atlas,` |
+| A0h | Table VIII, "Test, WT" row, "Conf. head" cell | `§` | `0.477` |
+| A0i | Table VIII caption | `§Withheld pending a check of the WT output (Section VII).` | delete; and change `Confidence head vs entropy on ET and TC:` to `Confidence head vs entropy, all regions:` |
+| A0j | §VII | `Its WT output scored below chance, which is implausible for a head trained on correctness and points either to a channel or sign defect or to a head collapsed by the class imbalance of an easy region; the check that would separate the two has not been run, so the WT value is withheld (Section XI) and the ET and TC comparisons do not depend on it.` | `On WT it is uninformative (AUROC 0.477; per-case median 0.484): a post-review check found no sign or channel defect, but a whole-tumour confidence output that is nearly constant (standard deviation about 0.02) and no different inside and outside the predicted tumour. The head learned nothing for the easiest region.` |
+
+These edits **add** about 120 words in §IX-E and **remove** about 60 in §XI. The net is fine for
+MELBA (see A4).
+
 ### A1. The two empty-ET cases also inflate the seed-43 replication and the decomposition
 
 Your new §VI-A paragraph is correct. Of the five test cases with no reference ET, the proposed model
@@ -115,9 +163,9 @@ it as "unfinished". All of these use only saved artifacts on CPU. **None needs a
 
 | Item | Cost | Why it matters |
 |---|---|---|
-| ~~R4 non-empty ET~~ | **done above** | — |
-| R3 signed registration offsets (22 studies) | minutes | **The H9 verdict depends on it** |
-| R8 confidence head WT | minutes | Removes the "§ withheld" entry |
+| ~~R4 non-empty ET~~ | **done, A1** | — |
+| ~~R3 signed registration offsets~~ | **done, A0** | — |
+| ~~R8 confidence head WT~~ | **done, A0** | — |
 | R6 SSA TC α = 0.05 at k ≥ 39 | minutes (saved logits) | Fills a hole in Table XI |
 | R5 Dice and precision of the recalibrated masks | about 1 h (saved logits) | Turns "restored" into a usable claim |
 | R7 pairwise-Dice detector and AURC | needs the MC passes; check whether `uncertainty/` survived the 2026-09-15 reclaim | Benchmark parity with Zenk et al. |
@@ -177,5 +225,11 @@ Sources: [arXiv 2606.20115](https://arxiv.org/abs/2606.20115) ·
 
 ## Order of work
 
-1. A1a–A1g (about 20 minutes) → 2. A2 → 3. B1–B5 → 4. decide the venue (A4) →
-5. the cheap analyses in Part C, R3 and R8 first → 6. A3 placeholders at submission time.
+1. A0a–A0j (R3 and R8 results) → 2. A1a–A1g (empty-ET) → 3. A2 → 4. B1–B5 → 5. decide the
+venue (A4) → 6. the remaining Part C analyses (R6, R5, R7) → 7. A3 placeholders at submission
+time.
+
+**Reproducibility note.** R3, R8 and the empty-ET numbers were computed in a review session from
+saved artifacts. Each piece of diagnostic code is saved beside its outputs, but none is a committed
+`scripts/` entry point yet. Before submission, have `py-implementer` turn them into committed
+scripts, so the paper's "code is public" statement covers them.

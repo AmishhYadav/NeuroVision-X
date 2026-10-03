@@ -2451,3 +2451,58 @@ evidence about the setup, and forgetting it means repeating it.
     Artifacts: `outputs/ood/{features_*.csv, *_ood_score.csv, model.json,
     thresholds.json, flag_rates.csv, auroc.csv, skipped.csv, run_meta.json}`,
     `outputs/error_budget_ood{,_baseline}/`.
+
+57. **POST-REVIEW CHECKS R3 AND R8 (2026-10-03, exploratory, not pre-registered).
+    THE REAL-DICOM OFFSET IS NOT A CONVENTION BUG; IT MIRRORS BRATS'S OWN
+    BRAIN-TO-ATLAS OFFSET. THE CONFIDENCE HEAD'S WT CHANNEL IS FLAT, NOT
+    MIS-WIRED.** Both run by hand from saved artifacts in a review session (no
+    committed script yet; the diagnostic code is saved beside the outputs).
+
+    **R3, signed registration offsets (22 accepted studies of note 55).**
+    (i) *Grid:* the front end registers to brainles' `brats_sri24.nii`. Its
+    affine is identical to the BraTS 2021 grid in `meta.json`
+    (diag(−1, −1, 1), origin (0, 239, 0)), so no axis or origin convention
+    differs. (Note: this project's own `data/atlas/sri24/*.nii` is LAS, with
+    origin 0. It is used only for anatomy reporting, never by the front end.)
+    (ii) *Signs:* the per-case tumour offsets do not share a sign (A-P: 7
+    positive, 12 negative, 3 zero; medians 0.5 / −1.5 / −2.0 voxels), so this
+    is not a constant offset.
+    (iii) *Mechanism:* BraTS's own skull-stripped brains sit off the SRI24
+    template. The best whole-brain shift onto `brats_sri24_skullstripped.nii`
+    has a median length of 3.3 mm over all 189 test cases, and 36% are
+    ≥ 5 mm (max 20). Our tumour offset is the **mirror image** of that brain
+    offset, case by case: Pearson r = −0.86 along A-P (p 2.5e-7), −0.47 L-R,
+    −0.52 S-I. Our tumour offset is about twice the brain offset, consistent
+    with local (tumour-level) displacement exceeding the whole-brain average.
+    Shifting our mask by the brain-only offset (no tumour information)
+    raises median WT from 0.658 to 0.708 (16/22 improve, Wilcoxon p 0.017),
+    TC from 0.579 to 0.665, and usable from 8/22 to 9/22. The tumour-fitted
+    shift of note 55 (WT 0.83, usable 14/22) is the optimistic upper bound.
+    **Reading:** two rigid registrations of the same patient disagree (ours
+    is brainles' default ANTs `Rigid`), and the reference is itself up to
+    several mm off the atlas. Table XV is therefore a measurement of
+    disagreement with BraTS's alignment, as the protocol defined it. It is
+    not evidence that our registration is worse than BraTS's, and there is
+    no defect to fix. H9 stays "refuted as measured".
+    Artifacts: `outputs/real_dicom_validation/r3/` (`r3_offsets.csv`,
+    `r3_dice.csv`, `brats_brain_vs_atlas.csv`,
+    `brats_test189_brain_vs_atlas.csv`, `job_map.json`).
+
+    **R8, confidence head WT AUROC 0.477 (C16).** Per-case WT AUROC is
+    centred at chance (median 0.484, IQR 0.40–0.56, range 0.16–0.85; 57% of
+    cases below 0.5). A sign error would cluster far below 0.5, and ET/TC
+    share the same code path and score 0.855/0.871. Re-running the model on
+    3 test cases (01092, 00098, 00194):
+    - The WT confidence channel is nearly constant: σ(conf) mean ≈ 0.79,
+      std 0.02–0.03, identical inside and outside the predicted WT.
+    - No channel predicts WT errors: AUROC with channels 0/1/2 ≈ 0.10–0.66,
+      so this is not a channel permutation.
+    - The ET and TC channels do localise their own region's errors (up to
+      0.98).
+
+    The training target (`losses/multitask.py`) and the scoring split
+    (`scripts/score_confidence.py`) both keep the (ET, TC, WT) order.
+    **Reading:** the WT confidence channel learned an uninformative,
+    near-constant output. It is a genuine negative, not a bug, so the WT
+    value may be quoted with that explanation.
+    Artifacts: `outputs/confidence/r8/r8_diag.py` (the scratch diagnostic).
