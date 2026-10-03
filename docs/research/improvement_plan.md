@@ -100,8 +100,8 @@ current situation.
 
 **Gate A-1 (robustness): RESOLVED 2026-08-19 — FAILED.** PED completed (99/99)
 and the pooled n=159 comparison came back inconclusive on every HD95 metric
-(`hd95_ET` +1.459 mm, CI [-3.942, 0.700]; `hd95_mean` +1.003, CI [-2.699,
-0.633]). The n=60 SSA pattern was noise. Worse, `dice_TC` is conclusively
+(`hd95_ET` improvement +1.459 mm, CI [-0.700, 3.942]; `hd95_mean` improvement
++1.003, CI [-0.633, 2.699]; sign of the CI corrected 2026-10-03). The n=60 SSA pattern was noise. Worse, `dice_TC` is conclusively
 **worse** for `neurovision` under shift (-0.0333 pooled, p_holm 0.0132; -0.0595
 on PED alone, p_holm 0.0002). See `docs/research_docs/experiments.md` note 30 and
 `outputs/compare_shift/`. **The boundary-robustness claim is dropped.** A1 and A2

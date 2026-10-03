@@ -189,13 +189,18 @@ record: `outputs/qc_validation/gate_c_verdict.json`.
 |---|---|---|---|---|
 | **PED** | **TC** | **+0.1686** | **[0.0686, 0.2747]** | **0.006** |
 | SSA | ET | +0.0375 | [−0.1096, 0.1758] | 1.0 |
-| SSA | TC | −0.1951 | [−0.3551, −0.0429] | 0.050 |
+| SSA | TC | −0.1951 | [−0.3551, −0.0429] | 0.0504 |
 | PED | ET | +0.0290 | [−0.0959, 0.1556] | 1.0 |
 | PED | WT | −0.1898 | [−0.3312, −0.0667] | 0.010 |
 
 **This is a mixed result, not a clean win, and must be written up as one.** The QC model beats free
 entropy on PED·TC by a wide, clearly significant margin. But in the same five-cell family, it *loses*
-to free entropy — significantly, in the opposite direction — on SSA·TC and PED·WT. The decision rule
+to free entropy — significantly, in the opposite direction — on PED·WT, and loses on SSA·TC by a
+margin that misses the bar by a hair (p_holm 0.0504; the bar above is p < 0.05 **and** CI excludes
+0, so SSA·TC is *inconclusive*, not significant). [Corrected 2026-10-03: this table and paragraph
+previously rounded 0.0504 to 0.050 and counted SSA·TC as a significant loss; exact value from
+`outputs/qc_validation/cells.csv`. The verdict is unchanged — Gate C is still POSITIVE by its rule,
+and still MIXED because PED·WT is a significant opposite-direction result.] The decision rule
 fixed in advance asks only whether *at least one* cell clears the bar, and one does, so the gate is
 POSITIVE by that rule. The honest sentence for the paper is: **the QC model adds real, significant
 value on tumour-core detection in the paediatric cohort, and is significantly worse than the free

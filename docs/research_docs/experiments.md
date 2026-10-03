@@ -695,8 +695,12 @@ sessions by resume is still ONE row — sum the GPU hours.
     recorded that on SSA alone (n=60) HD95 favoured `neurovision` in all three
     regions (-2.22 / -2.05 / -1.51 mm) with consistent effect size, and flagged
     it as underpowered rather than absent. At n=159 it is absent: `hd95_ET`
-    improvement +1.459 mm with CI [-3.942, 0.700], `hd95_mean` +1.003 with CI
-    [-2.699, 0.633]. Both straddle zero. The n=60 pattern was noise. **Do not
+    improvement +1.459 mm with CI [-0.700, 3.942] (as a difference, neurovision −
+    baseline = −1.459, CI [-3.942, 0.700]; n=136 cases with non-empty ET), `hd95_mean`
+    improvement +1.003 with CI [-0.633, 2.699] (difference −1.003, CI [-2.699, 0.633]).
+    Both straddle zero. [Corrected 2026-10-03: the original line paired the improvement's
+    sign with the difference's CI, putting the point outside its own interval; source
+    `outputs/compare_shift/neurovision_vs_baseline_pooled_ssa_ped.csv`.] The n=60 pattern was noise. **Do not
     write the "better boundaries under shift" framing** — this is the second
     time a promising direction in this project survived only until the sample
     grew, and the first (note 23) has the same shape.
