@@ -807,6 +807,12 @@ compare_family:
   ci: 0.95
   alpha: 0.05
   practical_threshold: null
+  # Sensitivity analysis: case ids dropped from EVERY item's a and b tables
+  # (after pooling), so the family stays the same size. Empty = no change.
+  # Each id must match a row somewhere, else ValueError (typo guard). Exists
+  # for the D3 duplicate-patient check: BraTS-PED-00121-000 and
+  # BraTS-PED-00137-000 are byte-identical upstream (note 58).
+  exclude_case_ids: []
   comparisons:
     - cohort: ssa
       a: [outputs/eval_ft_ssa_cf0/per_case_metrics.csv, outputs/eval_ft_ssa_cf1/per_case_metrics.csv]
@@ -1068,3 +1074,25 @@ silent_failure_by_region:
   cohorts: [test, ssa, ped]
   usable_regions: ${analysis.error_budget.usable_regions}
   usable_bar: ${analysis.error_budget.usable_bar}
+
+label_composition:
+  # Exploratory, post-hoc mechanism for D3 (experiments note 58). Does the
+  # paediatric cohort label nearly the whole tumour as "core"? Measures
+  # sub-region COMPOSITION two ways: (1) in the reference labels, from each
+  # case's meta.json `label_voxel_counts` (internal labels 1=NCR/NET, 2=ED,
+  # 3=ET; WT = 1+2+3, TC = 1+3), and (2) in a model's predictions, from the
+  # saved fp16 logits (region mask = logit > 0). scripts/label_composition.py.
+  # CPU, light, no model. Not pre-registered. Run:
+  #   python scripts/label_composition.py
+  out_dir: outputs/label_composition
+  low_ratio: 0.5        # report share of cases with TC/WT below this
+  low_ed_share: 0.05    # report share of cases with ED below this share of WT
+  references:           # name -> preprocessed root holding <case>/meta.json
+    brats: data/preprocessed/brats
+    ssa: data/preprocessed/brats_ssa
+    ped: data/preprocessed/brats_ped
+  predictions:          # name -> list of eval dirs, each holding logits/<case>.npy
+    ped_frozen: [outputs/eval_ped_neurovision]
+    ped_finetuned: [outputs/eval_ft_ped_cf0, outputs/eval_ft_ped_cf1]
+    ssa_frozen: [outputs/eval_ssa_neurovision]
+    ssa_finetuned: [outputs/eval_ft_ssa_cf0, outputs/eval_ft_ssa_cf1]

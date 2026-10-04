@@ -186,3 +186,78 @@ def test_missing_file_skips_item_with_warning_and_all_missing_raises(
     cfg_all_missing = _make_cfg(tmp_path, comparisons_all_missing)
     with pytest.raises(ValueError, match="skipped"):
         run_compare_family(cfg_all_missing)
+
+
+# ---------------------------------------------------------------------------
+# 4. exclude_case_ids: sensitivity exclusion applied to every item.
+# ---------------------------------------------------------------------------
+
+
+def _two_item_cfg(tmp_path: Path, seed: int, exclude: list[str] | None) -> OmegaConf:
+    """Two single-file cohorts ('test_*' and 'ext_*'); optionally sets exclude_case_ids."""
+    rng = np.random.default_rng(seed)
+    test_a, test_b = _cohort_paths(tmp_path, "test", rng)
+    ext_a, ext_b = _cohort_paths(tmp_path, "ext", rng)
+    comparisons = [
+        {"cohort": "test", "a": str(test_a), "b": str(test_b), "metrics": ["dice_ET"]},
+        {"cohort": "ext", "a": str(ext_a), "b": str(ext_b), "metrics": ["dice_ET"]},
+    ]
+    cfg = _make_cfg(tmp_path, comparisons)
+    if exclude is not None:
+        cfg.analysis.compare_family.exclude_case_ids = exclude
+    return cfg
+
+
+def test_empty_exclude_list_is_identical_to_no_key(tmp_path: Path) -> None:
+    """exclude_case_ids=[] must give byte-identical output to a config without the key."""
+    for sub in ("none", "empty"):
+        (tmp_path / sub).mkdir()
+    cfg_none = _two_item_cfg(tmp_path / "none", 4, None)
+    cfg_empty = _two_item_cfg(tmp_path / "empty", 4, [])
+    cfg_none.analysis.compare_family.out_dir = str(tmp_path / "out_none")
+    cfg_empty.analysis.compare_family.out_dir = str(tmp_path / "out_empty")
+    p_none = run_compare_family(cfg_none)["family_csv"]
+    p_empty = run_compare_family(cfg_empty)["family_csv"]
+    assert p_none.read_bytes() == p_empty.read_bytes()
+
+
+def test_excluding_one_id_reduces_n_only_for_its_item(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Dropping 'test_003' lowers n by one in the test item; ext keeps full n; config saved."""
+    cfg = _two_item_cfg(tmp_path, 5, ["test_003"])
+    with caplog.at_level(logging.WARNING):
+        paths = run_compare_family(cfg)
+    table = pd.read_csv(paths["family_csv"]).set_index("cohort")
+    assert int(table.loc["test", "n"]) == N_CASES - 1
+    assert int(table.loc["ext", "n"]) == N_CASES
+    assert len(table) == 2  # family size unchanged
+    assert "test_003" in caplog.text
+    saved = OmegaConf.load(paths["compare_family_config_yaml"])
+    assert list(saved.exclude_case_ids) == ["test_003"]
+
+
+def test_unknown_exclude_id_raises(tmp_path: Path) -> None:
+    """A typo'd id must raise, not silently produce an unchanged result."""
+    cfg = _two_item_cfg(tmp_path, 6, ["test_003", "no_such_case"])
+    with pytest.raises(ValueError, match="no_such_case"):
+        run_compare_family(cfg)
+
+
+def test_exclusion_applies_after_pooling(tmp_path: Path) -> None:
+    """With `a`/`b` as two-CSV lists, an id from the second file is dropped from the pool."""
+    rng = np.random.default_rng(7)
+    ssa_a, ssa_b = _cohort_paths(tmp_path, "ssa", rng)
+    ped_a, ped_b = _cohort_paths(tmp_path, "ped", rng)
+    comparisons = [
+        {
+            "cohort": "pooled",
+            "a": [str(ssa_a), str(ped_a)],
+            "b": [str(ssa_b), str(ped_b)],
+            "metrics": ["dice_ET"],
+        }
+    ]
+    cfg = _make_cfg(tmp_path, comparisons)
+    cfg.analysis.compare_family.exclude_case_ids = ["ped_001", "ssa_002"]
+    table = pd.read_csv(run_compare_family(cfg)["family_csv"])
+    assert int(table.loc[0, "n"]) == 2 * N_CASES - 2

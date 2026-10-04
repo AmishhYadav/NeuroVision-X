@@ -50,6 +50,16 @@ flight) must not crash the whole family -- it is logged as a WARNING naming
 the exact missing path, and that one item is left out of the family. If
 every item ends up skipped, there is nothing to correct, so the script
 raises rather than writing an empty, meaningless `family.csv`.
+
+## Sensitivity exclusions
+
+`cfg.analysis.compare_family.exclude_case_ids` (default `[]`, which changes
+nothing) drops those case ids from EVERY item's `a` and `b` table, after
+loading and pooling. It applies to all items, so the family size is
+unchanged: this is a sensitivity analysis, not a different family. Each
+drop is logged at WARNING (item, side, count, ids). An id that matches no
+row in any loaded table raises `ValueError`, so a typo can never produce a
+silently "unchanged" sensitivity result.
 """
 
 from __future__ import annotations
@@ -134,6 +144,37 @@ def _load_pooled(paths: Sequence[Path], side: str, cohort: str) -> pd.DataFrame:
     return pooled
 
 
+def _drop_excluded(
+    table: pd.DataFrame, exclude: Sequence[str], side: str, cohort: str, matched: set[str]
+) -> pd.DataFrame:
+    """Drops rows whose `case_id` (the index) is in `exclude`, and logs what went.
+
+    Args:
+        table: A per-case table indexed by `case_id`.
+        exclude: Case ids to drop. Empty means return `table` untouched.
+        side: `"a"` or `"b"`, used only in the log message.
+        cohort: The item's cohort name, used only in the log message.
+        matched: Mutated in place: gains every id from `exclude` found here.
+
+    Returns:
+        `table` without the excluded rows.
+    """
+    if not exclude:
+        return table
+    hit = table.index.isin(list(exclude))
+    found = [str(i) for i in table.index[hit]]
+    matched.update(found)
+    if found:
+        logger.warning(
+            "compare_family: cohort %r side %r -- dropped %d row(s) via exclude_case_ids: %s",
+            cohort,
+            side,
+            len(found),
+            found,
+        )
+    return table[~hit]
+
+
 def _threshold_for(
     practical_threshold: Mapping[str, float] | float | None, metric: str
 ) -> float | None:
@@ -214,7 +255,8 @@ def run_compare_family(cfg: DictConfig) -> dict[str, Path]:
         ValueError: No item ran (every item's `a` or `b` file was missing),
             or a pooled `a`/`b` had a duplicate `case_id` (see
             `_load_pooled`), or `compare_models` itself raised (e.g. a
-            requested metric missing from a table).
+            requested metric missing from a table), or an `exclude_case_ids`
+            entry matched no row in any loaded table.
     """
     fam_cfg = cfg.analysis.compare_family
     out_dir = ensure_dir(str(fam_cfg.out_dir))
@@ -225,6 +267,9 @@ def run_compare_family(cfg: DictConfig) -> dict[str, Path]:
     ci = float(fam_cfg.ci)
     alpha = float(fam_cfg.alpha)
     practical_threshold = fam_cfg.practical_threshold
+    # .get so older configs without the key behave exactly as before.
+    exclude_case_ids = [str(c) for c in fam_cfg.get("exclude_case_ids", None) or []]
+    matched_excluded: set[str] = set()
 
     # ONE generator, shared across every item's compare_models call -- see
     # module docstring.
@@ -246,6 +291,8 @@ def run_compare_family(cfg: DictConfig) -> dict[str, Path]:
 
         a_table = _load_pooled(a_paths, "a", cohort)
         b_table = _load_pooled(b_paths, "b", cohort)
+        a_table = _drop_excluded(a_table, exclude_case_ids, "a", cohort, matched_excluded)
+        b_table = _drop_excluded(b_table, exclude_case_ids, "b", cohort, matched_excluded)
         metrics = [str(m) for m in item.metrics]
 
         comparison = compare_models(
@@ -269,6 +316,13 @@ def run_compare_family(cfg: DictConfig) -> dict[str, Path]:
         raise ValueError(
             "compare_family: every item was skipped (missing a/b file) -- nothing to correct. "
             f"Configured comparisons: {[str(item.cohort) for item in fam_cfg.comparisons]}."
+        )
+
+    unknown = [c for c in exclude_case_ids if c not in matched_excluded]
+    if unknown:
+        raise ValueError(
+            f"compare_family: exclude_case_ids {unknown} match no row in any loaded table "
+            "-- check for a typo."
         )
 
     table = pd.concat(item_tables, axis=0, ignore_index=True)
