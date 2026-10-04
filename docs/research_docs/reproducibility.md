@@ -721,10 +721,10 @@ The four fine-tunes ran on Kaggle (`GIT_REF fb8b1b4`, `save_logits=true`). Their
 `outputs/eval_ft_{ssa,ped}_cf{0,1}/`. Everything below runs on the Mac CPU from those logits; no
 checkpoint is needed.
 
-**The four fine-tuned `last.pt` checkpoints have NOT been copied off Kaggle.** They exist only in the
-kernel outputs `amishyadav123/neurovision-d3-{ssa,ped}-cf{0,1}`. Until they are downloaded, a cache
-that needs a checkpoint (new logits, a new metric on raw predictions) cannot be rebuilt locally.
-The logits and per-case tables are local.
+**The four fine-tuned `last.pt` checkpoints were copied off Kaggle on 2026-10-04** to
+`outputs/neurovision_ft_{ssa,ped}_cf{0,1}/checkpoints/last.pt` (405 MB each; verified loadable, epochs
+119 / 119 / 66 / 67). A second copy stays in the kernel outputs `amishyadav123/neurovision-d3-{ssa,ped}-cf{0,1}`.
+The logits and per-case tables are local (`outputs/eval_ft_{ssa,ped}_cf{0,1}/`).
 
 | Step | Command |
 |---|---|
