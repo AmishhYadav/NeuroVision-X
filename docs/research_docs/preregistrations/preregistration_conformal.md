@@ -429,6 +429,8 @@ grid never reached SSA · TC's α = 0.05 floor (39), so Prediction 2 was never t
 Run off-grid at k = 39 and 45 (same driver, same 1,000 seeded splits; experiments note 57, R6),
 `neurovision` SSA · TC α = 0.05 is **NOT RESTORED at or above its floor**: feasible in 43.5% / 45.6%
 of splits, held-out risk 0.0578 / 0.0653. `baseline_unet3d` is RESTORED at both (0.027 / 0.030).
-So the floor (12) is necessary, not sufficient — it uses the cohort's R_min, and individual
-39-case draws often have a higher one. The registered verdicts above are unchanged; this addendum
+So the floor (12) is a guide for a typical draw, not a guarantee — it uses the cohort's R_min, and
+individual 39-case draws often have a higher one. (Corrected 2026-10-04 from "necessary, not
+sufficient": it is not necessary either, since draws below the floor can be feasible — PED · TC at
+α = 0.20, which has no floor, was feasible in up to 0.9% of splits.) The registered verdicts above are unchanged; this addendum
 qualifies Prediction 2 for one cell and must be quoted with it.

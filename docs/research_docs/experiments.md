@@ -2503,8 +2503,10 @@ evidence about the setup, and forgetting it means repeating it.
     0.0578 (CI 0.024–0.114, P(violation) 0.58), NOT RESTORED. At k = 45
     (15 held out), feasible in 45.6%, risk 0.0653, NOT RESTORED.
     `baseline_unet3d`: RESTORED at both (0.0269 and 0.0300; feasible in 100%).
-    **Reading:** the floor from (12) uses the *cohort's* R_min, so it is
-    necessary, not sufficient. Individual 39-case draws often have a higher
+    **Reading:** the floor from (12) uses the *cohort's* R_min, so it is a
+    guide for a typical draw, not a guarantee (corrected 2026-10-04 from
+    "necessary, not sufficient": draws below a floor can be feasible too, e.g.
+    PED TC at alpha 0.20, which has no floor). Individual 39-case draws often have a higher
     R_min, and when such a draw is feasible its threshold is too permissive
     for the held-out cases. For the proposed model, SSA TC at α = 0.05 cannot
     be restored from a 60-case site; for the baseline it can. The other
