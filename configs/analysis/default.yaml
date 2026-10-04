@@ -1053,3 +1053,18 @@ confidence_diag:
   per_case_csv: outputs/confidence/neurovision_test/per_case_confidence.csv
   # The first three test cases in loader order -- the ones the hand-run check used.
   cases: [BraTS2021_01092, BraTS2021_00098, BraTS2021_00194]
+
+silent_failure_by_region:
+  # Exploratory, post-review (2026-10-04; paper review rev4 item M2; paper
+  # Section IX-B). Which region makes each silent failure (accepted by the
+  # registered gate, but unusable) unusable? "Usable" needs BOTH WT and TC
+  # Dice >= the bar, and PED's tumour-core label means something different
+  # from the adult one, so the PED silent-failure rate may mostly measure the
+  # label change. scripts/silent_failure_by_region.py splits each cohort's
+  # silent failures into TC-only / WT-only / both from the saved error-budget
+  # per-case CSVs. CPU, seconds, no model. Not pre-registered.
+  out_dir: outputs/error_budget/silent_failure_by_region
+  per_case_dir: ${analysis.error_budget.out_dir}
+  cohorts: [test, ssa, ped]
+  usable_regions: ${analysis.error_budget.usable_regions}
+  usable_bar: ${analysis.error_budget.usable_bar}

@@ -71,17 +71,18 @@ Why it matters:
   place where that promise is not kept.
 - On SSA the label definition is unchanged, so those are genuine tumour-core failures.
 
-**Before you add this, the number needs a script.** The Data availability statement promises a
-script for every post-review number. I can have `py-implementer` write
-`scripts/silent_failure_by_region.py`, which reads `outputs/error_budget/per_case_*.csv` and needs
-about a minute of CPU. The figures above come from a scratch check and are not yet committed
-evidence.
+**Now scripted (2026-10-04).** `scripts/silent_failure_by_region.py` regenerates the split from
+the saved error-budget CSVs in seconds, and it reproduces every number above. The extra detail it
+gives: SSA has 2 cases that fail on both regions; PED has 4 that fail on both and 1 that fails on
+WT alone. The result is recorded in `experiments.md` note 57 and ledger C20.
 
 | # | Location | Find | Replace with |
 |---|---|---|---|
 | M2a | §IX-B | `with silent-failure rates of 4.2%, 18.3% and 49.5% (Table XIII, Fig. 6).` | `with silent-failure rates of 4.2%, 18.3% and 49.5% (Table XIII, Fig. 6). Almost all of these masks fail on tumour core alone: whole tumour clears the bar in all 8 test, 9 of 11 SSA and 44 of 49 PED silent failures (post-review, exploratory). On SSA, where the label definition is unchanged, these are genuine tumour-core failures; on PED the rate largely measures the changed tumour-core definition (Section IV-A).` |
 | M2b | Abstract | `with silent-failure rates of 4.2%, 18.3% and 49.5%. An input-statistics` | `with silent-failure rates of 4.2%, 18.3% and 49.5%, almost all on tumour core. An input-statistics` |
 | M2c | Abstract (keeps it within 250 words) | `(0.70–0.91× α; two intervals include α)` | delete. The abstract goes from 251 to about 249 words with M1a and M2b. |
+| M2d | Data and code availability | `confidence_diag.py and local_recalibration.py)` | `confidence_diag.py, local_recalibration.py and silent_failure_by_region.py)` |
+| M2e | §III-A | `the confidence-head check and the above-floor recalibration of SSA tumour core)` | `the confidence-head check, the above-floor recalibration of SSA tumour core and the split of silent failures by region)` |
 
 ### M3. Appendix A omits two amendments
 
@@ -179,6 +180,6 @@ removes" (§VIII-B) and "no threshold can help" (§X) are all true only for the 
 ## Order of work
 
 1. M1 (6 edits), M3, M4 and M5. These are about 20 minutes and need no new evidence.
-2. M2, after the script exists (say the word and I will delegate it).
+2. M2 (the script now exists): M2a–M2e.
 3. S1–S6.
 4. Export the PDF and do the visual checks.

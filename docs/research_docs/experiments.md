@@ -2548,3 +2548,25 @@ evidence about the setup, and forgetting it means repeating it.
     reproduces all 8 values and CIs to 4 decimals. Its "all"-case CIs use a
     fresh per-row generator, so they differ from the headline CIs of the original
     registered comparison ([0.0166, 0.0393]); the paper keeps the registered ones.
+
+    **Silent failures by region (2026-10-04, exploratory, post-review; paper
+    review rev4 item M2).** `python scripts/silent_failure_by_region.py`
+    (config `analysis.silent_failure_by_region`, seconds on CPU) reads the
+    note 47 error-budget per-case CSVs and asks which region makes each
+    silent failure (accepted by the registered gate, but unusable) unusable.
+    It first recomputes `usable` and the silent-failure cell from the Dice
+    values and raises on any disagreement with the saved columns.
+    Output: `outputs/error_budget/silent_failure_by_region/`.
+
+    | Cohort | Silent | TC only | WT only | Both | Silent if usable = WT alone |
+    |---|---|---|---|---|---|
+    | test | 8 | 8 | 0 | 0 | 0 / 189 (0%) |
+    | SSA | 11 | 9 | 0 | 2 | 2 / 60 (3.3%) |
+    | PED | 49 | 44 | 1 | 4 | 5 / 99 (5.1%) |
+
+    **Reading:** the registered silent-failure rates (4.2 / 18.3 / 49.5%) are
+    almost entirely tumour-core failures. On SSA the TC definition is the
+    adult one, so these are genuine TC failures. On PED the TC label means
+    something different (paper Section IV-A), so the 49.5% largely measures
+    the changed label, not a model that fails on whole tumour. Quote the
+    registered rate with this split beside it, never the WT-only rate alone.
