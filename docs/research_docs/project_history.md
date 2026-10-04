@@ -506,6 +506,13 @@ step: the Mondrian recalibration arm, which was pre-registered and never run.
   `67b67b1d`. Paper sources gathered under `docs/research_docs/`.
 - **Gate A session 2 done** (epochs 188–372, 21.9 GPU-h cumulative); projected ~61 GPU-h total.
 
+**10-03/04 — D3 gate fires (note 58, C27).** Four cross-fitted fine-tunes on Kaggle (~5 GPU-h,
+`fb8b1b4`): registered verdict **RECOVERS on both cohorts** (SSA TC +0.0433, PED TC +0.3676;
+cross-fitted, not external validation). Post-hoc: most of the PED TC gain is the model learning the
+paediatric label definition (TC/WT ratio 0.27 to 0.95; SSA control unchanged). PED · TC becomes
+restorable by local recalibration at α 0.10/0.20. Side finding: two PED cases are byte-identical
+duplicates and landed in opposite folds (lessons.md). Deployed model unchanged.
+
 ---
 
 ## 4. Every GPU run

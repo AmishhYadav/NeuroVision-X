@@ -712,3 +712,31 @@ rebuild to reproduce any published number.
 | `outputs/clinical_jobs/` except `9c2cc294…` | 1.1 GB | Old demo upload jobs; `9c2cc294` kept for the P0.7 twin eyeball | Re-upload the DICOM zip at `/clinical` |
 
 Kernel logs, `repo/` and `wandb/` under each `kaggle_kernels/*` dir were kept.
+
+---
+
+## 12. D3 cross-fitted fine-tune (note 58): regenerating the numbers
+
+The four fine-tunes ran on Kaggle (`GIT_REF fb8b1b4`, `save_logits=true`). Their logits were pulled to
+`outputs/eval_ft_{ssa,ped}_cf{0,1}/`. Everything below runs on the Mac CPU from those logits; no
+checkpoint is needed.
+
+**The four fine-tuned `last.pt` checkpoints have NOT been copied off Kaggle.** They exist only in the
+kernel outputs `amishyadav123/neurovision-d3-{ssa,ped}-cf{0,1}`. Until they are downloaded, a cache
+that needs a checkpoint (new logits, a new metric on raw predictions) cannot be rebuilt locally.
+The logits and per-case tables are local.
+
+| Step | Command |
+|---|---|
+| Lesion-wise columns, once per fold (`<cohort>` = `ssa` or `ped`, `<f>` = 0 or 1) | `.venv-analysis/bin/python scripts/replay_logits.py +analysis.replay.eval_dir=outputs/eval_ft_<cohort>_cf<f> analysis.replay.prep_dir=data/preprocessed/brats_<cohort> analysis.replay.out_dir=outputs/replay_lesionwise analysis.replay.lesionwise.enabled=true data.num_workers=0` |
+| Primary family (8 comparisons, one Holm correction) | `.venv/bin/python scripts/compare_family.py` (the config block in `configs/analysis/default.yaml` is the D3 family) |
+| Conformal curves of the pooled fine-tuned PED logits | `.venv/bin/python scripts/conformal.py calibration.conformal.calib_dir=outputs/neurovision/eval_val calibration.conformal.calib_prep_dir=data/preprocessed/brats 'calibration.conformal.apply_dirs=[outputs/eval_ft_ped_pooled]' 'calibration.conformal.apply_prep_dirs=[data/preprocessed/brats_ped]' calibration.conformal.out_dir=outputs/conformal/neurovision_ft_ped data.num_workers=0` |
+| Local recalibration (counterfactual) on those curves | `.venv/bin/python scripts/local_recalibration.py '~analysis.local_recalibration.models' '+analysis.local_recalibration.models={neurovision_ft_ped:{conformal_dir:outputs/conformal/neurovision_ft_ped,cohorts:{ped:eval_ft_ped_pooled}}}' analysis.local_recalibration.out_dir=outputs/local_recalibration_ft_ped` |
+
+`outputs/eval_ft_ped_pooled` is a pooled directory: symlinks to the logits of both PED folds plus the two
+`per_case_metrics.csv` files concatenated. The conformal fit is on the frozen BraTS val split
+(`outputs/neurovision/eval_val`); only the PED curves are used downstream. Outputs:
+`outputs/compare_family/d3_finetune_crossfit/family.csv`, `outputs/conformal/neurovision_ft_ped`,
+`outputs/local_recalibration_ft_ped`. The duplicate-case sensitivity family
+(`outputs/compare_family/d3_finetune_crossfit_sens_nodup`, n = 97) drops BraTS-PED-00121-000 and
+BraTS-PED-00137-000; the exact command and config for it are TODO (not supplied to this write-up).

@@ -223,7 +223,7 @@ and are archive-only; `tool_completion_plan.md`/`_log.md` join them once T0.4 cl
 | P3.3 | `docs/research_docs/related_work.md` — arXiv 2606.20115, 2608.10893, 2608.18193 + core refs; C14 loses "nobody has measured" | `[x]` 2026-09-27 `bc1c32f` (abstract-level; read full PDFs before the MELBA draft) | C14 rewritten |
 | P3.4 | Freeze: tag `semester-2026` | `[ ]` | pytest, smoke, and the new frontend's tests all green (old vitest/E2E went with `app/frontend`, 2026-09-28) |
 | **Phase 4 — GPU block (Dec – Feb, college card)** | | | |
-| P4 | Probe (must reach the failure condition) → **Gate A** nnU-Net fold 0, full recipe (~76 T4-h) → **D3** four fine-tunes (~8–10) → TTA (~2) → baseline seed 43 (~3.5). Core ≈ 90 T4-h. Stretch: D2 (+40), capacity control (+8) | `[ ]` | Each: Result section, note, claims, this board, push |
+| P4 | Probe (must reach the failure condition) → **Gate A** nnU-Net fold 0, full recipe (~76 T4-h) → **D3** four fine-tunes (~8–10) → TTA (~2) → baseline seed 43 (~3.5). Core ≈ 90 T4-h. Stretch: D2 (+40), capacity control (+8) | `[~]` **D3 `[x]` 2026-10-04 — note 58, C27**: all four folds done (~5 GPU-h), RECOVERS on both cohorts (SSA TC +0.0433, PED TC +0.3676, cross-fitted not external; most of PED TC is the paediatric label definition), PED·TC restorable at α 0.10/0.20 after fine-tune. Open in P4: Gate A, TTA. Baseline seed 43 done (see ledger) | Each: Result section, note, claims, this board, push |
 | **Phase 5 — capstone + paper (Jan – Jun 2027)** | | | |
 | P5 | IDH go/no-go 2027-01-15 · MELBA draft Feb, submit ~Apr · capstone extension chosen after Phase 4 · release tag · capstone report + final demo May–Jun | `[ ]` | — |
 
