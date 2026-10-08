@@ -1,0 +1,205 @@
+@import "tailwindcss";
+
+/* Self-hosted fonts (no CDN, so the demo works offline). Families follow the
+   Stitch "NeuroVision-X" design system: Inter for body text, Space Grotesk
+   for headings and labels, Space Mono for every number and measurement. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource/space-mono/400.css";
+@import "@fontsource/space-mono/700.css";
+
+/* Design tokens. Component code uses these names (bg-surface-panel,
+   text-text-secondary, text-data-enhancing, ...), never raw hex, so the
+   whole app re-themes from this one block. */
+@theme {
+  /* Surfaces: deep navy page, lighter navy panels (Stitch designMd). */
+  --color-surface-page: #0a0a1a;
+  --color-surface-panel: #12122e;
+  --color-surface-raised: #1a1a40;
+  --color-surface-seam: #26264d;
+  --color-surface-viewport: #000000;
+  --color-surface-ribbon: #07070f;
+
+  /* Text */
+  --color-text-primary: #eceef6;
+  --color-text-secondary: #a3a6c2;
+  --color-text-dim: #676a8a;
+
+  /* Brand / chrome accents. Chrome only: never used to draw data. */
+  --color-brand-primary: #6c5ce7; /* CTAs, active tab, selection */
+  --color-brand-primary-hover: #7d6ff0;
+  --color-brand-teal: #00cec9; /* live/online, secondary actions */
+  --color-brand-pink: #fd79a8; /* alerts */
+
+  /* Gate decision states. Always paired with a text label, never colour alone. */
+  --color-gate-proceed: #00cec9;
+  --color-gate-caution: #e69f00;
+  --color-gate-refuse: #fd79a8;
+
+  /* Data colours: the paper's Okabe-Ito region palette. Data only, never
+     chrome, so a purple button can never be mistaken for a tumour region. */
+  --color-data-necrotic: #56b4e9;
+  --color-data-oedema: #009e73;
+  --color-data-enhancing: #d55e00;
+  --color-data-wt: #0072b2;
+  --color-data-amber: #e69f00;
+
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  /* Old components use font-condensed for small uppercase labels; it now
+     maps to the heading face so they pick up the new look unchanged. */
+  --font-condensed: var(--font-heading);
+  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --radius-xl: 12px;
+
+  /* The landing page used to have its own light palette. Stitch is dark
+     everywhere, so these aliases point at the dark tokens. */
+  --color-landing-bg: #0a0a1a;
+  --color-landing-bg-raised: #12122e;
+  --color-landing-seam: #26264d;
+  --color-landing-text: #eceef6;
+  --color-landing-text-secondary: #a3a6c2;
+  --color-landing-text-dim: #676a8a;
+  --color-landing-accent: #6c5ce7;
+  --color-landing-accent-ink: #ffffff;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-surface-seam);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    background-color: var(--color-surface-page);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.01em;
+  }
+
+  /* Numbers line up in columns. */
+  .font-mono,
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-primary);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Translucent panel used for every card. Falls back to a solid panel when
+     the browser can't blur (so text stays readable). */
+  .glass-panel {
+    background: color-mix(in srgb, var(--color-surface-panel) 78%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgb(255 255 255 / 0.06);
+    border-radius: var(--radius-xl);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass-panel {
+      background: var(--color-surface-panel);
+    }
+  }
+
+  /* Small uppercase mono label above a value ("ICV", "SLICE"). */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-text-dim);
+  }
+
+  /* Pill tag for inline facts ("SRI24", "seed 42"). */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0.5rem;
+    border: 1px solid var(--color-surface-seam);
+    border-radius: 6px;
+    background: var(--color-surface-raised);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--color-brand-primary);
+    color: #fff;
+    padding: 0.5rem 1.25rem;
+    border-radius: var(--radius-xl);
+    font-family: var(--font-heading);
+    font-weight: 600;
+    transition:
+      background-color 150ms ease,
+      box-shadow 150ms ease;
+    border: 1px solid transparent;
+  }
+  .btn-primary:hover {
+    background: var(--color-brand-primary-hover);
+    box-shadow: 0 0 18px rgb(108 92 231 / 0.45);
+  }
+  .btn-primary:disabled {
+    opacity: 0.4;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    color: var(--color-brand-teal);
+    border: 1px solid color-mix(in srgb, var(--color-brand-teal) 60%, transparent);
+    padding: 0.5rem 1.25rem;
+    border-radius: var(--radius-xl);
+    font-family: var(--font-heading);
+    font-weight: 600;
+    transition:
+      background-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+  .btn-secondary:hover {
+    background: rgb(0 206 201 / 0.08);
+    box-shadow: 0 0 15px rgb(0 206 201 / 0.25);
+  }
+
+  /* Faint engineering grid behind viewers (Stitch twin studio). */
+  .bg-grid {
+    background-image:
+      linear-gradient(rgb(255 255 255 / 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.025) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

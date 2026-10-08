@@ -1,0 +1,30 @@
+{
+  "case_id": "BraTS2021_00000",
+  "source": "real skull-stripped nonzero-voxel mask (brain shell) and ground-truth label (tumour), same preprocessed frame",
+  "coord_note": "d->X (R<->L), w->Y (I->S, up), h->Z (A->P); centered+scaled on the brain shell's own extent",
+  "tumor_centroid_scene": [
+    0.19740872085094452,
+    -0.05420121178030968,
+    -0.47369617223739624
+  ],
+  "spacing_mm": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "class_volumes_ml": {
+    "necrotic": 11.74,
+    "oedema": 12.84,
+    "enhancing": 32.73
+  },
+  "region_volumes_ml": {
+    "ET": 32.73,
+    "TC": 44.47,
+    "WT": 57.3
+  },
+  "region_voxel_counts": {
+    "ET": 32731,
+    "TC": 44469,
+    "WT": 57305
+  }
+}

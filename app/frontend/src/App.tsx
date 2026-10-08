@@ -1,0 +1,504 @@
+import { useEffect, useMemo, useState } from "react";
+import { Brain, Layers, PanelLeftOpen } from "lucide-react";
+import {
+  ApiUnreachableError,
+  getCases,
+  getHealth,
+  type CaseSummary,
+  type HealthResponse,
+  type Modality,
+  type Plane,
+} from "./api";
+import type { OverlayMode } from "./lib/render";
+import { navigateTo } from "./lib/navigate";
+import { useCaseData } from "./hooks/useCaseData";
+import { useResponsiveLayout } from "./hooks/useResponsiveLayout";
+import { Header } from "./components/Header";
+import { CaseList } from "./components/CaseList";
+import { ViewportGrid } from "./components/ViewportGrid";
+import { SliceRibbon } from "./components/SliceRibbon";
+import { MetricsPanel } from "./components/MetricsPanel";
+import { Legend } from "./components/Legend";
+import { ControlBar, MODALITY_ORDER } from "./components/ControlBar";
+import { BrainTwinScene, type BrainTwinInput } from "./components/BrainTwinScene";
+
+const UNCERTAINTY_OPACITY = 0.6;
+const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 };
+// Module-level so this is the *same* array reference across renders - a
+// fresh `[]` on every render (while the profile is still loading) would
+// re-trigger the ribbon's draw effect on unrelated re-renders, e.g. dragging
+// the opacity slider.
+const EMPTY_PROFILE: number[] = [];
+
+type BootState = "loading" | "ready" | "unreachable" | "error";
+
+export default function App() {
+  const [bootState, setBootState] = useState<BootState>("loading");
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [cases, setCases] = useState<CaseSummary[]>([]);
+  // Initialised from the URL so a link like /app?case=BraTS2021_00123 (e.g.
+  // the report page's "back to viewer" link) reopens on that case rather
+  // than the empty "pick a case" state.
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("case"),
+  );
+  const [caseListOpen, setCaseListOpen] = useState(false);
+  const [caseListCollapsed, setCaseListCollapsed] = useState(false);
+
+  const [modality, setModality] = useState<Modality>("t1ce");
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>("prediction");
+  const [overlayOpacity, setOverlayOpacity] = useState(0.55);
+  const [showTruthOutline, setShowTruthOutline] = useState(true);
+  const [showUncertainty, setShowUncertainty] = useState(false);
+
+  const [expandedPlane, setExpandedPlane] = useState<Plane | null>(null);
+  const [singlePlane, setSinglePlane] = useState<Plane>("axial");
+  const [focusedPlane, setFocusedPlane] = useState<Plane>("axial");
+  const [sliceIndices, setSliceIndices] = useState<Record<Plane, number>>(ZERO_PLANES);
+
+  // The 3D twin is the default view now - the flat viewport grid is one tab
+  // switch away, not the initial state. Deliberately NOT reset on case
+  // change: a user who switched to the scan view stays there while browsing
+  // cases (see the view-switch toolbar below).
+  const [twinOpen, setTwinOpen] = useState(true);
+
+  const { layout, isPanelWidth } = useResponsiveLayout();
+  const caseData = useCaseData(selectedCaseId);
+
+  // Bootstrap: health + case list.
+  useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+    (async () => {
+      try {
+        const [healthRes, casesRes] = await Promise.all([
+          getHealth(controller.signal),
+          getCases(controller.signal),
+        ]);
+        if (cancelled) return;
+        setHealth(healthRes);
+        setCases(casesRes.cases);
+        setBootState("ready");
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (err instanceof ApiUnreachableError) {
+          setBootState("unreachable");
+        } else {
+          setBootError(err instanceof Error ? err.message : "Failed to load.");
+          setBootState("error");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
+
+  // Reset per-case view state whenever a new case finishes loading its meta.
+  useEffect(() => {
+    if (!caseData.detail) return;
+    const { sagittal, coronal, axial } = caseData.detail.meta.planes;
+    setSliceIndices({
+      sagittal: Math.floor(sagittal / 2),
+      coronal: Math.floor(coronal / 2),
+      axial: Math.floor(axial / 2),
+    });
+    setExpandedPlane(null);
+    if (!caseData.detail.meta.has_label) setOverlayMode("prediction");
+    // Prediction and Disagreement overlays both need a saved prediction;
+    // fall back to Truth (if available) rather than leaving the mode on a
+    // now-disabled control.
+    if (!caseData.detail.meta.has_prediction && caseData.detail.meta.has_label) {
+      setOverlayMode("truth");
+    }
+    if (!caseData.detail.meta.has_logits) setShowUncertainty(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseData.detail?.meta.case_id]);
+
+  // Keep the URL in sync with the selected case so it is bookmarkable and so
+  // the report page (a separate route now, not a panel) can link back to
+  // this exact case via /app?case=<id>. replaceState, not pushState: browsing
+  // cases is one continuous session, not a sequence of back-button stops.
+  useEffect(() => {
+    const next = selectedCaseId
+      ? `/app?case=${encodeURIComponent(selectedCaseId)}`
+      : "/app";
+    window.history.replaceState({}, "", next);
+  }, [selectedCaseId]);
+
+  // Global slice-stepping and modality shortcuts, scoped to the last-focused viewport.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (!caseData.detail) return;
+
+      if (e.key >= "1" && e.key <= "4") {
+        const m = MODALITY_ORDER[parseInt(e.key, 10) - 1];
+        if (m) setModality(m);
+        return;
+      }
+
+      const activePlane = layout === "single" ? singlePlane : (expandedPlane ?? focusedPlane);
+      const count = caseData.detail.meta.planes[activePlane];
+      if (count === undefined) return;
+
+      let delta = 0;
+      if (e.key === "ArrowRight") delta = 1;
+      else if (e.key === "ArrowLeft") delta = -1;
+      else if (e.key === "ArrowUp") delta = 10;
+      else if (e.key === "ArrowDown") delta = -10;
+      else return;
+
+      e.preventDefault();
+      setSliceIndices((prev) => ({
+        ...prev,
+        [activePlane]: Math.min(count - 1, Math.max(0, prev[activePlane] + delta)),
+      }));
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [caseData.detail, layout, singlePlane, expandedPlane, focusedPlane]);
+
+  if (bootState === "unreachable") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-surface-page px-6 text-center">
+        <div className="max-w-md">
+          <p className="mb-2 font-condensed text-sm tracking-[0.12em] text-text-dim uppercase">
+            NeuroVision-X
+          </p>
+          <p className="font-mono text-sm text-text-primary">
+            No response from the API. Start it with{" "}
+            <code className="text-data-oedema">uvicorn app.backend.main:app --reload</code>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (bootState === "error") {
+    return (
+      <div className="flex h-screen items-center justify-center bg-surface-page px-6 text-center">
+        <div className="max-w-md">
+          <p className="mb-2 font-condensed text-sm tracking-[0.12em] text-text-dim uppercase">
+            NeuroVision-X
+          </p>
+          <p className="mb-2 font-mono text-sm text-text-primary">
+            The API responded, but not with what the viewer expected.
+          </p>
+          <p className="font-mono text-xs text-text-secondary">{bootError}</p>
+          <p className="mt-3 font-mono text-xs text-text-dim">
+            Check the paths the server resolved at <code>/api/health</code>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const detail = caseData.detail;
+  const planeCounts = detail?.meta.planes ?? ZERO_PLANES;
+  const shape = detail?.meta.shape ?? null;
+  const hasLabel = detail?.meta.has_label ?? false;
+  const hasLogits = detail?.meta.has_logits ?? false;
+  const hasPrediction = detail?.meta.has_prediction ?? false;
+  const hasReport = detail?.has_report ?? false;
+  const uncertaintyKind = caseData.uncertainty?.kind ?? null;
+
+  // Fraction of this case's artifacts that have arrived. Counted against what
+  // the case ACTUALLY has -- a case with no label or no logits must still be
+  // able to reach 100%, or the bar would stall short of the end and look like
+  // a failed load.
+  const expectedArtifacts =
+    4 + 1 + (hasLabel ? 1 : 0) + (hasLogits ? 1 : 0); // modalities + profile + label + logits
+  const loadedArtifacts =
+    Object.keys(caseData.volumes).length +
+    (caseData.profile ? 1 : 0) +
+    (caseData.labelMask ? 1 : 0) +
+    (caseData.uncertainty ? 1 : 0);
+  const loadProgress = Math.min(1, loadedArtifacts / expectedArtifacts);
+  const ribbonPlane: Plane =
+    layout === "single" ? singlePlane : (expandedPlane ?? "axial");
+  const ribbonLabel = ribbonPlane.charAt(0).toUpperCase() + ribbonPlane.slice(1);
+  const profilePlane = caseData.profile?.planes[ribbonPlane];
+  const showCaseListInline = isPanelWidth;
+
+  // Built only while the twin view is actually open (a worker pass over a
+  // full volume is not free) and only once every modality has arrived, so
+  // the brain shell it produces reflects the whole case, not a partial one.
+  const twinInput: BrainTwinInput | null = useMemo(() => {
+    if (!twinOpen || !detail || !selectedCaseId) return null;
+    const modalityVolumes = Object.values(caseData.volumes)
+      .map((v) => v?.data)
+      .filter((d): d is Uint8Array => d != null);
+    if (modalityVolumes.length < 4) return null;
+    const tumorMask = caseData.labelMask?.data ?? caseData.predictionMask?.data ?? null;
+    const tumorSource: "label" | "prediction" | null = caseData.labelMask
+      ? "label"
+      : caseData.predictionMask
+        ? "prediction"
+        : null;
+    return {
+      caseId: selectedCaseId,
+      shape: detail.meta.shape,
+      spacing: detail.meta.spacing,
+      modalityVolumes,
+      tumorMask,
+      tumorSource,
+    };
+  }, [
+    twinOpen,
+    detail,
+    selectedCaseId,
+    caseData.volumes,
+    caseData.labelMask,
+    caseData.predictionMask,
+  ]);
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-text-primary">
+      <Header
+        health={health}
+        reachable={bootState === "ready"}
+        showCaseListToggle={!showCaseListInline}
+        onToggleCaseList={() => setCaseListOpen((v) => !v)}
+      />
+
+      {/* Below the single-viewport breakpoint the readout moves BELOW the
+          image instead of beside it: at ~600px a 224px sidebar eats a third
+          of the width, and the MRI is the thing worth the pixels. */}
+      <div
+        className={`relative flex min-h-0 flex-1 ${layout === "single" ? "flex-col" : "flex-row"}`}
+      >
+        {showCaseListInline && !caseListCollapsed && (
+          <div className="w-56 shrink-0 overflow-hidden border-r border-white/10 glass-panel">
+            <CaseList
+              cases={cases}
+              selectedCaseId={selectedCaseId}
+              onSelect={(id) => {
+                setSelectedCaseId(id);
+              }}
+              collapsible
+              onCollapse={() => setCaseListCollapsed(true)}
+            />
+          </div>
+        )}
+
+        {showCaseListInline && caseListCollapsed && (
+          <div className="flex w-9 shrink-0 flex-col items-center border-r border-white/10 glass-panel pt-2">
+            <button
+              type="button"
+              onClick={() => setCaseListCollapsed(false)}
+              aria-label="Show cases"
+              title="Show cases"
+              className="rounded-sm p-1 text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
+            >
+              <PanelLeftOpen size={14} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+
+        {!showCaseListInline && caseListOpen && (
+          <>
+            <div
+              className="absolute inset-0 z-10 bg-black/60"
+              onClick={() => setCaseListOpen(false)}
+              aria-hidden="true"
+            />
+            <div className="absolute inset-y-0 left-0 z-20 w-64 overflow-hidden border-r border-white/10 glass-panel">
+              <CaseList
+                cases={cases}
+                selectedCaseId={selectedCaseId}
+                onSelect={(id) => {
+                  setSelectedCaseId(id);
+                  setCaseListOpen(false);
+                }}
+              />
+            </div>
+          </>
+        )}
+
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
+          {!selectedCaseId ? (
+            <div className="flex flex-1 items-center justify-center text-center">
+              <div>
+                <p className="font-mono text-sm text-text-primary">Pick a case to begin.</p>
+                {health && (
+                  <p className="mt-1 font-mono text-xs text-text-dim">
+                    Evaluation directory: {health.eval_dir}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : caseData.error ? (
+            <div className="flex flex-1 items-center justify-center text-center">
+              <p className="font-mono text-sm text-text-primary">{caseData.error}</p>
+            </div>
+          ) : (
+            <>
+              {/* View switch: which case is loaded (left) and 3D twin vs. flat
+                  scan view (right). Sits above the loading bar so it is
+                  visible even while a case is still pulling its artifacts. */}
+              <div className="flex shrink-0 items-center gap-3">
+                <span className="font-mono text-xs text-text-primary">{selectedCaseId}</span>
+                <div
+                  role="group"
+                  aria-label="View"
+                  className="ml-auto flex items-center gap-1"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setTwinOpen(true)}
+                    aria-pressed={twinOpen}
+                    className={`flex items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+                      twinOpen
+                        ? "bg-surface-raised text-text-primary"
+                        : "text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    <Brain size={13} aria-hidden="true" />
+                    3D twin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTwinOpen(false)}
+                    aria-pressed={!twinOpen}
+                    className={`flex items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+                      !twinOpen
+                        ? "bg-surface-raised text-text-primary"
+                        : "text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    <Layers size={13} aria-hidden="true" />
+                    Scan view
+                  </button>
+                </div>
+              </div>
+
+              {/* A case pulls four modality volumes plus masks, entropy and the
+                  profile - around 20 MB. Without this the viewports sit black
+                  for several seconds and the app reads as frozen. Determinate,
+                  because we know exactly how many artifacts are outstanding. */}
+              {caseData.loading && (
+                <div
+                  className="flex shrink-0 items-center gap-3 border border-white/10 glass-panel px-3 py-1.5"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="font-condensed text-[11px] tracking-[0.12em] text-text-dim uppercase">
+                    Loading {selectedCaseId}
+                  </span>
+                  <span className="h-px flex-1 bg-surface-seam">
+                    <span
+                      className="block h-px bg-text-secondary transition-[width] duration-[120ms]"
+                      style={{ width: `${Math.round(loadProgress * 100)}%` }}
+                    />
+                  </span>
+                  <span className="tabular font-mono text-[11px] text-text-dim">
+                    {Math.round(loadProgress * 100)}%
+                  </span>
+                </div>
+              )}
+              {twinOpen ? (
+                <div className="relative min-h-0 flex-1 border border-white/10 glass-panel">
+                  <BrainTwinScene input={twinInput} />
+                  {/* BrainTwinScene's own empty state ("Pick a case to build
+                      its twin.") is meant for the no-case-selected moment,
+                      which can no longer reach it now that the twin is the
+                      default view - a case IS selected here, just still
+                      pulling its volumes, so this overlay says that instead. */}
+                  {twinInput === null && (
+                    <div className="absolute inset-0 flex items-center justify-center glass-panel">
+                      <span className="font-mono text-xs text-text-secondary">
+                        Loading {selectedCaseId}…
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="min-h-0 flex-1">
+                    <ViewportGrid
+                      layout={layout}
+                      expandedPlane={expandedPlane}
+                      onToggleExpand={(plane) =>
+                        setExpandedPlane((prev) => (prev === plane ? null : plane))
+                      }
+                      singlePlane={singlePlane}
+                      onChangeSinglePlane={setSinglePlane}
+                      onFocusPlane={setFocusedPlane}
+                      sliceIndices={sliceIndices}
+                      planeCounts={planeCounts}
+                      shape={shape}
+                      image={caseData.volumes[modality]?.data ?? null}
+                      predictionMask={caseData.predictionMask?.data ?? null}
+                      labelMask={caseData.labelMask?.data ?? null}
+                      uncertainty={caseData.uncertainty?.data ?? null}
+                      overlayMode={overlayMode}
+                      overlayOpacity={overlayOpacity}
+                      showTruthOutline={showTruthOutline}
+                      showUncertainty={showUncertainty}
+                      uncertaintyOpacity={UNCERTAINTY_OPACITY}
+                    />
+                  </div>
+                  <div className="shrink-0">
+                    <SliceRibbon
+                      planeLabel={ribbonLabel}
+                      sliceCount={planeCounts[ribbonPlane]}
+                      currentIndex={sliceIndices[ribbonPlane]}
+                      onScrub={(i) =>
+                        setSliceIndices((prev) => ({ ...prev, [ribbonPlane]: i }))
+                      }
+                      tumor={profilePlane?.tumor ?? EMPTY_PROFILE}
+                      error={profilePlane?.error ?? null}
+                      entropy={profilePlane?.entropy ?? null}
+                      onFocusRibbon={() => setFocusedPlane(ribbonPlane)}
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {selectedCaseId && !caseData.error && (
+          <div
+            className={`shrink-0 overflow-y-auto border-white/10 glass-panel ${
+              layout === "single" ? "max-h-56 w-full border-t" : "w-56 border-l"
+            }`}
+          >
+            <MetricsPanel metrics={caseData.detail?.metrics ?? null} regions={caseData.detail?.regions ?? null} />
+            <Legend
+              overlayMode={overlayMode}
+              showUncertainty={showUncertainty}
+              hasLabel={hasLabel}
+              uncertaintyKind={uncertaintyKind}
+            />
+          </div>
+        )}
+      </div>
+
+      <ControlBar
+        modality={modality}
+        onChangeModality={setModality}
+        overlayMode={overlayMode}
+        onChangeOverlayMode={setOverlayMode}
+        hasLabel={hasLabel}
+        hasPrediction={hasPrediction}
+        showTruthOutline={showTruthOutline}
+        onToggleTruthOutline={() => setShowTruthOutline((v) => !v)}
+        overlayOpacity={overlayOpacity}
+        onChangeOverlayOpacity={setOverlayOpacity}
+        hasLogits={hasLogits}
+        showUncertainty={showUncertainty}
+        onToggleUncertainty={() => setShowUncertainty((v) => !v)}
+        hasReport={hasReport}
+        onOpenReport={() =>
+          selectedCaseId && navigateTo(`/report/${encodeURIComponent(selectedCaseId)}`)
+        }
+      />
+    </div>
+  );
+}
