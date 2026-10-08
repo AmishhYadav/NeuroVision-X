@@ -120,6 +120,7 @@ def _clear_caches() -> None:
     config.get_settings.cache_clear()
     volumes._metrics_table.cache_clear()
     api._compute_profile.cache_clear()
+    volumes._WT_VOLUME_CACHE.clear()
 
 
 @pytest.fixture
@@ -308,6 +309,93 @@ def test_cases_ordering_and_shape(client: TestClient) -> None:
     assert no_label["has_label"] is False
     assert no_label["dice_mean"] is None
     assert no_label["dice"] is None
+
+
+# --- showcase selection ----------------------------------------------------
+
+
+def test_select_showcase_picks_min_max_and_even_ranks() -> None:
+    vols = {f"c{i}": float(i) for i in range(10)}
+    # linspace(0,1,5)*9 = 0, 2.25, 4.5, 6.75, 9 -> ranks 0, 2, 4 (round-half-even), 7, 9
+    assert volumes.select_showcase(vols, 5) == ["c0", "c2", "c4", "c7", "c9"]
+
+
+def test_select_showcase_k_at_least_n_returns_all_ascending() -> None:
+    vols = {"a": 3.0, "b": 1.0, "c": 2.0}
+    assert volumes.select_showcase(vols, 3) == ["b", "c", "a"]
+    assert volumes.select_showcase(vols, 10) == ["b", "c", "a"]
+
+
+def test_select_showcase_ties_broken_by_case_id() -> None:
+    vols = {"z": 1.0, "a": 1.0, "m": 1.0, "big": 5.0}
+    assert volumes.select_showcase(vols, 4) == ["a", "m", "z", "big"]
+    assert volumes.select_showcase(vols, 2) == ["a", "big"]
+
+
+def test_select_showcase_k1_is_smallest_and_no_duplicates() -> None:
+    vols = {f"c{i}": float(i) for i in range(6)}
+    assert volumes.select_showcase(vols, 1) == ["c0"]  # linspace(0,1,1) == [0.0]
+    picked = volumes.select_showcase(vols, 5)
+    assert len(set(picked)) == 5
+
+
+def test_select_showcase_rejects_k_below_one() -> None:
+    with pytest.raises(ValueError):
+        volumes.select_showcase({"a": 1.0}, 0)
+
+
+def test_ground_truth_wt_volume_exact_with_non_unit_spacing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prep = tmp_path / "prep"
+    (prep / "X").mkdir(parents=True)
+    label = np.zeros((4, 4, 4), dtype=np.uint8)
+    label[0, 0, :] = 1  # 4 voxels
+    label[1, 1, :2] = 2  # 2 voxels
+    label[2, 2, 0] = 3  # 1 voxel -> 7 WT voxels
+    np.save(prep / "X" / "label.npy", label)
+    meta = {
+        "cropped_shape": [4, 4, 4],
+        "original_shape": [4, 4, 4],
+        "bbox": [[0, 4]] * 3,
+        "spacing": [2.0, 2.0, 5.0],
+    }
+    (prep / "X" / "meta.json").write_text(json.dumps(meta))
+    (prep / "Y").mkdir()
+    (prep / "Y" / "meta.json").write_text(json.dumps(meta))  # no label.npy
+    settings = SimpleNamespace(
+        prep_dir=prep, predictions_dir=tmp_path / "pred", logits_dir=tmp_path / "logits"
+    )
+    # 7 voxels * (2*2*5 = 20 mm^3) = 140 mm^3 = 0.14 mL
+    assert volumes.ground_truth_wt_volume_ml("X", settings) == pytest.approx(0.14)
+    assert volumes.ground_truth_wt_volume_ml("Y", settings) is None
+
+
+def test_cases_showcase_param(backend: tuple[Path, Path], client: TestClient) -> None:
+    prep_dir, eval_dir = backend
+    # Make CaseLow's tumour bigger so the two labelled cases differ in size.
+    big = _make_label(CROPPED_SHAPE)
+    big[6:8, 6:8, 6:8] = 2
+    np.save(prep_dir / "CaseLow" / "label.npy", big)
+
+    body = client.get("/api/cases", params={"showcase": 2}).json()
+    ids = [c["case_id"] for c in body["cases"]]
+    assert len(ids) == 2
+    vols = [c["wt_volume_ml"] for c in body["cases"]]
+    assert vols == sorted(vols)
+    assert body["showcase"] == 2
+    assert body["total"] == 4  # CaseNoLabel counted, CaseBadGeo not listed
+    assert "CaseNoLabel" not in ids
+    assert body["selection"].startswith("ground-truth whole-tumour volume (label > 0)")
+    # Largest pick must be the enlarged CaseLow (spacing 1 mm, so voxels / 1000 = mL).
+    assert body["cases"][-1]["case_id"] == "CaseLow"
+    assert body["cases"][-1]["wt_volume_ml"] == round(int((big > 0).sum()) / 1000.0, 1)
+
+
+def test_cases_without_showcase_unchanged(client: TestClient) -> None:
+    body = client.get("/api/cases").json()
+    assert set(body) == {"cases"}
+    assert all("wt_volume_ml" not in c for c in body["cases"])
 
 
 # --- /api/cases/{case_id} -------------------------------------------------

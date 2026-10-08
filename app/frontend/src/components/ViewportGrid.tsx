@@ -1,5 +1,6 @@
 import type { Plane } from "../api";
 import type { OverlayMode } from "../lib/render";
+import type { Opaque } from "../lib/opaque";
 import { Viewport } from "./Viewport";
 
 export type LayoutMode = "single" | "stack" | "grid";
@@ -10,6 +11,8 @@ const PLANES: { plane: Plane; label: string }[] = [
   { plane: "sagittal", label: "Sagittal" },
 ];
 
+// The four voxel buffers are Opaque-wrapped: see lib/opaque.ts (React dev
+// prop-diffing enumerates every index of a raw typed array).
 interface ViewportGridProps {
   layout: LayoutMode;
   expandedPlane: Plane | null;
@@ -20,10 +23,10 @@ interface ViewportGridProps {
   sliceIndices: Record<Plane, number>;
   planeCounts: Record<Plane, number>;
   shape: [number, number, number] | null;
-  image: Uint8Array | null;
-  predictionMask: Uint8Array | null;
-  labelMask: Uint8Array | null;
-  uncertainty: Uint8Array | null;
+  image: Opaque<Uint8Array> | null;
+  predictionMask: Opaque<Uint8Array> | null;
+  labelMask: Opaque<Uint8Array> | null;
+  uncertainty: Opaque<Uint8Array> | null;
   overlayMode: OverlayMode;
   overlayOpacity: number;
   showTruthOutline: boolean;

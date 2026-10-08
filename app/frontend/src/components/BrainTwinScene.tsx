@@ -30,6 +30,7 @@ import type { AtlasStructureRow, ConformalMeta } from "../api";
 import { hexToRgb } from "../lib/colors";
 import { scalarsToColors, type VertexLayerKind } from "../lib/vertexColors";
 import { structureRow } from "../lib/atlasSelection";
+import { Opaque, opaque } from "../lib/opaque";
 import { structureColor } from "../lib/structureColors";
 import type {
   TwinMeshRequest,
@@ -84,8 +85,10 @@ export interface BrainTwinInput {
   caseId: string;
   shape: [number, number, number];
   spacing: [number, number, number];
-  modalityVolumes: Uint8Array[];
-  tumorMask: Uint8Array | null;
+  // Opaque-wrapped (lib/opaque.ts): React dev enumerates every index of a raw
+  // typed array in a changed prop, which cost seconds per render.
+  modalityVolumes: Opaque<Uint8Array[]>;
+  tumorMask: Opaque<Uint8Array> | null;
   tumorSource: "label" | "prediction" | null;
 }
 
@@ -103,7 +106,7 @@ export interface BrainTwinInput {
 export interface TwinActiveLayer {
   key: string;
   kind: VertexLayerKind;
-  data: Uint8Array;
+  data: Opaque<Uint8Array>;
   /** Conformal operating point, only used to label the legend. */
   conformal?: ConformalMeta | null;
 }
@@ -116,9 +119,39 @@ interface TwinGeometries {
 
 /** Atlas structure shells to draw - see BrainTwinSceneProps.atlas for the field meanings. */
 export interface TwinAtlasInput {
-  volume: Uint8Array;
+  volume: Opaque<Uint8Array>;
   selection: number[];
   table: AtlasStructureRow[];
+}
+
+// Module-level LRU of worker mesh results, so remounting the scene (view
+// switch) or revisiting a recent case does not re-mesh. The buffers in a
+// result were transferred to the main thread by the worker, so the main
+// thread owns them; they are never posted back to the worker with a
+// transfer list (the "sample" request structured-clones voxelGeometry).
+const MESH_LRU_SIZE = 5;
+const meshLru = new Map<string, TwinMeshResult>();
+
+/** Everything that defines the meshed input: case/job id, which mask fed the tumour surfaces, and the grid shape. */
+function meshKey(input: BrainTwinInput): string {
+  return `${input.caseId}|${input.tumorSource ?? "none"}|${input.shape.join("x")}`;
+}
+function lruGet(key: string): TwinMeshResult | undefined {
+  const hit = meshLru.get(key);
+  if (hit) {
+    meshLru.delete(key);
+    meshLru.set(key, hit); // refresh recency
+  }
+  return hit;
+}
+function lruSet(key: string, value: TwinMeshResult): void {
+  meshLru.delete(key);
+  meshLru.set(key, value);
+  while (meshLru.size > MESH_LRU_SIZE) {
+    const oldest = meshLru.keys().next().value;
+    if (oldest === undefined) break;
+    meshLru.delete(oldest);
+  }
 }
 
 /**
@@ -146,9 +179,8 @@ function useTwinMesh(
   structuresComputing: boolean;
 } {
   const workerRef = useRef<Worker | null>(null);
-  // Base mesh geometry per case - independent of which layer is active, so
-  // switching layers never touches this cache.
-  const meshCacheRef = useRef<Map<string, TwinMeshResult>>(new Map());
+  // Base mesh geometry lives in the module-level meshLru above - independent
+  // of which layer is active, so switching layers never touches it.
   // Sampled scalars per case, then per the caller's `key` (see
   // TwinActiveLayer's docstring on why `key` and not `kind`).
   const layerCacheRef = useRef<Map<string, Map<string, Partial<Record<ClassName, Float32Array>>>>>(
@@ -169,7 +201,7 @@ function useTwinMesh(
   // its turn. Both are cheap compared to the initial mesh pass, so this is
   // acceptable rather than needing its own independent id space.
   const pendingRef = useRef<
-    { type: "mesh" | "sample" | "structures"; caseId: string; key?: string } | null
+    { type: "mesh" | "sample" | "structures"; caseId: string; key?: string; meshKey?: string } | null
   >(null);
   // Read inside the mesh-request effect without adding activeLayer as a
   // dependency - that effect must stay keyed on caseId alone (a case switch
@@ -205,11 +237,11 @@ function useTwinMesh(
         // A sample request only ever carries ONE layer, so its single
         // entry is the one being resolved.
         const perClass = Object.values(data.layerScalars)[0];
-        if (perClass && pending?.type === "sample" && pending.key) {
-          let caseLayers = layerCacheRef.current.get(data.caseId);
+        if (perClass && pending?.type === "sample" && pending.key && pending.meshKey) {
+          let caseLayers = layerCacheRef.current.get(pending.meshKey);
           if (!caseLayers) {
             caseLayers = new Map();
-            layerCacheRef.current.set(data.caseId, caseLayers);
+            layerCacheRef.current.set(pending.meshKey, caseLayers);
           }
           caseLayers.set(pending.key, perClass);
           setLayerVersion((v) => v + 1);
@@ -219,11 +251,11 @@ function useTwinMesh(
       }
 
       if ("kind" in data && data.kind === "structures") {
-        if (pending?.type === "structures" && pending.key) {
-          let caseStructures = structuresCacheRef.current.get(data.caseId);
+        if (pending?.type === "structures" && pending.key && pending.meshKey) {
+          let caseStructures = structuresCacheRef.current.get(pending.meshKey);
           if (!caseStructures) {
             caseStructures = new Map();
-            structuresCacheRef.current.set(data.caseId, caseStructures);
+            structuresCacheRef.current.set(pending.meshKey, caseStructures);
           }
           caseStructures.set(pending.key, data.structures);
           setStructuresVersion((v) => v + 1);
@@ -232,18 +264,18 @@ function useTwinMesh(
         return;
       }
 
-      meshCacheRef.current.set(data.caseId, data);
+      if (pending?.type === "mesh" && pending.meshKey) lruSet(pending.meshKey, data);
       // The mesh request may itself have carried the active layer (see the
       // request-building effect below) - fold its result into the same
       // per-key cache a later "sample" response would use, so the two paths
       // are indistinguishable to activeLayerScalars.
-      if (data.layerScalars && pending?.type === "mesh" && pending.key) {
+      if (data.layerScalars && pending?.type === "mesh" && pending.key && pending.meshKey) {
         const perClass = Object.values(data.layerScalars)[0];
         if (perClass) {
-          let caseLayers = layerCacheRef.current.get(data.caseId);
+          let caseLayers = layerCacheRef.current.get(pending.meshKey);
           if (!caseLayers) {
             caseLayers = new Map();
-            layerCacheRef.current.set(data.caseId, caseLayers);
+            layerCacheRef.current.set(pending.meshKey, caseLayers);
           }
           caseLayers.set(pending.key, perClass);
         }
@@ -264,7 +296,8 @@ function useTwinMesh(
       setResult(null);
       return;
     }
-    const cached = meshCacheRef.current.get(input.caseId);
+    const key = meshKey(input);
+    const cached = lruGet(key);
     if (cached) {
       setResult(cached);
       setComputing(false);
@@ -273,7 +306,7 @@ function useTwinMesh(
     requestIdRef.current += 1;
     setComputing(true);
     const layer = activeLayerRef.current;
-    pendingRef.current = { type: "mesh", caseId: input.caseId, key: layer?.key };
+    pendingRef.current = { type: "mesh", caseId: input.caseId, key: layer?.key, meshKey: key };
     const request: TwinMeshRequest = {
       requestId: requestIdRef.current,
       caseId: input.caseId,
@@ -284,10 +317,10 @@ function useTwinMesh(
       // and clinical (`/clinical/jobs`) paths, so spacing never rescales the
       // isosurface itself.
       spacing: input.spacing,
-      modalityVolumes: input.modalityVolumes,
-      tumorMask: input.tumorMask,
+      modalityVolumes: input.modalityVolumes.value,
+      tumorMask: input.tumorMask?.value ?? null,
       tumorSource: input.tumorSource,
-      scalarLayers: layer ? { [layer.kind]: layer.data } : undefined,
+      scalarLayers: layer ? { [layer.kind]: layer.data.value } : undefined,
       keepVoxelGeometry: true,
     };
     // Deliberately NOT transferred: these are the SAME ArrayBuffers
@@ -298,26 +331,26 @@ function useTwinMesh(
     // 2D viewport must keep working while the twin is open.
     workerRef.current?.postMessage(request);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input?.caseId]);
+  }, [input?.caseId, input?.tumorSource]);
 
   // Layer request: fires whenever the active layer changes (or a cached
   // case turns out not to have this layer's scalars yet) - never re-meshes,
   // only resamples the case's already-computed voxel geometry.
   useEffect(() => {
     if (!input || !activeLayer) return;
-    const cachedMesh = meshCacheRef.current.get(input.caseId);
+    const cachedMesh = lruGet(meshKey(input));
     if (!cachedMesh || !cachedMesh.voxelGeometry) return; // mesh not ready yet; the mesh effect above will carry this layer once it lands
-    const caseLayers = layerCacheRef.current.get(input.caseId);
+    const caseLayers = layerCacheRef.current.get(meshKey(input));
     if (caseLayers?.has(activeLayer.key)) return; // already sampled
 
     requestIdRef.current += 1;
-    pendingRef.current = { type: "sample", caseId: input.caseId, key: activeLayer.key };
+    pendingRef.current = { type: "sample", caseId: input.caseId, key: activeLayer.key, meshKey: meshKey(input) };
     const request: TwinSampleRequest = {
       kind: "sample",
       requestId: requestIdRef.current,
       caseId: input.caseId,
       shape: input.shape,
-      layers: { [activeLayer.kind]: activeLayer.data },
+      layers: { [activeLayer.kind]: activeLayer.data.value },
       voxelGeometry: cachedMesh.voxelGeometry,
     };
     workerRef.current?.postMessage(request);
@@ -329,15 +362,15 @@ function useTwinMesh(
   // selected structures against the case's own scene frame (result.frame).
   useEffect(() => {
     if (!input || !atlas || atlas.selection.length === 0) return;
-    const cachedMesh = meshCacheRef.current.get(input.caseId);
+    const cachedMesh = lruGet(meshKey(input));
     if (!cachedMesh) return; // mesh (and its frame) not ready yet
     const key = atlas.selection.join(",");
-    const caseStructures = structuresCacheRef.current.get(input.caseId);
+    const caseStructures = structuresCacheRef.current.get(meshKey(input));
     if (caseStructures?.has(key)) return; // already meshed
 
     requestIdRef.current += 1;
     setStructuresComputing(true);
-    pendingRef.current = { type: "structures", caseId: input.caseId, key };
+    pendingRef.current = { type: "structures", caseId: input.caseId, key, meshKey: meshKey(input) };
     const request: TwinStructuresRequest = {
       kind: "structures",
       requestId: requestIdRef.current,
@@ -346,7 +379,7 @@ function useTwinMesh(
       // Deliberately NOT transferred (see TwinStructuresRequest's docstring)
       // - the caller (the report/atlas panel a later unit wires up) keeps
       // its own copy of this volume for the next selection change.
-      atlas: atlas.volume,
+      atlas: atlas.volume.value,
       selection: atlas.selection,
       frame: cachedMesh.frame,
     };
@@ -366,16 +399,28 @@ function useTwinMesh(
     };
   }, [result]);
 
+  // Free the GPU buffers of a replaced / unmounted geometry set. Keyed on the
+  // geometries object itself, so the cleanup only runs for the set that is
+  // being replaced, never for the one the next render uses.
+  useEffect(() => {
+    if (!geometries) return;
+    return () => {
+      geometries.brainLeft.dispose();
+      geometries.brainRight.dispose();
+      for (const g of Object.values(geometries.tumor)) g?.dispose();
+    };
+  }, [geometries]);
+
   const activeLayerScalars = useMemo(() => {
     if (!input || !activeLayer) return null;
-    return layerCacheRef.current.get(input.caseId)?.get(activeLayer.key) ?? null;
+    return layerCacheRef.current.get(meshKey(input))?.get(activeLayer.key) ?? null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input?.caseId, activeLayer, layerVersion, result]);
+  }, [input?.caseId, input?.tumorSource, activeLayer, layerVersion, result]);
 
   const structureGeometries = useMemo(() => {
     if (!input || !atlas || atlas.selection.length === 0) return null;
     const key = atlas.selection.join(",");
-    const structures = structuresCacheRef.current.get(input.caseId)?.get(key);
+    const structures = structuresCacheRef.current.get(meshKey(input))?.get(key);
     if (!structures) return null;
     const out = new Map<number, THREE.BufferGeometry>();
     for (const [indexStr, buf] of Object.entries(structures)) {
@@ -383,7 +428,14 @@ function useTwinMesh(
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input?.caseId, atlas, structuresVersion]);
+  }, [input?.caseId, input?.tumorSource, atlas, structuresVersion]);
+
+  useEffect(() => {
+    if (!structureGeometries) return;
+    return () => {
+      for (const g of structureGeometries.values()) g.dispose();
+    };
+  }, [structureGeometries]);
 
   return {
     result,
@@ -395,16 +447,19 @@ function useTwinMesh(
   };
 }
 
+// geometries / colorsByClass / structureGeometries are Opaque-wrapped: a
+// BufferGeometry's own enumerable keys reach its typed arrays, which React's
+// dev prop-diffing would walk (see lib/opaque.ts).
 interface TwinModelProps {
-  geometries: NonNullable<ReturnType<typeof useTwinMesh>["geometries"]>;
+  geometries: Opaque<NonNullable<ReturnType<typeof useTwinMesh>["geometries"]>>;
   separated: boolean;
   onToggleSeparate: () => void;
   selected: ClassName | null;
   onSelect: (c: ClassName | null) => void;
   /** Per-class vertex RGB from scalarsToColors, or absent/no-entry -> that class keeps its flat class colour. */
-  colorsByClass: Partial<Record<ClassName, Float32Array>> | null;
+  colorsByClass: Opaque<Partial<Record<ClassName, Float32Array>>> | null;
   /** Meshed atlas structure shells to render, keyed by atlas index, or null when none are selected/ready. */
-  structureGeometries: Map<number, THREE.BufferGeometry> | null;
+  structureGeometries: Opaque<Map<number, THREE.BufferGeometry>> | null;
   /** Atlas index to draw more opaque/emissive, or null/absent for none. */
   highlightedStructure?: number | null;
   /** Fired on a shell click (its index) or on empty space (null, via the canvas's onPointerMissed). */
@@ -419,16 +474,19 @@ const HEMISPHERE_GAP = 0.55;
 const PAINTED_EMISSIVE = new THREE.Color(0xffffff);
 
 function TwinModel({
-  geometries,
+  geometries: geometriesHandle,
   separated,
   onToggleSeparate,
   selected,
   onSelect,
-  colorsByClass,
-  structureGeometries,
+  colorsByClass: colorsHandle,
+  structureGeometries: structureHandle,
   highlightedStructure = null,
   onStructureSelect,
 }: TwinModelProps) {
+  const geometries = geometriesHandle.value;
+  const colorsByClass = colorsHandle?.value ?? null;
+  const structureGeometries = structureHandle?.value ?? null;
   const groupRef = useRef<THREE.Group>(null);
   const leftRef = useRef<THREE.Group>(null);
   const rightRef = useRef<THREE.Group>(null);
@@ -483,6 +541,10 @@ function TwinModel({
       }),
     [],
   );
+
+  // Free the shell materials' GPU programs when replaced / on unmount.
+  useEffect(() => () => shellBackMaterial.dispose(), [shellBackMaterial]);
+  useEffect(() => () => shellFrontMaterial.dispose(), [shellFrontMaterial]);
 
   // Clipping plane at the mid-sagittal plane (scene X = 0): when the brain
   // is separated, this clips the tumour meshes so the cross-section of all
@@ -715,6 +777,21 @@ export function BrainTwinScene({
   const [selected, setSelected] = useState<ClassName | null>(null);
   const controlsRef = useRef<import("three-stdlib").OrbitControls | null>(null);
 
+  // In a short host (the clinical 2x2 tile) the Structures list starts
+  // collapsed so it cannot crowd out the layer legend.
+  const hostRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height ?? el.clientHeight;
+      setCompact(h < 420);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // A new case resets the view - a previous case's separated/selected state
   // has no meaning for a different tumour.
   useEffect(() => {
@@ -752,7 +829,7 @@ export function BrainTwinScene({
       : null;
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={hostRef} className="relative h-full w-full">
       <Canvas
         camera={{ position: [0, 0.3, 2.6], fov: 42 }}
         onPointerMissed={() => {
@@ -775,13 +852,13 @@ export function BrainTwinScene({
           {geometries && (
             <>
               <TwinModel
-                geometries={geometries}
+                geometries={opaque(geometries)}
                 separated={separated}
                 onToggleSeparate={() => setSeparated((v) => !v)}
                 selected={selected}
                 onSelect={setSelected}
-                colorsByClass={colorsByClass}
-                structureGeometries={structureGeometries}
+                colorsByClass={opaque(colorsByClass)}
+                structureGeometries={opaque(structureGeometries)}
                 highlightedStructure={highlightedStructure}
                 onStructureSelect={onStructureSelect}
               />
@@ -823,11 +900,9 @@ export function BrainTwinScene({
       )}
 
       {geometries && (
-        <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col gap-1 text-xs text-text-dim">
-          <span>
-            Drag to orbit · scroll to zoom · click a hemisphere to separate
-            {structureGeometries && structureGeometries.size > 0 ? " · click a structure" : ""}
-          </span>
+        <div className="pointer-events-none absolute bottom-3 left-3 max-w-[calc(100%-18rem)] truncate text-xs text-text-dim">
+          Drag to orbit · scroll to zoom · click a hemisphere to separate
+          {structureGeometries && structureGeometries.size > 0 ? " · click a structure" : ""}
         </div>
       )}
 
@@ -918,58 +993,59 @@ export function BrainTwinScene({
         </div>
       )}
 
-      {/* Bottom-right stack: the structure legend (when shells are drawn)
-          above the layer legend (when a scalar layer is active) - a
-          flex-col-reverse column anchored at its bottom edge, so either can
-          be present alone without leaving a gap where the other would have
-          been. */}
+      {/* Bottom-right column holding BOTH overlays (structures above, layer
+          legend below) so they can never overlap each other. */}
       {(activeLayer || (structureGeometries && structureGeometries.size > 0)) && (
-        <div className="absolute right-3 bottom-3 flex w-48 flex-col-reverse gap-2">
+        <div className="absolute right-3 bottom-3 flex max-h-[calc(100%-1.5rem)] flex-col items-end gap-2 overflow-hidden">
+          {structureGeometries && structureGeometries.size > 0 && atlas && (
+            <div
+              data-testid="twin-structure-legend"
+              className="glass-panel min-h-0 w-full max-w-[16rem] p-2"
+            >
+              <details open={!compact}>
+                <summary className="eyebrow cursor-pointer px-1 pb-1">
+                  Structures ({atlas.selection.filter((i) => structureGeometries.has(i)).length})
+                </summary>
+                <div className="flex max-h-48 flex-col gap-1 overflow-auto">
+                  {/* atlas.selection's own order (report order), not the Map's
+                      - Object.entries on the worker's numeric-keyed structures
+                      object always comes back in ascending index order in JS,
+                      which would silently re-sort this list away from the
+                      report's involvement ranking. */}
+                  {atlas.selection
+                    .filter((index) => structureGeometries.has(index))
+                    .map((index) => {
+                      const row = structureRow(atlas.table, index);
+                      return (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => onStructureSelect?.(index)}
+                          className="flex items-center gap-2 rounded-sm text-left transition-colors hover:bg-surface-raised/50"
+                        >
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                            style={{ backgroundColor: structureColorHex(index) }}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate font-mono text-[11px] text-text-secondary">
+                            {row?.name ?? `#${index}`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </details>
+            </div>
+          )}
+
           {/* Label the layer ONLY by the header value passed in via
               activeLayer.kind - never an invented string - so the twin can
               never show a name for a quantity the backend did not actually
               send. */}
           {activeLayer && (
-            <div data-testid="twin-layer-legend" className="rounded-[10px]">
+            <div data-testid="twin-layer-legend" className="w-full max-w-[16rem] shrink-0 rounded-[10px]">
               <Legend overlayMode="prediction" showUncertainty hasLabel={false} uncertaintyKind={activeLayer.kind} conformal={activeLayer.conformal ?? null} />
-            </div>
-          )}
-
-          {structureGeometries && structureGeometries.size > 0 && atlas && (
-            <div
-              data-testid="twin-structure-legend"
-              className="glass-panel max-h-48 overflow-y-auto p-2"
-            >
-              <div className="eyebrow px-1 pb-1">Structures</div>
-              <div className="flex flex-col gap-1">
-                {/* atlas.selection's own order (report order), not the Map's
-                    - Object.entries on the worker's numeric-keyed structures
-                    object always comes back in ascending index order in JS,
-                    which would silently re-sort this list away from the
-                    report's involvement ranking. */}
-                {atlas.selection
-                  .filter((index) => structureGeometries.has(index))
-                  .map((index) => {
-                    const row = structureRow(atlas.table, index);
-                    return (
-                      <button
-                        key={index}
-                        type="button"
-                        onClick={() => onStructureSelect?.(index)}
-                        className="flex items-center gap-2 rounded-sm text-left transition-colors hover:bg-surface-raised/50"
-                      >
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                          style={{ backgroundColor: structureColorHex(index) }}
-                          aria-hidden="true"
-                        />
-                        <span className="truncate font-mono text-[11px] text-text-secondary">
-                          {row?.name ?? `#${index}`}
-                        </span>
-                      </button>
-                    );
-                  })}
-              </div>
             </div>
           )}
         </div>

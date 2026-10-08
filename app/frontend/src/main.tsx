@@ -1,10 +1,17 @@
-import { StrictMode, useEffect, useState } from "react";
+import { lazy, StrictMode, Suspense, useEffect, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
-import App from "./App.tsx";
-import { Landing } from "./pages/landing/Landing.tsx";
-import { ClinicalPage } from "./pages/clinical/ClinicalPage.tsx";
-import { ReportPage } from "./pages/report/ReportPage.tsx";
+
+// Each page is its own chunk: the landing page never downloads the viewer's
+// 3D code and vice versa.
+const App = lazy(() => import("./App.tsx"));
+const Landing = lazy(() => import("./pages/landing/Landing.tsx").then((m) => ({ default: m.Landing })));
+const ClinicalPage = lazy(() =>
+  import("./pages/clinical/ClinicalPage.tsx").then((m) => ({ default: m.ClinicalPage })),
+);
+const ReportPage = lazy(() =>
+  import("./pages/report/ReportPage.tsx").then((m) => ({ default: m.ReportPage })),
+);
 
 // Four real destinations, no router dependency: the landing page at "/",
 // the precomputed-case viewer at "/app" (unchanged), the live clinical
@@ -21,11 +28,23 @@ function Root() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  if (path === "/app") return <App />;
-  if (path === "/clinical") return <ClinicalPage />;
-  if (path.startsWith("/report/"))
-    return <ReportPage caseId={decodeURIComponent(path.slice("/report/".length))} />;
-  return <Landing />;
+  let page: ReactNode;
+  if (path === "/app") page = <App />;
+  else if (path === "/clinical") page = <ClinicalPage />;
+  else if (path.startsWith("/report/"))
+    page = <ReportPage caseId={decodeURIComponent(path.slice("/report/".length))} />;
+  else page = <Landing />;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-surface-page text-sm text-text-dim">
+          Loading…
+        </div>
+      }
+    >
+      {page}
+    </Suspense>
+  );
 }
 
 const container = document.getElementById("root");

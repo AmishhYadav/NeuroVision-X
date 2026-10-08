@@ -300,3 +300,59 @@ def region_voxel_counts(mask: np.ndarray, spacing: tuple[float, float, float]) -
         "WT": int((mask > 0).sum()),
     }
     return {region: {"voxels": n, "ml": round(n * voxel_ml, 2)} for region, n in counts.items()}
+
+
+# Per-process cache of ground-truth WT volumes, keyed by (prep_dir, case_id).
+# The first showcase request reads ~189 label files; later ones must not.
+# Only real volumes are cached, so a label added later is still picked up.
+_WT_VOLUME_CACHE: dict[tuple[Path, str], float] = {}
+
+
+def ground_truth_wt_volume_ml(case_id: str, settings: Settings | None = None) -> float | None:
+    """Whole-tumour volume of the ground-truth label, in millilitres.
+
+    Whole tumour (WT) is every non-zero label class (necrotic core, oedema,
+    enhancing) -- the same definition `region_voxel_counts` uses. Returns
+    `None` when the case has no `label.npy`.
+    """
+    s = settings or get_settings()
+    key = (s.prep_dir, case_id)
+    if key in _WT_VOLUME_CACHE:
+        return _WT_VOLUME_CACHE[key]
+    label_path = case_dir(case_id, s) / "label.npy"
+    if not label_path.exists():
+        return None
+    label = np.load(label_path, mmap_mode="r")
+    voxels = int((label > 0).sum())
+    voxel_mm3 = float(np.prod(read_meta(case_id, s).spacing))
+    volume_ml = voxels * voxel_mm3 / 1000.0  # 1 mL == 1000 mm^3
+    _WT_VOLUME_CACHE[key] = volume_ml
+    return volume_ml
+
+
+def select_showcase(volumes: dict[str, float], k: int) -> list[str]:
+    """Picks `k` case ids spread evenly across the volume range.
+
+    Cases are sorted by volume ascending (ties broken by case id so the result
+    is deterministic), then taken at ranks `round(q * (n - 1))` for `q` evenly
+    spaced in [0, 1]: the smallest, the largest, and evenly spaced ranks
+    between. If `k >= n` every case is returned, ascending. `k == 1` gives
+    just the smallest, because `linspace(0, 1, 1)` is `[0.0]`.
+
+    Raises:
+        ValueError: If `k < 1`.
+    """
+    if k < 1:
+        raise ValueError(f"k must be >= 1, got {k}")
+    ordered = sorted(volumes, key=lambda cid: (volumes[cid], cid))
+    n = len(ordered)
+    if k >= n:
+        return ordered
+    used: set[int] = set()
+    for q in np.linspace(0.0, 1.0, k):
+        rank = int(round(q * (n - 1)))
+        # Rounding can collide on nearby ranks; step forward to the next free one.
+        while rank in used:
+            rank += 1
+        used.add(rank)
+    return [ordered[r] for r in sorted(used)]

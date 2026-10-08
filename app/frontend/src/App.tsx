@@ -10,9 +10,11 @@ import {
   type Plane,
 } from "./api";
 import type { OverlayMode } from "./lib/render";
+import { opaque } from "./lib/opaque";
 import { navigateTo } from "./lib/navigate";
+import { dataForSelection } from "./lib/caseConsistency";
 import { splitLabel } from "./lib/splitLabel";
-import { useCaseData } from "./hooks/useCaseData";
+import { prefetchCase, useCaseData, type CaseDataState } from "./hooks/useCaseData";
 import { useResponsiveLayout } from "./hooks/useResponsiveLayout";
 import { AppShell } from "./components/AppShell";
 import { CaseList } from "./components/CaseList";
@@ -23,6 +25,9 @@ import { Legend } from "./components/Legend";
 import { ControlBar, MODALITY_ORDER } from "./components/ControlBar";
 import { BrainTwinScene, type BrainTwinInput } from "./components/BrainTwinScene";
 
+// The author asked for five cases with distinct tumour sizes; the server picks
+// them (evenly spaced ranks by ground-truth whole-tumour volume).
+const SHOWCASE_CASE_COUNT = 5;
 const UNCERTAINTY_OPACITY = 0.6;
 const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 };
 // Module-level so this is the *same* array reference across renders - a
@@ -30,6 +35,18 @@ const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 }
 // re-trigger the ribbon's draw effect on unrelated re-renders, e.g. dragging
 // the opacity slider.
 const EMPTY_PROFILE: number[] = [];
+// What the UI sees while the loaded data does not belong to the selected case.
+const EMPTY_SHOWN: Pick<
+  CaseDataState,
+  "detail" | "volumes" | "predictionMask" | "labelMask" | "uncertainty" | "profile"
+> = {
+  detail: null,
+  volumes: {},
+  predictionMask: null,
+  labelMask: null,
+  uncertainty: null,
+  profile: null,
+};
 
 type BootState = "loading" | "ready" | "unreachable" | "error";
 
@@ -38,6 +55,8 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [cases, setCases] = useState<CaseSummary[]>([]);
+  const [casesTotal, setCasesTotal] = useState<number | undefined>(undefined);
+  const [casesSelection, setCasesSelection] = useState<string | undefined>(undefined);
   // Initialised from the URL so a link like /app?case=BraTS2021_00123 (e.g.
   // the report page's "back to viewer" link) reopens on that case rather
   // than the empty "pick a case" state.
@@ -66,6 +85,11 @@ export default function App() {
 
   const { layout, isPanelWidth } = useResponsiveLayout();
   const caseData = useCaseData(selectedCaseId);
+  // useCaseData keeps the PREVIOUS case's data while the next one loads. Only
+  // data that is literally the selected case's may be drawn or labelled with
+  // its id; `shown` is the hook state when it matches, else empty.
+  const { matches, stale } = dataForSelection(selectedCaseId, caseData);
+  const shown = matches ? caseData : EMPTY_SHOWN;
 
   // Bootstrap: health + case list.
   useEffect(() => {
@@ -75,11 +99,13 @@ export default function App() {
       try {
         const [healthRes, casesRes] = await Promise.all([
           getHealth(controller.signal),
-          getCases(controller.signal),
+          getCases(controller.signal, SHOWCASE_CASE_COUNT),
         ]);
         if (cancelled) return;
         setHealth(healthRes);
         setCases(casesRes.cases);
+        setCasesTotal(casesRes.total);
+        setCasesSelection(casesRes.selection);
         setBootState("ready");
       } catch (err) {
         if (cancelled) return;
@@ -97,6 +123,59 @@ export default function App() {
       controller.abort();
     };
   }, []);
+
+  // After the selected case has finished loading, warm the cache with the
+  // other showcase cases, one at a time, whenever the browser is idle. Memory
+  // budget: 5 cases x ~26 MB ~= 130 MB (see useCaseData's cache). Stops on
+  // unmount; a prefetch already on the wire is left to finish (it only fills
+  // the cache, never React state).
+  const selectedLoaded = selectedCaseId !== null && !caseData.loading && matches;
+  useEffect(() => {
+    if (!selectedLoaded || cases.length === 0) return;
+    let stopped = false;
+    let handle: number | undefined;
+    const usingIdle = typeof window.requestIdleCallback === "function";
+    const schedule = (fn: () => void) => {
+      handle = usingIdle
+        ? window.requestIdleCallback(fn)
+        : window.setTimeout(fn, 200);
+    };
+    const queue = cases.map((c) => c.case_id).filter((id) => id !== selectedCaseId);
+    const next = () => {
+      if (stopped) return;
+      const id = queue.shift();
+      if (id === undefined) return;
+      prefetchCase(id).then(() => {
+        if (!stopped) schedule(next);
+      });
+    };
+    schedule(next);
+    return () => {
+      stopped = true;
+      if (handle !== undefined) {
+        if (usingIdle) window.cancelIdleCallback(handle);
+        else window.clearTimeout(handle);
+      }
+    };
+  }, [selectedLoaded, selectedCaseId, cases]);
+
+  // A case opened by deep link that the showcase does not include: still
+  // load it (fetch is by id) and list it as an extra "linked" row.
+  const linkedCase: CaseSummary | null = useMemo(() => {
+    if (!selectedCaseId || cases.length === 0) return null;
+    if (cases.some((c) => c.case_id === selectedCaseId)) return null;
+    const d = caseData.detail;
+    const same = d !== null && d.meta.case_id === selectedCaseId;
+    return {
+      case_id: selectedCaseId,
+      dice_mean: same ? (d.metrics?.dice_mean ?? null) : null,
+      dice: null,
+      has_label: same ? d.meta.has_label : false,
+      has_logits: same ? d.meta.has_logits : false,
+      has_report: same ? d.has_report : false,
+      wt_volume_ml: same ? d.regions.label?.WT.ml : undefined,
+    };
+  }, [selectedCaseId, cases, caseData.detail]);
 
   // Reset per-case view state whenever a new case finishes loading its meta.
   useEffect(() => {
@@ -135,7 +214,7 @@ export default function App() {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
-      if (!caseData.detail) return;
+      if (!shown.detail) return;
 
       if (e.key >= "1" && e.key <= "4") {
         const m = MODALITY_ORDER[parseInt(e.key, 10) - 1];
@@ -144,7 +223,7 @@ export default function App() {
       }
 
       const activePlane = layout === "single" ? singlePlane : (expandedPlane ?? focusedPlane);
-      const count = caseData.detail.meta.planes[activePlane];
+      const count = shown.detail.meta.planes[activePlane];
       if (count === undefined) return;
 
       let delta = 0;
@@ -162,7 +241,7 @@ export default function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [caseData.detail, layout, singlePlane, expandedPlane, focusedPlane]);
+  }, [shown.detail, layout, singlePlane, expandedPlane, focusedPlane]);
 
   if (bootState === "unreachable") {
     return (
@@ -199,14 +278,14 @@ export default function App() {
     );
   }
 
-  const detail = caseData.detail;
+  const detail = shown.detail;
   const planeCounts = detail?.meta.planes ?? ZERO_PLANES;
   const shape = detail?.meta.shape ?? null;
   const hasLabel = detail?.meta.has_label ?? false;
   const hasLogits = detail?.meta.has_logits ?? false;
   const hasPrediction = detail?.meta.has_prediction ?? false;
   const hasReport = detail?.has_report ?? false;
-  const uncertaintyKind = caseData.uncertainty?.kind ?? null;
+  const uncertaintyKind = shown.uncertainty?.kind ?? null;
 
   // Fraction of this case's artifacts that have arrived. Counted against what
   // the case ACTUALLY has -- a case with no label or no logits must still be
@@ -215,47 +294,47 @@ export default function App() {
   const expectedArtifacts =
     4 + 1 + (hasLabel ? 1 : 0) + (hasLogits ? 1 : 0); // modalities + profile + label + logits
   const loadedArtifacts =
-    Object.keys(caseData.volumes).length +
-    (caseData.profile ? 1 : 0) +
-    (caseData.labelMask ? 1 : 0) +
-    (caseData.uncertainty ? 1 : 0);
+    Object.keys(shown.volumes).length +
+    (shown.profile ? 1 : 0) +
+    (shown.labelMask ? 1 : 0) +
+    (shown.uncertainty ? 1 : 0);
   const loadProgress = Math.min(1, loadedArtifacts / expectedArtifacts);
   const ribbonPlane: Plane =
     layout === "single" ? singlePlane : (expandedPlane ?? "axial");
   const ribbonLabel = ribbonPlane.charAt(0).toUpperCase() + ribbonPlane.slice(1);
-  const profilePlane = caseData.profile?.planes[ribbonPlane];
+  const profilePlane = shown.profile?.planes[ribbonPlane];
   const showCaseListInline = isPanelWidth;
 
   // Built only while the twin view is actually open (a worker pass over a
   // full volume is not free) and only once every modality has arrived, so
   // the brain shell it produces reflects the whole case, not a partial one.
   const twinInput: BrainTwinInput | null = useMemo(() => {
-    if (!twinOpen || !detail || !selectedCaseId) return null;
-    const modalityVolumes = Object.values(caseData.volumes)
+    if (!twinOpen || !matches || !detail) return null;
+    const modalityVolumes = Object.values(shown.volumes)
       .map((v) => v?.data)
       .filter((d): d is Uint8Array => d != null);
     if (modalityVolumes.length < 4) return null;
-    const tumorMask = caseData.labelMask?.data ?? caseData.predictionMask?.data ?? null;
-    const tumorSource: "label" | "prediction" | null = caseData.labelMask
+    const tumorMask = shown.labelMask?.data ?? shown.predictionMask?.data ?? null;
+    const tumorSource: "label" | "prediction" | null = shown.labelMask
       ? "label"
-      : caseData.predictionMask
+      : shown.predictionMask
         ? "prediction"
         : null;
     return {
-      caseId: selectedCaseId,
+      caseId: detail.meta.case_id, // the data's own id, never the selection
       shape: detail.meta.shape,
       spacing: detail.meta.spacing,
-      modalityVolumes,
-      tumorMask,
+      modalityVolumes: opaque(modalityVolumes),
+      tumorMask: opaque(tumorMask),
       tumorSource,
     };
   }, [
     twinOpen,
+    matches,
     detail,
-    selectedCaseId,
-    caseData.volumes,
-    caseData.labelMask,
-    caseData.predictionMask,
+    shown.volumes,
+    shown.labelMask,
+    shown.predictionMask,
   ]);
 
   // Header's info now lives in AppShell's toolbar slot as chips. The split
@@ -293,9 +372,12 @@ export default function App() {
           of the width, and the MRI is the thing worth the pixels. */}
       <div className="relative flex h-full min-h-0 flex-row">
         {showCaseListInline && !caseListCollapsed && (
-          <div className="m-3 mr-0 w-56 shrink-0 overflow-hidden glass-panel">
+          <div className="m-3 mr-0 w-64 shrink-0 overflow-hidden glass-panel">
             <CaseList
               cases={cases}
+              total={casesTotal}
+              selection={casesSelection}
+              linkedCase={linkedCase}
               selectedCaseId={selectedCaseId}
               onSelect={(id) => {
                 setSelectedCaseId(id);
@@ -330,6 +412,9 @@ export default function App() {
             <div className="absolute inset-y-0 left-0 z-20 w-64 overflow-hidden border-r border-surface-seam glass-panel">
               <CaseList
                 cases={cases}
+                total={casesTotal}
+                selection={casesSelection}
+                linkedCase={linkedCase}
                 selectedCaseId={selectedCaseId}
                 onSelect={(id) => {
                   setSelectedCaseId(id);
@@ -366,7 +451,9 @@ export default function App() {
                     report) with its props unchanged. */}
                 <div className="glass-panel relative z-20 flex shrink-0 flex-col">
                   <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-                    <span className="font-mono text-xs text-text-primary">{selectedCaseId}</span>
+                    <span className="font-mono text-xs text-text-primary">
+                      {matches ? shown.detail?.meta.case_id : "Loading…"}
+                    </span>
                     <div
                       role="group"
                       aria-label="View"
@@ -409,7 +496,7 @@ export default function App() {
                       onToggleUncertainty={() => setShowUncertainty((v) => !v)}
                       hasReport={hasReport}
                       onOpenReport={() =>
-                        selectedCaseId && navigateTo(`/report/${encodeURIComponent(selectedCaseId)}`)
+                        matches && selectedCaseId && navigateTo(`/report/${encodeURIComponent(selectedCaseId)}`)
                       }
                     />
                   </div>
@@ -419,7 +506,7 @@ export default function App() {
                     profile - around 20 MB. Without this the viewports sit black
                     for several seconds and the app reads as frozen. Determinate,
                     because we know exactly how many artifacts are outstanding. */}
-                {caseData.loading && (
+                {(caseData.loading || stale) && (
                   <div
                     className="flex shrink-0 items-center gap-3 glass-panel px-3 py-1.5"
                     role="status"
@@ -470,10 +557,10 @@ export default function App() {
                         sliceIndices={sliceIndices}
                         planeCounts={planeCounts}
                         shape={shape}
-                        image={caseData.volumes[modality]?.data ?? null}
-                        predictionMask={caseData.predictionMask?.data ?? null}
-                        labelMask={caseData.labelMask?.data ?? null}
-                        uncertainty={caseData.uncertainty?.data ?? null}
+                        image={opaque(shown.volumes[modality]?.data)}
+                        predictionMask={opaque(shown.predictionMask?.data)}
+                        labelMask={opaque(shown.labelMask?.data)}
+                        uncertainty={opaque(shown.uncertainty?.data)}
                         overlayMode={overlayMode}
                         overlayOpacity={overlayOpacity}
                         showTruthOutline={showTruthOutline}
@@ -508,8 +595,8 @@ export default function App() {
             >
               <div className="glass-panel shrink-0">
                 <MetricsPanel
-                  metrics={caseData.detail?.metrics ?? null}
-                  regions={caseData.detail?.regions ?? null}
+                  metrics={shown.detail?.metrics ?? null}
+                  regions={shown.detail?.regions ?? null}
                 />
               </div>
               <div className="glass-panel shrink-0">

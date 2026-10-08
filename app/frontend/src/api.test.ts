@@ -8,6 +8,8 @@ import {
   fetchClinicalReport,
   getAtlasStructures,
   getCaseAtlas,
+  getCases,
+  casesPath,
   getClinicalJob,
   getClinicalJobAtlas,
   getClinicalJobConformalBand,
@@ -972,5 +974,37 @@ describe("exportClinicalJob", () => {
     );
 
     await expect(exportClinicalJob("job1", [])).rejects.toBeInstanceOf(ApiUnreachableError);
+  });
+});
+
+describe("getCases", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("builds the plain and showcase paths", () => {
+    expect(casesPath()).toBe("/cases");
+    expect(casesPath(5)).toBe("/cases?showcase=5");
+  });
+
+  it("requests ?showcase=5 and passes the new fields through", async () => {
+    const body = {
+      cases: [{ case_id: "c1", dice_mean: 0.9, dice: null, has_label: true, has_logits: true, has_report: false, wt_volume_ml: 2.8 }],
+      total: 189,
+      showcase: 5,
+      selection: "ground-truth whole-tumour volume (label > 0), evenly spaced ranks from smallest to largest",
+    };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => body });
+    vi.stubGlobal("fetch", fetchMock);
+    const res = await getCases(undefined, 5);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/cases?showcase=5");
+    expect(res.total).toBe(189);
+    expect(res.cases[0].wt_volume_ml).toBe(2.8);
+    expect(res.selection).toContain("whole-tumour");
+  });
+
+  it("omits the query string when no showcase is requested", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ cases: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    await getCases();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/cases");
   });
 });

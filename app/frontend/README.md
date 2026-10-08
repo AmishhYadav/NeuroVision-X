@@ -18,6 +18,13 @@ so start the backend separately:
 uvicorn app.backend.main:app --reload
 ```
 
+### Fast local run
+
+`npm run dev` carries React's dev-only instrumentation, which is noticeably
+slower with large volumes. For demos use `npm run serve` (builds, then serves
+the production bundle) and open <http://localhost:4173>. It proxies `/api` to
+`:8000` just like dev.
+
 ## Build
 
 ```bash

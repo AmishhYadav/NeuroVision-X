@@ -3,12 +3,13 @@
 // prototype, so the page leads with measurements, includes the negative
 // results, and ends with what the project does NOT claim. The NOT_CLAIMED
 // list quotes the pipeline's own block (src/neurovision/reporting/report.py).
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { AppShell } from "../../components/AppShell";
 import { navigateTo } from "../../lib/navigate";
 import { isPlainLeftClick } from "../../lib/shellStatus";
-import { HeroBrain } from "./HeroBrain";
+// three.js / fiber / drei live behind this import so the headline paints first.
+const HeroBrain = lazy(() => import("./HeroBrain").then((m) => ({ default: m.HeroBrain })));
 import { PipelineStory } from "./PipelineStory";
 
 const NOT_CLAIMED: { what: string; why: string }[] = [
@@ -171,7 +172,15 @@ function Hero() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.9, delay: reduce ? 0 : 0.2, ease: EASE_OUT_QUART }}
       >
-        <HeroBrain />
+        <Suspense
+          fallback={
+            <div className="mx-auto flex aspect-square w-full max-w-[640px] items-center justify-center text-sm text-text-dim">
+              Loading brain surface…
+            </div>
+          }
+        >
+          <HeroBrain />
+        </Suspense>
       </motion.div>
     </section>
   );

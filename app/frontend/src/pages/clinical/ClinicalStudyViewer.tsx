@@ -14,6 +14,7 @@ import {
   BrainTwinScene,
   type BrainTwinInput,
   type TwinActiveLayer,
+  type TwinAtlasInput,
 } from "../../components/BrainTwinScene";
 import { MODALITY_ORDER } from "../../components/ControlBar";
 import { Legend } from "../../components/Legend";
@@ -21,6 +22,7 @@ import { ReportPanel } from "../../components/ReportPanel";
 import { SliceRibbon } from "../../components/SliceRibbon";
 import { Viewport } from "../../components/Viewport";
 import { ViewportGrid } from "../../components/ViewportGrid";
+import { opaque } from "../../lib/opaque";
 import { useClinicalJobVolumes } from "../../hooks/useClinicalJobVolumes";
 import { useClinicalReport } from "../../hooks/useClinicalReport";
 import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
@@ -190,7 +192,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
     ) {
       return null;
     }
-    return { key: heatOverlay, kind, data: heatBuffer.data, conformal: heatBuffer.conformal ?? null };
+    return { key: heatOverlay, kind, data: opaque(heatBuffer.data), conformal: heatBuffer.conformal ?? null };
   }, [heatOverlay, heatBuffer]);
 
   // Drives the button group below. "None" is never disabled; the other
@@ -261,8 +263,8 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
       caseId: jobId,
       shape: geometry.shape,
       spacing: geometry.spacing,
-      modalityVolumes: MODALITY_ORDER.map((m) => volumes[m]!.data),
-      tumorMask: predictionMask!.data,
+      modalityVolumes: opaque(MODALITY_ORDER.map((m) => volumes[m]!.data)),
+      tumorMask: opaque(predictionMask!.data),
       tumorSource: "prediction",
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -277,6 +279,16 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
   const atlasSelection = useMemo(
     () => selectStructures({ report: reportState.report, table: atlasTable, extra: extraStructures }),
     [reportState.report, atlasTable, extraStructures],
+  );
+
+  // Memoised so the prop is referentially stable across renders; the voxel
+  // volume is Opaque-wrapped (lib/opaque.ts).
+  const twinAtlas: TwinAtlasInput | null = useMemo(
+    () =>
+      atlas && atlasTable && atlasSelection.length > 0
+        ? { volume: opaque(atlas.data), selection: atlasSelection, table: atlasTable }
+        : null,
+    [atlas, atlasTable, atlasSelection],
   );
 
   // The subset of atlasSelection that came from the report itself (as
@@ -510,10 +522,10 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
       sliceIndices={sliceIndices}
       planeCounts={planeCounts}
       shape={shape}
-      image={volumes[modality]?.data ?? null}
-      predictionMask={predictionMask?.data ?? null}
+      image={opaque(volumes[modality]?.data)}
+      predictionMask={opaque(predictionMask?.data)}
       labelMask={null}
-      uncertainty={heatBuffer?.data ?? null}
+      uncertainty={opaque(heatBuffer?.data)}
       overlayMode="prediction"
       overlayOpacity={overlayOpacity}
       showTruthOutline={false}
@@ -540,10 +552,10 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
         }}
         onFocusPlane={() => setFocusedPlane(plane)}
         shape={shape}
-        image={volumes[modality]?.data ?? null}
-        predictionMask={predictionMask?.data ?? null}
+        image={opaque(volumes[modality]?.data)}
+        predictionMask={opaque(predictionMask?.data)}
         labelMask={null}
-        uncertainty={heatBuffer?.data ?? null}
+        uncertainty={opaque(heatBuffer?.data)}
         overlayMode="prediction"
         overlayOpacity={overlayOpacity}
         showTruthOutline={false}
@@ -565,11 +577,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
         badge={twinBadge}
         badgeTone={twinBadgeTone}
         activeLayer={activeLayer}
-        atlas={
-          atlas && atlasTable && atlasSelection.length > 0
-            ? { volume: atlas.data, selection: atlasSelection, table: atlasTable }
-            : null
-        }
+        atlas={twinAtlas}
         highlightedStructure={highlightedStructure}
         onStructureSelect={setHighlightedStructure}
         structureDetail={(index) => reportRowForStructure(reportState.report, atlasTable, index)}

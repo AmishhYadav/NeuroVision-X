@@ -209,7 +209,12 @@ check("empty state invites an action", /Pick a case to begin/.test(health));
 const caseCount = await js(
   `[...document.querySelectorAll('button')].filter(e=>/^BraTS2021_/.test(e.textContent.trim())).length`,
 );
-check("case list is populated", caseCount > 100, `${caseCount} cases`);
+// The viewer shows a size-spread showcase (App.tsx SHOWCASE_CASE_COUNT), not
+// all evaluated cases - compare against what the API actually served.
+const showcaseCount = await js(
+  `fetch('/api/cases?showcase=5').then(r=>r.json()).then(d=>d.cases.length)`,
+);
+check("case list shows the showcase cases", caseCount > 0 && caseCount === showcaseCount, `${caseCount} shown, ${showcaseCount} served`);
 
 console.log("\n2. Load a case and confirm pixels actually render");
 await js(clickText.length ? `(function(){[...document.querySelectorAll('button')].find(e=>e.textContent.includes('BraTS2021_00156')).click();return 'ok';})()` : "");
@@ -355,12 +360,14 @@ const expandedFp = await js(`${FINGERPRINT}(0)`);
 check("expanded viewport still renders", expandedFp.nonBlack > 1000);
 
 console.log("\n8. Case switching does not strand stale data");
+// Two quick clicks on whichever cases the showcase list holds (2nd, then 3rd),
+// so the check never depends on a case id that may not be listed.
 await js(
-  `(function(){[...document.querySelectorAll('button')].find(e=>e.textContent.includes('BraTS2021_00412')).click();return 'ok';})()`,
+  `(function(){const b=[...document.querySelectorAll('button')].filter(e=>/^BraTS2021_\\d{5}/.test(e.textContent.trim()));b[1].click();return 'ok';})()`,
 );
 await sleep(1000);
 await js(
-  `(function(){[...document.querySelectorAll('button')].find(e=>e.textContent.includes('BraTS2021_01636')).click();return 'ok';})()`,
+  `(function(){const b=[...document.querySelectorAll('button')].filter(e=>/^BraTS2021_\\d{5}/.test(e.textContent.trim()));b[2].click();return 'ok';})()`,
 );
 await sleep(10000);
 const switched = await js(bodyText);

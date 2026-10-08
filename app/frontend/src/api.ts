@@ -36,10 +36,18 @@ export interface CaseSummary {
   has_label: boolean;
   has_logits: boolean;
   has_report: boolean;
+  /** Ground-truth whole-tumour volume in mL. Only present on the `?showcase=N` response. */
+  wt_volume_ml?: number;
 }
 
 export interface CasesResponse {
   cases: CaseSummary[];
+  /** Total number of test cases the server holds. Only present on the `?showcase=N` response. */
+  total?: number;
+  /** How many cases were requested. Only present on the `?showcase=N` response. */
+  showcase?: number;
+  /** The server's own description of how the showcase was chosen, shown verbatim. */
+  selection?: string;
 }
 
 export interface CaseMeta {
@@ -481,8 +489,13 @@ export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return getJson<HealthResponse>("/health", signal);
 }
 
-export function getCases(signal?: AbortSignal): Promise<CasesResponse> {
-  return getJson<CasesResponse>("/cases", signal);
+/** Build the `/cases` path; `showcase` asks the server for N evenly-spaced-by-tumour-size cases. */
+export function casesPath(showcase?: number): string {
+  return showcase === undefined ? "/cases" : `/cases?showcase=${encodeURIComponent(String(showcase))}`;
+}
+
+export function getCases(signal?: AbortSignal, showcase?: number): Promise<CasesResponse> {
+  return getJson<CasesResponse>(casesPath(showcase), signal);
 }
 
 export function getCase(caseId: string, signal?: AbortSignal): Promise<CaseDetail> {

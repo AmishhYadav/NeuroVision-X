@@ -1,18 +1,20 @@
 import { Maximize2, Minimize2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Plane } from "../api";
+import type { Opaque } from "../lib/opaque";
 import { renderSlice, type OverlayMode } from "../lib/render";
 
+// The four voxel buffers are Opaque-wrapped: see lib/opaque.ts.
 interface ViewportProps {
   plane: Plane;
   planeLabel: string;
   sliceIndex: number;
   sliceCount: number;
   shape: [number, number, number] | null;
-  image: Uint8Array | null;
-  predictionMask: Uint8Array | null;
-  labelMask: Uint8Array | null;
-  uncertainty: Uint8Array | null;
+  image: Opaque<Uint8Array> | null;
+  predictionMask: Opaque<Uint8Array> | null;
+  labelMask: Opaque<Uint8Array> | null;
+  uncertainty: Opaque<Uint8Array> | null;
   overlayMode: OverlayMode;
   overlayOpacity: number;
   showTruthOutline: boolean;
@@ -88,10 +90,10 @@ export function Viewport({
       plane,
       shape,
       sliceIndex,
-      image,
-      predictionMask,
-      labelMask,
-      uncertainty,
+      image: image.value,
+      predictionMask: predictionMask?.value ?? null,
+      labelMask: labelMask?.value ?? null,
+      uncertainty: uncertainty?.value ?? null,
       overlayMode,
       overlayOpacity,
       showTruthOutline,

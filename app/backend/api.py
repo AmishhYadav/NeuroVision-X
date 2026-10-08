@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from fastapi import APIRouter, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -48,6 +48,7 @@ from .volumes import (
     REGION_NAMES,
     CaseMeta,
     case_metrics,
+    ground_truth_wt_volume_ml,
     list_cases,
     load_clinical_uncertainty,
     load_mask,
@@ -55,6 +56,7 @@ from .volumes import (
     load_uncertainty,
     read_meta,
     region_voxel_counts,
+    select_showcase,
 )
 
 logger = logging.getLogger(__name__)
@@ -323,8 +325,12 @@ def get_health() -> dict[str, Any]:
 
 
 @router.get("/cases")
-def get_cases() -> dict[str, Any]:
-    """Lists cases in `list_cases()`'s own order (ranked by descending Dice)."""
+def get_cases(showcase: int | None = Query(None, ge=1, le=50)) -> dict[str, Any]:
+    """Lists cases in `list_cases()`'s own order (ranked by descending Dice).
+
+    With `showcase=k`, returns only `k` cases spread evenly across the
+    ground-truth whole-tumour volume range, ordered smallest to largest.
+    """
     settings = get_settings()
     cases: list[dict[str, Any]] = []
     for case_id in list_cases(settings):
@@ -349,7 +355,34 @@ def get_cases() -> dict[str, Any]:
                 "has_report": _has_report(case_id, settings),
             }
         )
-    return {"cases": cases}
+    if showcase is None:
+        return {"cases": cases}
+
+    # Showcase: choose by measured ground-truth WT volume. Cases without a
+    # label have no measured size, so they are excluded (but counted in total).
+    volumes: dict[str, float] = {}
+    for case in cases:
+        try:
+            volume = ground_truth_wt_volume_ml(case["case_id"], settings)
+        except Exception as exc:  # noqa: BLE001 - one bad case must not break the list
+            logger.warning("no volume for case %s: %s", case["case_id"], exc)
+            continue
+        if volume is not None:
+            volumes[case["case_id"]] = volume
+    by_id = {case["case_id"]: case for case in cases}
+    chosen = [
+        {**by_id[cid], "wt_volume_ml": round(volumes[cid], 1)}
+        for cid in select_showcase(volumes, showcase)
+    ]
+    return {
+        "cases": chosen,
+        "total": len(cases),
+        "showcase": showcase,
+        "selection": (
+            "ground-truth whole-tumour volume (label > 0), "
+            "evenly spaced ranks from smallest to largest"
+        ),
+    }
 
 
 @router.get("/cases/{case_id}")
