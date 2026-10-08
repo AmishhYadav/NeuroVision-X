@@ -63,17 +63,17 @@ export function ControlBar({
     // be a fixed-height row with overflow-x-auto, which technically scrolled
     // but gave no affordance -- the entropy toggle simply vanished off the
     // right edge at ~820px and looked like a missing feature.
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-y-1 border-t border-surface-seam bg-surface-panel px-3 py-1 xl:flex-nowrap xl:gap-y-0 xl:py-0">
-      <div className="flex shrink-0 items-center gap-1" role="group" aria-label="Modality">
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-y-2 border-t border-surface-seam bg-surface-panel/70 px-3 py-1.5">
+      <div className="inline-flex shrink-0 items-center rounded-lg border border-surface-seam bg-surface-raised/50 p-0.5" role="group" aria-label="Modality">
         {MODALITIES.map(({ key, label }) => (
           <button
             key={key}
             type="button"
             onClick={() => onChangeModality(key)}
             aria-pressed={modality === key}
-            className={`rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+            className={`rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
               modality === key
-                ? "bg-surface-raised text-text-primary"
+                ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
                 : "text-text-secondary hover:text-text-primary"
             }`}
           >
@@ -84,7 +84,7 @@ export function ControlBar({
 
       <Divider />
 
-      <div className="flex shrink-0 items-center gap-1" role="group" aria-label="Overlay">
+      <div className="inline-flex shrink-0 items-center rounded-lg border border-surface-seam bg-surface-raised/50 p-0.5" role="group" aria-label="Overlay">
         {OVERLAY_MODES.map(({ key, label }) => {
           // Prediction needs a saved prediction; Truth needs a label;
           // Disagreement compares the two, so it needs both.
@@ -104,11 +104,11 @@ export function ControlBar({
               onClick={() => onChangeOverlayMode(key)}
               aria-pressed={overlayMode === key}
               title={hint}
-              className={`rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+              className={`rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
                 disabled
                   ? "cursor-not-allowed text-text-dim"
                   : overlayMode === key
-                    ? "bg-surface-raised text-text-primary"
+                    ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
                     : "text-text-secondary hover:text-text-primary"
               }`}
             >
@@ -122,11 +122,11 @@ export function ControlBar({
           onClick={onToggleTruthOutline}
           aria-pressed={showTruthOutline}
           title="Outline the ground-truth whole tumour"
-          className={`ml-1 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+          className={`ml-1 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
             !hasLabel || overlayMode !== "prediction"
               ? "cursor-not-allowed text-text-dim"
               : showTruthOutline
-                ? "bg-surface-raised text-text-primary"
+                ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
                 : "text-text-secondary hover:text-text-primary"
           }`}
         >
@@ -145,7 +145,7 @@ export function ControlBar({
           step={0.01}
           value={overlayOpacity}
           onChange={(e) => onChangeOverlayOpacity(parseFloat(e.target.value))}
-          className="w-24 accent-[#E7EAEE]"
+          className="w-24 accent-[var(--color-brand-primary)]"
           aria-label="Overlay opacity"
         />
         <span className="tabular w-9 shrink-0 font-mono text-xs text-text-secondary">
@@ -161,11 +161,11 @@ export function ControlBar({
         onClick={onToggleUncertainty}
         aria-pressed={showUncertainty}
         title={!hasLogits ? "No saved logits for this case." : undefined}
-        className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+        className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
           !hasLogits
             ? "cursor-not-allowed text-text-dim"
             : showUncertainty
-              ? "bg-surface-raised text-text-primary"
+              ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
               : "text-text-secondary hover:text-text-primary"
         }`}
       >
@@ -189,7 +189,7 @@ export function ControlBar({
             ? "No report has been generated for this case."
             : "Open the plain-language report for this case"
         }
-        className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+        className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
           !hasReport
             ? "cursor-not-allowed text-text-dim"
             : "text-text-secondary hover:text-text-primary"

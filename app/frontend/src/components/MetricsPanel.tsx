@@ -19,7 +19,7 @@ export function MetricsPanel({ metrics, regions }: MetricsPanelProps) {
   const hasTruthVolume = Boolean(regions?.label);
 
   return (
-    <div className="flex flex-col gap-4 px-3 py-3">
+    <div className="glass-panel flex flex-col gap-4 px-3 py-3">
       <div>
         <div className="eyebrow mb-1.5">Dice</div>
         {metrics ? (

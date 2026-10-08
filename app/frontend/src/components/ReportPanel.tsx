@@ -1,4 +1,4 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { X } from "lucide-react";
 import type { LayoutMode } from "./ViewportGrid";
 import type {
@@ -71,23 +71,40 @@ function CenteredMessage({ children }: { children: ReactNode }) {
 function FactsGrid({ facts }: { facts: InterpretedFact[] }) {
   if (facts.length === 0) return null;
   return (
-    <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-2">
+    <dl className="grid grid-cols-2 gap-2">
       {facts.map((f, i) => (
-        <Fragment key={i}>
-          <dt className="text-sm text-text-primary">
-            {f.label}
-            {f.note && <div className="mt-0.5 text-xs text-text-dim">{f.note}</div>}
-          </dt>
-          <dd className="tabular text-right font-mono text-sm text-text-primary">{f.value}</dd>
-        </Fragment>
+        <div
+          key={i}
+          className="rounded-lg border border-surface-seam bg-surface-raised/40 p-2.5"
+        >
+          <dt className="eyebrow">{f.label}</dt>
+          <dd className="tabular mt-0.5 break-words font-mono text-base text-text-primary">
+            {f.value}
+          </dd>
+          {f.note && (
+            <div className="mt-1 text-[11px] leading-snug text-text-dim">
+              {f.note}
+            </div>
+          )}
+        </div>
       ))}
     </dl>
   );
 }
 
 function CompositionBar({ fractions }: { fractions: BurdenBlock }) {
-  const segments: { key: string; value: unknown; color: string; label: string }[] = [
-    { key: "edema", value: fractions.frac_edema_of_wt, color: "bg-data-oedema", label: "Swelling" },
+  const segments: {
+    key: string;
+    value: unknown;
+    color: string;
+    label: string;
+  }[] = [
+    {
+      key: "edema",
+      value: fractions.frac_edema_of_wt,
+      color: "bg-data-oedema",
+      label: "Swelling",
+    },
     {
       key: "enhancing",
       value: fractions.frac_enhancing_of_wt,
@@ -101,12 +118,14 @@ function CompositionBar({ fractions }: { fractions: BurdenBlock }) {
       label: "Necrotic",
     },
   ];
-  const allFinite = segments.every((s) => typeof s.value === "number" && Number.isFinite(s.value));
+  const allFinite = segments.every(
+    (s) => typeof s.value === "number" && Number.isFinite(s.value),
+  );
   if (!allFinite) return null;
 
   return (
     <div className="mb-4">
-      <div className="flex h-3 w-full overflow-hidden rounded-sm">
+      <div className="flex h-2 w-full overflow-hidden rounded-full bg-surface-seam">
         {segments.map((s) => (
           <div
             key={s.key}
@@ -118,8 +137,11 @@ function CompositionBar({ fractions }: { fractions: BurdenBlock }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
         {segments.map((s) => (
-          <div key={s.key} className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-text-secondary">
-            <span className={`inline-block h-2 w-2 rounded-sm ${s.color}`} />
+          <div
+            key={s.key}
+            className="flex items-center gap-1.5 font-mono text-[11px] text-text-secondary"
+          >
+            <span className={`inline-block h-2 w-2 rounded-full ${s.color}`} />
             {s.label} {formatPercent(s.value as number)}
           </div>
         ))}
@@ -151,29 +173,37 @@ function RegionsFacts({
           const fact = rowFacts[i];
           const structure = structures[i];
           const rawWidth =
-            typeof structure.frac_of_structure === "number" ? structure.frac_of_structure * 100 : 0;
+            typeof structure.frac_of_structure === "number"
+              ? structure.frac_of_structure * 100
+              : 0;
           const width = Math.min(100, Math.max(0, rawWidth));
-          const isHighlighted = structure.structure === highlightedStructureName;
-          
+          const isHighlighted =
+            structure.structure === highlightedStructureName;
+
           return (
-            <div 
+            <div
               key={i}
               onMouseEnter={() => onHoverStructure?.(structure.structure)}
               onMouseLeave={() => onHoverStructure?.(null)}
               onClick={() => onHoverStructure?.(structure.structure)}
-              className={`-mx-3 cursor-default rounded-sm p-3 transition-colors ${
-                isHighlighted ? "bg-surface-raised" : "hover:bg-surface-raised/50"
+              className={`-mx-2 cursor-default rounded-lg p-2 transition-colors ${
+                isHighlighted
+                  ? "bg-surface-raised"
+                  : "hover:bg-surface-raised/50"
               }`}
             >
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-sm text-text-primary">{fact.label}</span>
                 <span className="font-mono text-xs text-text-dim">
-                  {formatPercent(structure.frac_of_structure)} of region &middot;{" "}
-                  {formatPercent(structure.frac_of_tumour)} of tumour
+                  {formatPercent(structure.frac_of_structure)} of region
+                  &middot; {formatPercent(structure.frac_of_tumour)} of tumour
                 </span>
               </div>
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-sm bg-surface-seam">
-                <div className="h-1.5 bg-text-secondary" style={{ width: `${width}%` }} />
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-seam">
+                <div
+                  className="h-1.5 rounded-full bg-brand-primary/70"
+                  style={{ width: `${width}%` }}
+                />
               </div>
             </div>
           );
@@ -186,24 +216,33 @@ function RegionsFacts({
 function LimitsFacts({ facts }: { facts: InterpretedFact[] }) {
   if (facts.length === 0) return null;
   return (
-    <ol className="flex flex-col gap-3">
+    <ol className="flex flex-col gap-2">
       {facts.map((f, i) => (
-        <li key={i} className="text-sm leading-relaxed text-text-primary">
-          <strong>{f.label}</strong>
-          {f.note && <div className="mt-1 text-text-secondary">{f.note}</div>}
+        <li
+          key={i}
+          className="rounded-lg border border-surface-seam bg-surface-raised/40 p-2.5"
+        >
+          <strong className="font-mono text-xs font-normal text-text-primary">
+            {f.label}
+          </strong>
+          {f.note && (
+            <div className="mt-1 text-xs leading-relaxed text-text-secondary">
+              {f.note}
+            </div>
+          )}
         </li>
       ))}
     </ol>
   );
 }
 
-function SectionFacts({ 
-  section, 
-  report, 
-  onHoverStructure, 
-  highlightedStructureName 
-}: { 
-  section: InterpretedSection; 
+function SectionFacts({
+  section,
+  report,
+  onHoverStructure,
+  highlightedStructureName,
+}: {
+  section: InterpretedSection;
   report: ReportResponse;
   onHoverStructure?: (name: string | null) => void;
   highlightedStructureName?: string | null;
@@ -218,9 +257,9 @@ function SectionFacts({
   }
   if (section.id === "regions") {
     return (
-      <RegionsFacts 
-        facts={section.facts} 
-        structures={report.anatomy.structures} 
+      <RegionsFacts
+        facts={section.facts}
+        structures={report.anatomy.structures}
         onHoverStructure={onHoverStructure}
         highlightedStructureName={highlightedStructureName}
       />
@@ -236,43 +275,65 @@ function isEmptyBlock(block: BurdenBlock | undefined): block is undefined {
   return !block || Object.keys(block).length === 0;
 }
 
-function BurdenBlockDl({ title, block }: { title: string; block: BurdenBlock | undefined }) {
+function BurdenBlockDl({
+  title,
+  block,
+}: {
+  title: string;
+  block: BurdenBlock | undefined;
+}) {
   if (isEmptyBlock(block)) return null;
   return (
     <div className="mt-4">
-      <div className="font-condensed text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
-        {title}
-      </div>
-      <dl className="mt-1 flex flex-col gap-0.5">
-        {Object.entries(block).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
-          <div key={k} className="flex items-baseline justify-between gap-3">
-            <dt className="font-mono text-xs text-text-secondary">{burdenLabel(k)}</dt>
-            <dd className="tabular shrink-0 text-right font-mono text-xs text-text-primary">
-              {formatBurdenValue(k, v)}
-            </dd>
-          </div>
-        ))}
+      <div className="eyebrow">{title}</div>
+      <dl className="mt-1 rounded-lg border border-surface-seam py-1">
+        {Object.entries(block)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => (
+            <div
+              key={k}
+              className="flex items-baseline justify-between gap-3 px-2 py-0.5 odd:bg-surface-raised/30"
+            >
+              <dt className="font-mono text-xs text-text-secondary">
+                {burdenLabel(k)}
+              </dt>
+              <dd className="tabular shrink-0 text-right font-mono text-xs text-text-primary">
+                {formatBurdenValue(k, v)}
+              </dd>
+            </div>
+          ))}
       </dl>
     </div>
   );
 }
 
-function GeometryBlockDl({ title, block }: { title: string; block: BurdenBlock | undefined }) {
+function GeometryBlockDl({
+  title,
+  block,
+}: {
+  title: string;
+  block: BurdenBlock | undefined;
+}) {
   if (isEmptyBlock(block)) return null;
   return (
     <div className="mt-4">
-      <div className="font-condensed text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
-        {title}
-      </div>
-      <dl className="mt-1 flex flex-col gap-0.5">
-        {Object.entries(block).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
-          <div key={k} className="flex items-baseline justify-between gap-3">
-            <dt className="font-mono text-xs text-text-secondary">{geometryLabel(k)}</dt>
-            <dd className="tabular shrink-0 text-right font-mono text-xs text-text-primary">
-              {formatGeometryValue(k, typeof v === "number" ? v : null)}
-            </dd>
-          </div>
-        ))}
+      <div className="eyebrow">{title}</div>
+      <dl className="mt-1 rounded-lg border border-surface-seam py-1">
+        {Object.entries(block)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => (
+            <div
+              key={k}
+              className="flex items-baseline justify-between gap-3 px-2 py-0.5 odd:bg-surface-raised/30"
+            >
+              <dt className="font-mono text-xs text-text-secondary">
+                {geometryLabel(k)}
+              </dt>
+              <dd className="tabular shrink-0 text-right font-mono text-xs text-text-primary">
+                {formatGeometryValue(k, typeof v === "number" ? v : null)}
+              </dd>
+            </div>
+          ))}
       </dl>
     </div>
   );
@@ -289,21 +350,28 @@ function flattenProvenanceValue(v: unknown): string {
 }
 
 function ProvenanceDl({ provenance }: { provenance: ReportProvenance }) {
-  const entries = Object.entries(provenance as unknown as Record<string, unknown>);
+  const entries = Object.entries(
+    provenance as unknown as Record<string, unknown>,
+  );
   return (
     <div className="mt-4">
-      <div className="font-condensed text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
-        Provenance
-      </div>
-      <dl className="mt-1 flex flex-col gap-0.5">
-        {entries.sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => (
-          <div key={k} className="flex items-baseline justify-between gap-3">
-            <dt className="shrink-0 font-mono text-xs text-text-secondary">{k}</dt>
-            <dd className="tabular text-right font-mono text-xs break-all text-text-primary">
-              {flattenProvenanceValue(v)}
-            </dd>
-          </div>
-        ))}
+      <div className="eyebrow">Provenance</div>
+      <dl className="mt-1 rounded-lg border border-surface-seam py-1">
+        {entries
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => (
+            <div
+              key={k}
+              className="flex items-baseline justify-between gap-3 px-2 py-0.5 odd:bg-surface-raised/30"
+            >
+              <dt className="shrink-0 font-mono text-xs text-text-secondary">
+                {k}
+              </dt>
+              <dd className="tabular text-right font-mono text-xs break-all text-text-primary">
+                {flattenProvenanceValue(v)}
+              </dd>
+            </div>
+          ))}
       </dl>
     </div>
   );
@@ -311,7 +379,7 @@ function ProvenanceDl({ provenance }: { provenance: ReportProvenance }) {
 
 function TechnicalData({ report }: { report: ReportResponse }) {
   return (
-    <details className="border-t border-surface-seam px-4 py-4 mb-4">
+    <details className="glass-panel mx-4 mb-4 p-4">
       <summary className="eyebrow cursor-pointer select-none">
         Full technical data
       </summary>
@@ -319,22 +387,29 @@ function TechnicalData({ report }: { report: ReportResponse }) {
         <BurdenBlockDl title="Volumes" block={report.burden.volumes} />
         <BurdenBlockDl title="Fractions" block={report.burden.fractions} />
         <BurdenBlockDl title="Shape" block={report.burden.shape} />
-        <BurdenBlockDl title="Multifocality" block={report.burden.multifocality} />
+        <BurdenBlockDl
+          title="Multifocality"
+          block={report.burden.multifocality}
+        />
         <BurdenBlockDl title="Laterality" block={report.burden.laterality} />
         <BurdenBlockDl title="Centroid" block={report.burden.centroid} />
         <BurdenBlockDl title="Other (burden)" block={report.burden.other} />
         {report.geometry && (
           <>
-            <GeometryBlockDl title="Shape (geometric)" block={report.geometry.shape} />
+            <GeometryBlockDl
+              title="Shape (geometric)"
+              block={report.geometry.shape}
+            />
             <GeometryBlockDl title="Extent" block={report.geometry.extent} />
             <GeometryBlockDl title="Rim" block={report.geometry.rim} />
-            <GeometryBlockDl title="Other (geometry)" block={report.geometry.other} />
+            <GeometryBlockDl
+              title="Other (geometry)"
+              block={report.geometry.other}
+            />
           </>
         )}
         <div className="mt-4">
-          <div className="font-condensed text-[11px] font-semibold uppercase tracking-[0.08em] text-text-secondary">
-            Eloquence citation
-          </div>
+          <div className="eyebrow">Eloquence citation</div>
           <p className="mt-1 font-mono text-[11px] leading-relaxed text-text-dim">
             {report.eloquence.citation}
           </p>
@@ -357,11 +432,14 @@ export function ReportPanel({
   highlightedStructureName,
   pathologyJobId,
 }: ReportPanelProps) {
-  const interpreted = useMemo(() => (report ? interpretReport(report) : null), [report]);
+  const interpreted = useMemo(
+    () => (report ? interpretReport(report) : null),
+    [report],
+  );
 
   if (!open) return null;
 
-  const widthClass = layout === "single" ? "w-full" : "w-[420px]";
+  const widthClass = layout === "single" ? "w-full" : "w-full sm:w-[420px]";
 
   // Resolved once per render rather than inside JSX so the fallback path
   // (an unrecognised segmentation_source) is computed exactly once - same
@@ -380,8 +458,10 @@ export function ReportPanel({
     }
   }
 
-  const overview = interpreted?.sections.find((s) => s.id === "overview") ?? null;
-  const remainingSections = interpreted?.sections.filter((s) => s.id !== "overview") ?? [];
+  const overview =
+    interpreted?.sections.find((s) => s.id === "overview") ?? null;
+  const remainingSections =
+    interpreted?.sections.filter((s) => s.id !== "overview") ?? [];
 
   return (
     <>
@@ -391,31 +471,38 @@ export function ReportPanel({
         aria-hidden="true"
       />
       <div
-        className={`absolute inset-y-0 right-0 z-40 flex flex-col overflow-hidden border-l border-surface-seam bg-surface-panel shadow-2xl ${widthClass}`}
+        className={`absolute inset-y-0 right-0 z-40 flex flex-col overflow-hidden glass-panel !rounded-none border-l border-surface-seam shadow-2xl backdrop-blur ${widthClass}`}
         role="dialog"
         aria-label="Structured report"
       >
-        <div className="flex shrink-0 items-center gap-2 border-b border-surface-seam px-4 py-2.5">
-          <span className="font-condensed text-[11px] tracking-[0.12em] text-text-dim uppercase">
-            Report
-          </span>
+        <div className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-surface-seam bg-surface-panel/80 px-4 py-2.5 backdrop-blur">
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-brand-teal"
+            aria-hidden="true"
+          />
+          <span className="eyebrow">Structured report</span>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close report"
-            className="ml-auto rounded-sm p-1 text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
+            className="ml-auto rounded-lg p-1 text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
           >
             <X size={16} aria-hidden="true" />
           </button>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {status === "loading" && <CenteredMessage>Loading report for {caseId}…</CenteredMessage>}
+          {status === "loading" && (
+            <CenteredMessage>Loading report for {caseId}…</CenteredMessage>
+          )}
 
           {status === "unreachable" && (
             <CenteredMessage>
               No response from the API. Start it with{" "}
-              <code className="text-data-oedema">uvicorn app.backend.main:app --reload</code>.
+              <code className="text-data-oedema">
+                uvicorn app.backend.main:app --reload
+              </code>
+              .
             </CenteredMessage>
           )}
 
@@ -447,39 +534,41 @@ export function ReportPanel({
               {/* --- Header ------------------------------------------------ */}
               <div className="flex flex-col gap-1.5 px-4 py-4">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate font-mono text-sm text-text-primary">
+                  <span className="truncate font-heading text-lg text-text-primary">
                     {report.case_id}
                   </span>
-                  <span className="shrink-0 rounded-sm border border-surface-seam bg-surface-raised px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wide text-text-primary uppercase">
+                  <span className="chip shrink-0 uppercase">
                     {segBadge.text}
                   </span>
                 </div>
                 <p className="font-mono text-[11px] text-text-dim">
-                  Report schema v{report.report_version} · generated {report.generated_utc}
+                  Report schema v{report.report_version} · generated{" "}
+                  {report.generated_utc}
                 </p>
               </div>
 
               {/* --- Disclaimer --------------------------------------------- */}
-              <div className="mx-4 mb-4 border border-surface-seam bg-surface-raised px-3 py-2.5">
-                <p className="font-mono text-xs leading-relaxed text-text-primary">
+              <div className="mx-4 mb-4 rounded-lg border border-gate-caution/40 bg-gate-caution/10 p-3">
+                <p className="text-xs leading-relaxed text-gate-caution">
                   {report.disclaimer}
                 </p>
               </div>
 
               {/* --- Overview --------------------------------------------- */}
               {overview && (
-                <div className="border-t border-surface-seam px-4 py-6">
-                  <p className="text-sm leading-relaxed text-text-primary">
+                <div className="glass-panel mx-4 mb-3 p-4">
+                  <p className="font-heading text-sm leading-relaxed text-text-primary">
                     {overview.headline}
                   </p>
                   {overview.facts.length > 0 && (
-                    <div className="mt-6 grid grid-cols-2 gap-4">
+                    <div className="mt-4 grid grid-cols-2 gap-2">
                       {overview.facts.map((f, i) => (
-                        <div key={i}>
-                          <div className="font-mono text-[10px] uppercase tracking-wide text-text-secondary">
-                            {f.label}
-                          </div>
-                          <div className="tabular font-condensed text-xl text-text-primary mt-0.5">
+                        <div
+                          key={i}
+                          className="rounded-lg border border-surface-seam bg-surface-raised/40 p-2.5"
+                        >
+                          <div className="eyebrow">{f.label}</div>
+                          <div className="tabular mt-0.5 font-mono text-xl text-text-primary">
                             {f.value}
                           </div>
                         </div>
@@ -494,27 +583,33 @@ export function ReportPanel({
 
               {/* --- Remaining Sections ----------------------------------- */}
               {remainingSections.map((section) => (
-                <div key={section.id} className="border-t border-surface-seam px-4 py-6">
-                  <h3 className="font-condensed text-xl text-text-primary">
-                    {section.title}
-                  </h3>
+                <div key={section.id} className="glass-panel mx-4 mb-3 p-4">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-teal"
+                      aria-hidden="true"
+                    />
+                    <h3 className="font-heading text-base text-text-primary">
+                      {section.title}
+                    </h3>
+                  </div>
                   <p className="mt-2 text-sm leading-relaxed text-text-primary">
                     {section.headline}
                   </p>
-                  <p className="mt-2 mb-5 text-xs leading-relaxed text-text-secondary">
+                  <p className="mt-2 mb-4 text-xs leading-relaxed text-text-secondary">
                     {section.explanation}
                   </p>
-                  
-                  <SectionFacts 
-                    section={section} 
+
+                  <SectionFacts
+                    section={section}
                     report={report}
                     onHoverStructure={onHoverStructure}
                     highlightedStructureName={highlightedStructureName}
                   />
 
                   {section.caveat && (
-                    <div className="mt-5 border-l-2 border-surface-seam pl-3 text-xs leading-relaxed text-text-dim">
-                      <div className="font-mono text-[10px] uppercase tracking-wide mb-1">Caveat</div>
+                    <div className="mt-4 border-l-2 border-surface-seam pl-3 text-xs leading-relaxed text-text-dim">
+                      <div className="eyebrow mb-1">Caveat</div>
                       {section.caveat.split("\n").map((line, i) => (
                         <p key={i} className={i > 0 ? "mt-1" : ""}>
                           {line}
@@ -527,8 +622,11 @@ export function ReportPanel({
 
               {/* --- Confirmed pathology (T5.6) ---------------------------- */}
               {report.molecular && pathologyJobId && (
-                <div className="border-t border-surface-seam px-4 py-6">
-                  <MolecularPanel jobId={pathologyJobId} molecular={report.molecular} />
+                <div className="mx-4 mb-3">
+                  <MolecularPanel
+                    jobId={pathologyJobId}
+                    molecular={report.molecular}
+                  />
                 </div>
               )}
 

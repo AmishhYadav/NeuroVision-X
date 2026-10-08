@@ -26,7 +26,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import type { AtlasStructureRow } from "../api";
+import type { AtlasStructureRow, ConformalMeta } from "../api";
 import { hexToRgb } from "../lib/colors";
 import { scalarsToColors, type VertexLayerKind } from "../lib/vertexColors";
 import { structureRow } from "../lib/atlasSelection";
@@ -104,6 +104,8 @@ export interface TwinActiveLayer {
   key: string;
   kind: VertexLayerKind;
   data: Uint8Array;
+  /** Conformal operating point, only used to label the legend. */
+  conformal?: ConformalMeta | null;
 }
 
 interface TwinGeometries {
@@ -802,10 +804,10 @@ export function BrainTwinScene({
         <div
           data-testid="twin-badge"
           role="status"
-          className={`liquid-glass pointer-events-none absolute top-3 left-3 rounded-md border px-2.5 py-1 font-condensed text-[11px] font-semibold tracking-[0.12em] uppercase ${
+          className={`chip pointer-events-none absolute top-3 left-3 uppercase tracking-[0.08em] ${
             badgeTone === "caution"
               ? "border-data-amber/60 text-data-amber"
-              : "border-surface-seam text-text-secondary"
+              : ""
           }`}
         >
           {badge}
@@ -836,7 +838,7 @@ export function BrainTwinScene({
       {geometries && (selected || (highlightedStructure !== null && atlas)) && (
         <div className="absolute top-3 right-3 flex w-56 flex-col gap-2">
           {selected && result && (
-            <div className="liquid-glass rounded-md border border-surface-seam px-3 py-3">
+            <div className="glass-panel px-3 py-3">
               <div className="mb-1 flex items-center gap-2">
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
@@ -847,7 +849,7 @@ export function BrainTwinScene({
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
-                  className="ml-auto text-text-dim hover:text-text-primary"
+                  className="ml-auto rounded-md px-1 text-text-dim transition-colors hover:text-text-primary"
                   aria-label="Close tumour detail"
                 >
                   ×
@@ -877,7 +879,7 @@ export function BrainTwinScene({
               return (
                 <div
                   data-testid="twin-structure-detail"
-                  className="liquid-glass rounded-md border border-surface-seam px-3 py-3"
+                  className="glass-panel px-3 py-3"
                 >
                   <div className="mb-1 flex items-center gap-2">
                     <span
@@ -889,7 +891,7 @@ export function BrainTwinScene({
                     <button
                       type="button"
                       onClick={() => onStructureSelect?.(null)}
-                      className="ml-auto text-text-dim hover:text-text-primary"
+                      className="ml-auto rounded-md px-1 text-text-dim transition-colors hover:text-text-primary"
                       aria-label="Close structure detail"
                     >
                       ×
@@ -928,15 +930,15 @@ export function BrainTwinScene({
               never show a name for a quantity the backend did not actually
               send. */}
           {activeLayer && (
-            <div data-testid="twin-layer-legend" className="liquid-glass rounded-md border border-surface-seam">
-              <Legend overlayMode="prediction" showUncertainty hasLabel={false} uncertaintyKind={activeLayer.kind} />
+            <div data-testid="twin-layer-legend" className="rounded-xl">
+              <Legend overlayMode="prediction" showUncertainty hasLabel={false} uncertaintyKind={activeLayer.kind} conformal={activeLayer.conformal ?? null} />
             </div>
           )}
 
           {structureGeometries && structureGeometries.size > 0 && atlas && (
             <div
               data-testid="twin-structure-legend"
-              className="liquid-glass max-h-48 overflow-y-auto rounded-md border border-surface-seam p-2"
+              className="glass-panel max-h-48 overflow-y-auto p-2"
             >
               <div className="eyebrow px-1 pb-1">Structures</div>
               <div className="flex flex-col gap-1">
@@ -954,7 +956,7 @@ export function BrainTwinScene({
                         key={index}
                         type="button"
                         onClick={() => onStructureSelect?.(index)}
-                        className="flex items-center gap-2 text-left"
+                        className="flex items-center gap-2 rounded-sm text-left transition-colors hover:bg-surface-raised/50"
                       >
                         <span
                           className="h-2.5 w-2.5 shrink-0 rounded-[2px]"

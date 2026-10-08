@@ -69,16 +69,16 @@ export function ViewportGrid(props: ViewportGridProps) {
   if (layout === "single") {
     return (
       <div className="flex h-full min-h-0 flex-col gap-2">
-        <div className="flex shrink-0 gap-1">
+        <div className="inline-flex shrink-0 self-start rounded-lg border border-surface-seam bg-surface-raised/50 p-0.5">
           {PLANES.map(({ plane, label }) => (
             <button
               key={plane}
               type="button"
               onClick={() => onChangeSinglePlane(plane)}
-              className={`rounded-sm border px-2 py-1 font-condensed text-[11px] tracking-[0.1em] uppercase transition-colors duration-[120ms] ${
+              className={`rounded-md px-2.5 py-1 font-mono text-xs uppercase transition-colors duration-[120ms] ${
                 singlePlane === plane
-                  ? "border-text-primary text-text-primary"
-                  : "border-surface-seam text-text-secondary hover:text-text-primary"
+                  ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
+                  : "text-text-secondary hover:text-text-primary"
               }`}
             >
               {label}

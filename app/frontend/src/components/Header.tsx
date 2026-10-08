@@ -29,12 +29,12 @@ interface HeaderProps {
 
 export function Header({ health, reachable, onToggleCaseList, showCaseListToggle }: HeaderProps) {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-4 border-b border-surface-seam bg-surface-panel px-4">
+    <header className="flex h-12 shrink-0 items-center gap-4 border-b border-surface-seam bg-surface-panel/70 px-4">
       {showCaseListToggle && (
         <button
           type="button"
           onClick={onToggleCaseList}
-          className="rounded-sm border border-surface-seam px-2 py-1 font-condensed text-[11px] tracking-[0.12em] text-text-secondary uppercase transition-colors duration-[120ms] hover:border-text-dim hover:text-text-primary"
+          className="chip uppercase transition-colors duration-[120ms] hover:border-brand-primary/60 hover:text-text-primary"
         >
           Cases
         </button>
@@ -42,7 +42,7 @@ export function Header({ health, reachable, onToggleCaseList, showCaseListToggle
       {/* The wordmark never wraps: at ~600px it otherwise breaks mid-word into
           "NEUROVISION-" / "X" and pushes the header to two lines. The meta
           strip truncates instead of wrapping, for the same reason. */}
-      <h1 className="font-condensed shrink-0 text-sm font-semibold tracking-[0.12em] whitespace-nowrap text-text-primary uppercase">
+      <h1 className="font-heading shrink-0 text-sm font-semibold tracking-[0.12em] whitespace-nowrap text-text-primary uppercase">
         NeuroVision-X
       </h1>
       <div className="min-w-0 truncate font-mono text-xs text-text-secondary">

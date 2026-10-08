@@ -416,12 +416,13 @@ check("Report opens on its own route", reportPath === `/report/${REPORT_CASE}`, 
 
 const pageText = await js(bodyText);
 check("report page shows the case id", pageText.includes(REPORT_CASE));
-// ReportPage.tsx renders the overview as a hero card (a headline paragraph
-// plus a facts grid) with no "At a glance" heading of its own - only the
-// REMAINING sections carry an <h2> title. The hero's headline text is the
-// thing to check is actually there.
+// ReportPage.tsx renders every section, the overview included, as
+// <section id="section-{id}"> with a numbered <h2> and then the headline as
+// the section's first direct <p>. The overview's headline text is the thing
+// to check is actually there (selected by structure, not by styling class,
+// so a reskin cannot silently break it again).
 const heroHeadline = await js(
-  `(function(){const p=document.querySelector('p.font-condensed.text-2xl');return p ? p.innerText.trim() : null;})()`,
+  `(function(){const p=document.querySelector('#section-overview > p');return p ? p.innerText.trim() : null;})()`,
 );
 check(
   "overview hero renders a headline",
@@ -541,7 +542,7 @@ await sleep(1500);
 const clinicalLoadedText = await js(bodyText);
 check(
   "clinical page loads with an upload panel",
-  /Upload a DICOM study/.test(clinicalLoadedText),
+  /Drop a DICOM study/.test(clinicalLoadedText),
 );
 // Case-insensitive: the header link carries Tailwind's `uppercase`, which
 // Chrome's innerText reflects (unlike textContent) - the same trap section
@@ -567,8 +568,8 @@ const fileAttached = await js(`(function(){
 check("file input accepts a picked file", fileAttached === "ok", fileAttached);
 await sleep(300);
 
-const uploadResult = await js(clickText("Upload study"));
-check("Upload study button is enabled once a file is picked", uploadResult === "ok", uploadResult);
+const uploadResult = await js(clickText("Start pipeline"));
+check("Start pipeline button is enabled once a file is picked", uploadResult === "ok", uploadResult);
 
 // Poll rather than a fixed sleep: the request itself is fast, but this is
 // still a real network round trip through the dev proxy.
@@ -702,7 +703,16 @@ if (!clinicalViewerJobId) {
   check("twin view button is pressed after clicking", twinPressedAfterClick === "true", String(twinPressedAfterClick));
 
   // --- 3/4. Pixels: non-trivial and actually non-black -------------------
-  const d0 = await js(TWIN_CANVAS_DATA_URL_LEN);
+  // The viewer now opens in "Tri-plane + twin", so the mesh line above can
+  // already have been logged before the click, and the click itself remounts
+  // the twin into the full-size stage. Poll for the first painted frame
+  // (up to 10 s) instead of reading the canvas in the same tick as the click.
+  let d0 = 0;
+  for (let i = 0; i < 20; i++) {
+    d0 = await js(TWIN_CANVAS_DATA_URL_LEN);
+    if (d0 > 5000) break;
+    await sleep(500);
+  }
   check("twin canvas is non-trivial", d0 > 5000, `dataURL length ${d0}`);
   const nonBlack0 = await js(TWIN_CANVAS_NONBLACK_COUNT);
   check("twin renders non-black pixels", nonBlack0 > 50, `${nonBlack0} of 4096 sampled px`);

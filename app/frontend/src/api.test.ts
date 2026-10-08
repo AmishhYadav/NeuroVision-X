@@ -401,6 +401,55 @@ describe("getClinicalJobConformalBand", () => {
     expect(url).toBe("/api/clinical/jobs/job1/conformal-band/WT");
   });
 
+  function stubHeaders(h: Record<string, string>) {
+    const headers = new Map(Object.entries(h));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: { get: (k: string) => headers.get(k) ?? null },
+        arrayBuffer: async () => new Uint8Array([]).buffer,
+      }),
+    );
+  }
+
+  it("parses restrictive conformal headers", async () => {
+    stubHeaders({
+      "X-Conformal-Threshold": "0.7250",
+      "X-Conformal-Reference": "0.5",
+      "X-Conformal-Side": "restrictive",
+      "X-Conformal-Alpha": "0.1",
+    });
+    const buf = await getClinicalJobConformalBand("job1", "WT", [1, 1, 1]);
+    expect(buf?.conformal).toEqual({ threshold: 0.725, reference: 0.5, side: "restrictive", alpha: 0.1 });
+  });
+
+  it("parses permissive conformal headers", async () => {
+    stubHeaders({
+      "X-Conformal-Threshold": "0.3",
+      "X-Conformal-Reference": "0.5",
+      "X-Conformal-Side": "permissive",
+      "X-Conformal-Alpha": "0.1",
+    });
+    const buf = await getClinicalJobConformalBand("job1", "TC", [1, 1, 1]);
+    expect(buf?.conformal?.side).toBe("permissive");
+    expect(buf?.conformal?.threshold).toBe(0.3);
+  });
+
+  it("leaves conformal undefined when no conformal headers are present", async () => {
+    stubHeaders({ "X-Uncertainty-Kind": "conformal-band" });
+    const buf = await getClinicalJobConformalBand("job1", "WT", [1, 1, 1]);
+    expect(buf?.conformal).toBeUndefined();
+  });
+
+  it("maps a garbage side to null and unparseable numbers to null", async () => {
+    stubHeaders({ "X-Conformal-Side": "sideways", "X-Conformal-Threshold": "abc" });
+    const buf = await getClinicalJobConformalBand("job1", "WT", [1, 1, 1]);
+    expect(buf?.conformal).toEqual({ threshold: null, reference: null, side: null, alpha: null });
+  });
+
   it("includes the region segment for TC too", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

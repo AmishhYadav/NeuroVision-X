@@ -22,7 +22,7 @@ export function CaseList({
   onCollapse,
 }: CaseListProps) {
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="glass-panel flex h-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center px-3 pt-3 pb-2">
         <div className="eyebrow">Cases</div>
         {collapsible && (
@@ -31,11 +31,16 @@ export function CaseList({
             onClick={onCollapse}
             aria-label="Hide cases"
             title="Hide cases"
-            className="ml-auto rounded-sm p-1 text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
+            className="ml-auto rounded-md border border-surface-seam p-1 text-text-secondary transition-colors duration-[120ms] hover:border-brand-primary/60 hover:text-text-primary"
           >
             <PanelLeftClose size={14} aria-hidden="true" />
           </button>
         )}
+      </div>
+      {/* The right-hand number is CaseSummary.dice_mean (see formatDice). */}
+      <div className="flex shrink-0 items-center justify-between border-b border-surface-seam px-3 pb-1.5">
+        <span className="eyebrow">Case</span>
+        <span className="eyebrow">Mean Dice</span>
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {cases.map((c) => {
@@ -47,8 +52,8 @@ export function CaseList({
                 onClick={() => onSelect(c.case_id)}
                 className={`flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left font-mono text-xs transition-colors duration-[120ms] ${
                   active
-                    ? "border-text-primary bg-surface-raised text-text-primary"
-                    : "border-transparent text-text-secondary hover:bg-surface-raised/60 hover:text-text-primary"
+                    ? "border-brand-primary bg-brand-primary/15 text-text-primary"
+                    : "border-transparent text-text-secondary hover:bg-surface-raised/50 hover:text-text-primary"
                 }`}
                 aria-current={active ? "true" : undefined}
               >

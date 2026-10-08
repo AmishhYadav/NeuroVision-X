@@ -67,7 +67,7 @@ export function AppShell({
           : "flex min-h-full flex-col bg-surface-page"
       }
     >
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-surface-seam bg-surface-panel/80 px-4 backdrop-blur sm:px-6">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-surface-seam bg-surface-panel/80 px-4 backdrop-blur sm:px-6 md:h-14 md:flex-nowrap">
         <a
           href="/"
           onClick={(e) => {
@@ -76,7 +76,7 @@ export function AppShell({
               navigateTo("/");
             }
           }}
-          className="flex shrink-0 items-center gap-3"
+          className="flex h-12 shrink-0 items-center gap-3 md:h-auto"
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-brand-primary/40 bg-brand-primary/10">
             <Brain className="h-4 w-4 text-brand-primary" aria-hidden="true" />
@@ -87,7 +87,10 @@ export function AppShell({
           </span>
         </a>
 
-        <nav aria-label="Primary" className="flex min-w-0 flex-1 items-center gap-5 overflow-x-auto px-2 md:px-6">
+        <nav
+          aria-label="Primary"
+          className="order-3 flex w-full min-w-0 items-center gap-5 overflow-x-auto border-t border-surface-seam md:order-none md:w-auto md:flex-1 md:border-t-0 md:px-6"
+        >
           {NAV_ITEMS.map((item) => {
             const isActive = item.key === active;
             return (
@@ -101,7 +104,7 @@ export function AppShell({
                     navigateTo(item.href);
                   }
                 }}
-                className={`relative shrink-0 py-4 text-sm whitespace-nowrap ${
+                className={`relative shrink-0 py-3 text-sm md:py-4 whitespace-nowrap ${
                   isActive ? "text-text-primary" : "text-text-secondary hover:text-text-primary"
                 }`}
               >
@@ -114,11 +117,12 @@ export function AppShell({
           })}
         </nav>
 
-        <div className="flex shrink-0 items-center gap-3">
-          {toolbar}
+        <div className="order-2 ml-auto flex shrink-0 items-center gap-2 md:order-none md:gap-3">
+          {/* Below md only action buttons stay in the toolbar; informational chips are hidden to leave room. */}
+          <div className="flex items-center gap-2 md:gap-3 max-md:[&_.chip]:hidden">{toolbar}</div>
           <span className="chip" title={status.detail ?? undefined}>
             <span className={`h-1.5 w-1.5 rounded-full ${DOT_CLASS[status.tone]}`} aria-hidden="true" />
-            <span>{status.label}</span>
+            <span className="max-md:sr-only">{status.label}</span>
             {status.detail && <span className="hidden text-text-dim md:inline">{status.detail}</span>}
           </span>
         </div>

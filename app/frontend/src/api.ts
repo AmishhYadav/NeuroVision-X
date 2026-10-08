@@ -106,6 +106,23 @@ export const ATLAS_STRUCTURE_INDEX = "atlas-structure-index";
  */
 export interface UncertaintyBuffer extends VolumeBuffer {
   kind: string | null;
+  /** Conformal-band operating point from the `X-Conformal-*` headers; undefined when none were sent. */
+  conformal?: ConformalMeta;
+}
+
+/** Which side of the 0.5 point-estimate threshold the fitted conformal threshold sits on. */
+export type ConformalSide = "permissive" | "restrictive";
+
+/**
+ * The conformal operating point behind a band volume, parsed from the
+ * `X-Conformal-Threshold|Reference|Side|Alpha` headers. Any field is null if
+ * its header was missing or unparseable. `side` decides what byte 128 means.
+ */
+export interface ConformalMeta {
+  threshold: number | null;
+  reference: number | null;
+  side: ConformalSide | null;
+  alpha: number | null;
 }
 
 /**
@@ -440,7 +457,24 @@ async function getOptionalKindedBinary(
     : fallbackShape;
   const kind = res.headers.get("X-Uncertainty-Kind");
   const buf = await res.arrayBuffer();
-  return { data: new Uint8Array(buf), shape, kind };
+  const out: UncertaintyBuffer = { data: new Uint8Array(buf), shape, kind };
+  const sideHeader = res.headers.get("X-Conformal-Side");
+  const thresholdHeader = res.headers.get("X-Conformal-Threshold");
+  if (sideHeader !== null || thresholdHeader !== null) {
+    const num = (name: string): number | null => {
+      const h = res.headers.get(name);
+      if (h === null) return null;
+      const v = parseFloat(h);
+      return Number.isNaN(v) ? null : v;
+    };
+    out.conformal = {
+      threshold: num("X-Conformal-Threshold"),
+      reference: num("X-Conformal-Reference"),
+      side: sideHeader === "permissive" || sideHeader === "restrictive" ? sideHeader : null,
+      alpha: num("X-Conformal-Alpha"),
+    };
+  }
+  return out;
 }
 
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
@@ -898,9 +932,14 @@ export function getClinicalJobUncertainty(
  * clinical job's live segmentation - same wire format and same "null on 404"
  * convention as `getClinicalJobUncertainty` (a 404 here means no fitted
  * threshold is available for this region yet, a normal outcome, not an
- * error). Byte values: 0 outside the conservative mask, 128 inside the
- * conservative ("safety margin") mask but not the ordinary prediction, 255
- * inside the ordinary prediction.
+ * error). Byte values: 255 = in both the point-estimate mask P (prob > 0.5)
+ * and the conformal set S (prob >= fitted threshold); 0 = in neither; 128 =
+ * in exactly one, and WHICH one depends on `conformal.side`:
+ *   - permissive (fitted <= reference): 128 = S minus P, a safety margin
+ *     beyond the point estimate.
+ *   - restrictive (fitted > reference): 128 = P minus S, point-estimate
+ *     voxels outside the conformal set.
+ * The side arrives in the `X-Conformal-Side` header (see `ConformalMeta`).
  */
 export function getClinicalJobConformalBand(
   jobId: string,

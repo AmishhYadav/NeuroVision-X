@@ -11,9 +11,10 @@ import {
 } from "./api";
 import type { OverlayMode } from "./lib/render";
 import { navigateTo } from "./lib/navigate";
+import { splitLabel } from "./lib/splitLabel";
 import { useCaseData } from "./hooks/useCaseData";
 import { useResponsiveLayout } from "./hooks/useResponsiveLayout";
-import { Header } from "./components/Header";
+import { AppShell } from "./components/AppShell";
 import { CaseList } from "./components/CaseList";
 import { ViewportGrid } from "./components/ViewportGrid";
 import { SliceRibbon } from "./components/SliceRibbon";
@@ -257,23 +258,42 @@ export default function App() {
     caseData.predictionMask,
   ]);
 
-  return (
-    <div className="flex h-screen flex-col overflow-hidden bg-surface-page text-text-primary">
-      <Header
-        health={health}
-        reachable={bootState === "ready"}
-        showCaseListToggle={!showCaseListInline}
-        onToggleCaseList={() => setCaseListOpen((v) => !v)}
-      />
+  // Header's info now lives in AppShell's toolbar slot as chips. The split
+  // label comes from the eval directory actually in use (see lib/splitLabel).
+  const toolbar = (
+    <>
+      {!showCaseListInline && (
+        <button
+          type="button"
+          onClick={() => setCaseListOpen((v) => !v)}
+          className="btn-secondary !px-3 !py-1 text-xs uppercase"
+        >
+          Cases
+        </button>
+      )}
+      {health ? (
+        <>
+          <span className="chip">{splitLabel(health.eval_dir)}</span>
+        </>
+      ) : null}
+    </>
+  );
 
+  const viewBtn = (active: boolean) =>
+    `flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+      active
+        ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
+        : "text-text-secondary hover:text-text-primary"
+    }`;
+
+  return (
+    <AppShell fullHeight toolbar={toolbar}>
       {/* Below the single-viewport breakpoint the readout moves BELOW the
           image instead of beside it: at ~600px a 224px sidebar eats a third
           of the width, and the MRI is the thing worth the pixels. */}
-      <div
-        className={`relative flex min-h-0 flex-1 ${layout === "single" ? "flex-col" : "flex-row"}`}
-      >
+      <div className="relative flex h-full min-h-0 flex-row">
         {showCaseListInline && !caseListCollapsed && (
-          <div className="w-56 shrink-0 overflow-hidden border-r border-white/10 glass-panel">
+          <div className="m-3 mr-0 w-56 shrink-0 overflow-hidden rounded-xl border border-white/10 glass-panel">
             <CaseList
               cases={cases}
               selectedCaseId={selectedCaseId}
@@ -287,7 +307,7 @@ export default function App() {
         )}
 
         {showCaseListInline && caseListCollapsed && (
-          <div className="flex w-9 shrink-0 flex-col items-center border-r border-white/10 glass-panel pt-2">
+          <div className="m-3 mr-0 flex w-9 shrink-0 flex-col items-center self-start rounded-xl border border-white/10 glass-panel py-2">
             <button
               type="button"
               onClick={() => setCaseListCollapsed(false)}
@@ -320,185 +340,190 @@ export default function App() {
           </>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
-          {!selectedCaseId ? (
-            <div className="flex flex-1 items-center justify-center text-center">
-              <div>
-                <p className="font-mono text-sm text-text-primary">Pick a case to begin.</p>
-                {health && (
-                  <p className="mt-1 font-mono text-xs text-text-dim">
-                    Evaluation directory: {health.eval_dir}
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : caseData.error ? (
-            <div className="flex flex-1 items-center justify-center text-center">
-              <p className="font-mono text-sm text-text-primary">{caseData.error}</p>
-            </div>
-          ) : (
-            <>
-              {/* View switch: which case is loaded (left) and 3D twin vs. flat
-                  scan view (right). Sits above the loading bar so it is
-                  visible even while a case is still pulling its artifacts. */}
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="font-mono text-xs text-text-primary">{selectedCaseId}</span>
-                <div
-                  role="group"
-                  aria-label="View"
-                  className="ml-auto flex items-center gap-1"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setTwinOpen(true)}
-                    aria-pressed={twinOpen}
-                    className={`flex items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
-                      twinOpen
-                        ? "bg-surface-raised text-text-primary"
-                        : "text-text-secondary hover:text-text-primary"
-                    }`}
-                  >
-                    <Brain size={13} aria-hidden="true" />
-                    3D twin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTwinOpen(false)}
-                    aria-pressed={!twinOpen}
-                    className={`flex items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
-                      !twinOpen
-                        ? "bg-surface-raised text-text-primary"
-                        : "text-text-secondary hover:text-text-primary"
-                    }`}
-                  >
-                    <Layers size={13} aria-hidden="true" />
-                    Scan view
-                  </button>
-                </div>
-              </div>
-
-              {/* A case pulls four modality volumes plus masks, entropy and the
-                  profile - around 20 MB. Without this the viewports sit black
-                  for several seconds and the app reads as frozen. Determinate,
-                  because we know exactly how many artifacts are outstanding. */}
-              {caseData.loading && (
-                <div
-                  className="flex shrink-0 items-center gap-3 border border-white/10 glass-panel px-3 py-1.5"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <span className="font-condensed text-[11px] tracking-[0.12em] text-text-dim uppercase">
-                    Loading {selectedCaseId}
-                  </span>
-                  <span className="h-px flex-1 bg-surface-seam">
-                    <span
-                      className="block h-px bg-text-secondary transition-[width] duration-[120ms]"
-                      style={{ width: `${Math.round(loadProgress * 100)}%` }}
-                    />
-                  </span>
-                  <span className="tabular font-mono text-[11px] text-text-dim">
-                    {Math.round(loadProgress * 100)}%
-                  </span>
-                </div>
-              )}
-              {twinOpen ? (
-                <div className="relative min-h-0 flex-1 border border-white/10 glass-panel">
-                  <BrainTwinScene input={twinInput} />
-                  {/* BrainTwinScene's own empty state ("Pick a case to build
-                      its twin.") is meant for the no-case-selected moment,
-                      which can no longer reach it now that the twin is the
-                      default view - a case IS selected here, just still
-                      pulling its volumes, so this overlay says that instead. */}
-                  {twinInput === null && (
-                    <div className="absolute inset-0 flex items-center justify-center glass-panel">
-                      <span className="font-mono text-xs text-text-secondary">
-                        Loading {selectedCaseId}…
-                      </span>
-                    </div>
+        {/* Centre stage + right column. Side by side from lg; below lg the
+            right column drops under the stage (capped at 40vh, scrolling). */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+          <div className="flex min-w-0 flex-none flex-col gap-3 p-3 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
+            {!selectedCaseId ? (
+              <div className="flex flex-1 items-center justify-center text-center">
+                <div>
+                  <p className="font-mono text-sm text-text-primary">Pick a case to begin.</p>
+                  {health && (
+                    <p className="mt-1 font-mono text-xs text-text-dim">
+                      Evaluation directory: {health.eval_dir}
+                    </p>
                   )}
                 </div>
-              ) : (
-                <>
-                  <div className="min-h-0 flex-1">
-                    <ViewportGrid
-                      layout={layout}
-                      expandedPlane={expandedPlane}
-                      onToggleExpand={(plane) =>
-                        setExpandedPlane((prev) => (prev === plane ? null : plane))
-                      }
-                      singlePlane={singlePlane}
-                      onChangeSinglePlane={setSinglePlane}
-                      onFocusPlane={setFocusedPlane}
-                      sliceIndices={sliceIndices}
-                      planeCounts={planeCounts}
-                      shape={shape}
-                      image={caseData.volumes[modality]?.data ?? null}
-                      predictionMask={caseData.predictionMask?.data ?? null}
-                      labelMask={caseData.labelMask?.data ?? null}
-                      uncertainty={caseData.uncertainty?.data ?? null}
+              </div>
+            ) : caseData.error ? (
+              <div className="flex flex-1 items-center justify-center text-center">
+                <p className="font-mono text-sm text-text-primary">{caseData.error}</p>
+              </div>
+            ) : (
+              <>
+                {/* Toolbar strip on top: view switch + case id, then the
+                    ControlBar (modality / overlay / opacity / entropy /
+                    report) with its props unchanged. */}
+                <div className="glass-panel relative z-20 flex shrink-0 flex-col rounded-xl">
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+                    <span className="font-mono text-xs text-text-primary">{selectedCaseId}</span>
+                    <div
+                      role="group"
+                      aria-label="View"
+                      className="inline-flex shrink-0 rounded-lg border border-surface-seam bg-surface-raised/50 p-0.5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setTwinOpen(true)}
+                        aria-pressed={twinOpen}
+                        className={viewBtn(twinOpen)}
+                      >
+                        <Brain size={13} aria-hidden="true" />
+                        3D twin
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTwinOpen(false)}
+                        aria-pressed={!twinOpen}
+                        className={viewBtn(!twinOpen)}
+                      >
+                        <Layers size={13} aria-hidden="true" />
+                        Scan view
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border-t border-surface-seam [&>div]:border-t-0 [&>div]:bg-transparent">
+                    <ControlBar
+                      modality={modality}
+                      onChangeModality={setModality}
                       overlayMode={overlayMode}
-                      overlayOpacity={overlayOpacity}
+                      onChangeOverlayMode={setOverlayMode}
+                      hasLabel={hasLabel}
+                      hasPrediction={hasPrediction}
                       showTruthOutline={showTruthOutline}
+                      onToggleTruthOutline={() => setShowTruthOutline((v) => !v)}
+                      overlayOpacity={overlayOpacity}
+                      onChangeOverlayOpacity={setOverlayOpacity}
+                      hasLogits={hasLogits}
                       showUncertainty={showUncertainty}
-                      uncertaintyOpacity={UNCERTAINTY_OPACITY}
-                    />
-                  </div>
-                  <div className="shrink-0">
-                    <SliceRibbon
-                      planeLabel={ribbonLabel}
-                      sliceCount={planeCounts[ribbonPlane]}
-                      currentIndex={sliceIndices[ribbonPlane]}
-                      onScrub={(i) =>
-                        setSliceIndices((prev) => ({ ...prev, [ribbonPlane]: i }))
+                      onToggleUncertainty={() => setShowUncertainty((v) => !v)}
+                      hasReport={hasReport}
+                      onOpenReport={() =>
+                        selectedCaseId && navigateTo(`/report/${encodeURIComponent(selectedCaseId)}`)
                       }
-                      tumor={profilePlane?.tumor ?? EMPTY_PROFILE}
-                      error={profilePlane?.error ?? null}
-                      entropy={profilePlane?.entropy ?? null}
-                      onFocusRibbon={() => setFocusedPlane(ribbonPlane)}
                     />
                   </div>
-                </>
-              )}
-            </>
+                </div>
+
+                {/* A case pulls four modality volumes plus masks, entropy and the
+                    profile - around 20 MB. Without this the viewports sit black
+                    for several seconds and the app reads as frozen. Determinate,
+                    because we know exactly how many artifacts are outstanding. */}
+                {caseData.loading && (
+                  <div
+                    className="flex shrink-0 items-center gap-3 rounded-xl border border-white/10 glass-panel px-3 py-1.5"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <span className="font-condensed text-[11px] tracking-[0.12em] text-text-dim uppercase">
+                      Loading {selectedCaseId}
+                    </span>
+                    <span className="h-px flex-1 bg-surface-seam">
+                      <span
+                        className="block h-px bg-text-secondary transition-[width] duration-[120ms]"
+                        style={{ width: `${Math.round(loadProgress * 100)}%` }}
+                      />
+                    </span>
+                    <span className="tabular font-mono text-[11px] text-text-dim">
+                      {Math.round(loadProgress * 100)}%
+                    </span>
+                  </div>
+                )}
+                {twinOpen ? (
+                  <div className="bg-grid relative h-[70vh] min-h-[360px] flex-none overflow-hidden rounded-xl border border-white/10 glass-panel lg:h-auto lg:min-h-0 lg:flex-1">
+                    <BrainTwinScene input={twinInput} />
+                    {/* BrainTwinScene's own empty state ("Pick a case to build
+                        its twin.") is meant for the no-case-selected moment,
+                        which can no longer reach it now that the twin is the
+                        default view - a case IS selected here, just still
+                        pulling its volumes, so this overlay says that instead. */}
+                    {twinInput === null && (
+                      <div className="absolute inset-0 flex items-center justify-center glass-panel">
+                        <span className="font-mono text-xs text-text-secondary">
+                          Loading {selectedCaseId}…
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-grid h-[70vh] min-h-[360px] flex-none overflow-hidden rounded-xl lg:h-auto lg:min-h-0 lg:flex-1">
+                      <ViewportGrid
+                        layout={layout}
+                        expandedPlane={expandedPlane}
+                        onToggleExpand={(plane) =>
+                          setExpandedPlane((prev) => (prev === plane ? null : plane))
+                        }
+                        singlePlane={singlePlane}
+                        onChangeSinglePlane={setSinglePlane}
+                        onFocusPlane={setFocusedPlane}
+                        sliceIndices={sliceIndices}
+                        planeCounts={planeCounts}
+                        shape={shape}
+                        image={caseData.volumes[modality]?.data ?? null}
+                        predictionMask={caseData.predictionMask?.data ?? null}
+                        labelMask={caseData.labelMask?.data ?? null}
+                        uncertainty={caseData.uncertainty?.data ?? null}
+                        overlayMode={overlayMode}
+                        overlayOpacity={overlayOpacity}
+                        showTruthOutline={showTruthOutline}
+                        showUncertainty={showUncertainty}
+                        uncertaintyOpacity={UNCERTAINTY_OPACITY}
+                      />
+                    </div>
+                    <div className="shrink-0">
+                      <SliceRibbon
+                        planeLabel={ribbonLabel}
+                        sliceCount={planeCounts[ribbonPlane]}
+                        currentIndex={sliceIndices[ribbonPlane]}
+                        onScrub={(i) =>
+                          setSliceIndices((prev) => ({ ...prev, [ribbonPlane]: i }))
+                        }
+                        tumor={profilePlane?.tumor ?? EMPTY_PROFILE}
+                        error={profilePlane?.error ?? null}
+                        entropy={profilePlane?.entropy ?? null}
+                        onFocusRibbon={() => setFocusedPlane(ribbonPlane)}
+                      />
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {selectedCaseId && !caseData.error && (
+            <aside
+              aria-label="Case summary"
+              className="flex w-full shrink-0 flex-col gap-3 overflow-auto border-t border-surface-seam p-3 lg:w-80 lg:border-t-0 lg:border-l"
+            >
+              <div className="glass-panel shrink-0 rounded-xl">
+                <MetricsPanel
+                  metrics={caseData.detail?.metrics ?? null}
+                  regions={caseData.detail?.regions ?? null}
+                />
+              </div>
+              <div className="glass-panel shrink-0 rounded-xl">
+                <Legend
+                  overlayMode={overlayMode}
+                  showUncertainty={showUncertainty}
+                  hasLabel={hasLabel}
+                  uncertaintyKind={uncertaintyKind}
+                />
+              </div>
+            </aside>
           )}
         </div>
-
-        {selectedCaseId && !caseData.error && (
-          <div
-            className={`shrink-0 overflow-y-auto border-white/10 glass-panel ${
-              layout === "single" ? "max-h-56 w-full border-t" : "w-56 border-l"
-            }`}
-          >
-            <MetricsPanel metrics={caseData.detail?.metrics ?? null} regions={caseData.detail?.regions ?? null} />
-            <Legend
-              overlayMode={overlayMode}
-              showUncertainty={showUncertainty}
-              hasLabel={hasLabel}
-              uncertaintyKind={uncertaintyKind}
-            />
-          </div>
-        )}
       </div>
-
-      <ControlBar
-        modality={modality}
-        onChangeModality={setModality}
-        overlayMode={overlayMode}
-        onChangeOverlayMode={setOverlayMode}
-        hasLabel={hasLabel}
-        hasPrediction={hasPrediction}
-        showTruthOutline={showTruthOutline}
-        onToggleTruthOutline={() => setShowTruthOutline((v) => !v)}
-        overlayOpacity={overlayOpacity}
-        onChangeOverlayOpacity={setOverlayOpacity}
-        hasLogits={hasLogits}
-        showUncertainty={showUncertainty}
-        onToggleUncertainty={() => setShowUncertainty((v) => !v)}
-        hasReport={hasReport}
-        onOpenReport={() =>
-          selectedCaseId && navigateTo(`/report/${encodeURIComponent(selectedCaseId)}`)
-        }
-      />
-    </div>
+    </AppShell>
   );
 }

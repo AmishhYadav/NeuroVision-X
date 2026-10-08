@@ -18,19 +18,20 @@
 import { describe, expect, it } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CONFORMAL_BAND } from "../api";
+import { CONFORMAL_BAND, type ConformalMeta } from "../api";
 import { Legend } from "./Legend";
 
 const CAVEAT_TOOLTIP =
   "Calibrated so that, averaged over in-distribution studies, mask + band miss at most 10% of tumour voxels (α = 0.10). Not a guarantee for this patient, and it does not hold for scans unlike the training data.";
 
-function renderConformalBandLegend(): string {
+function renderConformalBandLegend(conformal?: ConformalMeta | null): string {
   return renderToStaticMarkup(
     React.createElement(Legend, {
       overlayMode: "prediction",
       showUncertainty: true,
       hasLabel: false,
       uncertaintyKind: CONFORMAL_BAND,
+      conformal,
     }),
   );
 }
@@ -51,5 +52,37 @@ describe("Legend conformal band caveat", () => {
   it("carries the full caveat, including the 10% figure and the shift warning, in a title tooltip", () => {
     const html = renderConformalBandLegend();
     expect(html).toContain(`title="${CAVEAT_TOOLTIP}"`);
+  });
+});
+
+describe("Legend conformal band labels by side", () => {
+  const meta = (side: ConformalMeta["side"], threshold = 0.725): ConformalMeta => ({
+    threshold,
+    reference: 0.5,
+    side,
+    alpha: 0.1,
+  });
+
+  it("restrictive: 128 is point estimate outside the conformal set", () => {
+    const html = renderConformalBandLegend(meta("restrictive"));
+    expect(html).toContain("Point estimate and conformal set");
+    expect(html).toContain("Point estimate only (outside the conformal set)");
+    expect(html).not.toContain("Safety margin");
+    expect(html).toContain("fitted 0.725 vs 0.5 · α = 0.1");
+  });
+
+  it("permissive: 128 is a margin beyond the point estimate", () => {
+    const html = renderConformalBandLegend(meta("permissive", 0.3));
+    expect(html).toContain("Point estimate and conformal set");
+    expect(html).toContain("Conformal set only (margin beyond the point estimate)");
+    expect(html).toContain("fitted 0.300 vs 0.5");
+  });
+
+  it("unknown or absent side: neutral labels", () => {
+    for (const c of [undefined, null, meta(null)]) {
+      const html = renderConformalBandLegend(c);
+      expect(html).toContain("In both masks");
+      expect(html).toContain("In one mask only (side unknown)");
+    }
   });
 });

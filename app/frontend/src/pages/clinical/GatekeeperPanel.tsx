@@ -43,14 +43,14 @@ function VerdictRow({ verdict }: { verdict: GatekeeperSignalVerdict }) {
   );
 
   return (
-    <div className="flex flex-col gap-1 border-t border-surface-seam pt-2 first:border-t-0 first:pt-0">
+    <div className="flex flex-col gap-1 border-t border-surface-seam pt-3 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span
           className={`font-mono text-xs ${verdict.enabled ? "text-text-primary" : "text-text-dim"}`}
         >
           {label}
         </span>
-        <span className="font-mono text-[10px] tracking-[0.04em] text-text-dim uppercase">
+        <span className="eyebrow">
           {!verdict.enabled
             ? "informational"
             : !verdict.available
@@ -94,16 +94,28 @@ export function GatekeeperPanel({ job }: GatekeeperPanelProps) {
   if (!decision) return null;
 
   const isCaution = decision.decision === "proceed_with_caution";
+  const isRefuse = decision.decision === "refuse";
+  // Refusal is amber (a correct outcome) drawn as a hollow ring so it differs
+  // from CAUTION's filled dot.
+  const pillClass = isRefuse || isCaution
+    ? "border-gate-caution/50 bg-gate-caution/10 text-gate-caution"
+    : "border-gate-proceed/50 bg-gate-proceed/10 text-gate-proceed";
+  const dotClass = isRefuse
+    ? "border-2 border-gate-caution"
+    : isCaution
+      ? "bg-gate-caution"
+      : "bg-gate-proceed";
+  const pillText = isRefuse ? "REFUSE" : isCaution ? "PROCEED WITH CAUTION" : "PROCEED";
 
   return (
-    <div className="flex flex-col gap-3 border border-surface-seam bg-surface-panel px-4 py-4">
-      <div className="flex items-center gap-2">
+    <div className="glass-panel flex flex-col gap-4 p-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="eyebrow">Gatekeeper decision</span>
         <span
-          className={`h-2 w-2 shrink-0 rounded-full ${isCaution ? "bg-data-amber" : "bg-data-oedema"}`}
-          aria-hidden="true"
-        />
-        <span className="font-condensed text-xs font-semibold tracking-[0.12em] text-text-primary uppercase">
-          {isCaution ? "Proceed with caution" : "Proceed"}
+          className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 font-heading text-base font-semibold ${pillClass}`}
+        >
+          <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} aria-hidden="true" />
+          {pillText}
         </span>
       </div>
 

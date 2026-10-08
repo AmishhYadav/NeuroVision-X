@@ -1468,7 +1468,17 @@ def create_app() -> FastAPI:
         # belongs here for the same reason: the frontend labels the layer from
         # it, and a hidden header would make it fall back to a generic label
         # for a quantity that must never be mislabelled as epistemic.
-        expose_headers=["X-Volume-Shape", "X-Volume-Dtype", "X-Uncertainty-Kind"],
+        expose_headers=[
+            "X-Volume-Shape",
+            "X-Volume-Dtype",
+            "X-Uncertainty-Kind",
+            # The conformal band's byte 128 means opposite things on the
+            # permissive and restrictive sides, so the client must see the side.
+            "X-Conformal-Threshold",
+            "X-Conformal-Reference",
+            "X-Conformal-Side",
+            "X-Conformal-Alpha",
+        ],
     )
     _register_exception_handlers(app)
 

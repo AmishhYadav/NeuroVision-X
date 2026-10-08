@@ -1,4 +1,4 @@
-import { Box, Download, FileText, Power } from "lucide-react";
+import { Box, Download, FileText } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CONFORMAL_BAND,
@@ -19,6 +19,7 @@ import { MODALITY_ORDER } from "../../components/ControlBar";
 import { Legend } from "../../components/Legend";
 import { ReportPanel } from "../../components/ReportPanel";
 import { SliceRibbon } from "../../components/SliceRibbon";
+import { Viewport } from "../../components/Viewport";
 import { ViewportGrid } from "../../components/ViewportGrid";
 import { useClinicalJobVolumes } from "../../hooks/useClinicalJobVolumes";
 import { useClinicalReport } from "../../hooks/useClinicalReport";
@@ -31,19 +32,21 @@ import {
 } from "../../lib/atlasSelection";
 import { triggerBlobDownload } from "../../lib/download";
 import { sliceIndexer } from "../../lib/slicing";
+import { bandStats, entropyProfile, entropyStats, gradcamStats } from "../../lib/heatStats";
+import { tumourProfile } from "../../lib/tumourProfile";
 import { reportRowForStructure } from "../../lib/structureDetail";
 import { captureCanvas, findTwinCanvas, snapshotFilename } from "../../lib/twinSnapshot";
+import { StudySidebar } from "./StudySidebar";
+import { UncertaintyCard } from "./UncertaintyCard";
 
 const ZERO_PLANES: Record<Plane, number> = { sagittal: 0, coronal: 0, axial: 0 };
 // Fixed, not a slider - matches App.tsx's own choice exactly (same constant
 // name and value) so the two viewers render entropy identically. Neither
 // viewer exposes a user-adjustable uncertainty-opacity control.
 const UNCERTAINTY_OPACITY = 0.6;
-// A live clinical case has no saved slice-ribbon profile (that is a
-// precomputed evaluation artifact - see useCaseData) - the ribbon still
-// needs SOME array for its tumour lane, and an empty one draws a flat,
-// honest "nothing measured" line rather than fabricating one.
-const EMPTY_PROFILE: number[] = [];
+// The slice ribbon's tumour lane is computed from the predicted mask itself
+// (lib/tumourProfile.ts) - a live clinical case has no saved, precomputed
+// profile like the research viewer's evaluation cases do.
 
 interface ClinicalStudyViewerProps {
   jobId: string;
@@ -52,21 +55,27 @@ interface ClinicalStudyViewerProps {
 }
 
 /** The six heat sources this viewer can show over the segmentation, one at a time. */
+/** Stage layout: three planes + twin together, planes only, or the twin alone. */
+type ViewMode = "tri" | "slices" | "twin";
+
 type HeatOverlay = "none" | "entropy" | "band_wt" | "band_tc" | "gradcam_wt" | "gradcam_tc";
 
 /**
  * The segmentation viewer for a `"done"` clinical job.
  *
- * Two views, toggled by the button group in the bottom control bar:
- * "Slices" (the default) shows the four modalities, the predicted mask, and
- * an optional heat overlay, scrollable per plane; "3D twin" swaps that
- * viewport for `BrainTwinScene` - the SAME digital-twin component the
- * research viewer (`App.tsx`) uses, fed here by this job's `/geometry`
- * response plus its four volumes and predicted mask, never forked. Unlike
- * the research viewer there is no truth outline and no ground truth for the
- * twin to draw (a live case has no label, so its `tumorSource` is always
- * `"prediction"`), and no case list. A "Report" button opens the same
- * `ReportPanel` drawer the research viewer uses, overlaying the viewport.
+ * A "Digital Twin Studio" layout: a toolbar strip on top (view mode,
+ * modality, heat overlay, opacity, structures, report, export), the stage in
+ * the middle and a study-summary sidebar (StudySidebar) on the right. Three
+ * view modes: "Tri-plane + twin" (default once the twin's data is in: the
+ * three slice planes plus the twin side by side), "Slices" (planes only) and
+ * "3D twin" (twin only). The twin is `BrainTwinScene` - the SAME
+ * digital-twin component the research viewer (`App.tsx`) uses, fed here by
+ * this job's `/geometry` response plus its four volumes and predicted mask,
+ * never forked - and only ONE instance is ever mounted. Unlike the research
+ * viewer there is no truth outline and no ground truth for the twin to draw
+ * (a live case has no label, so its `tumorSource` is always `"prediction"`),
+ * and no case list. A "Report" button opens the same `ReportPanel` drawer
+ * the research viewer uses, overlaying the stage.
  *
  * The heat overlay is a single-choice selector between predictive entropy,
  * the fitted conformal band, and the Grad-CAM explainability heatmap, each
@@ -106,7 +115,9 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
   const [sliceIndices, setSliceIndices] = useState<Record<Plane, number>>(ZERO_PLANES);
   const [overlayOpacity, setOverlayOpacity] = useState(0.55);
   const [heatOverlay, setHeatOverlay] = useState<HeatOverlay>("none");
-  const [view, setView] = useState<"slices" | "twin">("slices");
+  // Default is the combined tri-plane + twin stage; `effectiveView` (below)
+  // falls back to "slices" until the twin's data has arrived.
+  const [view, setView] = useState<ViewMode>("tri");
   const [reportOpen, setReportOpen] = useState(false);
   // T6.4 export: whether a bundle download is in flight, and the last
   // failure to show next to the button. Both are local to this component -
@@ -115,7 +126,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   // Points at the wrapper div around BrainTwinScene (only mounted while
-  // view === "twin") so the export handler can find its live <canvas> via
+  // the twin is on screen, in "tri" or "twin" mode) so the export handler can find its live <canvas> via
   // findTwinCanvas - the same DOM query twinSnapshot.ts already centralises
   // in one place, reused rather than re-querying document here.
   const twinHostRef = useRef<HTMLDivElement>(null);
@@ -179,7 +190,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
     ) {
       return null;
     }
-    return { key: heatOverlay, kind, data: heatBuffer.data };
+    return { key: heatOverlay, kind, data: heatBuffer.data, conformal: heatBuffer.conformal ?? null };
   }, [heatOverlay, heatBuffer]);
 
   // Drives the button group below. "None" is never disabled; the other
@@ -238,8 +249,14 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
   // Built exactly as App.tsx's own `twinInput` memo, but from this hook's
   // data. On the clinical path there is never a label, so `tumorSource` is
   // always `"prediction"`.
+  // The twin is mounted (and so meshed) in "tri" and "twin" modes only.
+  // `effectiveView` demotes "tri"/"twin" to "slices" while its data is not
+  // ready, so the default "tri" never mounts a twin with nothing to draw.
+  const effectiveView: ViewMode = twinDataReady ? view : "slices";
+  const twinOn = effectiveView !== "slices";
+
   const twinInput: BrainTwinInput | null = useMemo(() => {
-    if (view !== "twin" || !twinDataReady || !geometry) return null;
+    if (!twinOn || !twinDataReady || !geometry) return null;
     return {
       caseId: jobId,
       shape: geometry.shape,
@@ -249,7 +266,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
       tumorSource: "prediction",
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, twinDataReady, geometry, volumes, predictionMask, jobId]);
+  }, [twinOn, twinDataReady, geometry, volumes, predictionMask, jobId]);
 
   // Which atlas indices get a shell in the twin: the report's own top-N
   // involved structures (by name -> index, via the atlas table) plus
@@ -301,7 +318,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
     setExportError(null);
     try {
       const snapshots: { blob: Blob; filename: string }[] = [];
-      if (view === "twin" && twinHostRef.current) {
+      if (twinOn && twinHostRef.current) {
         const canvas = findTwinCanvas(twinHostRef.current);
         if (canvas) {
           try {
@@ -314,7 +331,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
           }
         }
       }
-      // view === "slices": the 2D viewport draws to several plane canvases,
+      // effectiveView === "slices": the 2D viewport draws to several plane canvases,
       // not one twin canvas - snapshotting those is out of scope for this
       // first version of export, so the bundle simply carries no snapshot.
       const { blob, filename } = await exportClinicalJob(jobId, snapshots);
@@ -395,6 +412,74 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [shape, layout, singlePlane, expandedPlane, focusedPlane, planeCounts]);
 
+  // >= 1280px (Tailwind xl): tri mode becomes a true 2x2. Tracked in JS
+  // (not just CSS) because the two arrangements render different trees and
+  // the twin must still be mounted exactly once.
+  const [isXl, setIsXl] = useState(() =>
+    typeof window === "undefined" ? true : window.matchMedia("(min-width: 1280px)").matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1280px)");
+    const onChange = () => setIsXl(mq.matches);
+    mq.addEventListener("change", onChange);
+    onChange();
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const ribbonPlane: Plane = layout === "single" ? singlePlane : (expandedPlane ?? "axial");
+  const ribbonLabel = ribbonPlane.charAt(0).toUpperCase() + ribbonPlane.slice(1);
+
+  // Real per-slice tumour fraction of the predicted mask along the ribbon's
+  // plane (same definition as the backend's /profile). Recomputed only when
+  // the mask, its shape or the ribbon's plane changes - one pass over the
+  // volume, so scrubbing slices never re-runs it. Hook order: this sits
+  // above the early `error` return below on purpose.
+  const maskData = predictionMask?.data ?? null;
+  const maskShape = predictionMask?.shape ?? null;
+  const tumorProfile = useMemo(
+    () => (maskData && maskShape ? tumourProfile(maskData, maskShape, ribbonPlane) : []),
+    [maskData, maskShape, ribbonPlane],
+  );
+
+  // Heat-overlay statistics, computed once per buffer (memo keyed on buffer
+  // identity). Only the stats for the ACTIVE overlay's kind are computed.
+  const heatKind = heatBuffer?.kind ?? null;
+  const heatData = heatOverlay !== "none" ? (heatBuffer?.data ?? null) : null;
+  const heatRegion: "WT" | "TC" | null = heatOverlay.endsWith("_wt")
+    ? "WT"
+    : heatOverlay.endsWith("_tc")
+      ? "TC"
+      : null;
+  const entropyStatsMemo = useMemo(
+    () =>
+      heatData && maskData && heatKind === PREDICTIVE_ENTROPY_SINGLE_PASS
+        ? entropyStats(heatData, maskData)
+        : null,
+    [heatData, maskData, heatKind],
+  );
+  const bandStatsMemo = useMemo(
+    () => (heatData && heatKind === CONFORMAL_BAND ? bandStats(heatData) : null),
+    [heatData, heatKind],
+  );
+  const gradcamStatsMemo = useMemo(
+    () =>
+      heatData && maskData && heatKind === GRADCAM && heatRegion
+        ? gradcamStats(heatData, maskData, heatRegion)
+        : null,
+    [heatData, maskData, heatKind, heatRegion],
+  );
+  // Per-slice mean entropy for the ribbon - entropy overlay only.
+  const entropyRibbon = useMemo(
+    () =>
+      heatData && maskShape && heatKind === PREDICTIVE_ENTROPY_SINGLE_PASS
+        ? entropyProfile(heatData, maskShape, ribbonPlane)
+        : null,
+    [heatData, maskShape, heatKind, ribbonPlane],
+  );
+  // Voxel volume from the job geometry; null (-> report voxels, never an
+  // assumed 1 mm) until /geometry has arrived.
+  const voxelMm3 = geometry ? geometry.spacing[0] * geometry.spacing[1] * geometry.spacing[2] : null;
+
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center text-center">
@@ -403,20 +488,271 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
     );
   }
 
-  const ribbonPlane: Plane = layout === "single" ? singlePlane : (expandedPlane ?? "axial");
-  const ribbonLabel = ribbonPlane.charAt(0).toUpperCase() + ribbonPlane.slice(1);
+  const segBtn = (active: boolean, disabled = false) =>
+    `flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+      disabled
+        ? "cursor-not-allowed text-text-dim"
+        : active
+          ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
+          : "text-text-secondary hover:text-text-primary"
+    }`;
+  const segGroup =
+    "inline-flex shrink-0 flex-wrap min-[1800px]:flex-nowrap rounded-lg border border-surface-seam bg-surface-raised/50 p-0.5";
+
+  const slicesGrid = (
+    <ViewportGrid
+      layout={layout}
+      expandedPlane={expandedPlane}
+      onToggleExpand={(plane) => setExpandedPlane((prev) => (prev === plane ? null : plane))}
+      singlePlane={singlePlane}
+      onChangeSinglePlane={setSinglePlane}
+      onFocusPlane={setFocusedPlane}
+      sliceIndices={sliceIndices}
+      planeCounts={planeCounts}
+      shape={shape}
+      image={volumes[modality]?.data ?? null}
+      predictionMask={predictionMask?.data ?? null}
+      labelMask={null}
+      uncertainty={heatBuffer?.data ?? null}
+      overlayMode="prediction"
+      overlayOpacity={overlayOpacity}
+      showTruthOutline={false}
+      showUncertainty={showHeat}
+      uncertaintyOpacity={showHeat ? UNCERTAINTY_OPACITY : 0}
+    />
+  );
+
+  // One plane tile of the 2x2: the same Viewport, with the same props
+  // ViewportGrid hands it, so slicing/overlay behaviour is identical. The
+  // expand button leaves tri mode for "Slices" with this plane expanded.
+  const planeTile = (plane: Plane, label: string) => (
+    <div key={plane} className="min-h-0">
+      <Viewport
+        plane={plane}
+        planeLabel={label}
+        sliceIndex={sliceIndices[plane]}
+        sliceCount={planeCounts[plane]}
+        expanded={false}
+        expandable
+        onToggleExpand={() => {
+          setExpandedPlane(plane);
+          setView("slices");
+        }}
+        onFocusPlane={() => setFocusedPlane(plane)}
+        shape={shape}
+        image={volumes[modality]?.data ?? null}
+        predictionMask={predictionMask?.data ?? null}
+        labelMask={null}
+        uncertainty={heatBuffer?.data ?? null}
+        overlayMode="prediction"
+        overlayOpacity={overlayOpacity}
+        showTruthOutline={false}
+        showUncertainty={showHeat}
+        uncertaintyOpacity={showHeat ? UNCERTAINTY_OPACITY : 0}
+      />
+    </div>
+  );
+
+  // The one and only BrainTwinScene. It is rendered in exactly one place per
+  // mode (inside `twinTile` below), so there is never a second WebGL context.
+  const twinTile = (
+    <div
+      ref={twinHostRef}
+      className="h-full min-h-0 overflow-hidden rounded-xl border border-surface-seam bg-surface-panel"
+    >
+      <BrainTwinScene
+        input={twinInput}
+        badge={twinBadge}
+        badgeTone={twinBadgeTone}
+        activeLayer={activeLayer}
+        atlas={
+          atlas && atlasTable && atlasSelection.length > 0
+            ? { volume: atlas.data, selection: atlasSelection, table: atlasTable }
+            : null
+        }
+        highlightedStructure={highlightedStructure}
+        onStructureSelect={setHighlightedStructure}
+        structureDetail={(index) => reportRowForStructure(reportState.report, atlasTable, index)}
+      />
+    </div>
+  );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div
-        className={`relative flex min-h-0 flex-1 ${layout === "single" ? "flex-col" : "flex-row"}`}
-      >
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
+    <div className="flex flex-none flex-col lg:min-h-0 lg:flex-1">
+      <div className="glass-panel relative z-20 mx-2 mt-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 min-[1800px]:flex-nowrap">
+        <div className={segGroup} role="group" aria-label="View">
+          <button
+            type="button"
+            disabled={!twinDataReady}
+            onClick={() => setView("tri")}
+            aria-pressed={effectiveView === "tri"}
+            title={!twinDataReady ? "Waiting for all four volumes and the mask…" : undefined}
+            className={segBtn(effectiveView === "tri", !twinDataReady)}
+          >
+            Tri-plane + twin
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("slices")}
+            aria-pressed={effectiveView === "slices"}
+            className={segBtn(effectiveView === "slices")}
+          >
+            Slices
+          </button>
+          <button
+            type="button"
+            data-testid="clinical-view-twin"
+            disabled={!twinDataReady}
+            onClick={() => setView("twin")}
+            aria-pressed={effectiveView === "twin"}
+            title={!twinDataReady ? "Waiting for all four volumes and the mask…" : undefined}
+            className={segBtn(effectiveView === "twin", !twinDataReady)}
+          >
+            <Box size={13} aria-hidden="true" />
+            3D twin
+          </button>
+        </div>
+
+        <div className={segGroup} role="group" aria-label="Modality">
+          {MODALITY_ORDER.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setModality(m)}
+              aria-pressed={modality === m}
+              className={segBtn(modality === m)}
+            >
+              {m.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        <div className={segGroup} role="group" aria-label="Heat overlay">
+          {heatOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              disabled={opt.disabled}
+              onClick={() => setHeatOverlay(opt.value)}
+              aria-pressed={heatOverlay === opt.value}
+              title={opt.title}
+              className={segBtn(heatOverlay === opt.value, opt.disabled)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="eyebrow shrink-0">Opacity</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={overlayOpacity}
+            onChange={(e) => setOverlayOpacity(parseFloat(e.target.value))}
+            className="w-24 accent-brand-primary"
+            aria-label="Overlay opacity"
+          />
+          <span className="tabular w-9 shrink-0 font-mono text-xs text-text-secondary">
+            {overlayOpacity.toFixed(2)}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 min-[1800px]:ml-auto min-[1800px]:flex-nowrap">
+          {/* "Add a structure": only meaningful while the twin is on screen
+              (the 2D slices never draw atlas shells), and only once the
+              atlas table has loaded - a native <details> keeps this a
+              zero-JS popover that closes itself on an outside click, same
+              as a browser <select>. Copy stays strictly geometric
+              (name/lobe/laterality/"from report"/a count) - never a grade,
+              stage, prognosis, deficit or impairment word. */}
+          {twinOn && atlasTable && (
+            <details className="relative shrink-0">
+              <summary
+                data-testid="clinical-atlas-structures-toggle"
+                className="cursor-pointer list-none rounded-lg border border-surface-seam bg-surface-raised/50 px-2.5 py-1 font-mono text-xs text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
+              >
+                Structures · {atlasSelection.length} shown
+              </summary>
+              <div className="liquid-glass absolute top-full right-0 z-30 mt-1 max-h-64 w-64 overflow-y-auto rounded-md border border-surface-seam p-2">
+                <div className="flex flex-col gap-1">
+                  {[...atlasTable]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((row) => {
+                      const checked = atlasSelection.includes(row.index);
+                      const fromReport = reportDerivedIndices.has(row.index);
+                      const atCap = !checked && atlasSelection.length >= MAX_ATLAS_STRUCTURES;
+                      const disabled = fromReport || atCap;
+                      return (
+                        <label
+                          key={row.index}
+                          title={atCap ? "16 structures max" : undefined}
+                          className="flex items-center gap-1.5 font-mono text-xs text-text-secondary"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={(e) => toggleExtraStructure(row.index, e.target.checked)}
+                            className="accent-brand-primary"
+                          />
+                          <span className="truncate">{row.name}</span>
+                          {fromReport && (
+                            <span className="ml-auto shrink-0 text-text-dim">from report</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            </details>
+          )}
+
+          <button
+            type="button"
+            data-testid="clinical-report-toggle"
+            disabled={reportState.status === "not_found"}
+            onClick={() => setReportOpen((v) => !v)}
+            aria-pressed={reportOpen}
+            title={
+              reportState.status === "not_found"
+                ? "No report was generated for this job."
+                : undefined
+            }
+            className="btn-secondary !px-3 !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <FileText size={13} aria-hidden="true" />
+            Report
+          </button>
+
+          <button
+            type="button"
+            data-testid="clinical-export"
+            disabled={exporting}
+            onClick={handleExport}
+            title="Download report.json, report.md, DICOM-SEG and a twin snapshot as one zip"
+            className="btn-secondary !px-3 !py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Download size={13} aria-hidden="true" />
+            {exporting ? "Exporting…" : "Export"}
+          </button>
+          {exportError && (
+            <span role="alert" className="font-mono text-[11px] text-gate-caution">
+              {exportError}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="relative flex flex-none flex-col lg:min-h-0 lg:flex-1 lg:flex-row">
+        <div className="bg-grid flex flex-none flex-col gap-2 p-3 lg:min-h-0 lg:flex-1 lg:overflow-hidden">
           {decision === "proceed_with_caution" && (
             <div
               data-testid="clinical-caution-strip"
               role="status"
-              className="flex shrink-0 items-center gap-2 border border-data-amber/60 bg-surface-panel px-3 py-1.5 text-data-amber"
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-gate-caution/50 bg-gate-caution/10 px-3 py-1.5 text-gate-caution"
             >
               <span className="font-condensed text-[11px] tracking-[0.12em] uppercase">
                 Gatekeeper: proceed with caution — read the report's not_claimed list before
@@ -426,7 +762,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
           )}
           {loading && (
             <div
-              className="flex shrink-0 items-center gap-2 border border-surface-seam bg-surface-panel px-3 py-1.5"
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-surface-seam bg-surface-panel px-3 py-1.5"
               role="status"
               aria-live="polite"
             >
@@ -439,7 +775,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
             <div
               data-testid="clinical-layer-warnings"
               role="status"
-              className="flex shrink-0 flex-col gap-0.5 border border-surface-seam bg-surface-panel px-3 py-1.5"
+              className="flex shrink-0 flex-col gap-0.5 rounded-lg border border-surface-seam bg-surface-panel px-3 py-1.5"
             >
               {warnings.map((warning) => (
                 <span key={warning} className="font-mono text-[11px] text-text-dim">
@@ -448,75 +784,86 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
               ))}
             </div>
           )}
-          {view === "twin" ? (
-            <div ref={twinHostRef} className="min-h-0 flex-1 border border-surface-seam bg-surface-panel">
-              <BrainTwinScene
-                input={twinInput}
-                badge={twinBadge}
-                badgeTone={twinBadgeTone}
-                activeLayer={activeLayer}
-                atlas={
-                  atlas && atlasTable && atlasSelection.length > 0
-                    ? { volume: atlas.data, selection: atlasSelection, table: atlasTable }
-                    : null
-                }
-                highlightedStructure={highlightedStructure}
-                onStructureSelect={setHighlightedStructure}
-                structureDetail={(index) => reportRowForStructure(reportState.report, atlasTable, index)}
-              />
+
+          {effectiveView === "tri" && isXl ? (
+            // True 2x2: axial | coronal over sagittal | twin.
+            <div className="grid h-full min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-3">
+              {planeTile("axial", "Axial")}
+              {planeTile("coronal", "Coronal")}
+              {planeTile("sagittal", "Sagittal")}
+              <div className="min-h-0">{twinTile}</div>
             </div>
+          ) : effectiveView === "tri" ? (
+            // Below xl: three plane tiles (ViewportGrid, unmodified: 3 columns on wide
+            // screens, stacked below) on the left two thirds; twin as the
+            // fourth tile on the right third. Stacks vertically below lg.
+            <div className="grid flex-none grid-cols-1 gap-2 lg:min-h-0 lg:flex-1 lg:grid-cols-3">
+              <div className="h-[50vh] min-h-[280px] md:h-[70vh] md:min-h-[360px] lg:col-span-2 lg:h-auto lg:min-h-0">{slicesGrid}</div>
+              <div className="h-[50vh] min-h-[280px] lg:h-auto lg:min-h-0">{twinTile}</div>
+            </div>
+          ) : effectiveView === "twin" ? (
+            <div className="h-[70vh] min-h-[360px] flex-none lg:h-auto lg:min-h-0 lg:flex-1">{twinTile}</div>
           ) : (
-            <div className="min-h-0 flex-1">
-              <ViewportGrid
-                layout={layout}
-                expandedPlane={expandedPlane}
-                onToggleExpand={(plane) =>
-                  setExpandedPlane((prev) => (prev === plane ? null : plane))
-                }
-                singlePlane={singlePlane}
-                onChangeSinglePlane={setSinglePlane}
-                onFocusPlane={setFocusedPlane}
-                sliceIndices={sliceIndices}
-                planeCounts={planeCounts}
-                shape={shape}
-                image={volumes[modality]?.data ?? null}
-                predictionMask={predictionMask?.data ?? null}
-                labelMask={null}
-                uncertainty={heatBuffer?.data ?? null}
-                overlayMode="prediction"
-                overlayOpacity={overlayOpacity}
-                showTruthOutline={false}
-                showUncertainty={showHeat}
-                uncertaintyOpacity={showHeat ? UNCERTAINTY_OPACITY : 0}
-              />
-            </div>
+            <div className="h-[70vh] min-h-[360px] flex-none lg:h-auto lg:min-h-0 lg:flex-1">{slicesGrid}</div>
           )}
+
           <div className="shrink-0">
             <SliceRibbon
               planeLabel={ribbonLabel}
               sliceCount={planeCounts[ribbonPlane]}
               currentIndex={sliceIndices[ribbonPlane]}
               onScrub={(i) => setSliceIndices((prev) => ({ ...prev, [ribbonPlane]: i }))}
-              tumor={EMPTY_PROFILE}
+              tumor={tumorProfile}
               error={null}
-              entropy={null}
+              entropy={entropyRibbon}
               onFocusRibbon={() => setFocusedPlane(ribbonPlane)}
             />
           </div>
         </div>
 
-        <div
-          className={`shrink-0 overflow-y-auto border-surface-seam bg-surface-panel ${
-            layout === "single" ? "max-h-56 w-full border-t" : "w-56 border-l"
-          }`}
+        <aside
+          aria-label="Study summary"
+          className="flex w-full shrink-0 flex-col gap-3 overflow-auto border-t border-surface-seam p-3 lg:w-80 lg:border-t-0 lg:border-l"
         >
           <Legend
             overlayMode="prediction"
             showUncertainty={showHeat}
             hasLabel={false}
             uncertaintyKind={heatBuffer?.kind ?? null}
+            conformal={heatBuffer?.conformal ?? null}
           />
-        </div>
+          <StudySidebar
+            uncertaintySlot={
+              showHeat ? (
+                <UncertaintyCard
+                  kind={heatKind}
+                  region={heatRegion}
+                  entropy={entropyStatsMemo}
+                  band={bandStatsMemo}
+                  conformal={heatBuffer?.conformal ?? null}
+                  gradcam={gradcamStatsMemo}
+                  voxelMm3={voxelMm3}
+                />
+              ) : null
+            }
+            report={reportState.report}
+            reportStatus={reportState.status}
+            decision={decision}
+            jobId={jobId}
+            onHoverStructure={(name) =>
+              setHighlightedStructure(name ? structureIndexForName(atlasTable, name) : null)
+            }
+            highlightedStructureName={
+              highlightedStructure !== null
+                ? (structureRow(atlasTable, highlightedStructure)?.name ?? null)
+                : null
+            }
+            onOpenReport={() => setReportOpen(true)}
+            onExport={handleExport}
+            exporting={exporting}
+            exportError={exportError}
+          />
+        </aside>
 
         <ReportPanel
           open={reportOpen}
@@ -541,195 +888,6 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
             highlightedStructure !== null ? (structureRow(atlasTable, highlightedStructure)?.name ?? null) : null
           }
         />
-      </div>
-
-      <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-3 border-t border-surface-seam bg-surface-panel px-3 py-1.5">
-        <div className="flex items-center gap-1" role="group" aria-label="Modality">
-          {MODALITY_ORDER.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setModality(m)}
-              aria-pressed={modality === m}
-              className={`rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
-                modality === m
-                  ? "bg-surface-raised text-text-primary"
-                  : "text-text-secondary hover:text-text-primary"
-              }`}
-            >
-              {m.toUpperCase()}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-1" role="group" aria-label="View">
-          <button
-            type="button"
-            onClick={() => setView("slices")}
-            aria-pressed={view === "slices"}
-            className={`rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
-              view === "slices"
-                ? "bg-surface-raised text-text-primary"
-                : "text-text-secondary hover:text-text-primary"
-            }`}
-          >
-            Slices
-          </button>
-          <button
-            type="button"
-            data-testid="clinical-view-twin"
-            disabled={!twinDataReady}
-            onClick={() => setView("twin")}
-            aria-pressed={view === "twin"}
-            title={!twinDataReady ? "Waiting for all four volumes and the mask…" : undefined}
-            className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
-              !twinDataReady
-                ? "cursor-not-allowed text-text-dim"
-                : view === "twin"
-                  ? "bg-surface-raised text-text-primary"
-                  : "text-text-secondary hover:text-text-primary"
-            }`}
-          >
-            <Box size={13} aria-hidden="true" />
-            3D twin
-          </button>
-        </div>
-
-        {/* "Add a structure": only meaningful in the twin view (the 2D
-            slices never draw atlas shells), and only once the atlas table
-            has loaded - a native <details> keeps this a zero-JS popover
-            (no open/close state to manage) that still closes itself on an
-            outside click, same as a browser <select>. Copy stays strictly
-            geometric (name/lobe/laterality/"from report"/a count) - never a
-            grade, stage, prognosis, deficit or impairment word. */}
-        {view === "twin" && atlasTable && (
-          <details className="relative shrink-0">
-            <summary
-              data-testid="clinical-atlas-structures-toggle"
-              className="cursor-pointer list-none rounded-sm px-2 py-1 font-mono text-xs text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
-            >
-              Structures · {atlasSelection.length} shown
-            </summary>
-            <div className="liquid-glass absolute bottom-full left-0 z-10 mb-1 max-h-64 w-64 overflow-y-auto rounded-md border border-surface-seam p-2">
-              <div className="flex flex-col gap-1">
-                {[...atlasTable]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((row) => {
-                    const checked = atlasSelection.includes(row.index);
-                    const fromReport = reportDerivedIndices.has(row.index);
-                    const atCap = !checked && atlasSelection.length >= MAX_ATLAS_STRUCTURES;
-                    const disabled = fromReport || atCap;
-                    return (
-                      <label
-                        key={row.index}
-                        title={atCap ? "16 structures max" : undefined}
-                        className="flex items-center gap-1.5 font-mono text-xs text-text-secondary"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={(e) => toggleExtraStructure(row.index, e.target.checked)}
-                          className="accent-[#E7EAEE]"
-                        />
-                        <span className="truncate">{row.name}</span>
-                        {fromReport && (
-                          <span className="ml-auto shrink-0 text-text-dim">from report</span>
-                        )}
-                      </label>
-                    );
-                  })}
-              </div>
-            </div>
-          </details>
-        )}
-
-        <button
-          type="button"
-          data-testid="clinical-report-toggle"
-          disabled={reportState.status === "not_found"}
-          onClick={() => setReportOpen((v) => !v)}
-          aria-pressed={reportOpen}
-          title={
-            reportState.status === "not_found"
-              ? "No report was generated for this job."
-              : undefined
-          }
-          className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
-            reportState.status === "not_found"
-              ? "cursor-not-allowed text-text-dim"
-              : reportOpen
-                ? "bg-surface-raised text-text-primary"
-                : "text-text-secondary hover:text-text-primary"
-          }`}
-        >
-          <FileText size={13} aria-hidden="true" />
-          Report
-        </button>
-
-        <button
-          type="button"
-          data-testid="clinical-export"
-          disabled={exporting}
-          onClick={handleExport}
-          title="Download report.json, report.md, DICOM-SEG and a twin snapshot as one zip"
-          className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
-            exporting
-              ? "cursor-not-allowed text-text-dim"
-              : "text-text-secondary hover:text-text-primary"
-          }`}
-        >
-          <Download size={13} aria-hidden="true" />
-          {exporting ? "Exporting…" : "Export"}
-        </button>
-        {exportError && (
-          <span role="alert" className="font-mono text-[11px] text-data-amber">
-            {exportError}
-          </span>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          <span className="eyebrow shrink-0">Opacity</span>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={overlayOpacity}
-            onChange={(e) => setOverlayOpacity(parseFloat(e.target.value))}
-            className="w-24 accent-[#E7EAEE]"
-            aria-label="Overlay opacity"
-          />
-          <span className="tabular w-9 shrink-0 font-mono text-xs text-text-secondary">
-            {overlayOpacity.toFixed(2)}
-          </span>
-          <div
-            className="ml-2 flex shrink-0 items-center gap-1"
-            role="group"
-            aria-label="Heat overlay"
-          >
-            <Power size={13} aria-hidden="true" className="mr-1 text-text-dim" />
-            {heatOptions.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                disabled={opt.disabled}
-                onClick={() => setHeatOverlay(opt.value)}
-                aria-pressed={heatOverlay === opt.value}
-                title={opt.title}
-                className={`flex shrink-0 items-center rounded-sm px-2 py-1 font-mono text-xs transition-colors duration-[120ms] ${
-                  opt.disabled
-                    ? "cursor-not-allowed text-text-dim"
-                    : heatOverlay === opt.value
-                      ? "bg-surface-raised text-text-primary"
-                      : "text-text-secondary hover:text-text-primary"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

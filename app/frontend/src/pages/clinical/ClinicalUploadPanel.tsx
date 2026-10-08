@@ -1,12 +1,20 @@
-import { useState } from "react";
+import { FileArchive, Play } from "lucide-react";
+import { useRef, useState, type DragEvent } from "react";
 import { ApiError, ApiUnreachableError, createClinicalJob } from "../../api";
 
 interface ClinicalUploadPanelProps {
   onJobCreated: (jobId: string) => void;
 }
 
+/** Bytes as B / KB / MB (1 decimal, base 1024). */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /**
- * File picker + upload button for a raw DICOM study `.zip`.
+ * Drop zone + file card for a raw DICOM study `.zip`.
  *
  * A rejected upload (empty file, oversized, not a zip, a zip-slip attempt)
  * never creates a job at all - the backend answers with a plain 400 before
@@ -17,6 +25,20 @@ export function ClinicalUploadPanel({ onJobCreated }: ClinicalUploadPanelProps) 
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length !== 1 || !files[0].name.toLowerCase().endsWith(".zip")) {
+      setError("Drop a single .zip file.");
+      return;
+    }
+    setError(null);
+    setFile(files[0]);
+  }
 
   async function handleUpload() {
     if (!file || submitting) return;
@@ -41,44 +63,67 @@ export function ClinicalUploadPanel({ onJobCreated }: ClinicalUploadPanelProps) 
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-4 border border-surface-seam bg-surface-panel p-6">
-      <div>
-        <p className="eyebrow">Clinical upload</p>
-        <h2 className="mt-1 font-condensed text-2xl text-text-primary">Upload a DICOM study</h2>
-        <p className="mt-2 font-mono text-xs leading-relaxed text-text-secondary">
-          A .zip of one patient's raw DICOM study. It runs through ingest, input QC, clinical
-          preprocessing and segmentation - and is declined outright if any gate along the way
-          determines it cannot be handled safely.
-        </p>
-      </div>
-
-      <label className="flex flex-col gap-2">
-        <span className="eyebrow">DICOM study (.zip)</span>
-        <input
-          type="file"
-          accept=".zip"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="font-mono text-xs text-text-secondary file:mr-3 file:rounded-sm file:border file:border-surface-seam file:bg-surface-raised file:px-3 file:py-1.5 file:font-mono file:text-xs file:text-text-primary hover:file:border-text-dim"
-        />
-      </label>
-
-      <button
-        type="button"
-        disabled={!file || submitting}
-        onClick={handleUpload}
-        className={`self-start rounded-sm border px-4 py-2 font-condensed text-xs tracking-[0.1em] uppercase transition-colors duration-[120ms] ${
-          !file || submitting
-            ? "cursor-not-allowed border-surface-seam text-text-dim"
-            : "border-text-primary text-text-primary hover:bg-surface-raised"
+    <div className="flex flex-col gap-4">
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        className={`flex flex-col items-center gap-4 rounded-xl border-2 border-dashed px-6 py-14 text-center transition-colors ${
+          dragging ? "border-brand-primary bg-brand-primary/5" : "border-brand-primary/40"
         }`}
       >
-        {submitting ? "Uploading…" : "Upload study"}
-      </button>
+        <span className="flex h-16 w-16 items-center justify-center rounded-xl border border-brand-primary/40 bg-brand-primary/10">
+          <FileArchive className="h-8 w-8 text-brand-primary" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="font-heading text-xl">Drop a DICOM study (.zip)</p>
+          <p className="mt-1 text-sm text-text-secondary">One patient's raw DICOM study, zipped.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="chip cursor-pointer hover:border-brand-primary hover:text-text-primary"
+        >
+          or browse
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".zip"
+          aria-label="DICOM study (.zip)"
+          className="hidden"
+          onChange={(e) => {
+            setFile(e.target.files?.[0] ?? null);
+            setError(null);
+          }}
+        />
+      </div>
+
+      {file && (
+        <div className="glass-panel flex flex-wrap items-center gap-4 p-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-seam bg-surface-raised">
+            <FileArchive className="h-5 w-5 text-text-secondary" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-mono text-sm text-text-primary" title={file.name}>
+              {file.name}
+            </p>
+            <p className="font-mono text-xs text-text-dim">{formatBytes(file.size)}</p>
+          </div>
+          <button type="button" className="btn-primary" disabled={submitting} onClick={handleUpload}>
+            <Play className="h-4 w-4" aria-hidden="true" />
+            {submitting ? "Uploading…" : "Start pipeline"}
+          </button>
+        </div>
+      )}
 
       {error && (
         <p
           role="alert"
-          className="border border-surface-seam bg-surface-raised px-3 py-2 font-mono text-xs leading-relaxed text-text-primary"
+          className="glass-panel border-gate-refuse/40 px-4 py-3 font-mono text-xs leading-relaxed text-text-primary"
         >
           {error}
         </p>

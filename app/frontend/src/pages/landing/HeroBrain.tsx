@@ -1,8 +1,7 @@
 // The landing page's hero visual: a real reconstructed brain shell (marching
 // cubes over BraTS2021_00000's own skull-stripped mask, extracted offline -
 // see /public/twin) with a properly opaque, lit material instead of the
-// thin translucent shell used for the in-tool digital twin, plus a
-// procedural streamline layer wrapping the surface for visual texture.
+// thin translucent shell used for the in-tool digital twin.
 // No case is selected on the landing page, so the hero shows the brain
 // shell only - no tumour. A tumour is only ever rendered for a selected
 // case inside the tool itself.
@@ -12,12 +11,9 @@
 //     case-switching reconstruction lives in the tool itself
 //     (components/BrainTwinScene.tsx) - this one exists only to give the
 //     landing page a real, non-generic hero visual.
-//   - The streamlines are a procedural visual motif, not real diffusion
-//     tractography (BraTS is structural MRI only; this project has no DTI
-//     data). They are never captioned as fibre-tract data anywhere in copy.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Line, OrbitControls } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { loadMesh, type MeshBuffers } from "../../lib/loadBinary";
 
@@ -58,58 +54,6 @@ function useHeroAssets(): Assets | null {
   return assets;
 }
 
-// Deterministic pseudo-random so the visual is stable across reloads.
-function mulberry32(seed: number) {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Procedural streamlines hugging just outside the brain surface - a visual motif, not tractography data (see file header). */
-function Streamlines({ radius }: { radius: number }) {
-  const rand = useMemo(() => mulberry32(7), []);
-  const curves = useMemo(() => {
-    const lines: THREE.Vector3[][] = [];
-    for (let i = 0; i < 46; i++) {
-      const latOffset = (rand() - 0.5) * Math.PI * 0.9;
-      const tilt = rand() * Math.PI;
-      const r = radius * (1.04 + rand() * 0.1);
-      const points: THREE.Vector3[] = [];
-      const segments = 48;
-      for (let s = 0; s <= segments; s++) {
-        const theta = (s / segments) * Math.PI * 2;
-        const x = Math.cos(theta) * r;
-        const z = Math.sin(theta) * r * Math.cos(latOffset);
-        const y = Math.sin(theta) * r * Math.sin(latOffset) * 0.6 + latOffset * radius * 0.3;
-        const v = new THREE.Vector3(x, y, z);
-        v.applyAxisAngle(new THREE.Vector3(0, 1, 0), tilt);
-        points.push(v);
-      }
-      lines.push(points);
-    }
-    return lines;
-  }, [radius, rand]);
-
-  return (
-    <group>
-      {curves.map((pts, i) => (
-        <Line
-          key={i}
-          points={pts}
-          color="#7fd4ff"
-          transparent
-          opacity={0.16}
-          lineWidth={1}
-        />
-      ))}
-    </group>
-  );
-}
-
 function Scene({ assets }: { assets: Assets }) {
   const groupRef = useRef<THREE.Group>(null);
 
@@ -138,7 +82,6 @@ function Scene({ assets }: { assets: Assets }) {
     <group ref={groupRef}>
       <mesh geometry={assets.brainLeft} material={shellMaterial} />
       <mesh geometry={assets.brainRight} material={shellMaterial} />
-      <Streamlines radius={1.05} />
     </group>
   );
 }
@@ -164,7 +107,7 @@ export function HeroBrain() {
       </Canvas>
       {!assets && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-mono text-xs text-landing-text-dim">Loading real case geometry…</span>
+          <span className="font-mono text-xs text-text-dim">Loading brain mesh…</span>
         </div>
       )}
     </div>

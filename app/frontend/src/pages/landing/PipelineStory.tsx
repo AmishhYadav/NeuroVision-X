@@ -1,101 +1,67 @@
-// Real scroll-scrubbed storytelling, not discrete fade-ins: the real MRI
-// slice sits pinned full-bleed in the background and grows from a small
-// centred frame out past the edges of the viewport as the page scrolls
-// through this section, while four stages of the real pipeline cross-fade
-// over it in sequence. One continuous scroll progress value
-// (useScroll + useTransform, Motion only - see the taste skill's warning
-// against mixing GSAP and Motion in one tree) drives every layer, each at
-// its own rate, the same idea as a classic multi-layer parallax reveal.
-import { motion, useReducedMotion, useScroll, useTransform } from "motion/react";
-import { useRef } from "react";
-import { useHeroSliceImages } from "./heroSliceImages";
+// The clinical pipeline as numbered phase cards, beside a real MRI slice.
+// Every step below mirrors the pipeline actually built (see
+// app/backend/clinical_jobs.py and src/lib/pipelineSteps.ts). The slice is
+// shown with its GROUND-TRUTH label (BraTS annotation), not a model output;
+// the CursorReveal caption says so.
+import { motion, useReducedMotion } from "motion/react";
+import { CursorReveal } from "./CursorReveal";
 
-interface Stage {
-  title: string;
-  body: string;
-  range: [number, number, number, number]; // fade-in start, hold start, hold end, fade-out end
-}
-
-const STAGES: Stage[] = [
+const PHASES: { n: string; title: string; body: string }[] = [
   {
-    title: "Four sequences, one frame",
-    body: "T1, T1CE, T2 and FLAIR, co-registered, skull-stripped and atlas-aligned before the model ever sees them.",
-    range: [0.04, 0.1, 0.2, 0.26],
+    n: "01",
+    title: "Ingest and first QC",
+    body: "A DICOM zip is read and series are assigned to T1, T1CE, T2 and FLAIR. Input QC runs before anything is registered.",
   },
   {
-    title: "Dual encoder, gated fusion",
-    body: "A 3D CNN and a Swin Transformer read the same volume in parallel; an adaptive gated cross-attention block decides how much of each to trust, per location.",
-    range: [0.28, 0.34, 0.44, 0.5],
+    n: "02",
+    title: "Registration and skull stripping",
+    body: "Co-registration, SRI24 atlas registration and HD-BET skull stripping, then input QC a second time.",
   },
   {
-    title: "Three heads, not one mask",
-    body: "The decoder outputs a segmentation, a confidence estimate and a boundary map together, not a single class prediction bolted onto uncertainty after the fact.",
-    range: [0.52, 0.58, 0.68, 0.74],
+    n: "03",
+    title: "Segmentation",
+    body: "The dual-encoder model predicts the enhancing tumour, tumour core and whole tumour regions.",
   },
   {
-    title: "A gate that can say no",
-    body: "An input quality check and a calibrated refusal gate run before the segmentation is trusted - every threshold measured against held-out data, not picked by hand.",
-    range: [0.76, 0.82, 0.94, 0.99],
+    n: "04",
+    title: "Gatekeeper",
+    body: "Input QC, a predicted-Dice estimate and intended use (adults only) decide. The conformal band and an OOD score are computed and shown, but do not decide.",
+  },
+  {
+    n: "05",
+    title: "Decision and outputs",
+    body: "PROCEED, CAUTION or REFUSE, then a report, DICOM-SEG and a 3D twin. A refusal is a correct outcome, not an error.",
   },
 ];
 
-function StageCaption({ stage, progress }: { stage: Stage; progress: import("motion/react").MotionValue<number> }) {
-  const [a, b, c, d] = stage.range;
-  const opacity = useTransform(progress, [a, b, c, d], [0, 1, 1, 0]);
-  const y = useTransform(progress, [a, b, c, d], [24, 0, 0, -24]);
-  return (
-    <motion.div style={{ opacity, y }} className="pointer-events-none absolute inset-x-0 bottom-[14%] px-6 text-center">
-      <span className="font-mono text-[11px] text-white/50">{stage.title}</span>
-      <p className="mx-auto mt-2 max-w-lg text-base leading-relaxed text-white md:text-lg">{stage.body}</p>
-    </motion.div>
-  );
-}
-
 export function PipelineStory() {
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const reduceMotion = useReducedMotion();
-  const { baseUrl, revealUrl } = useHeroSliceImages();
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start start", "end end"],
-  });
-
-  const imageScale = useTransform(scrollYProgress, [0, 1], reduceMotion ? [1, 1] : [0.42, 1.22]);
-  const overlayOpacity = useTransform(scrollYProgress, [0.18, 0.32], [0, 1]);
-  const vignetteOpacity = useTransform(scrollYProgress, [0, 0.08, 0.92, 1], [1, 0, 0, 1]);
-  // The image layer and the caption layer drift at slightly different rates
-  // - the multi-speed-layers idea, done with two useTransform outputs off
-  // the same progress value instead of two separately-clocked animations.
-  const imageY = useTransform(scrollYProgress, [0, 1], reduceMotion ? ["0%", "0%"] : ["6%", "-6%"]);
-
+  const reduce = useReducedMotion();
   return (
-    <section ref={sectionRef} className="relative h-[420vh]">
-      <div className="sticky top-0 h-screen overflow-hidden bg-black">
-        <motion.div style={{ scale: imageScale, y: imageY }} className="absolute inset-0 flex items-center justify-center">
-          {baseUrl && (
-            <img
-              src={baseUrl}
-              alt="Raw MRI slice"
-              className="h-full w-full object-cover"
-              style={{ imageRendering: "pixelated" }}
-            />
-          )}
-          {revealUrl && (
-            <motion.img
-              src={revealUrl}
-              alt="Same slice with the real segmentation overlay"
-              style={{ opacity: overlayOpacity, imageRendering: "pixelated" }}
-              className="absolute inset-0 h-full w-full object-cover"
-            />
-          )}
-        </motion.div>
-
-        <motion.div style={{ opacity: vignetteOpacity }} className="pointer-events-none absolute inset-0 bg-black" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/60" />
-
-        {STAGES.map((stage) => (
-          <StageCaption key={stage.title} stage={stage} progress={scrollYProgress} />
-        ))}
+    <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+      <span className="chip">Pipeline</span>
+      <h2 className="mt-3 font-heading text-3xl font-semibold text-text-primary md:text-4xl">
+        From DICOM zip to a decision
+      </h2>
+      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
+        <ol className="grid gap-4 sm:grid-cols-2">
+          {PHASES.map((p, i) => (
+            <motion.li
+              key={p.n}
+              initial={reduce ? false : { opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.35, delay: reduce ? 0 : i * 0.05 }}
+              className={`glass-panel flex flex-col gap-2 p-5 ${i === PHASES.length - 1 ? "sm:col-span-2" : ""}`}
+            >
+              <span className="font-mono text-2xl text-brand-teal">{p.n}</span>
+              <h3 className="font-heading text-lg font-semibold text-text-primary">{p.title}</h3>
+              <p className="text-sm leading-relaxed text-text-secondary">{p.body}</p>
+            </motion.li>
+          ))}
+        </ol>
+        <div className="glass-panel self-start p-4">
+          <CursorReveal />
+        </div>
       </div>
     </section>
   );

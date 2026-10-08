@@ -217,7 +217,7 @@ export function SliceRibbon({
       : null;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5 rounded-xl border border-surface-seam bg-surface-panel/70 px-3 py-2">
       <div className="flex items-baseline justify-between">
         <span className="eyebrow">{caption}</span>
         {hoverInfo && (
@@ -236,7 +236,7 @@ export function SliceRibbon({
         aria-valuemin={0}
         aria-valuemax={Math.max(sliceCount - 1, 0)}
         aria-valuenow={currentIndex}
-        className="h-16 w-full cursor-pointer touch-none select-none"
+        className="h-16 w-full cursor-pointer touch-none overflow-hidden rounded-md border border-surface-seam select-none"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -247,7 +247,7 @@ export function SliceRibbon({
         <canvas ref={canvasRef} className="h-full w-full" />
       </div>
       <div className="flex justify-end">
-        <span className="tabular font-mono text-[11px] text-text-dim">
+        <span className="tabular font-mono text-[11px] text-text-secondary">
           {currentIndex} / {Math.max(sliceCount - 1, 0)}
         </span>
       </div>

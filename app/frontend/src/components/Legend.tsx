@@ -1,4 +1,4 @@
-import { CONFORMAL_BAND, GRADCAM, PREDICTIVE_ENTROPY_SINGLE_PASS } from "../api";
+import { CONFORMAL_BAND, GRADCAM, PREDICTIVE_ENTROPY_SINGLE_PASS, type ConformalMeta } from "../api";
 import { ENTROPY_ONE_CHANNEL } from "../lib/colors";
 import type { OverlayMode } from "../lib/render";
 
@@ -8,24 +8,45 @@ interface LegendProps {
   hasLabel: boolean;
   /** Raw `X-Uncertainty-Kind` header value from the last uncertainty fetch, or null if absent. */
   uncertaintyKind: string | null;
+  /** Conformal operating point for the band overlay; decides what the 128 swatch means. */
+  conformal?: ConformalMeta | null;
+}
+
+/** Labels for the two conformal-band swatches, by which side the fitted threshold sits on. */
+export function bandLabels(side: ConformalMeta["side"] | undefined): { both: string; one: string } {
+  if (side === "restrictive")
+    return { both: "Point estimate and conformal set", one: "Point estimate only (outside the conformal set)" };
+  if (side === "permissive")
+    return { both: "Point estimate and conformal set", one: "Conformal set only (margin beyond the point estimate)" };
+  return { both: "In both masks", one: "In one mask only (side unknown)" };
+}
+
+function operatingPointLine(c: ConformalMeta | null | undefined): string | null {
+  if (!c) return null;
+  const parts: string[] = [];
+  if (c.threshold !== null && c.reference !== null) parts.push(`fitted ${c.threshold.toFixed(3)} vs ${c.reference}`);
+  if (c.alpha !== null) parts.push(`α = ${c.alpha}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function Swatch({ color, label }: { color: string; label: string }) {
   return (
     <div className="flex items-center gap-2">
       <span
-        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+        className="h-2.5 w-2.5 shrink-0 rounded-sm"
         style={{ backgroundColor: color }}
         aria-hidden="true"
       />
-      <span className="font-mono text-[11px] text-text-secondary">{label}</span>
+      <span className="font-mono text-xs text-text-secondary">{label}</span>
     </div>
   );
 }
 
-export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind }: LegendProps) {
+export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind, conformal }: LegendProps) {
+  const labels = bandLabels(conformal?.side);
+  const opLine = operatingPointLine(conformal);
   return (
-    <div className="flex flex-col gap-2 border-t border-surface-seam px-3 py-3">
+    <div className="glass-panel flex flex-col gap-2 px-3 py-3">
       <div className="eyebrow">Legend</div>
 
       {(overlayMode === "prediction" || overlayMode === "truth") && (
@@ -36,7 +57,7 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
           {overlayMode === "prediction" && hasLabel && (
             <div className="mt-1 flex items-center gap-2">
               <span
-                className="h-2.5 w-2.5 shrink-0 rounded-[2px] border border-white"
+                className="h-2.5 w-2.5 shrink-0 rounded-sm border border-white"
                 aria-hidden="true"
               />
               <span className="font-mono text-[11px] text-text-secondary">
@@ -64,8 +85,15 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
                 so hue is the only thing distinguishing them; that's what these
                 two swatches show, using entropyColor at the buffer's actual
                 normalized values (128/255 and 255/255). */}
-            <Swatch color="#E46A3F" label="Safety margin (not in point estimate)" />
-            <Swatch color="#FCFDBF" label="Point estimate (and safety margin)" />
+            {/* Same colours for every side; only the meaning of 128 changes
+                (see bandLabels and getClinicalJobConformalBand). */}
+            <Swatch color="#E46A3F" label={labels.one} />
+            <Swatch color="#FCFDBF" label={labels.both} />
+            {opLine && (
+              <div className="font-mono text-[10px] text-text-dim" data-testid="conformal-operating-point">
+                {opLine}
+              </div>
+            )}
             {/* This is an average-case, in-distribution calibration result,
                 not a per-patient guarantee - it does not hold on data unlike
                 what the model was trained on (measured to fail on the SSA and
@@ -91,7 +119,7 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
                 which part of the ramp entropy can realistically reach. */}
             <div className="relative h-2 w-full">
               <div
-                className="h-2 w-full rounded-[2px]"
+                className="h-2 w-full rounded-sm"
                 style={{
                   background: "linear-gradient(90deg, #3B0F70, #E4693E, #FCFDBF)",
                 }}
