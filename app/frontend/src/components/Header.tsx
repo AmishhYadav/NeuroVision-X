@@ -29,12 +29,12 @@ interface HeaderProps {
 
 export function Header({ health, reachable, onToggleCaseList, showCaseListToggle }: HeaderProps) {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-4 border-b border-surface-seam bg-surface-panel/70 px-4">
+    <header className="flex h-12 shrink-0 items-center gap-4 border-b border-surface-seam bg-surface-panel px-4">
       {showCaseListToggle && (
         <button
           type="button"
           onClick={onToggleCaseList}
-          className="chip uppercase transition-colors duration-[120ms] hover:border-brand-primary/60 hover:text-text-primary"
+          className="chip transition-colors duration-[120ms] hover:border-brand-primary/60 hover:text-text-primary"
         >
           Cases
         </button>
@@ -42,19 +42,19 @@ export function Header({ health, reachable, onToggleCaseList, showCaseListToggle
       {/* The wordmark never wraps: at ~600px it otherwise breaks mid-word into
           "NEUROVISION-" / "X" and pushes the header to two lines. The meta
           strip truncates instead of wrapping, for the same reason. */}
-      <h1 className="font-heading shrink-0 text-sm font-semibold tracking-[0.12em] whitespace-nowrap text-text-primary uppercase">
+      <h1 className="font-heading shrink-0 text-sm font-semibold tracking-tight whitespace-nowrap text-text-primary">
         NeuroVision-X
       </h1>
-      <div className="min-w-0 truncate font-mono text-xs text-text-secondary">
+      <div className="min-w-0 truncate text-xs text-text-secondary">
         {health ? (
           <span>
-            {health.experiment} · {splitLabel(health.eval_dir)} · {health.case_count} cases
+            <span className="font-mono">{health.experiment}</span> · <span className="font-mono">{splitLabel(health.eval_dir)}</span> · <span className="font-mono tabular-nums">{health.case_count}</span> cases
           </span>
         ) : (
           <span className="text-text-dim">connecting…</span>
         )}
       </div>
-      <div className="ml-auto flex items-center gap-2 font-mono text-xs text-text-secondary">
+      <div className="ml-auto flex items-center gap-2 text-xs text-text-secondary">
         <span
           className={`h-2 w-2 rounded-full ${reachable ? "bg-data-oedema" : "bg-data-enhancing"}`}
           aria-hidden="true"

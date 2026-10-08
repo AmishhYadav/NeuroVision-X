@@ -217,7 +217,7 @@ export function SliceRibbon({
       : null;
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-xl border border-surface-seam bg-surface-panel/70 px-3 py-2">
+    <div className="flex flex-col gap-1.5 rounded-[10px] border border-surface-seam bg-surface-panel px-3 py-2">
       <div className="flex items-baseline justify-between">
         <span className="eyebrow">{caption}</span>
         {hoverInfo && (

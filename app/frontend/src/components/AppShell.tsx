@@ -67,7 +67,7 @@ export function AppShell({
           : "flex min-h-full flex-col bg-surface-page"
       }
     >
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-surface-seam bg-surface-panel/80 px-4 backdrop-blur sm:px-6 md:h-14 md:flex-nowrap">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-surface-seam bg-surface-page px-4 sm:px-6 md:h-14 md:flex-nowrap">
         <a
           href="/"
           onClick={(e) => {
@@ -78,11 +78,9 @@ export function AppShell({
           }}
           className="flex h-12 shrink-0 items-center gap-3 md:h-auto"
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-brand-primary/40 bg-brand-primary/10">
-            <Brain className="h-4 w-4 text-brand-primary" aria-hidden="true" />
-          </span>
+          <Brain className="h-7 w-7 shrink-0 text-brand-primary" aria-hidden="true" />
           <span className="flex flex-col leading-tight">
-            <span className="font-heading font-semibold whitespace-nowrap">NeuroVision-X</span>
+            <span className="font-heading font-semibold tracking-tight whitespace-nowrap">NeuroVision-X</span>
             <span className="eyebrow hidden md:block">Research prototype · not for clinical use</span>
           </span>
         </a>

@@ -71,7 +71,7 @@ export function ClinicalUploadPanel({ onJobCreated }: ClinicalUploadPanelProps) 
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
-        className={`flex flex-col items-center gap-4 rounded-xl border-2 border-dashed px-6 py-14 text-center transition-colors ${
+        className={`flex flex-col items-center gap-4 rounded-[10px] border-2 border-dashed px-6 py-14 text-center transition-colors ${
           dragging ? "border-brand-primary bg-brand-primary/5" : "border-brand-primary/40"
         }`}
       >
@@ -123,7 +123,7 @@ export function ClinicalUploadPanel({ onJobCreated }: ClinicalUploadPanelProps) 
       {error && (
         <p
           role="alert"
-          className="glass-panel border-gate-refuse/40 px-4 py-3 font-mono text-xs leading-relaxed text-text-primary"
+          className="glass-panel border-gate-refuse/40 px-4 py-3 text-xs leading-relaxed text-text-primary"
         >
           {error}
         </p>

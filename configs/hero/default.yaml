@@ -1,0 +1,26 @@
+# Landing-page hero brain mesh (scripts/build_hero_brain_mesh.py).
+#
+# Extracts a cortical-surface (pial) mesh with visible gyri/sulci from the
+# healthy SRI24 T1 template. Composed under the `hero:` group, so the script
+# reads cfg.hero.<field>. Relative paths resolve against the repo root.
+# SRI24 is CC BY-SA -- the output meta.json carries the licence and citation.
+
+template_path: data/atlas/sri24/spgr.nii
+out_dir: app/frontend/public/hero
+name: sri24-cortex
+
+# Gaussian blur (voxels) applied before iso-surfacing; removes MRI noise.
+sigma: 1.0
+# Intensity of the iso-surface. CSF ~160-280, GM ~450-550, WM ~700-780, so 420
+# sits on the grey-matter / CSF boundary, i.e. the pial surface.
+level: 420.0
+# Taubin smoothing iterations (shrink-free smoothing, removes voxel staircase).
+smooth_iterations: 10
+# Face budget for vertex-clustering decimation (result lands within +-15%).
+target_faces: 120000
+# Drop stray islands (e.g. bits of eye/vessel); keep only the biggest piece.
+keep_largest_component: true
+
+# Largest half-extent (scene units) of the existing twin brain meshes in
+# app/frontend/public/twin (measured: union Z extent -0.92995..0.87005 -> 0.9).
+reference_half_extent: 0.9

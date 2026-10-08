@@ -28,7 +28,7 @@ export function MetricsPanel({ metrics, regions }: MetricsPanelProps) {
               const empty = metrics.gt_empty[region];
               return (
                 <div key={region} className="flex items-baseline justify-between">
-                  <dt className="font-mono text-xs text-text-secondary">{region}</dt>
+                  <dt className="text-xs text-text-secondary">{region}</dt>
                   <dd
                     className="tabular font-mono text-xs text-text-primary"
                     title={
@@ -45,7 +45,7 @@ export function MetricsPanel({ metrics, regions }: MetricsPanelProps) {
             })}
           </dl>
         ) : (
-          <p className="font-mono text-xs text-text-dim">No ground truth for this case.</p>
+          <p className="text-xs text-text-dim">No ground truth for this case.</p>
         )}
       </div>
 
@@ -55,7 +55,7 @@ export function MetricsPanel({ metrics, regions }: MetricsPanelProps) {
           <dl className="flex flex-col gap-0.5">
             {REGION_ORDER.map((region) => (
               <div key={region} className="flex items-baseline justify-between">
-                <dt className="font-mono text-xs text-text-secondary">{region}</dt>
+                <dt className="text-xs text-text-secondary">{region}</dt>
                 <dd className="tabular font-mono text-xs text-text-primary">
                   {fmt(metrics.hd95[region], 2)}
                 </dd>
@@ -63,7 +63,7 @@ export function MetricsPanel({ metrics, regions }: MetricsPanelProps) {
             ))}
           </dl>
         ) : (
-          <p className="font-mono text-xs text-text-dim">—</p>
+          <p className="text-xs text-text-dim">—</p>
         )}
       </div>
 
@@ -73,7 +73,7 @@ export function MetricsPanel({ metrics, regions }: MetricsPanelProps) {
             well two masks overlap; it does not say whether the model
             over- or under-segments, and the pair of numbers does. */}
         {hasTruthVolume && (
-          <div className="mb-0.5 flex items-baseline justify-between font-mono text-[10px] text-text-dim">
+          <div className="mb-0.5 flex items-baseline justify-between text-xs text-text-dim">
             <span />
             <span className="flex gap-3">
               <span className="w-12 text-right">pred</span>
@@ -84,8 +84,8 @@ export function MetricsPanel({ metrics, regions }: MetricsPanelProps) {
         <dl className="flex flex-col gap-0.5">
           {REGION_ORDER.map((region) => (
             <div key={region} className="flex items-baseline justify-between">
-              <dt className="font-mono text-xs text-text-secondary">{region}</dt>
-              <dd className="flex gap-3 font-mono text-xs">
+              <dt className="text-xs text-text-secondary">{region}</dt>
+              <dd className="flex gap-3 text-xs">
                 <span className="tabular w-12 text-right text-text-primary">
                   {fmt(regions?.prediction[region]?.ml, 1)}
                 </span>
@@ -103,7 +103,7 @@ export function MetricsPanel({ metrics, regions }: MetricsPanelProps) {
       {/* Footnotes, not tooltips. A tooltip is invisible in a screenshot and
           unreachable when this is on a projector, and both marks below change
           how a number must be read. */}
-      <div className="flex flex-col gap-1 border-t border-surface-seam pt-2 font-mono text-[10px] leading-snug text-text-dim">
+      <div className="flex flex-col gap-1 border-t border-surface-seam pt-2 text-xs leading-snug text-text-dim">
         <p>Dice and HD95 come from scripts/evaluate.py at overlap 0.5. HD95 is in millimetres.</p>
         {anyGtEmpty && (
           <p>

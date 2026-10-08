@@ -134,11 +134,11 @@ export function Viewport({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-surface-seam bg-surface-viewport"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-[10px] border border-surface-seam bg-surface-viewport"
       onFocus={onFocusPlane}
       onMouseDown={onFocusPlane}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-surface-seam bg-surface-panel/70 px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-2 border-b border-surface-seam bg-surface-panel px-2 py-1.5">
         <button
           type="button"
           onClick={onToggleExpand}
@@ -147,7 +147,7 @@ export function Viewport({
           title={
             !expandable ? undefined : expanded ? "Show all three planes" : "Expand this plane"
           }
-          className="group chip uppercase tracking-[0.08em] transition-colors duration-[120ms] hover:border-brand-primary/60 hover:text-text-primary disabled:cursor-default disabled:hover:border-surface-seam disabled:hover:text-text-secondary"
+          className="group chip transition-colors duration-[120ms] hover:border-brand-primary/60 hover:text-text-primary disabled:cursor-default disabled:hover:border-surface-seam disabled:hover:text-text-secondary"
         >
           {planeLabel}
           {/* The label is the expand control, which is not discoverable from

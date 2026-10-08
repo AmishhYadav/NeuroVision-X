@@ -63,7 +63,7 @@ interface ReportPanelProps {
 function CenteredMessage({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-1 items-center justify-center px-6 text-center">
-      <p className="font-mono text-xs text-text-secondary">{children}</p>
+      <p className="text-xs text-text-secondary">{children}</p>
     </div>
   );
 }
@@ -139,10 +139,10 @@ function CompositionBar({ fractions }: { fractions: BurdenBlock }) {
         {segments.map((s) => (
           <div
             key={s.key}
-            className="flex items-center gap-1.5 font-mono text-[11px] text-text-secondary"
+            className="flex items-center gap-1.5 text-xs text-text-secondary"
           >
             <span className={`inline-block h-2 w-2 rounded-full ${s.color}`} />
-            {s.label} {formatPercent(s.value as number)}
+            {s.label} <span className="font-mono tabular-nums">{formatPercent(s.value as number)}</span>
           </div>
         ))}
       </div>
@@ -194,9 +194,9 @@ function RegionsFacts({
             >
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-sm text-text-primary">{fact.label}</span>
-                <span className="font-mono text-xs text-text-dim">
-                  {formatPercent(structure.frac_of_structure)} of region
-                  &middot; {formatPercent(structure.frac_of_tumour)} of tumour
+                <span className="text-xs text-text-dim">
+                  <span className="font-mono tabular-nums">{formatPercent(structure.frac_of_structure)}</span> of region
+                  &middot; <span className="font-mono tabular-nums">{formatPercent(structure.frac_of_tumour)}</span> of tumour
                 </span>
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-seam">
@@ -222,7 +222,7 @@ function LimitsFacts({ facts }: { facts: InterpretedFact[] }) {
           key={i}
           className="rounded-lg border border-surface-seam bg-surface-raised/40 p-2.5"
         >
-          <strong className="font-mono text-xs font-normal text-text-primary">
+          <strong className="text-xs font-normal text-text-primary">
             {f.label}
           </strong>
           {f.note && (
@@ -294,7 +294,7 @@ function BurdenBlockDl({
               key={k}
               className="flex items-baseline justify-between gap-3 px-2 py-0.5 odd:bg-surface-raised/30"
             >
-              <dt className="font-mono text-xs text-text-secondary">
+              <dt className="text-xs text-text-secondary">
                 {burdenLabel(k)}
               </dt>
               <dd className="tabular shrink-0 text-right font-mono text-xs text-text-primary">
@@ -326,7 +326,7 @@ function GeometryBlockDl({
               key={k}
               className="flex items-baseline justify-between gap-3 px-2 py-0.5 odd:bg-surface-raised/30"
             >
-              <dt className="font-mono text-xs text-text-secondary">
+              <dt className="text-xs text-text-secondary">
                 {geometryLabel(k)}
               </dt>
               <dd className="tabular shrink-0 text-right font-mono text-xs text-text-primary">
@@ -410,7 +410,7 @@ function TechnicalData({ report }: { report: ReportResponse }) {
         )}
         <div className="mt-4">
           <div className="eyebrow">Eloquence citation</div>
-          <p className="mt-1 font-mono text-[11px] leading-relaxed text-text-dim">
+          <p className="mt-1 text-xs leading-relaxed text-text-dim">
             {report.eloquence.citation}
           </p>
         </div>
@@ -471,11 +471,11 @@ export function ReportPanel({
         aria-hidden="true"
       />
       <div
-        className={`absolute inset-y-0 right-0 z-40 flex flex-col overflow-hidden glass-panel !rounded-none border-l border-surface-seam shadow-2xl backdrop-blur ${widthClass}`}
+        className={`absolute inset-y-0 right-0 z-40 flex flex-col overflow-hidden glass-panel !rounded-none border-l border-surface-seam shadow-[0_0_0_1px_var(--color-surface-seam),0_24px_48px_-12px_rgb(0_0_0/0.6)] ${widthClass}`}
         role="dialog"
         aria-label="Structured report"
       >
-        <div className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-surface-seam bg-surface-panel/80 px-4 py-2.5 backdrop-blur">
+        <div className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-surface-seam bg-surface-panel px-4 py-2.5">
           <span
             className="h-1.5 w-1.5 rounded-full bg-brand-teal"
             aria-hidden="true"
@@ -537,13 +537,13 @@ export function ReportPanel({
                   <span className="truncate font-heading text-lg text-text-primary">
                     {report.case_id}
                   </span>
-                  <span className="chip shrink-0 uppercase">
+                  <span className="chip shrink-0">
                     {segBadge.text}
                   </span>
                 </div>
-                <p className="font-mono text-[11px] text-text-dim">
-                  Report schema v{report.report_version} · generated{" "}
-                  {report.generated_utc}
+                <p className="text-xs text-text-dim">
+                  Report schema <span className="font-mono tabular-nums">v{report.report_version}</span> · generated{" "}
+                  <span className="font-mono tabular-nums">{report.generated_utc}</span>
                 </p>
               </div>
 
@@ -608,7 +608,7 @@ export function ReportPanel({
                   />
 
                   {section.caveat && (
-                    <div className="mt-4 border-l-2 border-surface-seam pl-3 text-xs leading-relaxed text-text-dim">
+                    <div className="mt-4 rounded-md bg-surface-raised/50 px-3 py-2 text-xs leading-relaxed text-text-secondary">
                       <div className="eyebrow mb-1">Caveat</div>
                       {section.caveat.split("\n").map((line, i) => (
                         <p key={i} className={i > 0 ? "mt-1" : ""}>

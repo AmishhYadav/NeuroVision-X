@@ -168,10 +168,10 @@ export default function App() {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-page px-6 text-center">
         <div className="max-w-md">
-          <p className="mb-2 font-condensed text-sm tracking-[0.12em] text-text-dim uppercase">
+          <p className="mb-2 font-condensed text-sm text-text-dim">
             NeuroVision-X
           </p>
-          <p className="font-mono text-sm text-text-primary">
+          <p className="text-sm text-text-primary">
             No response from the API. Start it with{" "}
             <code className="text-data-oedema">uvicorn app.backend.main:app --reload</code>.
           </p>
@@ -184,14 +184,14 @@ export default function App() {
     return (
       <div className="flex h-screen items-center justify-center bg-surface-page px-6 text-center">
         <div className="max-w-md">
-          <p className="mb-2 font-condensed text-sm tracking-[0.12em] text-text-dim uppercase">
+          <p className="mb-2 font-condensed text-sm text-text-dim">
             NeuroVision-X
           </p>
-          <p className="mb-2 font-mono text-sm text-text-primary">
+          <p className="mb-2 text-sm text-text-primary">
             The API responded, but not with what the viewer expected.
           </p>
-          <p className="font-mono text-xs text-text-secondary">{bootError}</p>
-          <p className="mt-3 font-mono text-xs text-text-dim">
+          <p className="text-xs text-text-secondary">{bootError}</p>
+          <p className="mt-3 text-xs text-text-dim">
             Check the paths the server resolved at <code>/api/health</code>.
           </p>
         </div>
@@ -266,7 +266,7 @@ export default function App() {
         <button
           type="button"
           onClick={() => setCaseListOpen((v) => !v)}
-          className="btn-secondary !px-3 !py-1 text-xs uppercase"
+          className="btn-secondary !px-3 !py-1 text-xs"
         >
           Cases
         </button>
@@ -280,7 +280,7 @@ export default function App() {
   );
 
   const viewBtn = (active: boolean) =>
-    `flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+    `flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-[120ms] ${
       active
         ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
         : "text-text-secondary hover:text-text-primary"
@@ -293,7 +293,7 @@ export default function App() {
           of the width, and the MRI is the thing worth the pixels. */}
       <div className="relative flex h-full min-h-0 flex-row">
         {showCaseListInline && !caseListCollapsed && (
-          <div className="m-3 mr-0 w-56 shrink-0 overflow-hidden rounded-xl border border-white/10 glass-panel">
+          <div className="m-3 mr-0 w-56 shrink-0 overflow-hidden glass-panel">
             <CaseList
               cases={cases}
               selectedCaseId={selectedCaseId}
@@ -307,7 +307,7 @@ export default function App() {
         )}
 
         {showCaseListInline && caseListCollapsed && (
-          <div className="m-3 mr-0 flex w-9 shrink-0 flex-col items-center self-start rounded-xl border border-white/10 glass-panel py-2">
+          <div className="m-3 mr-0 flex w-9 shrink-0 flex-col items-center self-start glass-panel py-2">
             <button
               type="button"
               onClick={() => setCaseListCollapsed(false)}
@@ -327,7 +327,7 @@ export default function App() {
               onClick={() => setCaseListOpen(false)}
               aria-hidden="true"
             />
-            <div className="absolute inset-y-0 left-0 z-20 w-64 overflow-hidden border-r border-white/10 glass-panel">
+            <div className="absolute inset-y-0 left-0 z-20 w-64 overflow-hidden border-r border-surface-seam glass-panel">
               <CaseList
                 cases={cases}
                 selectedCaseId={selectedCaseId}
@@ -347,9 +347,9 @@ export default function App() {
             {!selectedCaseId ? (
               <div className="flex flex-1 items-center justify-center text-center">
                 <div>
-                  <p className="font-mono text-sm text-text-primary">Pick a case to begin.</p>
+                  <p className="text-sm text-text-primary">Pick a case to begin.</p>
                   {health && (
-                    <p className="mt-1 font-mono text-xs text-text-dim">
+                    <p className="mt-1 text-xs text-text-dim">
                       Evaluation directory: {health.eval_dir}
                     </p>
                   )}
@@ -357,14 +357,14 @@ export default function App() {
               </div>
             ) : caseData.error ? (
               <div className="flex flex-1 items-center justify-center text-center">
-                <p className="font-mono text-sm text-text-primary">{caseData.error}</p>
+                <p className="text-sm text-text-primary">{caseData.error}</p>
               </div>
             ) : (
               <>
                 {/* Toolbar strip on top: view switch + case id, then the
                     ControlBar (modality / overlay / opacity / entropy /
                     report) with its props unchanged. */}
-                <div className="glass-panel relative z-20 flex shrink-0 flex-col rounded-xl">
+                <div className="glass-panel relative z-20 flex shrink-0 flex-col">
                   <div className="flex flex-wrap items-center gap-2 px-3 py-2">
                     <span className="font-mono text-xs text-text-primary">{selectedCaseId}</span>
                     <div
@@ -421,11 +421,11 @@ export default function App() {
                     because we know exactly how many artifacts are outstanding. */}
                 {caseData.loading && (
                   <div
-                    className="flex shrink-0 items-center gap-3 rounded-xl border border-white/10 glass-panel px-3 py-1.5"
+                    className="flex shrink-0 items-center gap-3 glass-panel px-3 py-1.5"
                     role="status"
                     aria-live="polite"
                   >
-                    <span className="font-condensed text-[11px] tracking-[0.12em] text-text-dim uppercase">
+                    <span className="font-condensed text-[11px] text-text-dim">
                       Loading {selectedCaseId}
                     </span>
                     <span className="h-px flex-1 bg-surface-seam">
@@ -440,7 +440,7 @@ export default function App() {
                   </div>
                 )}
                 {twinOpen ? (
-                  <div className="bg-grid relative h-[70vh] min-h-[360px] flex-none overflow-hidden rounded-xl border border-white/10 glass-panel lg:h-auto lg:min-h-0 lg:flex-1">
+                  <div className="bg-grid relative h-[70vh] min-h-[360px] flex-none overflow-hidden glass-panel lg:h-auto lg:min-h-0 lg:flex-1">
                     <BrainTwinScene input={twinInput} />
                     {/* BrainTwinScene's own empty state ("Pick a case to build
                         its twin.") is meant for the no-case-selected moment,
@@ -449,7 +449,7 @@ export default function App() {
                         pulling its volumes, so this overlay says that instead. */}
                     {twinInput === null && (
                       <div className="absolute inset-0 flex items-center justify-center glass-panel">
-                        <span className="font-mono text-xs text-text-secondary">
+                        <span className="text-xs text-text-secondary">
                           Loading {selectedCaseId}…
                         </span>
                       </div>
@@ -457,7 +457,7 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <div className="bg-grid h-[70vh] min-h-[360px] flex-none overflow-hidden rounded-xl lg:h-auto lg:min-h-0 lg:flex-1">
+                    <div className="bg-grid h-[70vh] min-h-[360px] flex-none overflow-hidden rounded-[10px] lg:h-auto lg:min-h-0 lg:flex-1">
                       <ViewportGrid
                         layout={layout}
                         expandedPlane={expandedPlane}
@@ -506,13 +506,13 @@ export default function App() {
               aria-label="Case summary"
               className="flex w-full shrink-0 flex-col gap-3 overflow-auto border-t border-surface-seam p-3 lg:w-80 lg:border-t-0 lg:border-l"
             >
-              <div className="glass-panel shrink-0 rounded-xl">
+              <div className="glass-panel shrink-0">
                 <MetricsPanel
                   metrics={caseData.detail?.metrics ?? null}
                   regions={caseData.detail?.regions ?? null}
                 />
               </div>
-              <div className="glass-panel shrink-0 rounded-xl">
+              <div className="glass-panel shrink-0">
                 <Legend
                   overlayMode={overlayMode}
                   showUncertainty={showUncertainty}

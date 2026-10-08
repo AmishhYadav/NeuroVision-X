@@ -83,12 +83,12 @@ export function RefusalBanner({ job, hideInputQc = false }: RefusalBannerProps) 
         clear - not a system error.
       </p>
       {job.error && (
-        <p className="font-mono text-xs leading-relaxed text-text-primary">{job.error}</p>
+        <p className="text-xs leading-relaxed text-text-primary">{job.error}</p>
       )}
       {reasons.length > 0 && (
         <ul className="flex flex-col gap-1.5 border-t border-surface-seam pt-3">
           {reasons.map((r, i) => (
-            <li key={i} className="font-mono text-[11px] leading-relaxed text-text-secondary">
+            <li key={i} className="text-xs leading-relaxed text-text-secondary">
               <span className="text-text-primary">{r.source}</span>: {r.message}
             </li>
           ))}

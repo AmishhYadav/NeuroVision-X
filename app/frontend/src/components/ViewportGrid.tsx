@@ -75,7 +75,7 @@ export function ViewportGrid(props: ViewportGridProps) {
               key={plane}
               type="button"
               onClick={() => onChangeSinglePlane(plane)}
-              className={`rounded-md px-2.5 py-1 font-mono text-xs uppercase transition-colors duration-[120ms] ${
+              className={`rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-[120ms] ${
                 singlePlane === plane
                   ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
                   : "text-text-secondary hover:text-text-primary"

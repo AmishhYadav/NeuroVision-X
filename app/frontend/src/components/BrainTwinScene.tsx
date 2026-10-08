@@ -804,7 +804,7 @@ export function BrainTwinScene({
         <div
           data-testid="twin-badge"
           role="status"
-          className={`chip pointer-events-none absolute top-3 left-3 uppercase tracking-[0.08em] ${
+          className={`chip pointer-events-none absolute top-3 left-3 ${
             badgeTone === "caution"
               ? "border-data-amber/60 text-data-amber"
               : ""
@@ -816,14 +816,14 @@ export function BrainTwinScene({
 
       {!geometries && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-mono text-xs text-text-dim">
+          <span className="text-xs text-text-dim">
             {computing ? "Reconstructing this case's geometry…" : "Pick a case to build its twin."}
           </span>
         </div>
       )}
 
       {geometries && (
-        <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col gap-1 font-mono text-[11px] text-text-dim">
+        <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col gap-1 text-xs text-text-dim">
           <span>
             Drag to orbit · scroll to zoom · click a hemisphere to separate
             {structureGeometries && structureGeometries.size > 0 ? " · click a structure" : ""}
@@ -845,7 +845,7 @@ export function BrainTwinScene({
                   style={{ backgroundColor: CLASS_HEX[selected] }}
                   aria-hidden="true"
                 />
-                <span className="font-mono text-xs text-text-primary">{CLASS_LABEL[selected]}</span>
+                <span className="text-xs text-text-primary">{CLASS_LABEL[selected]}</span>
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
@@ -855,15 +855,15 @@ export function BrainTwinScene({
                   ×
                 </button>
               </div>
-              <p className="tabular font-mono text-[11px] text-text-secondary">
-                {(result.classVolumesMl[selected] ?? 0).toFixed(2)} ml, this case
+              <p className="tabular text-xs text-text-secondary">
+                <span className="font-mono tabular-nums">{(result.classVolumesMl[selected] ?? 0).toFixed(2)}</span> ml, this case
               </p>
-              <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
+              <p className="mt-1 text-xs leading-relaxed text-text-dim">
                 {result.tumorSource === "label" ? "Real ground-truth label" : "Real saved model prediction"},{" "}
                 {result.caseId}.
               </p>
               {selectedLayerMean !== null && (
-                <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
+                <p className="mt-1 text-xs leading-relaxed text-text-dim">
                   mean {activeLayer!.kind} at surface−1 voxel: {selectedLayerMean.toFixed(2)}
                 </p>
               )}
@@ -897,15 +897,15 @@ export function BrainTwinScene({
                       ×
                     </button>
                   </div>
-                  <p className="font-mono text-[11px] text-text-secondary">
+                  <p className="text-xs text-text-secondary">
                     {row.laterality ?? "—"} · {row.lobe ?? "—"}
                   </p>
                   {/* Raw table value, verbatim - never invented (e.g. never
                       substitute a friendlier word than what the atlas's own
                       eloquence field actually says). */}
-                  <p className="mt-1 font-mono text-[11px] text-text-secondary">{row.eloquence ?? "—"}</p>
+                  <p className="mt-1 text-xs text-text-secondary">{row.eloquence ?? "—"}</p>
                   {detail && (detail.fracOfStructure !== null || detail.fracOfTumour !== null) && (
-                    <p className="mt-1 font-mono text-[10px] leading-relaxed text-text-dim">
+                    <p className="mt-1 text-xs leading-relaxed text-text-dim">
                       {detail.fracOfStructure !== null &&
                         `${(detail.fracOfStructure * 100).toFixed(0)}% of ${row.name} overlaps the mask`}
                       {detail.fracOfStructure !== null && detail.fracOfTumour !== null && " · "}
@@ -930,7 +930,7 @@ export function BrainTwinScene({
               never show a name for a quantity the backend did not actually
               send. */}
           {activeLayer && (
-            <div data-testid="twin-layer-legend" className="rounded-xl">
+            <div data-testid="twin-layer-legend" className="rounded-[10px]">
               <Legend overlayMode="prediction" showUncertainty hasLabel={false} uncertaintyKind={activeLayer.kind} conformal={activeLayer.conformal ?? null} />
             </div>
           )}

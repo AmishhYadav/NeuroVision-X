@@ -66,12 +66,12 @@ export function PreviousStudies({ onOpen }: PreviousStudiesProps) {
     <section className="glass-panel p-5">
       <h2 className="font-heading text-base font-semibold">Previous studies</h2>
 
-      {error && <p className="mt-3 font-mono text-xs text-text-secondary">{error}</p>}
+      {error && <p className="mt-3 text-xs text-text-secondary">{error}</p>}
 
-      {!error && jobs === null && <p className="mt-3 font-mono text-xs text-text-dim">Loading…</p>}
+      {!error && jobs === null && <p className="mt-3 text-xs text-text-dim">Loading…</p>}
 
       {!error && jobs !== null && jobs.length === 0 && (
-        <p className="mt-3 font-mono text-xs text-text-dim">No previous studies on this server.</p>
+        <p className="mt-3 text-xs text-text-dim">No previous studies on this server.</p>
       )}
 
       {jobs && jobs.length > 0 && (
@@ -89,9 +89,9 @@ export function PreviousStudies({ onOpen }: PreviousStudiesProps) {
                 type="button"
                 data-testid="previous-study-row"
                 onClick={() => onOpen(job.job_id)}
-                className="grid w-full grid-cols-[88px_96px_minmax(0,1fr)] items-center gap-3 px-3 py-2.5 text-left font-mono text-xs transition-colors duration-[120ms] hover:bg-surface-raised/60 sm:grid-cols-[88px_96px_minmax(0,1fr)_140px_90px]"
+                className="grid w-full grid-cols-[88px_96px_minmax(0,1fr)] items-center gap-3 px-3 py-2.5 text-left text-xs transition-colors duration-[120ms] hover:bg-surface-raised/60 sm:grid-cols-[88px_96px_minmax(0,1fr)_140px_90px]"
               >
-                <span className="text-text-secondary">{job.job_id.slice(0, 8)}</span>
+                <span className="font-mono text-text-secondary">{job.job_id.slice(0, 8)}</span>
                 <span className={`font-heading text-xs font-semibold ${STATE_TAG_CLASS[job.state]}`}>
                   {STATE_LABEL[job.state]}
                 </span>

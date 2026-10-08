@@ -1,0 +1,28 @@
+{
+  "source": "SRI24 atlas, spgr T1 template \u2014 healthy adult average, not a patient",
+  "licence": "CC BY-SA",
+  "citation": "Rohlfing T, Zahr NM, Sullivan EV, Pfefferbaum A. The SRI24 multichannel atlas of normal adult human brain structure. Hum Brain Mapp. 2010;31(5):798-819.",
+  "coord_note": "X = voxel axis0 (R->L), Y = voxel axis2 (I->S, up), Z = -voxel axis1 (A->P); matches twin-meta.json (d->X, w->Y, h->Z). Centred on bbox centre and scaled uniformly so the largest half-extent equals the twin brain's.",
+  "n_vertices": 59135,
+  "n_faces": 119074,
+  "parameters": {
+    "template_path": "data/atlas/sri24/spgr.nii",
+    "sigma": 1.0,
+    "level": 420.0,
+    "smooth_iterations": 10,
+    "target_faces": 120000,
+    "keep_largest_component": true
+  },
+  "centre": [
+    119.03518676757812,
+    72.30484056472778,
+    -109.50146293640137
+  ],
+  "scale": 0.010703727617004706,
+  "half_extent": 0.9,
+  "volume_shape": [
+    240,
+    240,
+    155
+  ]
+}

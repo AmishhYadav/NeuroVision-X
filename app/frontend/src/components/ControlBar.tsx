@@ -71,7 +71,7 @@ export function ControlBar({
             type="button"
             onClick={() => onChangeModality(key)}
             aria-pressed={modality === key}
-            className={`rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+            className={`rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-[120ms] ${
               modality === key
                 ? "bg-brand-primary/20 text-text-primary ring-1 ring-brand-primary/40"
                 : "text-text-secondary hover:text-text-primary"
@@ -104,7 +104,7 @@ export function ControlBar({
               onClick={() => onChangeOverlayMode(key)}
               aria-pressed={overlayMode === key}
               title={hint}
-              className={`rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+              className={`rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-[120ms] ${
                 disabled
                   ? "cursor-not-allowed text-text-dim"
                   : overlayMode === key
@@ -122,7 +122,7 @@ export function ControlBar({
           onClick={onToggleTruthOutline}
           aria-pressed={showTruthOutline}
           title="Outline the ground-truth whole tumour"
-          className={`ml-1 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+          className={`ml-1 rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-[120ms] ${
             !hasLabel || overlayMode !== "prediction"
               ? "cursor-not-allowed text-text-dim"
               : showTruthOutline
@@ -161,7 +161,7 @@ export function ControlBar({
         onClick={onToggleUncertainty}
         aria-pressed={showUncertainty}
         title={!hasLogits ? "No saved logits for this case." : undefined}
-        className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+        className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-[120ms] ${
           !hasLogits
             ? "cursor-not-allowed text-text-dim"
             : showUncertainty
@@ -173,7 +173,7 @@ export function ControlBar({
         Predictive entropy
       </button>
       {!hasLogits && (
-        <span className="ml-2 hidden shrink-0 font-mono text-[11px] text-text-dim sm:inline">
+        <span className="ml-2 hidden shrink-0 text-xs text-text-dim sm:inline">
           No saved logits for this case.
         </span>
       )}
@@ -189,7 +189,7 @@ export function ControlBar({
             ? "No report has been generated for this case."
             : "Open the plain-language report for this case"
         }
-        className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+        className={`flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-[120ms] ${
           !hasReport
             ? "cursor-not-allowed text-text-dim"
             : "text-text-secondary hover:text-text-primary"
@@ -200,7 +200,7 @@ export function ControlBar({
         {hasReport && <ArrowUpRight size={12} aria-hidden="true" />}
       </button>
       {!hasReport && (
-        <span className="ml-2 hidden shrink-0 font-mono text-[11px] text-text-dim sm:inline">
+        <span className="ml-2 hidden shrink-0 text-xs text-text-dim sm:inline">
           No report has been generated for this case.
         </span>
       )}

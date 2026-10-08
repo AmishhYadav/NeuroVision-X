@@ -1,9 +1,9 @@
-// The clinical pipeline as numbered phase cards, beside a real MRI slice.
-// Every step below mirrors the pipeline actually built (see
-// app/backend/clinical_jobs.py and src/lib/pipelineSteps.ts). The slice is
-// shown with its GROUND-TRUTH label (BraTS annotation), not a model output;
-// the CursorReveal caption says so.
-import { motion, useReducedMotion } from "motion/react";
+// The clinical pipeline as a vertical timeline beside a real MRI slice. Every
+// step below mirrors the pipeline actually built (see
+// app/backend/clinical_jobs.py and src/lib/pipelineSteps.ts). The numbering is
+// legitimate: it is a real ordered sequence. The slice is shown with its
+// GROUND-TRUTH label (BraTS annotation), not a model output; the CursorReveal
+// caption says so.
 import { CursorReveal } from "./CursorReveal";
 
 const PHASES: { n: string; title: string; body: string }[] = [
@@ -35,31 +35,26 @@ const PHASES: { n: string; title: string; body: string }[] = [
 ];
 
 export function PipelineStory() {
-  const reduce = useReducedMotion();
   return (
-    <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
-      <span className="chip">Pipeline</span>
-      <h2 className="mt-3 font-heading text-3xl font-semibold text-text-primary md:text-4xl">
-        From DICOM zip to a decision
-      </h2>
-      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
-        <ol className="grid gap-4 sm:grid-cols-2">
-          {PHASES.map((p, i) => (
-            <motion.li
-              key={p.n}
-              initial={reduce ? false : { opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ duration: 0.35, delay: reduce ? 0 : i * 0.05 }}
-              className={`glass-panel flex flex-col gap-2 p-5 ${i === PHASES.length - 1 ? "sm:col-span-2" : ""}`}
-            >
-              <span className="font-mono text-2xl text-brand-teal">{p.n}</span>
-              <h3 className="font-heading text-lg font-semibold text-text-primary">{p.title}</h3>
-              <p className="text-sm leading-relaxed text-text-secondary">{p.body}</p>
-            </motion.li>
+    <section className="mx-auto max-w-[1180px] px-4 py-24 sm:px-6 md:py-32">
+      <h2 className="font-heading text-3xl font-semibold text-text-primary md:text-4xl">From DICOM zip to a decision</h2>
+      <div className="mt-12 grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:gap-16">
+        <ol className="relative m-0 list-none p-0">
+          {/* The timeline rule: a 1px line behind the step numbers. */}
+          <div aria-hidden="true" className="absolute top-2 bottom-2 left-[1.125rem] w-px bg-surface-seam" />
+          {PHASES.map((p) => (
+            <li key={p.n} className="relative grid grid-cols-[2.25rem_minmax(0,1fr)] gap-x-4 pb-9 last:pb-0">
+              <span className="relative z-10 h-6 self-start bg-surface-page text-center font-mono text-sm leading-6 text-brand-primary">
+                {p.n}
+              </span>
+              <div>
+                <h3 className="font-heading text-lg font-semibold text-text-primary">{p.title}</h3>
+                <p className="mt-1 max-w-[56ch] text-sm leading-relaxed text-text-secondary">{p.body}</p>
+              </div>
+            </li>
           ))}
         </ol>
-        <div className="glass-panel self-start p-4">
+        <div className="self-start lg:sticky lg:top-24">
           <CursorReveal />
         </div>
       </div>

@@ -27,12 +27,12 @@ interface MolecularPanelProps {
 }
 
 const SELECT_CLASSES =
-  "bg-surface-panel border border-surface-seam rounded-sm px-2 py-1 font-mono text-xs text-text-primary disabled:cursor-not-allowed disabled:text-text-dim";
+  "bg-surface-panel border border-surface-seam rounded-sm px-2 py-1 text-xs text-text-primary disabled:cursor-not-allowed disabled:text-text-dim";
 
 /** The AI-estimate slot for one marker - greyed, and always the server's own words (see the module docstring). */
 function AiEstimateLine({ aiEstimate }: { aiEstimate: { status: string } | null }) {
   const text = aiEstimate ? aiEstimate.status : NO_AI_ESTIMATE_TEXT;
-  return <p className="mt-1 font-mono text-[11px] text-text-dim">AI estimate: {text}</p>;
+  return <p className="mt-1 text-xs text-text-dim">AI estimate: {text}</p>;
 }
 
 /**
@@ -111,7 +111,7 @@ function MarkerRow({
       />
       <AiEstimateLine aiEstimate={aiEstimate} />
       <details className="mt-1">
-        <summary className="cursor-pointer select-none font-mono text-[10px] uppercase tracking-wide text-text-secondary">
+        <summary className="cursor-pointer select-none text-xs text-text-secondary">
           What this means
         </summary>
         <p className="mt-1 text-xs leading-relaxed text-text-secondary">{meaning}</p>
@@ -199,7 +199,7 @@ export function MolecularPanel({ jobId, molecular }: MolecularPanelProps) {
 
       {/* The block's own disclaimer, verbatim - this is not frontend copy. */}
       <div className="mt-3 border border-surface-seam bg-surface-raised px-3 py-2.5">
-        <p className="font-mono text-xs leading-relaxed text-text-primary">{molecular.caveat}</p>
+        <p className="text-xs leading-relaxed text-text-primary">{molecular.caveat}</p>
       </div>
 
       <div className="mt-4">
@@ -234,13 +234,13 @@ export function MolecularPanel({ jobId, molecular }: MolecularPanelProps) {
         </p>
       )}
       {cns5.name === null && hint && (
-        <p className="mt-4 font-mono text-xs text-text-dim">{hint}</p>
+        <p className="mt-4 text-xs text-text-dim">{hint}</p>
       )}
 
       {error && (
         <p
           role="alert"
-          className="mt-4 border border-surface-seam bg-surface-raised px-3 py-2 font-mono text-xs leading-relaxed text-text-primary"
+          className="mt-4 border border-surface-seam bg-surface-raised px-3 py-2 text-xs leading-relaxed text-text-primary"
         >
           {error}
         </p>

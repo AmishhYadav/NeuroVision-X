@@ -47,7 +47,7 @@ function HowTheGateDecides() {
           <li key={r.name} className="flex items-start gap-3">
             <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${r.dot}`} aria-hidden="true" />
             <div>
-              <p className="font-mono text-xs text-text-primary">{r.name}</p>
+              <p className="text-xs text-text-primary">{r.name}</p>
               <p className="text-xs text-text-secondary">{r.text}</p>
             </div>
           </li>
@@ -104,7 +104,7 @@ export function ClinicalPage() {
       {job.state === "failed" && (
         <div className="glass-panel border-gate-refuse/40 p-5">
           <p className="eyebrow">Failed</p>
-          <p className="mt-2 font-mono text-xs leading-relaxed text-text-primary">
+          <p className="mt-2 text-xs leading-relaxed text-text-primary">
             {job.error ?? "The job failed for an unspecified reason."}
           </p>
         </div>
@@ -118,7 +118,7 @@ export function ClinicalPage() {
   // Everything else that explains the outcome of a job. Shared by both layouts.
   const outcome = job && (
     <>
-      {error && <p className="font-mono text-xs text-text-secondary">{error}</p>}
+      {error && <p className="text-xs text-text-secondary">{error}</p>}
       {job.input_qc_pre && (
         <InputQCPanel title="Input QC — before registration" report={job.input_qc_pre} />
       )}
@@ -209,7 +209,7 @@ export function ClinicalPage() {
             <div className="flex min-w-0 flex-col gap-6">
               {job ? <ClinicalJobStatus job={job} /> : <ClinicalUploadPanel onJobCreated={setJobId} />}
               {verdictCards}
-              {!job && error && <p className="font-mono text-xs text-text-secondary">{error}</p>}
+              {!job && error && <p className="text-xs text-text-secondary">{error}</p>}
             </div>
             <div className="flex flex-col gap-6">
               <SeriesMatrix job={job ?? null} />

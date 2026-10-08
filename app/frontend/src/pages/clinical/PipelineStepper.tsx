@@ -63,7 +63,7 @@ export function PipelineStepper({ job }: { job: ClinicalJob | null }) {
                 <p className="text-xs text-text-dim">{step.detail}</p>
                 {(status === "failed" || status === "refused") && (
                   <p
-                    className={`mt-1 font-mono text-[11px] ${status === "failed" ? "text-gate-refuse" : "text-gate-caution"}`}
+                    className={`mt-1 text-xs ${status === "failed" ? "text-gate-refuse" : "text-gate-caution"}`}
                   >
                     {STATUS_WORD[status]}
                   </p>

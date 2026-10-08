@@ -13,6 +13,7 @@ defaults:
   - anatomy: sri24
   - analysis: default
   - clinical: default
+  - hero: default
   - _self_
 
 # --- Run identity ---

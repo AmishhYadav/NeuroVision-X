@@ -39,7 +39,7 @@ function Shell({ title, subtitle, children, footer }: { title: string; subtitle?
   return (
     <section className="glass-panel p-4" data-testid="clinical-uncertainty-card">
       <p className="eyebrow">{title}</p>
-      {subtitle && <p className="mt-0.5 font-mono text-[11px] text-text-dim">{subtitle}</p>}
+      {subtitle && <p className="mt-0.5 text-xs text-text-dim">{subtitle}</p>}
       <div className="mt-3 flex flex-col gap-1.5">{children}</div>
       <p className="mt-3 text-[11px] text-text-dim">{footer}</p>
     </section>
@@ -71,10 +71,10 @@ export function UncertaintyCard({ kind, region, entropy, band, gradcam, voxelMm3
             />
           ))}
         </div>
-        <p className="font-mono text-[10px] text-text-dim">
+        <p className="text-xs text-text-dim">
           Within predicted tumour, 0 = certain → 1 = maximal
         </p>
-        <p className="font-mono text-xs text-text-primary">
+        <p className="text-xs text-text-primary">
           {above === null ? "—" : formatPercent(above, 0)} of tumour voxels above 0.5
         </p>
       </Shell>
@@ -110,7 +110,7 @@ export function UncertaintyCard({ kind, region, entropy, band, gradcam, voxelMm3
             <Row label={`Conformal set (p ≥ ${threshold})`} value={volume(conformalSetVoxels ?? 0, voxelMm3)} />
           </>
         )}
-        <p className="font-mono text-xs text-text-primary">{sentence}</p>
+        <p className="text-xs text-text-primary">{sentence}</p>
       </Shell>
     );
   }
@@ -121,7 +121,7 @@ export function UncertaintyCard({ kind, region, entropy, band, gradcam, voxelMm3
         title={`Grad-CAM · ${region ?? "—"}`}
         footer="Evidence for this region's prediction. It shows where the network looked, not whether it is right."
       >
-        <p className="font-mono text-xs text-text-primary">
+        <p className="text-xs text-text-primary">
           Evidence inside predicted region:{" "}
           {gradcam.shareInside === null ? "—" : formatPercent(gradcam.shareInside, 0)}
         </p>

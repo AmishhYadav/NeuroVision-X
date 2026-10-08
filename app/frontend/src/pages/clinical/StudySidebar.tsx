@@ -220,7 +220,7 @@ export function StudySidebar(props: StudySidebarProps) {
             2,
             <>
               {typeof dominant === "string" && dominant.length > 0 && (
-                <p className="font-mono text-sm text-text-primary">
+                <p className="text-sm text-text-primary">
                   Dominant side (WT): {capitalise(dominant)}
                 </p>
               )}
@@ -235,9 +235,9 @@ export function StudySidebar(props: StudySidebarProps) {
                       ]}
                     />
                   )}
-                  <div className="flex justify-between font-mono text-xs text-text-secondary">
-                    <span>L {formatVolumeMl(volLeft)}</span>
-                    <span>R {formatVolumeMl(volRight)}</span>
+                  <div className="flex justify-between text-xs text-text-secondary">
+                    <span>L <span className="font-mono tabular-nums">{formatVolumeMl(volLeft)}</span></span>
+                    <span>R <span className="font-mono tabular-nums">{formatVolumeMl(volRight)}</span></span>
                   </div>
                 </div>
               )}
@@ -252,7 +252,7 @@ export function StudySidebar(props: StudySidebarProps) {
             {components.map((c) => (
               <li key={c.region} className="flex justify-between text-xs">
                 <span className="text-text-secondary">{c.region}</span>
-                <span className="font-mono text-text-primary">
+                <span className="text-text-primary">
                   {c.n === null ? "—" : plural(c.n, "component")}
                 </span>
               </li>
@@ -284,9 +284,9 @@ export function StudySidebar(props: StudySidebarProps) {
                         <span className="shrink-0 text-[11px] text-text-dim">{row.laterality}</span>
                       )}
                     </div>
-                    <div className="flex justify-between font-mono text-[11px] text-text-secondary">
-                      <span>{formatVolumeMl(row.volume_mm3)}</span>
-                      <span>{formatPercent(row.frac_of_structure)} of structure</span>
+                    <div className="flex justify-between text-xs text-text-secondary">
+                      <span className="font-mono">{formatVolumeMl(row.volume_mm3)}</span>
+                      <span><span className="font-mono tabular-nums">{formatPercent(row.frac_of_structure)}</span> of structure</span>
                     </div>
                   </li>
                 ))}
@@ -295,7 +295,7 @@ export function StudySidebar(props: StudySidebarProps) {
             {typeof report?.anatomy.caveat === "string" && report.anatomy.caveat.length > 0 && (
               <p className="mt-3 text-[11px] text-text-dim">{report.anatomy.caveat}</p>
             )}
-            {atlasFooter && <p className="mt-2 font-mono text-[11px] text-text-dim">{atlasFooter}</p>}
+            {atlasFooter && <p className="mt-2 text-xs text-text-dim">{atlasFooter}</p>}
           </>,
         )}
       </Card>
@@ -303,7 +303,7 @@ export function StudySidebar(props: StudySidebarProps) {
       {(decision === "proceed" || decision === "proceed_with_caution") && (
         <Card title="Gate">
           <span
-            className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 font-mono text-xs ${
+            className={`inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs ${
               decision === "proceed"
                 ? "border-gate-proceed/50 bg-gate-proceed/10 text-gate-proceed"
                 : "border-gate-caution/50 bg-gate-caution/10 text-gate-caution"
@@ -338,7 +338,7 @@ export function StudySidebar(props: StudySidebarProps) {
             Open report
           </button>
           {exportError && (
-            <p role="alert" className="font-mono text-[11px] text-gate-caution">
+            <p role="alert" className="text-xs text-gate-caution">
               {exportError}
             </p>
           )}

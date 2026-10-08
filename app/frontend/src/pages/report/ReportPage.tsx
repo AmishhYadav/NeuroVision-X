@@ -200,10 +200,10 @@ function CompositionBar({ fractions }: { fractions: BurdenBlock }) {
         {segments.map((s) => (
           <div
             key={s.key}
-            className="flex items-center gap-1.5 font-mono text-xs text-text-secondary"
+            className="flex items-center gap-1.5 text-xs text-text-secondary"
           >
             <span className={`inline-block h-2 w-2 rounded-full ${s.color}`} />
-            {s.label} {formatPercent(s.value as number)}
+            {s.label} <span className="font-mono tabular-nums">{formatPercent(s.value as number)}</span>
           </div>
         ))}
       </div>
@@ -246,9 +246,9 @@ function RegionsFacts({
             <div key={i}>
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-sm text-text-primary">{fact.label}</span>
-                <span className="font-mono text-xs text-text-dim">
-                  {formatPercent(structure.frac_of_structure)} of region
-                  &middot; {formatPercent(structure.frac_of_tumour)} of tumour
+                <span className="text-xs text-text-dim">
+                  <span className="font-mono tabular-nums">{formatPercent(structure.frac_of_structure)}</span> of region
+                  &middot; <span className="font-mono tabular-nums">{formatPercent(structure.frac_of_tumour)}</span> of tumour
                 </span>
               </div>
               <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-seam">
@@ -272,7 +272,7 @@ function LimitsFacts({ facts }: { facts: InterpretedFact[] }) {
     <ol className="grid gap-3 sm:grid-cols-2">
       {facts.map((f, i) => (
         <li key={i} className="glass-panel p-3">
-          <strong className="font-mono text-sm font-normal text-text-primary">
+          <strong className="text-sm font-normal text-text-primary">
             {f.label}
           </strong>
           {f.note && (
@@ -360,7 +360,7 @@ function BurdenBlockDl({
   return (
     <div>
       <BlockTitle>{title}</BlockTitle>
-      <dl className="mt-1 rounded-lg border border-surface-seam py-1 font-mono text-xs">
+      <dl className="mt-1 rounded-lg border border-surface-seam py-1 text-xs">
         {Object.entries(block).map(([k, v]) => (
           <KvRow key={k} k={burdenLabel(k)}>
             {formatBurdenValue(k, v)}
@@ -382,7 +382,7 @@ function GeometryBlockDl({
   return (
     <div>
       <BlockTitle>{title}</BlockTitle>
-      <dl className="mt-1 rounded-lg border border-surface-seam py-1 font-mono text-xs">
+      <dl className="mt-1 rounded-lg border border-surface-seam py-1 text-xs">
         {Object.entries(block).map(([k, v]) => (
           <KvRow key={k} k={geometryLabel(k)}>
             {formatGeometryValue(k, typeof v === "number" ? v : null)}
@@ -408,7 +408,7 @@ function ProvenanceDl({ provenance }: { provenance: ReportProvenance }) {
     provenance as unknown as Record<string, unknown>,
   );
   return (
-    <dl className="mt-1 rounded-lg border border-surface-seam py-1 font-mono text-xs">
+    <dl className="mt-1 rounded-lg border border-surface-seam py-1 text-xs">
       {entries.map(([k, v]) => (
         <KvRow key={k} k={k} breakAll>
           {flattenProvenanceValue(v)}
@@ -451,7 +451,7 @@ function TechnicalData({ report }: { report: ReportResponse }) {
         )}
         <div>
           <BlockTitle>Eloquence citation</BlockTitle>
-          <p className="mt-1 font-mono text-xs leading-relaxed text-text-secondary">
+          <p className="mt-1 text-xs leading-relaxed text-text-secondary">
             {report.eloquence.citation}
           </p>
         </div>
@@ -512,7 +512,7 @@ function SectionCard({
         </p>
       )}
       {section.caveat && (
-        <div className="mt-4 border-l-2 border-surface-seam pl-3 text-xs leading-relaxed text-text-dim">
+        <div className="mt-4 rounded-md bg-surface-raised/50 px-3 py-2 text-xs leading-relaxed text-text-secondary">
           <div className="eyebrow">Caveat</div>
           {section.caveat.split("\n").map((line, i) => (
             <p key={i} className="mt-1">
@@ -741,7 +741,7 @@ export function ReportPage({ caseId }: { caseId: string }) {
                 {/* Footer - the disclaimer again, plus a second way back (on
                     print, the only one, since the nav is print:hidden). */}
                 <footer className="flex flex-col items-center gap-3 py-4 text-center">
-                  <p className="font-mono text-xs text-text-dim">
+                  <p className="text-xs text-text-dim">
                     {report.disclaimer}
                   </p>
                   <BackLink

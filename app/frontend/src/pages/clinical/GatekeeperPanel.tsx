@@ -46,7 +46,7 @@ function VerdictRow({ verdict }: { verdict: GatekeeperSignalVerdict }) {
     <div className="flex flex-col gap-1 border-t border-surface-seam pt-3 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span
-          className={`font-mono text-xs ${verdict.enabled ? "text-text-primary" : "text-text-dim"}`}
+          className={`text-xs ${verdict.enabled ? "text-text-primary" : "text-text-dim"}`}
         >
           {label}
         </span>
@@ -59,7 +59,7 @@ function VerdictRow({ verdict }: { verdict: GatekeeperSignalVerdict }) {
         </span>
       </div>
       <p
-        className={`font-mono text-[11px] leading-relaxed ${verdict.enabled ? "text-text-secondary" : "text-text-dim"}`}
+        className={`text-xs leading-relaxed ${verdict.enabled ? "text-text-secondary" : "text-text-dim"}`}
       >
         {verdict.message}
       </p>

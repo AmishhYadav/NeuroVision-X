@@ -37,7 +37,7 @@ function Swatch({ color, label }: { color: string; label: string }) {
         style={{ backgroundColor: color }}
         aria-hidden="true"
       />
-      <span className="font-mono text-xs text-text-secondary">{label}</span>
+      <span className="text-xs text-text-secondary">{label}</span>
     </div>
   );
 }
@@ -60,7 +60,7 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
                 className="h-2.5 w-2.5 shrink-0 rounded-sm border border-white"
                 aria-hidden="true"
               />
-              <span className="font-mono text-[11px] text-text-secondary">
+              <span className="text-xs text-text-secondary">
                 Ground-truth outline
               </span>
             </div>
@@ -90,7 +90,7 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
             <Swatch color="#E46A3F" label={labels.one} />
             <Swatch color="#FCFDBF" label={labels.both} />
             {opLine && (
-              <div className="font-mono text-[10px] text-text-dim" data-testid="conformal-operating-point">
+              <div className="text-xs text-text-dim" data-testid="conformal-operating-point">
                 {opLine}
               </div>
             )}
@@ -102,7 +102,7 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
                 tooltip rather than more on-screen text, so the legend does
                 not grow every time a caveat is added. */}
             <div
-              className="text-center font-mono text-[10px] text-text-dim"
+              className="text-center text-xs text-text-dim"
               title="Calibrated so that, averaged over in-distribution studies, mask + band miss at most 10% of tumour voxels (α = 0.10). Not a guarantee for this patient, and it does not hold for scans unlike the training data."
             >
               Conformal band: average-case bound (in-distribution only, not per patient)
@@ -133,13 +133,13 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
                 />
               )}
             </div>
-            <div className="flex justify-between font-mono text-[10px] text-text-dim">
-              <span>0</span>
+            <div className="flex justify-between text-xs text-text-dim">
+              <span className="font-mono">0</span>
               <span>{uncertaintyKind === GRADCAM ? "Grad-CAM evidence" : "Predictive entropy"}</span>
-              <span>1</span>
+              <span className="font-mono">1</span>
             </div>
             {uncertaintyKind !== GRADCAM && (
-              <div className="text-center font-mono text-[10px] text-text-dim">
+              <div className="text-center text-xs text-text-dim">
                 tick = 1 channel fully uncertain
               </div>
             )}
@@ -148,7 +148,7 @@ export function Legend({ overlayMode, showUncertainty, hasLabel, uncertaintyKind
                 "single pass" text for an unrecognized or missing header, since
                 this layer must never be presented as epistemic/MC-dropout
                 uncertainty when it isn't. */}
-            <div className="text-center font-mono text-[10px] text-text-dim">
+            <div className="text-center text-xs text-text-dim">
               {uncertaintyKind === PREDICTIVE_ENTROPY_SINGLE_PASS
                 ? "single pass · aleatoric + epistemic combined"
                 : uncertaintyKind === GRADCAM

@@ -483,13 +483,13 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
   if (error) {
     return (
       <div className="flex flex-1 items-center justify-center text-center">
-        <p className="font-mono text-sm text-text-primary">{error}</p>
+        <p className="text-sm text-text-primary">{error}</p>
       </div>
     );
   }
 
   const segBtn = (active: boolean, disabled = false) =>
-    `flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-xs transition-colors duration-[120ms] ${
+    `flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors duration-[120ms] ${
       disabled
         ? "cursor-not-allowed text-text-dim"
         : active
@@ -558,7 +558,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
   const twinTile = (
     <div
       ref={twinHostRef}
-      className="h-full min-h-0 overflow-hidden rounded-xl border border-surface-seam bg-surface-panel"
+      className="h-full min-h-0 overflow-hidden rounded-[10px] border border-surface-seam bg-surface-panel"
     >
       <BrainTwinScene
         input={twinInput}
@@ -672,7 +672,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
             <details className="relative shrink-0">
               <summary
                 data-testid="clinical-atlas-structures-toggle"
-                className="cursor-pointer list-none rounded-lg border border-surface-seam bg-surface-raised/50 px-2.5 py-1 font-mono text-xs text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
+                className="cursor-pointer list-none rounded-lg border border-surface-seam bg-surface-raised/50 px-2.5 py-1 text-[13px] font-medium text-text-secondary transition-colors duration-[120ms] hover:text-text-primary"
               >
                 Structures · {atlasSelection.length} shown
               </summary>
@@ -689,7 +689,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
                         <label
                           key={row.index}
                           title={atCap ? "16 structures max" : undefined}
-                          className="flex items-center gap-1.5 font-mono text-xs text-text-secondary"
+                          className="flex items-center gap-1.5 text-xs text-text-secondary"
                         >
                           <input
                             type="checkbox"
@@ -698,7 +698,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
                             onChange={(e) => toggleExtraStructure(row.index, e.target.checked)}
                             className="accent-brand-primary"
                           />
-                          <span className="truncate">{row.name}</span>
+                          <span className="truncate font-mono">{row.name}</span>
                           {fromReport && (
                             <span className="ml-auto shrink-0 text-text-dim">from report</span>
                           )}
@@ -739,7 +739,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
             {exporting ? "Exporting…" : "Export"}
           </button>
           {exportError && (
-            <span role="alert" className="font-mono text-[11px] text-gate-caution">
+            <span role="alert" className="text-xs text-gate-caution">
               {exportError}
             </span>
           )}
@@ -754,7 +754,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
               role="status"
               className="flex shrink-0 items-center gap-2 rounded-lg border border-gate-caution/50 bg-gate-caution/10 px-3 py-1.5 text-gate-caution"
             >
-              <span className="font-condensed text-[11px] tracking-[0.12em] uppercase">
+              <span className="font-condensed text-xs">
                 Gatekeeper: proceed with caution — read the report's not_claimed list before
                 relying on it
               </span>
@@ -766,7 +766,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
               role="status"
               aria-live="polite"
             >
-              <span className="font-condensed text-[11px] tracking-[0.12em] text-text-dim uppercase">
+              <span className="font-condensed text-xs text-text-dim">
                 Loading segmentation…
               </span>
             </div>
@@ -778,7 +778,7 @@ export function ClinicalStudyViewer({ jobId, decision }: ClinicalStudyViewerProp
               className="flex shrink-0 flex-col gap-0.5 rounded-lg border border-surface-seam bg-surface-panel px-3 py-1.5"
             >
               {warnings.map((warning) => (
-                <span key={warning} className="font-mono text-[11px] text-text-dim">
+                <span key={warning} className="text-xs text-text-dim">
                   Layer unavailable — {warning}
                 </span>
               ))}

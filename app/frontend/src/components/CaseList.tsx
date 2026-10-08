@@ -50,10 +50,10 @@ export function CaseList({
               <button
                 type="button"
                 onClick={() => onSelect(c.case_id)}
-                className={`flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left font-mono text-xs transition-colors duration-[120ms] ${
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-xs transition-colors duration-[120ms] ${
                   active
-                    ? "border-brand-primary bg-brand-primary/15 text-text-primary"
-                    : "border-transparent text-text-secondary hover:bg-surface-raised/50 hover:text-text-primary"
+                    ? "bg-brand-primary/12 text-text-primary ring-1 ring-inset ring-brand-primary/35"
+                    : "text-text-secondary hover:bg-surface-raised/50 hover:text-text-primary"
                 }`}
                 aria-current={active ? "true" : undefined}
               >
@@ -69,7 +69,7 @@ export function CaseList({
           );
         })}
         {cases.length === 0 && (
-          <li className="px-3 py-2 font-mono text-xs text-text-dim">No cases available.</li>
+          <li className="px-3 py-2 text-xs text-text-dim">No cases available.</li>
         )}
       </ul>
     </div>

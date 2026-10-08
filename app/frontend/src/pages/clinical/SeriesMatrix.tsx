@@ -45,17 +45,17 @@ export function SeriesMatrix({ job }: { job: ClinicalJob | null }) {
             >
               <span className="font-mono text-sm text-text-primary">{label}</span>
               {s === "assigned" && (
-                <span className="flex items-center gap-1.5 font-mono text-xs text-brand-teal">
+                <span className="flex items-center gap-1.5 text-xs text-brand-teal">
                   <Check className="h-4 w-4" aria-hidden="true" /> assigned
                 </span>
               )}
               {s === "missing" && (
-                <span className="flex items-center gap-1.5 font-mono text-xs text-gate-refuse">
+                <span className="flex items-center gap-1.5 text-xs text-gate-refuse">
                   <X className="h-4 w-4" aria-hidden="true" /> missing
                 </span>
               )}
               {s === "unknown" && (
-                <span className="flex items-center gap-1.5 font-mono text-xs text-text-dim">
+                <span className="flex items-center gap-1.5 text-xs text-text-dim">
                   <Minus className="h-4 w-4" aria-hidden="true" />
                   <span className="sr-only">not yet known</span>
                 </span>

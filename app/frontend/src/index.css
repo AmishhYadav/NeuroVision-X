@@ -1,68 +1,85 @@
 @import "tailwindcss";
 
-/* Self-hosted fonts (no CDN, so the demo works offline). Families follow the
-   Stitch "NeuroVision-X" design system: Inter for body text, Space Grotesk
-   for headings and labels, Space Mono for every number and measurement. */
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/space-grotesk";
-@import "@fontsource/space-mono/400.css";
-@import "@fontsource/space-mono/700.css";
+/* ------------------------------------------------------------------------
+   NeuroVision-X design system — "reading room".
 
-/* Design tokens. Component code uses these names (bg-surface-panel,
-   text-text-secondary, text-data-enhancing, ...), never raw hex, so the
-   whole app re-themes from this one block. */
+   Scene: someone reads grey MRI slices on a laptop or a projector in a dim
+   room. The images read best on near-black, so the chrome is dark graphite,
+   quiet, and never competes with the data. Colour lives in the DATA (the
+   paper's Okabe-Ito tumour palette); the chrome is restrained: tinted
+   neutrals plus one pale ice-cyan accent for selection, focus and the
+   primary action. No purple, no glass, no gradients.
+
+   Type: Atkinson Hyperlegible (Next + Mono), drawn by the Braille Institute
+   for low-vision legibility. One family, real weight contrast. Mono only for
+   numbers and identifiers, so columns line up.
+
+   Token NAMES are unchanged from the previous theme (components use
+   bg-surface-panel, text-brand-primary, …), so every page re-themes from
+   this file alone. "brand-primary" now means the ice accent.
+   ------------------------------------------------------------------------ */
+
+@import "@fontsource-variable/atkinson-hyperlegible-next";
+@import "@fontsource-variable/atkinson-hyperlegible-mono";
+
 @theme {
-  /* Surfaces: deep navy page, lighter navy panels (Stitch designMd). */
-  --color-surface-page: #0a0a1a;
-  --color-surface-panel: #12122e;
-  --color-surface-raised: #1a1a40;
-  --color-surface-seam: #26264d;
-  --color-surface-viewport: #000000;
-  --color-surface-ribbon: #07070f;
+  /* Surfaces — graphite, tinted 0.008–0.012 chroma toward hue 250. */
+  --color-surface-page: oklch(0.16 0.008 250);
+  --color-surface-panel: oklch(0.195 0.009 250);
+  --color-surface-raised: oklch(0.24 0.01 250);
+  --color-surface-seam: oklch(0.31 0.011 250);
+  --color-surface-viewport: oklch(0 0 0);
+  --color-surface-ribbon: oklch(0.135 0.008 250);
 
-  /* Text */
-  --color-text-primary: #eceef6;
-  --color-text-secondary: #a3a6c2;
-  --color-text-dim: #676a8a;
+  /* Text — all ≥ 4.5:1 on surface-page and surface-panel. */
+  --color-text-primary: oklch(0.95 0.004 250);
+  --color-text-secondary: oklch(0.79 0.012 250);
+  --color-text-dim: oklch(0.65 0.013 250);
 
-  /* Brand / chrome accents. Chrome only: never used to draw data. */
-  --color-brand-primary: #6c5ce7; /* CTAs, active tab, selection */
-  --color-brand-primary-hover: #7d6ff0;
-  --color-brand-teal: #00cec9; /* live/online, secondary actions */
-  --color-brand-pink: #fd79a8; /* alerts */
+  /* Chrome accent (selection, focus, primary action). Pale and low-chroma on
+     purpose: the saturated data colours must stay the loudest thing on screen. */
+  --color-brand-primary: oklch(0.86 0.075 215);
+  --color-brand-primary-hover: oklch(0.92 0.06 215);
+  --color-brand-ink: oklch(0.2 0.03 230); /* text on an accent fill */
+  /* "Live/online" and success-ish chrome signals. */
+  --color-brand-teal: oklch(0.83 0.1 180);
+  /* Alerts (system faults only — never a refusal). */
+  --color-brand-pink: oklch(0.7 0.16 28);
 
   /* Gate decision states. Always paired with a text label, never colour alone. */
-  --color-gate-proceed: #00cec9;
-  --color-gate-caution: #e69f00;
-  --color-gate-refuse: #fd79a8;
+  --color-gate-proceed: oklch(0.84 0.1 165);
+  --color-gate-caution: oklch(0.83 0.13 78);
+  --color-gate-refuse: oklch(0.7 0.16 28);
 
-  /* Data colours: the paper's Okabe-Ito region palette. Data only, never
-     chrome, so a purple button can never be mistaken for a tumour region. */
+  /* Data colours: the paper's Okabe-Ito palette. DATA ONLY, never chrome. */
   --color-data-necrotic: #56b4e9;
   --color-data-oedema: #009e73;
   --color-data-enhancing: #d55e00;
   --color-data-wt: #0072b2;
   --color-data-amber: #e69f00;
 
-  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Space Grotesk Variable", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  /* Old components use font-condensed for small uppercase labels; it now
-     maps to the heading face so they pick up the new look unchanged. */
-  --font-condensed: var(--font-heading);
-  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+  /* Landing-page hologram only. */
+  --color-holo: oklch(0.8 0.12 232);
+  --color-holo-deep: oklch(0.45 0.13 250);
 
-  --radius-xl: 12px;
+  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+  --font-condensed: var(--font-sans);
+  --font-mono: "Atkinson Hyperlegible Mono Variable", ui-monospace, "SFMono-Regular", monospace;
 
-  /* The landing page used to have its own light palette. Stitch is dark
-     everywhere, so these aliases point at the dark tokens. */
-  --color-landing-bg: #0a0a1a;
-  --color-landing-bg-raised: #12122e;
-  --color-landing-seam: #26264d;
-  --color-landing-text: #eceef6;
-  --color-landing-text-secondary: #a3a6c2;
-  --color-landing-text-dim: #676a8a;
-  --color-landing-accent: #6c5ce7;
-  --color-landing-accent-ink: #ffffff;
+  --radius-xl: 10px;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+
+  /* Old landing aliases → the same dark tokens. */
+  --color-landing-bg: var(--color-surface-page);
+  --color-landing-bg-raised: var(--color-surface-panel);
+  --color-landing-seam: var(--color-surface-seam);
+  --color-landing-text: var(--color-text-primary);
+  --color-landing-text-secondary: var(--color-text-secondary);
+  --color-landing-text-dim: var(--color-text-dim);
+  --color-landing-accent: var(--color-brand-primary);
+  --color-landing-accent-ink: var(--color-brand-ink);
 }
 
 @layer base {
@@ -77,7 +94,10 @@
     background-color: var(--color-surface-page);
     color: var(--color-text-primary);
     font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    font-optical-sizing: auto;
   }
 
   h1,
@@ -85,7 +105,13 @@
   h3,
   h4 {
     font-family: var(--font-heading);
-    letter-spacing: -0.01em;
+    font-weight: 650;
+    letter-spacing: -0.012em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   /* Numbers line up in columns. */
@@ -93,50 +119,52 @@
   .tabular {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
   }
 
   :focus-visible {
     outline: 2px solid var(--color-brand-primary);
     outline-offset: 2px;
   }
+
+  ::selection {
+    background: color-mix(in oklch, var(--color-brand-primary) 35%, transparent);
+  }
 }
 
 @layer components {
-  /* Translucent panel used for every card. Falls back to a solid panel when
-     the browser can't blur (so text stays readable). */
+  /* A plain panel: solid surface, hairline border. (Name kept for
+     compatibility — there is deliberately no blur or translucency.) */
   .glass-panel {
-    background: color-mix(in srgb, var(--color-surface-panel) 78%, transparent);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgb(255 255 255 / 0.06);
+    background: var(--color-surface-panel);
+    border: 1px solid var(--color-surface-seam);
     border-radius: var(--radius-xl);
   }
-  @supports not (backdrop-filter: blur(1px)) {
-    .glass-panel {
-      background: var(--color-surface-panel);
-    }
-  }
 
-  /* Small uppercase mono label above a value ("ICV", "SLICE"). */
+  /* Small field label above a value ("Whole tumour", "Slice"). Sentence
+     case, no tracking: a label, not a shouted kicker. */
   .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.3;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--color-text-dim);
   }
 
-  /* Pill tag for inline facts ("SRI24", "seed 42"). */
+  /* Inline fact tag ("SRI24", "job 9c2cc294"). */
   .chip {
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    padding: 0.125rem 0.5rem;
+    padding: 0.0625rem 0.5rem;
     border: 1px solid var(--color-surface-seam);
-    border-radius: 6px;
-    background: var(--color-surface-raised);
+    border-radius: 999px;
+    background: transparent;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 11.5px;
+    line-height: 1.6;
     color: var(--color-text-secondary);
     white-space: nowrap;
   }
@@ -146,24 +174,26 @@
     align-items: center;
     gap: 0.5rem;
     background: var(--color-brand-primary);
-    color: #fff;
-    padding: 0.5rem 1.25rem;
-    border-radius: var(--radius-xl);
-    font-family: var(--font-heading);
-    font-weight: 600;
-    transition:
-      background-color 150ms ease,
-      box-shadow 150ms ease;
+    color: var(--color-brand-ink);
+    padding: 0.5rem 1rem;
     border: 1px solid transparent;
+    border-radius: 8px;
+    font-family: var(--font-sans);
+    font-weight: 650;
+    transition:
+      background-color 160ms var(--ease-out-quart),
+      transform 160ms var(--ease-out-quart);
   }
   .btn-primary:hover {
     background: var(--color-brand-primary-hover);
-    box-shadow: 0 0 18px rgb(108 92 231 / 0.45);
+  }
+  .btn-primary:active {
+    transform: translateY(1px);
   }
   .btn-primary:disabled {
     opacity: 0.4;
-    box-shadow: none;
     cursor: not-allowed;
+    transform: none;
   }
 
   .btn-secondary {
@@ -171,27 +201,29 @@
     align-items: center;
     gap: 0.5rem;
     background: transparent;
-    color: var(--color-brand-teal);
-    border: 1px solid color-mix(in srgb, var(--color-brand-teal) 60%, transparent);
-    padding: 0.5rem 1.25rem;
-    border-radius: var(--radius-xl);
-    font-family: var(--font-heading);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-surface-seam);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-family: var(--font-sans);
     font-weight: 600;
     transition:
-      background-color 150ms ease,
-      box-shadow 150ms ease;
+      background-color 160ms var(--ease-out-quart),
+      border-color 160ms var(--ease-out-quart);
   }
   .btn-secondary:hover {
-    background: rgb(0 206 201 / 0.08);
-    box-shadow: 0 0 15px rgb(0 206 201 / 0.25);
+    background: var(--color-surface-raised);
+    border-color: color-mix(in oklch, var(--color-text-dim) 60%, var(--color-surface-seam));
+  }
+  .btn-secondary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
-  /* Faint engineering grid behind viewers (Stitch twin studio). */
+  /* Formerly a decorative grid behind viewers. Retired: a plain field reads
+     calmer and keeps the eye on the image. Kept as a no-op class. */
   .bg-grid {
-    background-image:
-      linear-gradient(rgb(255 255 255 / 0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 0.025) 1px, transparent 1px);
-    background-size: 32px 32px;
+    background-image: none;
   }
 }
 
