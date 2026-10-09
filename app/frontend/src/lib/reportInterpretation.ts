@@ -356,12 +356,14 @@ function buildOverview(report: ReportResponse): InterpretedSection {
 }
 
 const VOLUME_KEYS = ["vol_WT_mm3", "vol_TC_mm3", "vol_ET_mm3", "vol_NCR_mm3", "vol_ED_mm3"] as const;
+// Shown under each volume's label, so they say what the label means rather
+// than repeating it.
 const VOLUME_NOTES: Record<string, string> = {
-  vol_WT_mm3: "whole tumour (everything marked abnormal, including swelling)",
-  vol_TC_mm3: "tumour core (the solid part: enhancing + necrotic)",
-  vol_ET_mm3: "enhancing tumour (tissue that takes up contrast dye)",
-  vol_NCR_mm3: "necrotic core (dead tissue, usually at the centre)",
-  vol_ED_mm3: "oedema (swelling in the surrounding brain)",
+  vol_WT_mm3: "everything marked abnormal, including swelling",
+  vol_TC_mm3: "the solid part: enhancing + necrotic",
+  vol_ET_mm3: "tissue that takes up contrast dye",
+  vol_NCR_mm3: "dead tissue, usually at the centre",
+  vol_ED_mm3: "swelling in the surrounding brain",
 };
 
 function buildSize(report: ReportResponse): InterpretedSection {

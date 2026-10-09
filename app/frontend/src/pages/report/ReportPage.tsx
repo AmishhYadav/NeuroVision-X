@@ -1,57 +1,36 @@
-// A plain-language, printable report document.
+// A plain-language, printable report document for one case.
 //
-// Stitch "Structured Report" look: the app's dark glass-panel tokens inside
-// the shared AppShell, a two-column layout (report + sticky section nav).
-// A small @media print block below swaps the tokens to a white page so a
-// printed copy stays readable.
+// Layout ("reading room" system, see index.css): a document, not a stack of
+// cards. A title block (case id, metadata, the basis sentence, the
+// disclaimer once), then numbered sections separated by hairlines, a sticky
+// contents rail on wide screens, and the raw technical data collapsed at the
+// end. Section bodies are laid out by ReportFacts.tsx; the raw panel lives
+// in TechnicalData.tsx.
 //
-// Almost every value rendered here comes from `interpretReport` as an
-// already-formatted STRING (InterpretedFact.value), never a raw number this
-// component reformats itself - `reportInterpretation.ts` is the single place
-// that decides how a number becomes a plain-language fact, and it is owned
-// by another agent concurrently. The two exceptions are the composition bar
-// and the regions bar list, which need the underlying fraction as a *number*
-// to size a `width` style - those two read `report.burden.fractions` /
-// `report.anatomy.structures` directly (never re-deriving a label from them;
-// labels still come from the matching InterpretedFact).
+// Every sentence and figure comes from `interpretReport`
+// (lib/reportInterpretation.ts) as an already-formatted string - this page
+// decides placement and typesetting only, never how a number is worded.
+//
+// Contract with e2e/smoke.mjs (section 10), keep it when restyling:
+//  - each section is <section id="section-{id}"> whose FIRST direct <p> is
+//    the section's headline (checked on the overview);
+//  - the limits section lists its items as `ol > li`;
+//  - an <a> whose text includes "Back to viewer" returns to /app?case=<id>.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ArrowLeft, Info, Printer } from "lucide-react";
 import { AppShell } from "../../components/AppShell";
-import {
-  type AnatomyStructureRow,
-  type BurdenBlock,
-  type ReportProvenance,
-  type ReportResponse,
-  fetchReport,
-} from "../../api";
-import {
-  burdenLabel,
-  formatBurdenValue,
-  formatGeometryValue,
-  formatPercent,
-  geometryLabel,
-} from "../../lib/report";
+import { fetchReport, type ReportResponse } from "../../api";
 import { classifyReportError } from "../../lib/reportStatus";
 import { navigateTo } from "../../lib/navigate";
-import {
-  type InterpretedFact,
-  type InterpretedSection,
-  interpretReport,
-} from "../../lib/reportInterpretation";
+import { splitCode } from "../../lib/reportLayout";
+import { type InterpretedSection, interpretReport } from "../../lib/reportInterpretation";
+import { SectionFacts } from "./ReportFacts";
+import { TechnicalData } from "./TechnicalData";
 
-type LoadStatus =
-  | "loading"
-  | "loaded"
-  | "not_found"
-  | "server_error"
-  | "unreachable"
-  | "invalid";
+type LoadStatus = "loading" | "loaded" | "not_found" | "server_error" | "unreachable" | "invalid";
 
-/** The message shown for each non-loaded status. `loading` needs the case id; the rest fall back to the classified message, which is null only for `unreachable`. */
-function statusMessage(
-  status: LoadStatus,
-  caseId: string,
-  classifiedMessage: string | null,
-): string {
+/** The message for each non-loaded status. `loading` needs the case id; the rest fall back to the classified message, which is null only for `unreachable`. */
+function statusMessage(status: LoadStatus, caseId: string, classifiedMessage: string | null): string {
   switch (status) {
     case "loading":
       return `Loading report for ${caseId}…`;
@@ -64,15 +43,23 @@ function statusMessage(
   }
 }
 
-/** `generated_utc` -> a locale date string; falls back to the raw string if it does not parse (an older report, a clock skew, anything that is not valid ISO). */
+const STATUS_TITLE: Record<Exclude<LoadStatus, "loading" | "loaded">, string> = {
+  not_found: "No report for this case yet",
+  unreachable: "Can't reach the API",
+  server_error: "The report couldn't be loaded",
+  invalid: "The report couldn't be read",
+};
+
+/** `generated_utc` -> a locale date string; falls back to the raw string if it does not parse. */
 function formatGeneratedDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
 }
 
-function isEmptyBlock(block: BurdenBlock | undefined): block is undefined {
-  return !block || Object.keys(block).length === 0;
+/** Two-digit section numbers: the report is an ordered document, cited by section. */
+function sectionNumber(i: number): string {
+  return String(i + 1).padStart(2, "0");
 }
 
 // --------------------------------------------------------------------- //
@@ -82,32 +69,30 @@ function isEmptyBlock(block: BurdenBlock | undefined): block is undefined {
 
 const PRINT_CSS = `
 @media print {
+  @page { margin: 14mm; }
   :root {
     --color-surface-page: #ffffff;
     --color-surface-panel: #ffffff;
-    --color-surface-raised: #f3f4f6;
+    --color-surface-raised: #eceef1;
     --color-surface-seam: #d1d5db;
     --color-text-primary: #111111;
     --color-text-secondary: #374151;
     --color-text-dim: #4b5563;
+    --color-brand-primary: #1f6f8b;
   }
   html, body, #root { background: #ffffff !important; }
-  body header { display: none !important; }
-  .glass-panel { background: #ffffff !important; backdrop-filter: none !important; border-color: #d1d5db !important; }
+  #root > div > header { display: none !important; }
+  #report-doc { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #report-doc h2 { break-after: avoid-page; }
+  #section-technical:not([open]) { display: none; }
 }
 `;
 
 // --------------------------------------------------------------------- //
-// Actions (back / print)
+// Small pieces
 // --------------------------------------------------------------------- //
 
-function BackLink({
-  caseId,
-  className,
-}: {
-  caseId: string;
-  className?: string;
-}) {
+function BackLink({ caseId, className, children }: { caseId: string; className?: string; children: ReactNode }) {
   const href = `/app?case=${encodeURIComponent(caseId)}`;
   return (
     <a
@@ -118,410 +103,238 @@ function BackLink({
       }}
       className={className}
     >
-      &larr; Back to viewer
+      {children}
     </a>
   );
 }
 
-const SMALL_BTN = "btn-secondary !px-3 !py-1.5 text-xs justify-center";
-
-// --------------------------------------------------------------------- //
-// Facts rendering - one dispatcher per section id. Every branch renders
-// strings from InterpretedFact; only the two "bar" branches below reach
-// past that into raw report numbers, and only to size a width.
-// --------------------------------------------------------------------- //
-
-/** KPI tiles: eyebrow label, mono value, optional note underneath. */
-function FactsGrid({ facts }: { facts: InterpretedFact[] }) {
-  if (facts.length === 0) return null;
-  return (
-    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {facts.map((f, i) => (
-        <div
-          key={i}
-          className="rounded-lg border border-surface-seam bg-surface-raised/40 p-3"
-        >
-          <dt className="eyebrow">{f.label}</dt>
-          <dd className="tabular mt-1 break-words font-mono text-xl text-text-primary">
-            {f.value}
-          </dd>
-          {f.note && <div className="mt-1 text-xs text-text-dim">{f.note}</div>}
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/** The three shares of WT, read raw so the bar segment widths are exact percentages rather than re-parsed from a formatted string. Renders nothing if any of the three is missing or non-finite. */
-function CompositionBar({ fractions }: { fractions: BurdenBlock }) {
-  const segments: {
-    key: string;
-    value: unknown;
-    color: string;
-    label: string;
-  }[] = [
-    {
-      key: "edema",
-      value: fractions.frac_edema_of_wt,
-      color: "bg-data-oedema",
-      label: "Swelling",
-    },
-    {
-      key: "enhancing",
-      value: fractions.frac_enhancing_of_wt,
-      color: "bg-data-enhancing",
-      label: "Enhancing",
-    },
-    {
-      key: "necrotic",
-      value: fractions.frac_necrotic_of_wt,
-      color: "bg-data-necrotic",
-      label: "Necrotic",
-    },
-  ];
-  const allFinite = segments.every(
-    (s) => typeof s.value === "number" && Number.isFinite(s.value),
-  );
-  if (!allFinite) return null;
-
-  return (
-    <div className="mb-4">
-      <div className="flex h-2 w-full overflow-hidden rounded-full bg-surface-seam">
-        {segments.map((s) => (
-          <div
-            key={s.key}
-            className={s.color}
-            style={{ width: `${(s.value as number) * 100}%` }}
-            title={`${s.label}: ${formatPercent(s.value as number)}`}
-          />
-        ))}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-        {segments.map((s) => (
-          <div
-            key={s.key}
-            className="flex items-center gap-1.5 text-xs text-text-secondary"
-          >
-            <span className={`inline-block h-2 w-2 rounded-full ${s.color}`} />
-            {s.label} <span className="font-mono tabular-nums">{formatPercent(s.value as number)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * `regions` facts are, in order: two summary facts ("Regions touched",
- * "Unlabelled share"), then one fact per `report.anatomy.structures` row -
- * same order, offset by those two. The bar width and the two percentages
- * come from the matching raw structure row (frac_of_structure,
- * frac_of_tumour); the structure NAME comes from the fact's own label so
- * this component never re-derives a name from the raw atlas row itself.
- */
-function RegionsFacts({
-  facts,
-  structures,
-}: {
-  facts: InterpretedFact[];
-  structures: AnatomyStructureRow[];
-}) {
-  const summaryFacts = facts.slice(0, 2);
-  const rowFacts = facts.slice(2);
-  const n = Math.min(rowFacts.length, structures.length);
-
+/** Renders `code` spans in a status message as <code>. */
+function WithCode({ text }: { text: string }) {
   return (
     <>
-      <FactsGrid facts={summaryFacts} />
-      <div className="mt-4 flex flex-col gap-3">
-        {Array.from({ length: n }, (_, i) => {
-          const fact = rowFacts[i];
-          const structure = structures[i];
-          const rawWidth =
-            typeof structure.frac_of_structure === "number"
-              ? structure.frac_of_structure * 100
-              : 0;
-          const width = Math.min(100, Math.max(0, rawWidth));
-          return (
-            <div key={i}>
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-sm text-text-primary">{fact.label}</span>
-                <span className="text-xs text-text-dim">
-                  <span className="font-mono tabular-nums">{formatPercent(structure.frac_of_structure)}</span> of region
-                  &middot; <span className="font-mono tabular-nums">{formatPercent(structure.frac_of_tumour)}</span> of tumour
-                </span>
-              </div>
-              <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-seam">
-                <div
-                  className="h-2 rounded-full bg-brand-primary/70"
-                  style={{ width: `${width}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {splitCode(text).map((part, i) =>
+        i % 2 === 1 ? (
+          <code key={i} className="rounded bg-surface-raised px-1.5 py-0.5 font-mono text-[0.9em] text-text-primary">
+            {part}
+          </code>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
     </>
   );
 }
 
-/** "What this report does not claim": each limit is a small card, label as mono title and its note as the reason - `value` carries nothing for this section. */
-function LimitsFacts({ facts }: { facts: InterpretedFact[] }) {
-  if (facts.length === 0) return null;
+function Meta({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <ol className="grid gap-3 sm:grid-cols-2">
-      {facts.map((f, i) => (
-        <li key={i} className="glass-panel p-3">
-          <strong className="text-sm font-normal text-text-primary">
-            {f.label}
-          </strong>
-          {f.note && (
-            <div className="mt-1 text-xs leading-relaxed text-text-secondary">
-              {f.note}
-            </div>
-          )}
-        </li>
-      ))}
-    </ol>
+    <div className="min-w-0">
+      <dt className="eyebrow">{label}</dt>
+      <dd className={`mt-1 text-sm whitespace-nowrap text-text-primary ${mono ? "font-mono tabular" : ""}`}>{value}</dd>
+    </div>
   );
 }
 
-function SectionFacts({
+function Caveat({ text }: { text: string }) {
+  return (
+    <aside className="mt-6 rounded-lg border border-surface-seam bg-surface-panel px-4 py-3 break-inside-avoid">
+      <p className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
+        <Info size={14} aria-hidden="true" className="text-text-dim" />
+        Caveat
+      </p>
+      {text.split("\n").map((line, i) => (
+        <p key={i} className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+          {line}
+        </p>
+      ))}
+    </aside>
+  );
+}
+
+// --------------------------------------------------------------------- //
+// One section: number + title, the headline (first direct <p>), the
+// explanation, the facts, then any caveat.
+// --------------------------------------------------------------------- //
+
+function ReportSection({
   section,
+  number,
   report,
 }: {
   section: InterpretedSection;
-  report: ReportResponse;
-}) {
-  if (section.id === "composition") {
-    return (
-      <>
-        <CompositionBar fractions={report.burden.fractions} />
-        <FactsGrid facts={section.facts} />
-      </>
-    );
-  }
-  if (section.id === "regions") {
-    return (
-      <RegionsFacts
-        facts={section.facts}
-        structures={report.anatomy.structures}
-      />
-    );
-  }
-  if (section.id === "limits") {
-    return <LimitsFacts facts={section.facts} />;
-  }
-  return <FactsGrid facts={section.facts} />;
-}
-
-// --------------------------------------------------------------------- //
-// Full technical data - the raw-key panel, collapsed by default. Kept
-// `print:hidden` on just the `<summary>` (not the whole `<details>`): the
-// element defaults to closed, so on print it contributes nothing either way
-// - hiding only the summary chrome removes the toggle affordance from the
-// printed page without needing to force the section open ("expand nothing").
-// --------------------------------------------------------------------- //
-
-/** One zebra-striped mono row of a key/value table. */
-function KvRow({
-  k,
-  children,
-  breakAll,
-}: {
-  k: string;
-  children: ReactNode;
-  breakAll?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 px-2 py-1 odd:bg-surface-raised/30">
-      <dt className="text-text-secondary">{k}</dt>
-      <dd
-        className={`tabular text-right text-text-primary ${breakAll ? "break-all" : ""}`}
-      >
-        {children}
-      </dd>
-    </div>
-  );
-}
-
-function BlockTitle({ children }: { children: ReactNode }) {
-  return <div className="eyebrow">{children}</div>;
-}
-
-function BurdenBlockDl({
-  title,
-  block,
-}: {
-  title: string;
-  block: BurdenBlock | undefined;
-}) {
-  if (isEmptyBlock(block)) return null;
-  return (
-    <div>
-      <BlockTitle>{title}</BlockTitle>
-      <dl className="mt-1 rounded-lg border border-surface-seam py-1 text-xs">
-        {Object.entries(block).map(([k, v]) => (
-          <KvRow key={k} k={burdenLabel(k)}>
-            {formatBurdenValue(k, v)}
-          </KvRow>
-        ))}
-      </dl>
-    </div>
-  );
-}
-
-function GeometryBlockDl({
-  title,
-  block,
-}: {
-  title: string;
-  block: BurdenBlock | undefined;
-}) {
-  if (isEmptyBlock(block)) return null;
-  return (
-    <div>
-      <BlockTitle>{title}</BlockTitle>
-      <dl className="mt-1 rounded-lg border border-surface-seam py-1 text-xs">
-        {Object.entries(block).map(([k, v]) => (
-          <KvRow key={k} k={geometryLabel(k)}>
-            {formatGeometryValue(k, typeof v === "number" ? v : null)}
-          </KvRow>
-        ))}
-      </dl>
-    </div>
-  );
-}
-
-function flattenProvenanceValue(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "object") {
-    return Object.entries(v as Record<string, unknown>)
-      .map(([k, val]) => `${k}=${String(val)}`)
-      .join(", ");
-  }
-  return String(v);
-}
-
-function ProvenanceDl({ provenance }: { provenance: ReportProvenance }) {
-  const entries = Object.entries(
-    provenance as unknown as Record<string, unknown>,
-  );
-  return (
-    <dl className="mt-1 rounded-lg border border-surface-seam py-1 text-xs">
-      {entries.map(([k, v]) => (
-        <KvRow key={k} k={k} breakAll>
-          {flattenProvenanceValue(v)}
-        </KvRow>
-      ))}
-    </dl>
-  );
-}
-
-function TechnicalData({ report }: { report: ReportResponse }) {
-  return (
-    <details id="section-technical" className="glass-panel scroll-mt-24 p-6">
-      <summary className="eyebrow cursor-pointer select-none print:hidden">
-        Full technical data
-      </summary>
-      <div className="mt-6 grid gap-6 sm:grid-cols-2">
-        <BurdenBlockDl title="Volumes" block={report.burden.volumes} />
-        <BurdenBlockDl title="Fractions" block={report.burden.fractions} />
-        <BurdenBlockDl title="Shape" block={report.burden.shape} />
-        <BurdenBlockDl
-          title="Multifocality"
-          block={report.burden.multifocality}
-        />
-        <BurdenBlockDl title="Laterality" block={report.burden.laterality} />
-        <BurdenBlockDl title="Centroid" block={report.burden.centroid} />
-        <BurdenBlockDl title="Other (burden)" block={report.burden.other} />
-        {report.geometry && (
-          <>
-            <GeometryBlockDl
-              title="Shape (geometric)"
-              block={report.geometry.shape}
-            />
-            <GeometryBlockDl title="Extent" block={report.geometry.extent} />
-            <GeometryBlockDl title="Rim" block={report.geometry.rim} />
-            <GeometryBlockDl
-              title="Other (geometry)"
-              block={report.geometry.other}
-            />
-          </>
-        )}
-        <div>
-          <BlockTitle>Eloquence citation</BlockTitle>
-          <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-            {report.eloquence.citation}
-          </p>
-        </div>
-        <div>
-          <BlockTitle>Provenance</BlockTitle>
-          <ProvenanceDl provenance={report.provenance} />
-        </div>
-      </div>
-    </details>
-  );
-}
-
-// --------------------------------------------------------------------- //
-// One report section as a glass card: teal dot + numbered title, then the
-// headline / explanation / facts / caveat the interpretation supplies.
-// --------------------------------------------------------------------- //
-
-function SectionCard({
-  section,
-  index,
-  report,
-}: {
-  section: InterpretedSection;
-  index: number;
+  number: string;
   report: ReportResponse;
 }) {
   const isOverview = section.id === "overview";
+  // The limits section's explanation is the disclaimer, already shown once
+  // under the title block; don't print it a second time.
+  const explanation = section.explanation && section.explanation !== report.disclaimer ? section.explanation : null;
+  const headingId = `heading-${section.id}`;
   return (
-    <section
-      id={`section-${section.id}`}
-      className="glass-panel scroll-mt-24 p-6"
-    >
-      <div className="flex items-center gap-3">
-        <span
-          className="h-2 w-2 shrink-0 rounded-full bg-brand-teal"
-          aria-hidden="true"
-        />
-        <h2 className="font-heading text-xl">
-          {index + 1}. {section.title}
+    <section id={`section-${section.id}`} aria-labelledby={headingId} className="scroll-mt-6 border-t border-surface-seam py-10">
+      <div className="flex items-baseline gap-3">
+        <span className="font-mono tabular text-sm text-text-dim">{number}</span>
+        <h2 id={headingId} className="font-heading text-xl font-semibold text-text-primary">
+          {section.title}
         </h2>
       </div>
       <p
-        className={`mt-3 leading-relaxed text-text-primary ${isOverview ? "font-heading text-lg" : "text-base"}`}
+        className={
+          isOverview
+            ? "mt-4 max-w-[60ch] text-xl leading-snug text-text-primary sm:text-[1.375rem]"
+            : "mt-3 max-w-[68ch] text-base leading-relaxed text-text-primary"
+        }
       >
         {section.headline}
       </p>
-      {!isOverview && (
-        <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-          {section.explanation}
-        </p>
+      {!isOverview && explanation && (
+        <p className="mt-2 max-w-[68ch] text-sm leading-relaxed text-text-secondary">{explanation}</p>
       )}
-      <div className="mt-4">
+      <div className="mt-6">
         <SectionFacts section={section} report={report} />
       </div>
-      {isOverview && (
-        <p className="mt-4 text-sm leading-relaxed text-text-secondary">
-          {section.explanation}
-        </p>
+      {isOverview && explanation && (
+        <p className="mt-4 max-w-[68ch] text-sm leading-relaxed text-text-secondary">{explanation}</p>
       )}
-      {section.caveat && (
-        <div className="mt-4 rounded-md bg-surface-raised/50 px-3 py-2 text-xs leading-relaxed text-text-secondary">
-          <div className="eyebrow">Caveat</div>
-          {section.caveat.split("\n").map((line, i) => (
-            <p key={i} className="mt-1">
-              {line}
-            </p>
-          ))}
-        </div>
-      )}
+      {section.caveat && <Caveat text={section.caveat} />}
     </section>
+  );
+}
+
+// --------------------------------------------------------------------- //
+// Contents: a sticky rail on wide screens, a scrolling chip row below.
+// --------------------------------------------------------------------- //
+
+interface NavItem {
+  id: string;
+  number: string;
+  title: string;
+}
+
+function ContentsRail({ items, activeId, caseId }: { items: NavItem[]; activeId: string | null; caseId: string }) {
+  return (
+    <div className="sticky top-6 flex flex-col gap-8">
+      <nav aria-label="Report contents">
+        <p className="eyebrow">Contents</p>
+        <ol className="m-0 mt-3 list-none border-l border-surface-seam p-0">
+          {items.map((n) => {
+            const active = activeId === n.id;
+            return (
+              <li key={n.id}>
+                <a
+                  href={`#${n.id}`}
+                  aria-current={active ? "location" : undefined}
+                  className={`-ml-px flex gap-2.5 border-l py-1.5 pl-3.5 text-[13px] leading-snug transition-colors duration-150 ${
+                    active
+                      ? "border-brand-primary text-text-primary"
+                      : "border-transparent text-text-secondary hover:border-text-dim hover:text-text-primary"
+                  }`}
+                >
+                  <span className={`font-mono tabular text-xs leading-[1.2rem] ${active ? "text-brand-primary" : "text-text-dim"}`}>
+                    {n.number}
+                  </span>
+                  <span>{n.title}</span>
+                </a>
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+      <div className="flex flex-col items-start gap-1 border-t border-surface-seam pt-4 text-[13px]">
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="flex items-center gap-2 rounded-md py-1 text-text-secondary transition-colors duration-150 hover:text-text-primary"
+        >
+          <Printer size={14} aria-hidden="true" />
+          Print report
+        </button>
+        <BackLink
+          caseId={caseId}
+          className="flex items-center gap-2 rounded-md py-1 text-text-secondary transition-colors duration-150 hover:text-text-primary"
+        >
+          <ArrowLeft size={14} aria-hidden="true" />
+          Back to viewer
+        </BackLink>
+      </div>
+    </div>
+  );
+}
+
+function ContentsChips({ items, activeId }: { items: NavItem[]; activeId: string | null }) {
+  return (
+    <nav aria-label="Report contents" className="-mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-3 sm:-mx-6 sm:px-6 lg:hidden print:hidden">
+      {items.map((n) => {
+        const active = activeId === n.id;
+        return (
+          <a
+            key={n.id}
+            href={`#${n.id}`}
+            aria-current={active ? "location" : undefined}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] whitespace-nowrap transition-colors duration-150 ${
+              active ? "border-brand-primary text-text-primary" : "border-surface-seam text-text-secondary"
+            }`}
+          >
+            <span className="font-mono tabular text-xs text-text-dim">{n.number}</span>
+            {n.title}
+          </a>
+        );
+      })}
+    </nav>
+  );
+}
+
+// --------------------------------------------------------------------- //
+// Loading and error states
+// --------------------------------------------------------------------- //
+
+function Skeleton() {
+  const bar = "animate-pulse rounded bg-surface-raised";
+  return (
+    <div className="mx-auto max-w-[47rem]" aria-hidden="true">
+      <div className={`${bar} h-3 w-28`} />
+      <div className={`${bar} mt-3 h-8 w-72`} />
+      <div className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i}>
+            <div className={`${bar} h-2.5 w-16`} />
+            <div className={`${bar} mt-2 h-4 w-24`} />
+          </div>
+        ))}
+      </div>
+      <div className={`${bar} mt-8 h-14 w-full`} />
+      <div className="mt-10 border-t border-surface-seam pt-10">
+        <div className={`${bar} h-5 w-40`} />
+        <div className={`${bar} mt-4 h-5 w-full`} />
+        <div className={`${bar} mt-2 h-5 w-4/5`} />
+      </div>
+    </div>
+  );
+}
+
+function StatusView({ status, caseId, message }: { status: LoadStatus; caseId: string; message: string | null }) {
+  if (status === "loading") {
+    return (
+      <div role="status" aria-live="polite">
+        <p className="sr-only">{statusMessage(status, caseId, message)}</p>
+        <Skeleton />
+      </div>
+    );
+  }
+  if (status === "loaded") return null;
+  return (
+    <div className="mx-auto max-w-[36rem] py-12" role="alert">
+      <p className="eyebrow">
+        Structured report · <span className="font-mono">{caseId}</span>
+      </p>
+      <h1 className="mt-2 font-heading text-2xl font-semibold text-text-primary">{STATUS_TITLE[status]}</h1>
+      <p className="mt-3 leading-relaxed text-text-secondary">
+        <WithCode text={statusMessage(status, caseId, message)} />
+      </p>
+      <BackLink caseId={caseId} className="btn-secondary mt-6">
+        <ArrowLeft size={16} aria-hidden="true" />
+        Back to viewer
+      </BackLink>
+    </div>
   );
 }
 
@@ -535,9 +348,8 @@ export function ReportPage({ caseId }: { caseId: string }) {
   const [report, setReport] = useState<ReportResponse | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  // Restore the previous document title on unmount so navigating away (this
-  // is a no-router SPA - see main.tsx) doesn't leave a stale "Report · ..."
-  // title behind on whatever renders next.
+  // Restore the previous document title on unmount so navigating away (a
+  // no-router SPA, see main.tsx) doesn't leave a stale title behind.
   useEffect(() => {
     const previousTitle = document.title;
     document.title = `Report · ${caseId}`;
@@ -565,42 +377,28 @@ export function ReportPage({ caseId }: { caseId: string }) {
     return () => controller.abort();
   }, [caseId]);
 
-  const interpreted = useMemo(
-    () => (report ? interpretReport(report) : null),
-    [report],
-  );
+  const interpreted = useMemo(() => (report ? interpretReport(report) : null), [report]);
 
-  // Every section the page renders, in order: the overview first, then the
-  // rest, then the collapsed technical-data panel. Drives the numbered nav.
-  const navItems = useMemo(
-    () =>
-      interpreted
-        ? [
-            ...interpreted.sections.map((s) => ({
-              id: `section-${s.id}`,
-              title: s.title,
-            })),
-            { id: "section-technical", title: "Full technical data" },
-          ]
-        : [],
-    [interpreted],
-  );
+  // Every section in page order, then the technical-data panel.
+  const navItems: NavItem[] = useMemo(() => {
+    if (!interpreted) return [];
+    const items = interpreted.sections.map((s, i) => ({ id: `section-${s.id}`, number: sectionNumber(i), title: s.title }));
+    items.push({ id: "section-technical", number: sectionNumber(items.length), title: "Full technical data" });
+    return items;
+  }, [interpreted]);
 
-  // Highlight the nav entry for whichever section is nearest the top of the
-  // viewport. Skipped where IntersectionObserver does not exist (tests).
+  // Mark the contents entry for the section nearest the top of the viewport.
+  // Skipped where IntersectionObserver does not exist (tests).
   useEffect(() => {
-    if (navItems.length === 0 || typeof IntersectionObserver === "undefined")
-      return;
+    if (navItems.length === 0 || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries.filter((e) => e.isIntersecting);
         if (visible.length === 0) return;
-        visible.sort(
-          (a, b) => a.boundingClientRect.top - b.boundingClientRect.top,
-        );
+        visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
         setActiveId(visible[0].target.id);
       },
-      { rootMargin: "-80px 0px -60% 0px" },
+      { rootMargin: "0px 0px -65% 0px" },
     );
     for (const item of navItems) {
       const el = document.getElementById(item.id);
@@ -609,150 +407,61 @@ export function ReportPage({ caseId }: { caseId: string }) {
     return () => observer.disconnect();
   }, [navItems]);
 
-  const basisChip = interpreted
-    ? interpreted.basis === "prediction"
-      ? "Model segmentation"
-      : "Reference label"
-    : null;
-
-  // Mobile: horizontal chip row.
-  const mobileNav = (
-    <nav
-      aria-label="Report structure"
-      className="-mx-4 mb-6 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:hidden print:hidden"
-    >
-      {navItems.map((n, i) => (
-        <a
-          key={n.id}
-          href={`#${n.id}`}
-          className={`chip shrink-0 ${activeId === n.id ? "border-brand-teal/60 text-brand-teal" : ""}`}
-        >
-          {i + 1}. {n.title}
-        </a>
-      ))}
-    </nav>
-  );
-
-  // Desktop: sticky right column.
-  const sideNav = (
-    <aside className="hidden lg:block print:hidden">
-      <div className="sticky top-20 flex flex-col gap-4">
-        <div className="glass-panel p-4">
-          <div className="eyebrow">Report structure</div>
-          <nav
-            aria-label="Report structure"
-            className="mt-3 flex flex-col gap-1"
-          >
-            {navItems.map((n, i) => (
-              <a
-                key={n.id}
-                href={`#${n.id}`}
-                aria-current={activeId === n.id ? "true" : undefined}
-                className={`rounded-lg px-2 py-1.5 text-sm transition-colors ${
-                  activeId === n.id
-                    ? "bg-brand-teal/10 text-brand-teal"
-                    : "text-text-secondary hover:text-text-primary"
-                }`}
-              >
-                <span className="mr-2 font-mono text-xs">{i + 1}.</span>
-                {n.title}
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className={SMALL_BTN}
-          >
-            Print
-          </button>
-          <BackLink caseId={caseId} className={SMALL_BTN} />
-        </div>
-      </div>
-    </aside>
-  );
-
   return (
     <AppShell>
       <style>{PRINT_CSS}</style>
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        {status !== "loaded" && (
-          <div className="mx-auto max-w-3xl">
-            <div className="glass-panel p-6 text-center">
-              <p className="text-base leading-relaxed text-text-secondary">
-                {statusMessage(status, caseId, message)}
-              </p>
-            </div>
-            <div className="mt-4 text-center">
-              <BackLink
-                caseId={caseId}
-                className="text-sm text-text-secondary hover:text-text-primary"
-              />
-            </div>
-          </div>
-        )}
+      <div className="mx-auto max-w-[1180px] px-4 py-10 sm:px-6 md:py-14">
+        {status !== "loaded" && <StatusView status={status} caseId={caseId} message={message} />}
 
         {status === "loaded" && report && interpreted && (
-          <>
-            {mobileNav}
-            <div className="lg:grid lg:grid-cols-[minmax(0,860px)_18rem] lg:justify-center lg:gap-8">
-              <div className="flex min-w-0 flex-col gap-6">
-                {/* Header block */}
-                <div className="glass-panel p-6">
-                  <div className="eyebrow">Structured report</div>
-                  <h1 className="mt-2 break-words font-heading text-3xl">
-                    {interpreted.caseId}
-                  </h1>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="chip">
-                      Generated {formatGeneratedDate(report.generated_utc)}
-                    </span>
-                    <span className="chip">
-                      {report.anatomy.atlas.name} {report.anatomy.atlas.version}
-                    </span>
-                    {basisChip && <span className="chip">{basisChip}</span>}
-                    <span className="chip">
-                      schema v{report.report_version}
-                    </span>
+          <div className="lg:grid lg:grid-cols-[12.5rem_minmax(0,47rem)] lg:justify-center lg:gap-16 print:block">
+            <aside className="hidden lg:block print:hidden">
+              <ContentsRail items={navItems} activeId={activeId} caseId={caseId} />
+            </aside>
+
+            <article id="report-doc" className="min-w-0">
+              {/* Title block */}
+              <div className="pb-8">
+                <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+                  <div className="min-w-0">
+                    <p className="eyebrow">Structured report</p>
+                    <h1 className="mt-1.5 font-mono text-[1.75rem] leading-tight font-semibold break-all text-text-primary sm:text-3xl">
+                      {interpreted.caseId}
+                    </h1>
                   </div>
-                  <p className="mt-4 text-sm text-text-secondary">
-                    {interpreted.basisSentence}
-                  </p>
+                  <div className="flex shrink-0 gap-2 print:hidden">
+                    <BackLink caseId={caseId} className="btn-secondary !px-3 !py-1.5 text-sm">
+                      <ArrowLeft size={15} aria-hidden="true" />
+                      Back to viewer
+                    </BackLink>
+                    <button type="button" onClick={() => window.print()} className="btn-secondary !px-3 !py-1.5 text-sm">
+                      <Printer size={15} aria-hidden="true" />
+                      Print
+                    </button>
+                  </div>
                 </div>
-
-                {/* Disclaimer: always visible, directly under the header. */}
-                <div className="rounded-lg border border-gate-caution/40 bg-gate-caution/10 p-3 text-xs text-gate-caution">
-                  {report.disclaimer}
-                </div>
-
-                {interpreted.sections.map((section, idx) => (
-                  <SectionCard
-                    key={section.id}
-                    section={section}
-                    index={idx}
-                    report={report}
-                  />
-                ))}
-
-                <TechnicalData report={report} />
-
-                {/* Footer - the disclaimer again, plus a second way back (on
-                    print, the only one, since the nav is print:hidden). */}
-                <footer className="flex flex-col items-center gap-3 py-4 text-center">
-                  <p className="text-xs text-text-dim">
-                    {report.disclaimer}
-                  </p>
-                  <BackLink
-                    caseId={caseId}
-                    className="text-sm text-text-secondary hover:text-text-primary"
-                  />
-                </footer>
+                <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-4">
+                  <Meta label="Generated" value={formatGeneratedDate(report.generated_utc)} mono />
+                  <Meta label="Measured on" value={interpreted.basis === "prediction" ? "Model segmentation" : "Reference label"} />
+                  <Meta label="Atlas" value={`${report.anatomy.atlas.name} ${report.anatomy.atlas.version}`} mono />
+                  <Meta label="Report schema" value={`v${report.report_version}`} mono />
+                </dl>
+                <p className="mt-5 max-w-[68ch] text-sm leading-relaxed text-text-secondary">{interpreted.basisSentence}</p>
+                <p className="mt-5 flex gap-2.5 rounded-lg border border-surface-seam bg-surface-panel px-4 py-3 text-sm leading-relaxed text-text-secondary">
+                  <Info size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-text-dim" />
+                  <span>{report.disclaimer}</span>
+                </p>
               </div>
-              {sideNav}
-            </div>
-          </>
+
+              <ContentsChips items={navItems} activeId={activeId} />
+
+              {interpreted.sections.map((section, i) => (
+                <ReportSection key={section.id} section={section} number={sectionNumber(i)} report={report} />
+              ))}
+
+              <TechnicalData report={report} number={sectionNumber(interpreted.sections.length)} />
+            </article>
+          </div>
         )}
       </div>
     </AppShell>
