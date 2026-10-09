@@ -220,10 +220,30 @@
     cursor: not-allowed;
   }
 
+  /* Landing hero's "Scroll to scan" cue: a short ice segment falling down a
+     1px track, on a loop. The global reduced-motion rule below stops it. */
+  .scroll-cue {
+    animation: scroll-cue 2.2s var(--ease-out-quart) infinite;
+  }
+
   /* Formerly a decorative grid behind viewers. Retired: a plain field reads
      calmer and keeps the eye on the image. Kept as a no-op class. */
   .bg-grid {
     background-image: none;
+  }
+}
+
+@keyframes scroll-cue {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(340%);
+    opacity: 0;
   }
 }
 

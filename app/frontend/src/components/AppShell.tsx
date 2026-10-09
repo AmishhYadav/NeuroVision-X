@@ -59,6 +59,9 @@ export function AppShell({
 
   const status = apiStatus(health, reachable);
 
+  // Header and footer are positioned (z-10) so a page can put a fixed
+  // backdrop at z-0 behind its content without it drawing over them (the
+  // landing page's scroll-driven brain does this).
   return (
     <div
       className={
@@ -67,7 +70,7 @@ export function AppShell({
           : "flex min-h-full flex-col bg-surface-page"
       }
     >
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-surface-seam bg-surface-page px-4 sm:px-6 md:h-14 md:flex-nowrap">
+      <header className="relative z-10 flex shrink-0 flex-wrap items-center gap-x-3 border-b border-surface-seam bg-surface-page px-4 sm:px-6 md:h-14 md:flex-nowrap">
         <a
           href="/"
           onClick={(e) => {
@@ -133,7 +136,7 @@ export function AppShell({
           {DISCLAIMER}
         </div>
       ) : (
-        <footer className="border-t border-surface-seam">
+        <footer className="relative z-10 border-t border-surface-seam bg-surface-page">
           <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 md:flex-row md:items-start md:justify-between">
             <div className="flex flex-col gap-1">
               <span className="font-heading text-sm">NeuroVision-X</span>
