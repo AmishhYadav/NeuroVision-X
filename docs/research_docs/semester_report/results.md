@@ -66,6 +66,16 @@ core, above every α tested [C24]. This was stated before the run.
 **Figure 3** — held-out risk vs number of local calibration cases k. *(Source:
 `outputs/local_recalibration/summary.csv`; figure to be generated.)*
 
+Changing the model does what recalibration cannot. Fine-tuning the deployed model on half of each
+shifted cohort and scoring the other half — **cross-fitted, not external validation** — recovers
+tumour-core Dice on both: SSA +0.0433 (CI 0.0094–0.0785; 0.785 → 0.828, n = 60) and PED +0.3676
+(CI 0.2952–0.4375; 0.439 → 0.807, n = 99) [C27]. After fine-tuning, paediatric tumour core becomes
+restorable by local recalibration at α 0.10 and 0.20 (the loosest-threshold miss rate falls from
+0.356 to 0.048). Most of the paediatric gain is the model learning the paediatric label definition
+— PED ground truth is almost all necrotic core with little oedema — not better imaging
+generalisation; on SSA the same tumour-core/whole-tumour ratio barely moved (note 58). The deployed
+model is unchanged.
+
 ### 4.5 The end-to-end pipeline and its refusal gate
 
 Measured through every stage with the deployed, frozen gate, the pipeline returns a usable mask
@@ -103,8 +113,10 @@ produces it. The more useful result is about reliability machinery around *any* 
 distribution-free bound is only as good as the exchangeability behind it: it holds in distribution
 and degrades with the size of the shift, and a learned refusal gate does not see that shift
 coming. What restores it is local data — tens of labelled cases at a new site — except where the
-model's failure is so large that no threshold can meet the target, as for paediatric tumour core;
-there, only changing the model (fine-tuning, D3, planned) could help.
+model's failure is so large that no threshold can meet the target, as for paediatric tumour core.
+There, changing the model is what helps: a cross-fitted fine-tune on half the cohort recovers
+tumour-core Dice and makes the bound restorable again — largely by teaching the model a different
+label convention, which is itself a finding about what "shift" means between datasets [C27].
 
 These findings sit beside recent work: coverage failure under shift has been reported between
 brain-tumour sites within one population and for CT organs, with similar local sample sizes
@@ -120,6 +132,8 @@ against the bound.
 2. The strong baseline (nnU-Net) is still running; C1 is not yet tested against it.
 3. The test split is a random split of the BraTS 2021 training set; numbers are not comparable to
    published challenge results, and lesion-wise results are exploratory.
-4. The local-recalibration result is a counterfactual on public cohorts, not a site study.
+4. The local-recalibration result is a counterfactual on public cohorts, not a site study; the
+   fine-tune result is cross-fitted (each fine-tune saw half of its own cohort), single-seed, and
+   its effect on in-distribution test accuracy (forgetting) was not measured.
 5. The demo's PROCEED study is a BraTS training patient (note 50).
 6. Not for clinical use. The bound is an average over studies, in distribution, not per patient.
