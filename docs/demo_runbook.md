@@ -21,9 +21,9 @@ art". The bound is an **average over studies, in distribution, not per patient**
 
 ```bash
 # from the repo root
-.venv/bin/pytest                                   # expect ~2,460 passed, ~37 skipped
+.venv/bin/pytest                                   # expect ~2,640 passed, ~36 skipped (2026-10-11)
 .venv/bin/python scripts/smoke_test.py             # SMOKE TEST PASSED
-(cd app/frontend && npm test)                      # vitest green
+(cd app/frontend && npm test)                      # vitest green (362 tests, 2026-10-11)
 
 # serve (two terminals) -- exactly as docs/research_docs/reproducibility.md §5
 NVX_EXPERIMENT=neurovision NVX_EVAL_DIR=outputs/neurovision/eval_test \
@@ -32,7 +32,7 @@ NVX_REPORT_DIR=outputs/report_neurovision/reports NVX_JOB_DIR=outputs/clinical_j
 .venv-clinical/bin/uvicorn app.backend.main:app --port 8000
 (cd app/frontend && npm run dev)
 
-(cd app/frontend && npm run test:e2e)              # rendered-pixel E2E, third terminal
+(cd app/frontend && npm run test:e2e)              # rendered-pixel E2E, third terminal (79/79, 2026-10-11)
 ```
 
 Also check: jobs `9c2cc294` (PROCEED) and the regenerated UPENN-GBM-00001 REFUSE job (story B) still load at `/clinical` after a

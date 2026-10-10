@@ -226,7 +226,7 @@ and the full clinical pipeline — DICOM zip in → ingest → input QC → co-r
 HD-BET → input QC → segmentation (deployed `neurovision` seed 42) → QC-model + conformal signals →
 PROCEED / CAUTION / REFUSE, at `/clinical`, with the 3D twin, atlas shells, report, entered-pathology
 molecular panel, DICOM-SEG and zip export. A `"refused"` job is a successful outcome, never a failure.
-2,230 tests passing, 35 skipped, ~60 s (verified 2026-09-24). Serving command:
+2,641 tests passing, 36 skipped, ~71 s (verified 2026-10-11). Serving command:
 `docs/research_docs/reproducibility.md` §5.
 
 **Open author actions:** eyeball the twin on job `9c2cc294` (P0.7). The Kaggle RSNA-MICCAI rules
