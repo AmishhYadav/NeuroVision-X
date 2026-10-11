@@ -213,7 +213,7 @@ but not which masks fail — misses its switch-on rule, stays display-only.
 
 **Where the science stands** (authority: `docs/research_docs/claims_and_evidence.md`, read it before writing
 anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189),
-~79% architecture / ~21% capacity, now checked against a measured seed noise floor (D1, note 49:
+~79–80% architecture / ~20% capacity (two draws, note 60), now checked against a measured seed noise floor (D1, note 49:
 +0.0021) — but **never yet tested against nnU-Net** (Gate A, P4). Conformal risk control holds in
 distribution and breaks under shift in proportion to the shift (C13/C14). The pipeline returns a
 usable mask for 85% / 78% / 24% of test / SSA / PED studies, with silent failure 4.2% / 18.3% /

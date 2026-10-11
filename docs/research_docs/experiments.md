@@ -2745,3 +2745,48 @@ evidence about the setup, and forgetting it means repeating it.
     eval_config), `outputs/compare_family/tta_flip/`, kernel log in
     `outputs/kaggle_kernels/tta/out/`. Regenerate the family:
     `.venv/bin/python scripts/compare_family.py analysis.compare_family.name=tta_flip analysis.compare_family.name_a=neurovision_tta analysis.compare_family.name_b=neurovision 'analysis.compare_family.comparisons=[{cohort:test,a:outputs/eval_test_neurovision_tta/per_case_metrics.csv,b:outputs/neurovision/eval_test/per_case_metrics.csv,metrics:[dice_ET,dice_TC,dice_WT]}]'`.
+
+60. **CAPACITY CONTROL, SECOND DRAW -- C2 STANDS ON TWO DRAWS: ARCHITECTURE
+    SHARE 0.80 (r2) vs 0.79 (ORIGINAL) ON VOXEL ET; 0.64 LESION-WISE.** Run
+    2026-10-11 on Kaggle T4 (`amishyadav123/neurovision-capacity-r2-s1`,
+    `GIT_REF 01ebcdb`, W&B `c92aj3ga` offline), pre-registration
+    `preregistrations/preregistration_capacity_rerun.md` (`01ebcdb`, before the
+    run). Arm `capacity_control_unet3d_r2`: `+experiment=capacity_control_unet3d`,
+    seed 42, recipe unchanged since `f363067` -- a new draw, never a
+    restoration of the lost original.
+
+    **Run checks.** 80/80 epochs in one session, ~5.8 GPU-h (abort bound 16),
+    `NVX_HEALTH: OK`, losses finite, 0.7% of steps clipped. `best.pt` = epoch 79,
+    val `dice_mean` 0.8910. 34,829,696 parameters (original 34.83 M). Test
+    evaluation on the Mac CPU at ~7.8 s/case (U-Net, not the ~1.4 min/case of
+    `neurovision`), settings identical to the original's `eval_config.yaml`
+    (roi 64, overlap 0.5, gaussian, same postprocess); 189/189 cases.
+
+    **Family (m = 12, `outputs/compare_family/capacity_r2/family.csv`):**
+    primary `neurovision` − r2 `dice_ET` +0.0213 [+0.0092, +0.0381], p_holm
+    5.9e-16, better; `lwdice_ET` +0.0323 [+0.0050, +0.0597], better. Also
+    better: `dice_TC` +0.0084, `lwdice_TC` +0.0305. WT inconclusive under both
+    metrics. r2 − `baseline_unet3d`: `dice_ET` +0.0053 [+0.0029, +0.0080],
+    better (the capacity share is real, not noise); the other five
+    inconclusive. Full table in the pre-registration's Result.
+
+    **Reading.** Architecture share on voxel ET = (0.8709 − 0.8495) /
+    (0.8709 − 0.8442) = 0.80, against 0.79 for the original: C2 **stands**, now
+    quoted as a range over two draws, 0.79–0.80. Lesion-wise (new; the
+    original was never scorable): 0.0323 / 0.0508 = 0.64 -- under lesion-wise
+    scoring width alone buys relatively more (+0.0185, inconclusive), so the
+    lesion-wise statement is "most of the gain", not "~80%".
+
+    **Secondary.** r2 − original, paired on test: `dice_ET` −0.0002
+    [−0.0015, +0.0011], `dice_TC` −0.0016 [−0.0041, +0.0009], `dice_WT`
+    −0.0014 [−0.0032, +0.0000] -- below the U-Net seed shift (+0.0041) and the
+    `neurovision` floor (+0.0021). The recipe reproduces within noise.
+
+    Artifacts: checkpoint `outputs/capacity_control_unet3d_r2/checkpoints/best.pt`
+    (epoch 79), `outputs/eval_test_capacity_control_r2/` (logits, per-case,
+    summary), `outputs/replay_lesionwise/eval_test_capacity_control_r2/`,
+    `outputs/compare_family/capacity_r2/`, kernel log
+    `outputs/kaggle_kernels/capacity-r2-s1/out/`. Regenerate the family:
+    `.venv-analysis/bin/python scripts/compare_family.py analysis.compare_family.name=capacity_r2 analysis.compare_family.name_a=A analysis.compare_family.name_b=B 'analysis.compare_family.comparisons=[{cohort:test_nv_minus_r2,a:outputs/replay_lesionwise/eval_test/per_case_default.csv,b:outputs/replay_lesionwise/eval_test_capacity_control_r2/per_case_default.csv,metrics:[dice_ET,dice_TC,dice_WT,lwdice_ET,lwdice_TC,lwdice_WT]},{cohort:test_r2_minus_baseline,a:outputs/replay_lesionwise/eval_test_capacity_control_r2/per_case_default.csv,b:outputs/replay_lesionwise/eval_test_baseline_unet3d/per_case_default.csv,metrics:[dice_ET,dice_TC,dice_WT,lwdice_ET,lwdice_TC,lwdice_WT]}]'`.
+    Note: `scripts/replay_logits.py` writes under `${output_dir}/replay/` unless
+    `analysis.replay.out_dir` is set; the r2 replay was moved to the path above.

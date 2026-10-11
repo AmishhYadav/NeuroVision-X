@@ -17,7 +17,8 @@ over a matched 3D U-Net by **+0.0267** (95% CI 0.0166–0.0393; Holm-adjusted p 
 paired) [C1]. A second training seed of the proposed model moves test ET Dice by only +0.0021
 (CI −0.0018 to +0.0068), about thirteen times smaller than the margin [C1]. A width-matched U-Net
 (34.83 M vs 34.91 M parameters) recovers only +0.0055 of the gain, attributing roughly 79% of it
-to architecture rather than capacity [C2]. Within the architecture, the gain comes from gated
+to architecture rather than capacity [C2]. A pre-registered second training run of that control reproduces it
+(architecture share 0.80; 0.64 under lesion-wise scoring) [C2, note 60]. Within the architecture, the gain comes from gated
 cross-attention fusion; conditioning the gate on inter-branch disagreement — the project's founding
 hypothesis — adds nothing measurable (+0.0022, CI −0.0067 to +0.0152) [C3].
 

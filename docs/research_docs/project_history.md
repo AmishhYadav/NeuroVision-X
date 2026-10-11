@@ -515,6 +515,8 @@ duplicates and landed in opposite folds (lessons.md). Deployed model unchanged.
 
 **10-11 — TTA gate fires (note 59, C28).** Flip TTA on the deployed model, Kaggle T4 ~3 GPU-h: ET +0.0007, inconclusive (a third of the seed floor); WT +0.0017 significant but tiny. Same day: author moves D2 and the capacity-control rerun to Kaggle; both pre-registered (`01ebcdb`) before launch.
 
+**10-11 — Capacity-control rerun gate fires (note 60, C2).** Second draw of the lost width-matched U-Net, Kaggle T4 ~5.8 GPU-h: reproduces the original (ET −0.0002); architecture share 0.80 vs 0.79, C2 stands on two draws; first lesion-wise column for C2 (share 0.64).
+
 ---
 
 ## 4. Every GPU run
