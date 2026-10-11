@@ -25,6 +25,9 @@ The result replicates at a second seed of both models: +0.0247 (CI 0.0116–0.04
 +0.0257 averaged over the two seeds [C1, note 54]. The U-Net's own seed-to-seed shift on test ET is
 +0.0041 — small, but resolvable at n = 189 — so the margin is about six times the larger seed
 effect of either model.
+Test-time flip augmentation (8 flips) changes ET Dice by +0.0007 (CI −0.0004 to +0.0017) —
+not resolvable at n = 189, a third of the seed noise floor — so the margin is not an artefact of
+inference settings [C28].
 [PENDING: comparison against nnU-Net, the strong baseline — Gate A, running.]
 
 Under lesion-wise scoring (the BraTS convention since 2023; exploratory, not pre-registered) the

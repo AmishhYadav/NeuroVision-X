@@ -2703,3 +2703,45 @@ evidence about the setup, and forgetting it means repeating it.
     `outputs/compare_family/d3_finetune_crossfit{,_sens_nodup}/`,
     `outputs/conformal/neurovision_ft_ped`, `outputs/local_recalibration_ft_ped`.
     Commands: `reproducibility.md` §12.
+
+59. **FLIP TTA -- PRE-REGISTERED PRIMARY (ET) INCONCLUSIVE: +0.0007
+    [-0.0004, +0.0017], BELOW THE SEED NOISE FLOOR; WT +0.0017 IS
+    HOLM-SIGNIFICANT BUT TINY.** Run 2026-10-11 on Kaggle T4
+    (`amishyadav123/neurovision-tta`, `GIT_REF fb8b1b4`; inference code
+    unchanged since), pre-registration `preregistrations/preregistration_tta.md`
+    (`3def985`, before any number). Arm: the deployed `neurovision` seed-42
+    `best.pt` (epoch 69, wandb `cc2l5j1c`), `inference.tta.axes=[0,1,2]` (all 8
+    flip combinations), everything else as the published test row. Deployment
+    consequence: none, as registered (TTA stays off; 8x CPU inference).
+
+    **Run checks.** Identity check passed (epoch 69, `cc2l5j1c`, 358 finite
+    tensors). The 5-case TTA-off probe reproduced the published row within 0.01
+    Dice on every case (trap 9: reached the wrong-checkpoint/config failure
+    condition before spending hours). Projected 2.91 GPU-h, under the 5 GPU-h
+    abort bound; actual ~3.0 GPU-h. `NVX_TTA: OK`, 189/189 cases, case-id set
+    equal to the test split.
+
+    **Family (m = 3, `outputs/compare_family/tta_flip/family.csv`):**
+
+    | Metric | TTA | no TTA | Diff | 95% CI | p_holm | Verdict |
+    |---|---|---|---|---|---|---|
+    | `dice_ET` (primary) | 0.8716 | 0.8709 | +0.0007 | [-0.0004, +0.0017] | 1.0e-07 | inconclusive |
+    | `dice_TC` | 0.9167 | 0.9161 | +0.0006 | [-0.0014, +0.0025] | 1.0e-07 | inconclusive |
+    | `dice_WT` | 0.9338 | 0.9321 | +0.0017 | [+0.0003, +0.0033] | 7.5e-10 | better |
+
+    **Reading (registered wording).** "Flip TTA gain on ET not resolvable at
+    n = 189." The Wilcoxon p is tiny while the bootstrap CI on the mean crosses
+    0: TTA nudges most cases up by a hair (ET: 132 up, 49 down, 8 equal; median
+    +0.0009) but a few cases drop by up to 0.065, so the *mean* gain is not
+    resolved -- the project's verdict rule requires both. Beside the yardsticks:
+    +0.0007 ET is a third of the `neurovision` seed noise floor (+0.0021, note
+    49) and ~1/38 of the C1 margin (+0.0267). The literature's +0.003-0.008 is
+    not reproduced for this model. Relevance to Gate A: nnU-Net's primary arm
+    predicts with mirroring on; this row shows that giving `neurovision` the
+    same mirroring would change its ET by less than seed noise, so Gate A's
+    registered TTA asymmetry cannot move its verdict by more than ~0.001 ET.
+
+    Artifacts: `outputs/eval_test_neurovision_tta/` (per-case, summary,
+    eval_config), `outputs/compare_family/tta_flip/`, kernel log in
+    `outputs/kaggle_kernels/tta/out/`. Regenerate the family:
+    `.venv/bin/python scripts/compare_family.py analysis.compare_family.name=tta_flip analysis.compare_family.name_a=neurovision_tta analysis.compare_family.name_b=neurovision 'analysis.compare_family.comparisons=[{cohort:test,a:outputs/eval_test_neurovision_tta/per_case_metrics.csv,b:outputs/neurovision/eval_test/per_case_metrics.csv,metrics:[dice_ET,dice_TC,dice_WT]}]'`.

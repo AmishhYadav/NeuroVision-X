@@ -513,6 +513,8 @@ paediatric label definition (TC/WT ratio 0.27 to 0.95; SSA control unchanged). P
 restorable by local recalibration at α 0.10/0.20. Side finding: two PED cases are byte-identical
 duplicates and landed in opposite folds (lessons.md). Deployed model unchanged.
 
+**10-11 — TTA gate fires (note 59, C28).** Flip TTA on the deployed model, Kaggle T4 ~3 GPU-h: ET +0.0007, inconclusive (a third of the seed floor); WT +0.0017 significant but tiny. Same day: author moves D2 and the capacity-control rerun to Kaggle; both pre-registered (`01ebcdb`) before launch.
+
 ---
 
 ## 4. Every GPU run

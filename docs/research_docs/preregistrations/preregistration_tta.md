@@ -84,5 +84,18 @@ for the split. Budgeted in the Kaggle ledger (`master_plan.md`, week of 2026-10-
 
 ## Result
 
-*(To be completed after the run. Nothing above this line may be edited once the first number
-exists.)*
+**2026-10-11 — primary INCONCLUSIVE; deployment consequence none (as registered).** Note 59.
+
+Kaggle T4, `amishyadav123/neurovision-tta`, `GIT_REF fb8b1b4`. Identity check and the 5-case TTA-off
+probe (published row reproduced within 0.01 on all 5) passed; projected 2.91 GPU-h (< 5 abort), actual
+~3.0 GPU-h; 189/189 cases.
+
+| Metric | TTA − no TTA | 95% CI | p_holm (m = 3) | Verdict |
+|---|---|---|---|---|
+| `dice_ET` (primary) | +0.0007 | [−0.0004, +0.0017] | 1.0e-07 | inconclusive |
+| `dice_TC` | +0.0006 | [−0.0014, +0.0025] | 1.0e-07 | inconclusive |
+| `dice_WT` | +0.0017 | [+0.0003, +0.0033] | 7.5e-10 | better |
+
+Paper wording (fixed above): "flip TTA gain not resolvable at n = 189". Secondary: +0.0007 ET is about a
+third of the seed noise floor (+0.0021) and ~1/38 of the C1 margin; the Gate A margin is not yet known.
+`outputs/compare_family/tta_flip/family.csv`.

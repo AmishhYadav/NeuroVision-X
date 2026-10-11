@@ -221,7 +221,7 @@ usable mask for 85% / 78% / 24% of test / SSA / PED studies, with silent failure
 12/12 inconclusive. The founding hypothesis is a pre-registered null.
 
 **What is built.** Everything through Milestone 3 (`docs/project_state.md`), plus lesion-wise
-metrics, TTA (wired, unmeasured), conformal risk control, the QC model, the end-to-end error budget,
+metrics, TTA (measured, note 59: ET +0.0007, inconclusive), conformal risk control, the QC model, the end-to-end error budget,
 and the full clinical pipeline — DICOM zip in → ingest → input QC → co-registration / SRI24 /
 HD-BET → input QC → segmentation (deployed `neurovision` seed 42) → QC-model + conformal signals →
 PROCEED / CAUTION / REFUSE, at `/clinical`, with the 3D twin, atlas shells, report, entered-pathology
