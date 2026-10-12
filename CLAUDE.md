@@ -207,14 +207,16 @@ at its top** — read it before planning anything. Why it changed shape:
 
 **Since 2026-09-26:** C1 replicated at a second seed pair (note 54); real-DICOM front-end run done
 (note 55, C25: 40% thick-slice refusals, WT −0.23, mostly registration disagreement); `intended_use`
-(adults only) live in the gate (note 53); nnU-Net importer/scorer built; Gate A on Kaggle at session 2
-of ~7 (209 s/epoch); P1.4 OOD score run (note 56, C26): sees the SSA shift (60% flagged vs 9.5% test)
+(adults only) live in the gate (note 53); nnU-Net importer/scorer built; Gate A done (RETIRED, note 61);
+D2 pooled training on Kaggle from 2026-10-12; P1.4 OOD score run (note 56, C26): sees the SSA shift (60% flagged vs 9.5% test)
 but not which masks fail — misses its switch-on rule, stays display-only.
 
 **Where the science stands** (authority: `docs/research_docs/claims_and_evidence.md`, read it before writing
 anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189),
 ~79–80% architecture / ~20% capacity (two draws, note 60), now checked against a measured seed noise floor (D1, note 49:
-+0.0021) — but **never yet tested against nnU-Net** (Gate A, P4). Conformal risk control holds in
++0.0021) — but **nnU-Net beats it**
+(Gate A RETIRED 2026-10-12, note 61, C29: ET 0.8879 vs 0.8709, lesion-wise −0.0309), so the
+architecture claim is withdrawn and C1 is quoted only against the matched-recipe U-Net. Conformal risk control holds in
 distribution and breaks under shift in proportion to the shift (C13/C14). The pipeline returns a
 usable mask for 85% / 78% / 24% of test / SSA / PED studies, with silent failure 4.2% / 18.3% /
 49.5% (note 47). Gate C is MIXED (one cell of five). D0 heavy augmentation and D1 seed 43 are both

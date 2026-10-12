@@ -2790,3 +2790,89 @@ evidence about the setup, and forgetting it means repeating it.
     `.venv-analysis/bin/python scripts/compare_family.py analysis.compare_family.name=capacity_r2 analysis.compare_family.name_a=A analysis.compare_family.name_b=B 'analysis.compare_family.comparisons=[{cohort:test_nv_minus_r2,a:outputs/replay_lesionwise/eval_test/per_case_default.csv,b:outputs/replay_lesionwise/eval_test_capacity_control_r2/per_case_default.csv,metrics:[dice_ET,dice_TC,dice_WT,lwdice_ET,lwdice_TC,lwdice_WT]},{cohort:test_r2_minus_baseline,a:outputs/replay_lesionwise/eval_test_capacity_control_r2/per_case_default.csv,b:outputs/replay_lesionwise/eval_test_baseline_unet3d/per_case_default.csv,metrics:[dice_ET,dice_TC,dice_WT,lwdice_ET,lwdice_TC,lwdice_WT]}]'`.
     Note: `scripts/replay_logits.py` writes under `${output_dir}/replay/` unless
     `analysis.replay.out_dir` is set; the r2 replay was moved to the path above.
+
+61. **GATE A -- RETIRED: nnU-NET BEATS `neurovision` ON BOTH CO-PRIMARY
+    ENDPOINTS. THE ARCHITECTURE CLAIM IS WITHDRAWN FROM THE PAPER.** Run
+    2026-09-26 → 2026-10-12 on Kaggle T4, pre-registration
+    `preregistrations/preregistration_strong_baseline.md` + Amendment 1 (both
+    before any nnU-Net number). Arm `nnunet_v2_3dfullres`: nnU-Net v2 (2.8.1
+    at predict), default `nnUNetPlans`, `3d_fullres`, `fold all` = exactly our
+    875 train cases (fingerprint and `dataset.json`: `numTraining` 875; train ∩
+    test = 0), the full unreduced 1000-epoch recipe chained over 7 sessions
+    (`neurovision-gatea-s1..s7`), `checkpoint_final.pth` (epoch 1000, EMA
+    pseudo-Dice 0.956 on training cases -- a health signal only). Prediction
+    `neurovision-gatea-predict` v2 (`GIT_REF e093910`): `health OK`, 189/189
+    test cases per arm, mirroring on 7.1 s/case, `--disable_tta` 1.3 s/case.
+
+    **Cost.** ~59.0 GPU-h training + ~0.5 h prediction, inside the 95 GPU-h
+    bound of Amendment 1 item 1. Plus ~7 GPU-h lost to a held s7 container
+    (billed; see `master_plan.md` ledger). `neurovision` trained 80 epochs in
+    ~22 GPU-h, so nnU-Net had ~2.7x the GPU time.
+
+    **Scoring.** `scripts/score_nnunet.py` (`.venv-analysis`, lesion-wise on):
+    ground-truth round-trip self-test passed on `BraTS2021_00000` before any
+    prediction was scored; then each prediction mapped to our label
+    convention, reoriented and cropped to `meta.json` geometry, turned into
+    pseudo-logits, and scored by `replay_case` with the project default
+    post-processing -- the identical chain every other arm runs through.
+    nnU-Net mean test Dice (mirroring on): ET 0.8879, TC 0.9247, WT 0.9424;
+    lesion-wise ET 0.7859. Without mirroring: ET 0.8822, TC 0.9258, WT 0.9406.
+
+    **Family (m = 18, `outputs/compare_family/gatea/family.csv`),** paired
+    bootstrap (10,000) + Wilcoxon, Holm over all 18:
+
+    | Pair | Metric | Improvement (A − B, sign = A better) | 95% CI | p_holm | Verdict |
+    |---|---|---|---|---|---|
+    | nv − nnU-Net | **dice_ET (E1)** | **−0.0170** | [−0.0309, −0.0069] | 1.0e-07 | **worse** |
+    | nv − nnU-Net | **lwdice_ET (E2)** | **−0.0309** | [−0.0605, −0.0020] | 4.2e-05 | **worse** |
+    | nv − nnU-Net | dice_TC | −0.0086 | [−0.0152, −0.0030] | 1.0e-07 | worse |
+    | nv − nnU-Net | dice_WT | −0.0104 | [−0.0153, −0.0061] | 6.2e-09 | worse |
+    | nv − nnU-Net | lwdice_TC | −0.0288 | [−0.0580, −0.0003] | 5.5e-05 | worse |
+    | nv − nnU-Net | lwdice_WT | −0.0737 | [−0.1080, −0.0406] | 2.6e-09 | worse |
+    | nv − nnU-Net | hd95_ET (n 186) | −0.45 mm | [−1.70, +0.84] | 0.04 | inconclusive |
+    | nv − nnU-Net | hd95_TC | −0.92 mm | [−2.70, +0.69] | 0.49 | inconclusive |
+    | nv − nnU-Net | hd95_WT | −2.97 mm | [−4.89, −1.24] | 3.4e-04 | worse |
+    | nnU-Net − baseline | dice_ET | +0.0437 | [+0.0264, +0.0650] | 3.8e-23 | better |
+    | nnU-Net − baseline | lwdice_ET | +0.0817 | [+0.0488, +0.1158] | 7.3e-16 | better |
+    | nnU-Net − baseline | dice_TC | +0.0189 | [+0.0107, +0.0285] | 3.4e-17 | better |
+    | nnU-Net − baseline | dice_WT | +0.0148 | [+0.0095, +0.0215] | 7.9e-17 | better |
+    | nnU-Net − baseline | lwdice_TC | +0.0658 | [+0.0353, +0.0983] | 6.6e-13 | better |
+    | nnU-Net − baseline | lwdice_WT | +0.1036 | [+0.0700, +0.1379] | 1.5e-13 | better |
+    | nnU-Net − baseline | hd95_ET (n 184) | +1.13 mm | [−0.44, +2.80] | 2.8e-05 | inconclusive |
+    | nnU-Net − baseline | hd95_TC | +1.18 mm | [−0.39, +2.80] | 0.33 | inconclusive |
+    | nnU-Net − baseline | hd95_WT | +2.60 mm | [+0.91, +4.45] | 1.1e-04 | better |
+
+    **Verdict (registered rule, both E1 and E2): nnU-Net better, CI excluding
+    zero, Holm-significant → RETIRED.** Per the pre-registration: the
+    architecture claim is withdrawn from the paper; the +0.0267 over the
+    matched U-Net (C1) is reported as measured against a matched-recipe
+    baseline only, with this nnU-Net result printed beside it; the pipeline,
+    guarantee and refusal work is the contribution.
+
+    **Reading.** nnU-Net is better on every Dice row, voxel-wise and
+    lesion-wise, and on WT boundary distance. It beats the matched U-Net by
+    +0.0437 ET -- 1.6x what `neurovision` gains over the same U-Net -- so the
+    matched recipe (80 epochs, 64³, our augmentation) is the weaker part, not
+    the U-Net topology. Per-case ET: `neurovision` wins 53, ties 4, loses 132.
+
+    **Descriptive, not in the family.** (1) Mirroring is not the gap: nnU-Net
+    without TTA still leads ET by 0.0113 (its own TTA is worth +0.0057; ours,
+    note 59, +0.0007). (2) Empty-ET caveat (as C1's): the 5 test cases with no
+    reference ET split identically except one (nv 0, nnU-Net 1); on the 184
+    cases with reference ET the gap is −0.0120 [−0.0194, −0.0058], so the
+    verdict does not rest on empty cases. (3) Lesion counts: false-positive
+    ET lesions per case 0.317 (nv) vs 0.243 (nnU-Net), false negatives 0.275
+    vs 0.238 -- nnU-Net is better at both detection errors, so C11's "fewer
+    spurious lesions" mechanism is relative to the matched U-Net only.
+
+    Artifacts: predictions `outputs/nnunet_predictions/gatea/nnunet_predictions/{tta_on,tta_off}/`
+    (378 label maps, ~9 MB), scores `outputs/score_nnunet/gatea_tta_{on,off}/`,
+    family `outputs/compare_family/gatea/`, kernel logs
+    `outputs/kaggle_kernels/gatea-s{1..7}/out/`, predict summary in the
+    `neurovision-gatea-predict` output. Regenerate:
+    `.venv-analysis/bin/python scripts/score_nnunet.py analysis.score_nnunet.pred_dir=outputs/nnunet_predictions/gatea/nnunet_predictions/tta_on analysis.score_nnunet.out_dir=outputs/score_nnunet/gatea_tta_on analysis.score_nnunet.lesionwise.enabled=true`
+    (same with `tta_off`), then
+    `.venv-analysis/bin/python scripts/compare_family.py analysis.compare_family.name=gatea analysis.compare_family.name_a=A analysis.compare_family.name_b=B "analysis.compare_family.comparisons=[{cohort:test_nv_minus_nnunet,a:outputs/replay_lesionwise/eval_test/per_case_default.csv,b:outputs/score_nnunet/gatea_tta_on/per_case_metrics.csv,metrics:[dice_ET,lwdice_ET,dice_TC,dice_WT,lwdice_TC,lwdice_WT,hd95_ET,hd95_TC,hd95_WT]},{cohort:test_nnunet_minus_baseline,a:outputs/score_nnunet/gatea_tta_on/per_case_metrics.csv,b:outputs/replay_lesionwise/eval_test_baseline_unet3d/per_case_default.csv,metrics:[dice_ET,lwdice_ET,dice_TC,dice_WT,lwdice_TC,lwdice_WT,hd95_ET,hd95_TC,hd95_WT]}]"`.
+    Note: the Kaggle CLI's `kernels files` listing reported ~931 B per
+    prediction; the real files are ~25 KB full-grid label maps -- the listing
+    size is wrong, not the files.

@@ -29,7 +29,15 @@ effect of either model.
 Test-time flip augmentation (8 flips) changes ET Dice by +0.0007 (CI −0.0004 to +0.0017) —
 not resolvable at n = 189, a third of the seed noise floor — so the margin is not an artefact of
 inference settings [C28].
-[PENDING: comparison against nnU-Net, the strong baseline — Gate A, running.]
+Against the field's standard baseline the picture reverses. nnU-Net v2 (`3d_fullres`, default
+plans, its full 1000-epoch recipe, trained on the same 875 cases) reaches test ET Dice **0.8879**
+against our **0.8709**: −0.0170 (CI −0.0309 to −0.0069; Holm-adjusted p = 1.0 × 10⁻⁷), and
+lesion-wise ET 0.7859 against 0.7550 (−0.0309, CI −0.0605 to −0.0020) [C29]. Both pre-registered
+co-primary endpoints favour nnU-Net, so by the rule fixed before the run the architecture claim is
+**retired**: the gain above is real, but only against a matched-recipe U-Net. nnU-Net beats that
+same U-Net by +0.0437 — the matched recipe (80 epochs, 64³ patches) is the weaker part. Mirroring
+does not explain the gap: without it nnU-Net still leads by 0.0113. nnU-Net also used about 2.7×
+the GPU time (~59 vs ~22 T4-hours) [note 61].
 
 Under lesion-wise scoring (the BraTS convention since 2023; exploratory, not pre-registered) the
 in-distribution gain is larger — ET +0.0508, TC +0.0371 [C10] — and comes from fewer spurious
@@ -111,9 +119,9 @@ signal [C26, note 56]. It detects the shifted cohort, not the failed study.
 
 ## 5. Discussion
 
-The project's one clean positive is modest and in distribution: a real, attributable ET gain from
-gated fusion. It does not transfer, and the mechanism the project was built to test is not what
-produces it. The more useful result is about reliability machinery around *any* model. A
+The architecture result is modest, in distribution, and relative: a real, attributable ET gain from
+gated fusion over a matched U-Net, which a standard nnU-Net exceeds [C29]. It does not transfer,
+and the mechanism the project was built to test is not what produces it. The more useful result is about reliability machinery around *any* model. A
 distribution-free bound is only as good as the exchangeability behind it: it holds in distribution
 and degrades with the size of the shift, and a learned refusal gate does not see that shift
 coming. What restores it is local data — tens of labelled cases at a new site — except where the
@@ -133,7 +141,8 @@ against the bound.
 ## 6. Limitations
 
 1. Most models are single-seed; the noise floor is one seed pair, not a variance estimate.
-2. The strong baseline (nnU-Net) is still running; C1 is not yet tested against it.
+2. C1 holds only against a matched-recipe U-Net; nnU-Net beats the proposed model (Gate A,
+   RETIRED). nnU-Net was trained once (`fold all`, one seed) with ~2.7× the GPU time.
 3. The test split is a random split of the BraTS 2021 training set; numbers are not comparable to
    published challenge results, and lesion-wise results are exploratory.
 4. The local-recalibration result is a counterfactual on public cohorts, not a site study; the

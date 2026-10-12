@@ -145,6 +145,32 @@ time implies more than 60 GPU-h for the pair.
 *(To be completed after the runs. Nothing above this line may be edited once the first number
 exists.)*
 
+**Recorded 2026-10-12. Verdict: RETIRED.** (Experiments note 61; family
+`outputs/compare_family/gatea/family.csv`, m = 18, Holm over all 18 as Amendment 1 item 9 fixes.)
+
+Arm as amended: nnU-Net v2 `3d_fullres`, default plans, `fold all` on our 875 train cases, full
+1000-epoch recipe chained over 7 Kaggle T4 sessions, `checkpoint_final.pth`, mirroring on. Cost
+~59.0 GPU-h training + ~0.5 h prediction (bound 95). Scored through our own path after the
+ground-truth round-trip self-test passed. 189/189 test cases.
+
+| Endpoint | `neurovision` | nnU-Net | nv − nnU-Net | 95% CI | p_holm (family) | Verdict |
+|---|---|---|---|---|---|---|
+| **E1** voxel ET Dice | 0.8709 | 0.8879 | **−0.0170** | [−0.0309, −0.0069] | 1.0e-07 | nnU-Net better |
+| **E2** lesion-wise ET Dice | 0.7550 | 0.7859 | **−0.0309** | [−0.0605, −0.0020] | 4.2e-05 | nnU-Net better |
+
+Both co-primary endpoints: nnU-Net better, CI excluding zero, Holm-significant → **RETIRED**, by the
+rule fixed above. Consequence, as registered: **the architecture claim is withdrawn from the paper.**
+The +0.0267 is reported as measured against a matched-recipe baseline only, with the nnU-Net result
+printed beside it. The pipeline, guarantee and refusal work becomes the entire contribution.
+
+Secondary rows (same family): nv − nnU-Net is worse on TC and WT under both metrics and on WT HD95
+(−2.97 mm); ET and TC HD95 inconclusive. nnU-Net − `baseline_unet3d` is better on all six Dice rows
+(ET +0.0437 [+0.0264, +0.0650]) and on WT HD95; ET and TC HD95 inconclusive.
+
+Descriptive, outside the family (Amendment 1 item 7): nnU-Net with `--disable_tta` scores ET
+0.8822, still 0.0113 above `neurovision`, so mirroring explains about a third of the gap and not the
+verdict.
+
 ---
 
 ## Amendment 1 — where and how the nnU-Net arm runs, fixed 2026-09-26 before any of its numbers exist

@@ -50,8 +50,9 @@ The project has had **three identities**. Each one was replaced because the evid
 | 3 | **"A segmentation model wrapped in a distribution-free error bound and a refusal gate — measured where it breaks"** | 2026-08-23 → now | The bound holds in distribution and **breaks under shift in proportion to the shift** (note 42). The refusal gate cannot see cohort-level shift (note 47). A new site can restore the bound with ~10–40 labelled cases, except paediatric tumour core (note 52). On real hospital DICOM the front end loses a lot (note 55). This is the current thesis |
 
 **The one clean positive:** ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189),
-replicated at a second seed pair (+0.0247, note 54), ~13x the seed noise floor (note 49). It has
-**not yet** been tested against nnU-Net (Gate A is training on Kaggle now).
+replicated at a second seed pair (+0.0247, note 54), ~13x the seed noise floor (note 49). **Against
+nnU-Net it loses** (Gate A RETIRED 2026-10-12, note 61: ET 0.8879 vs 0.8709), so it stands only
+as a matched-recipe result and the architecture claim is withdrawn from the paper.
 
 **The current thesis** (from `CLAUDE.md`, rewritten 2026-09-26):
 
@@ -517,6 +518,8 @@ duplicates and landed in opposite folds (lessons.md). Deployed model unchanged.
 
 **10-11 — Capacity-control rerun gate fires (note 60, C2).** Second draw of the lost width-matched U-Net, Kaggle T4 ~5.8 GPU-h: reproduces the original (ET −0.0002); architecture share 0.80 vs 0.79, C2 stands on two draws; first lesion-wise column for C2 (share 0.64).
 
+**10-12 — Gate A fires: RETIRED (note 61, C29).** nnU-Net v2 `3d_fullres`, full 1000-epoch recipe on our 875 train cases (7 chained Kaggle T4 sessions, ~59 GPU-h + ~7 lost to a held container), beats `neurovision` on both co-primary endpoints: ET Dice 0.8879 vs 0.8709 (−0.0170, p_holm 1e-7), lesion-wise ET −0.0309. By the rule fixed before the run, the architecture claim is withdrawn; C1 stays only as a matched-recipe result printed beside nnU-Net. nnU-Net beats the matched U-Net by +0.0437, so the recipe, not the U-Net, was the weak link. Same day: D2 session 1 pushed into the week's last 7.5 GPU-h.
+
 ---
 
 ## 4. Every GPU run
@@ -543,7 +546,7 @@ whether the weights still exist — a run without a checkpoint can never be re-s
 | 15 | **`neurovision_seed43`** (D1) | 09-20 → 09-23 | 3 · `9c770ce` | ~23 | Seed noise floor +0.0021 (note 49) | ✓ |
 | 16 | **`baseline_unet3d_seed43`** | 09-26 | 1 | ~5 | C1 replicated at seed 43 (note 54) | ✓ |
 | 17 | Gate A nnU-Net prep | 09-26 | CPU kernel | 0 | Preprocessing for nnU-Net | — |
-| 18 | **Gate A nnU-Net, sessions 1–2** | 09-26 → 09-27 | chained · `c7778c2` driver | ~21.9 so far | Epoch 372 of 1000, 209–222 s/epoch, healthy. Projected ~61 GPU-h | in progress |
+| 18 | **Gate A nnU-Net, sessions 1–7 + predict** | 09-26 → 10-12 | 7 chained + predict (`e093910`) | ~59.5 (+~7 lost to a held s7 container) | 1000/1000 epochs, ~208 s/epoch; test ET 0.8879, beats `neurovision` on both endpoints — **RETIRED** (note 61) | `checkpoint_final.pth` in Kaggle output `neurovision-gatea-s7` |
 
 **Total so far: roughly 170 GPU-h** (several rows are approximate). Of that, 10.5 h were lost to
 the NaN bug and ~16.5 h went to a baseline that was superseded.
@@ -590,7 +593,7 @@ Everything the project believed at some point, in the order it was tested. ✓ s
 | 09-27 | The headline replicates at a second seed pair | ✓ +0.0247 | note 54, C1 |
 | 09-27 | The clinical front end costs ≤0.05 WT Dice on real DICOM | ✗ −0.23, prediction failed ~5x | note 55, C25 |
 | 09-27 | An input OOD score earns a place as a refusal signal | ✗ switch-on rule failed; sees cohort, not failed study | note 56, C26 |
-| open | The gain survives nnU-Net (Gate A) | — training | prereg strong_baseline |
+| 10-12 | The gain survives nnU-Net (Gate A) | ✗ **RETIRED**: nnU-Net better on ET by 0.0170 (voxel) and 0.0309 (lesion-wise) | note 61, C29 |
 | open | Cross-fitted fine-tuning fixes PED tumour core (D3) | — pre-registered | prereg finetune |
 | open | Flip TTA helps | — pre-registered | prereg tta |
 
@@ -759,8 +762,8 @@ Full detail and restart commands: `status_2026-09-27.md`. In short:
 - **Proven:** C1 (+0.0267 ET, replicated, above seed noise), C2 (79% architecture), the conformal
   bound in distribution (C13), graded failure under shift (C14), end-to-end error budget (C20–C22),
   local recalibration recipe (C24), real-DICOM front-end cost (C25).
-- **Running:** Gate A (nnU-Net) on Kaggle, epoch 372 of 1000. Until it reports, every C1 sentence
-  ends with "not yet tested against nnU-Net".
+- **Gate A done 10-12: RETIRED** (note 61, C29). Every C1 sentence is now "over a matched-recipe
+  U-Net", printed beside nnU-Net's 0.8879.
 - **Next on GPU:** Gate A sessions 3–6 and prediction, D3 fine-tunes, flip-TTA measurement.
 - **Author-only:** eyeball the 3D twin on job `9c2cc294` (P0.7); write the report's Introduction
   and Methods (P3.1); submit the GPU request ~11-05 (P2.6); rehearse the demo and tag
