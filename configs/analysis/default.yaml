@@ -910,6 +910,81 @@ score_nnunet:
     nsd_tolerance_mm: 1.0
     connectivity: 26
 
+nnunet_probs:
+  # docs/research_docs/preregistrations/preregistration_conformal_nnunet.md --
+  # runs the Gate A nnU-Net model on ONE cohort's PREPROCESSED arrays with
+  # --save_probabilities and writes an eval directory in the format
+  # scripts/evaluate.py produces (logits/, per_case_metrics.csv, summary.csv,
+  # eval_config.yaml), so scripts/conformal.py and scripts/replay_logits.py
+  # read it unmodified. Consumed by scripts/nnunet_predict_probs.py. Needs a
+  # GPU (Kaggle T4) for the prediction step; run once per cohort (val, test,
+  # SSA, PED). nnunetv2 is only ever called as a subprocess.
+
+  # Root searched (bounded depth) for the one trained model folder holding
+  # fold_all/checkpoint_final.pth, e.g. /kaggle/input. null forces an explicit
+  # CLI override -- never guess which nnU-Net run this is predicting from.
+  model_search_root: null
+
+  # Root of the preprocessed tree for THIS cohort (holds <case>/image.npy,
+  # label.npy and meta.json). Override per cohort (brats, brats_ssa, brats_ped).
+  prep_dir: ${data.preprocessing.out_dir}
+
+  # The frozen split file and the split name the case list comes from. For SSA
+  # and PED point splits_path at their own split file and use split: test.
+  splits_path: ${data.splits.path}
+  split: test
+
+  # Where logits/, per_case_metrics.csv, summary.csv, eval_config.yaml and
+  # nnunet_probs_summary.json are written. null forces an explicit CLI
+  # override, same reason as model_search_root.
+  out_eval_dir: null
+
+  # Scratch space: nnU-Net's input NIfTIs and its raw .npz/.pkl/label outputs
+  # live here and are deleted case by case after conversion. null forces an
+  # explicit override (on Kaggle, a directory under /kaggle/working).
+  work_dir: null
+
+  # Pre-registered: ONLY checkpoint_final.pth. checkpoint_best.pth is selected
+  # on training cases in fold "all" and is refused. Kept as a key so the
+  # refusal is visible in the saved config, not hidden in code.
+  checkpoint_name: checkpoint_final.pth
+
+  # The epoch checkpoint_final.pth must report (Gate A trained 1000).
+  expect_epoch: 1000
+
+  # Passed to nnU-Net's -device. "cuda" or "cpu" only (never mps).
+  device: cuda
+
+  # false = nnU-Net's own default, mirroring ON (the pre-registered primary
+  # arm). true adds --disable_tta; do not use it for the conformal run.
+  disable_tta: false
+
+  # null = every case in the split. An int predicts only the first N cases,
+  # for a smoke run. Applied AFTER the "every case has its arrays" check.
+  case_limit: null
+
+  # Per-case sanity check: regions thresholded from the converted logits must
+  # reproduce nnU-Net's own exported label map. The mismatch fraction is
+  # (voxels that disagree) / (voxels in the volume), per region. 1e-5 is
+  # ~30 voxels of a 3M-voxel volume: tight enough that a flipped axis or a
+  # swapped channel (thousands of voxels) cannot pass, loose enough to
+  # absorb a handful of voxels sitting exactly on the 0.5 boundary.
+  label_check_tol: 1.0e-5
+
+  # Cases per nnU-Net call. Inputs (~52 MB/case as float32 NIfTI) and probability
+  # files are written, converted and deleted one chunk at a time, so Kaggle's
+  # ~19.5 GB /kaggle/working never holds a whole cohort. nnU-Net reloads the model
+  # once per chunk (seconds).
+  chunk_size: 25
+
+  # Dice sanity: the label check compares nnU-Net with itself, so a modality-order
+  # or frame error against label.npy would pass it. After the first sanity_after_n
+  # scored cases, raise if their mean WT Dice is below min_dice_wt_sanity. A real
+  # tumour model scores far above 0.5 even under shift. null disables the raise
+  # (the running mean is always logged).
+  min_dice_wt_sanity: 0.5
+  sanity_after_n: 5
+
 semester_figures:
   # scripts/plot_semester_figures.py -- the two Milestone 5 figures the
   # semester report cites (docs/research_docs/experiments.md notes 42 and 52). Reads
