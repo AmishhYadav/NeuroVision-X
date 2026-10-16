@@ -544,6 +544,44 @@ has ~8 points per line because validation runs every 10 epochs; `val/dice_mean` 
 Runs: `nz5y7li7` old U-Net (predates loss components and grad norms) · `iriee13d` seed 43, session
 1 only · `k7b8l3h2` heavy augmentation (D0). The deployed run `cc2l5j1c` is not in W&B.
 
+### Reading the actual curves (seed 43, epochs 0–33, pulled from W&B 2026-10-16)
+
+| Epoch | loss_epoch | val Dice mean | ET | TC | WT | HD95 mm |
+|---|---|---|---|---|---|---|
+| 0 | 1.272 | | | | | |
+| 9 | 0.634 | 0.857 | 0.819 | 0.853 | 0.898 | 10.4 |
+| 19 | 0.581 | 0.878 | 0.845 | 0.881 | 0.908 | 7.2 |
+| 29 | 0.540 | 0.884 | 0.851 | 0.887 | 0.913 | 6.9 |
+| 33 | 0.523 | | | | | |
+
+**Loss.** Two phases: halves in 12 epochs (1.27 → 0.61, learning what a tumour is), then creeps
+down (→ 0.52, refining edges). Train falls while val rises, so no overfitting. Per-step `train/loss`
+ranges 0.11–1.16 late on because each step is 4 random patches; only the epoch mean is meaningful.
+Make-up at epoch 33: segmentation 1.0 × 0.33, boundary 0.3 × 0.46, branch 0.1 × 0.20, confidence
+0.05 × 0.11 ≈ 0.50 — segmentation ~2/3, boundary ~1/4. Boundary always exceeds seg (thin 1-voxel
+shell). Branch probes still improving at epoch 33 (0.58 → 0.20). **Open item:** `loss_confidence`
+falls to ~0.025 by epoch 16 then rises to ~0.11 from epoch 26 and stays; coincides with the
+epoch 24/27 anomalies below; not investigated; ~0.004 of the total, validation unaffected.
+
+**Optimiser.** LR warms up over epochs 0–4 to 1e-4; still ~7e-5 at epoch 33 (most of the decay is
+in the last 40 epochs). Gradient median 1.34 → ~0.7, p90 2.9 → ~2.0. Clipping hits 1.1–2.6% of
+steps; 18 of 1,487 logged steps exceeded 5. `grad_norm_max` = Infinity at epochs 0, 3, 8, 10, 12,
+14, 19 is the GradScaler raising its scale every ~2,000 steps (~2.3 epochs) until fp16 overflows,
+skipping that step and halving — normal.
+
+**Known logging bug (epochs 24, 27).** Median 7.96 / 6.84 exceeds p90 0.69 / 1.45, which real
+percentiles cannot do. Some steps had a NaN gradient norm (epoch 24 max = NaN); `sorted()` cannot
+order NaN, so `trainer.py`'s median/p90 for those epochs are invalid. Training was unaffected (the
+scaler skips non-finite steps). Fix after the demo: compute the percentiles over finite values only.
+
+**Hardware.** ~1,025 s per epoch; epochs 9, 19, 29 take ~1,690 s (validation adds ~0.19 h). From
+epoch 25 ~1,000 s (likely a different Kaggle host). VRAM 7.23 GB in epoch 0 (cuDNN autotuning),
+then flat 6.62 GB = 6.17 GiB, matching the 64³ probe: no leak.
+
+**One line to say:** loss falls in two phases, validation rises with it so there's no overfitting,
+clipping only catches rare spikes, memory is flat, and the infinities are mixed precision skipping
+overflowed steps.
+
 ---
 
 ## Part 4 — The notebooks
