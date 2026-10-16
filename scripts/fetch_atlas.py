@@ -1,7 +1,7 @@
 """Fetches the SRI24 atlas from NITRC into a configured directory.
 
 The SRI24 atlas backs the interpretable pipeline (Phase 0 onward, see
-`docs/research/interpretable_pipeline_plan.md` and
+`docs/archive/interpretable_pipeline_plan.md` and
 `docs/research_docs/phase0_atlas_findings.md`), but it is licensed **CC-BY-SA** --
 so unlike BraTS-derived artifacts, it must never be vendored into the repo.
 This script downloads it at setup time instead, verifies every archive

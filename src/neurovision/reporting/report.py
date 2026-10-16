@@ -9,7 +9,7 @@ set of caller-supplied strings (evidence, citation, coverage line). It writes
 one JSON file and, optionally, one Markdown rendering per case.
 
 The reason this module exists is not formatting. It is
-`docs/research/interpretable_pipeline_plan.md` section 2: the project has
+`docs/archive/interpretable_pipeline_plan.md` section 2: the project has
 exactly two kinds of claim it is allowed to ship (geometric, computed
 deterministically from a mask and a label map; and referential, a lookup into
 a named published classification where the source owns the claim), and this
@@ -112,7 +112,7 @@ _SOURCE_OWNS_CLAIM: str = (
 )
 
 # (what we refuse to say, why) -- eight items, now nine. Six are one per row
-# of `docs/research/interpretable_pipeline_plan.md` section 2's "Explicitly
+# of `docs/archive/interpretable_pipeline_plan.md` section 2's "Explicitly
 # NOT in scope" table, minus the diagnostic-use item (that is what DISCLAIMER
 # covers); a seventh (mass effect), an eighth (growth pattern / invasiveness),
 # and a ninth (a molecular subtype inferred from imaging) were appended

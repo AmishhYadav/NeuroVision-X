@@ -1,6 +1,6 @@
 """Hydra entry point for the anatomical-localisation driver.
 
-Phase 1 of `docs/research/interpretable_pipeline_plan.md` §5. Walks a frozen
+Phase 1 of `docs/archive/interpretable_pipeline_plan.md` §5. Walks a frozen
 split, loads each case's class map (either a saved prediction or the
 preprocessed ground-truth label) plus its `meta.json`, intersects it with the
 SRI24/TZO atlas, and writes two CSVs: one long per-structure table

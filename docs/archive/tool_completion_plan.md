@@ -72,7 +72,7 @@ involvement, eloquence, provenance). Job states `queued|running|done|refused|fai
 
 ## Deliverable
 
-1. **`docs/research/tool_completion_plan.md`** — this plan in `master_plan.md` §4 form
+1. **`docs/archive/tool_completion_plan.md`** — this plan in `master_plan.md` §4 form
    (orientation, how to tell what is done, queue with `[x]/[ ]`, dependency arrows, verification).
    Markdown, so Opus writes it directly. Committed together with the six docs left uncommitted
    since 2026-09-15 (`CLAUDE.md`, `docs/research_docs/reproducibility.md`, four `docs/research/*.md`), then
@@ -194,7 +194,7 @@ auc_in_distribution, auc_age_controlled}` from a saved per-job inference; the `n
 rewritten to "IDH estimated from imaging on in-distribution data only".
 
 ### T-docs — close the loop
-`docs/research/tool_completion_plan.md` · `CLAUDE.md` "What is next" · `master_plan.md` §4.3
+`docs/archive/tool_completion_plan.md` · `CLAUDE.md` "What is next" · `master_plan.md` §4.3
 Track 1 gains the T-queue · memory `gpu-track-parked-tool-first` points at the plan ·
 `docs/research_docs/experiments.md` note 45 · `docs/research_docs/reproducibility.md` HD-BET weights + fixture manifest.
 
@@ -289,6 +289,6 @@ demo), the E2E section 12, any threshold change to make the fixture pass.
 the backend running; have screenshots of every screen as the fallback if the browser misbehaves.
 
 ## First three actions after approval
-1. Write `docs/research/tool_completion_plan.md`; commit with the six pending docs; push.
+1. Write `docs/archive/tool_completion_plan.md`; commit with the six pending docs; push.
 2. T0.1 — author downloads the fixture (Kaggle credentials); T0.2 spec → `py-implementer`.
 3. T1.1 spec → `py-implementer`, in parallel.

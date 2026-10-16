@@ -1,6 +1,6 @@
 """Group-level and tissue-level tumour involvement, plus epicentre naming.
 
-Phase 3b of `docs/research/interpretable_pipeline_plan.md` §5. This module is
+Phase 3b of `docs/archive/interpretable_pipeline_plan.md` §5. This module is
 `neurovision.anatomy.localize`'s sibling: where `localize.py` answers "which
 individual atlas structure does the tumour touch, and how badly", this module
 answers three coarser questions that a single structure cannot:

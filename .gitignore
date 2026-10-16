@@ -48,3 +48,7 @@ venv/
 
 
 brag-output/
+# Dated /brag runs (brag-output-YYYY-MM-DD-HHMMSS/) and the E2E smoke run's
+# screenshots; both are regenerated, never source.
+/brag-output-*/
+app/frontend/e2e/out/

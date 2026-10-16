@@ -494,7 +494,7 @@ def test_non_eloquent_verdict_never_appears_far_from_any_eloquent_structure() ->
     manufacture a "non-eloquent" verdict about the patient. `build_report`
     must report only the measured distance and the boolean threshold
     comparison, never a three-level classification derived from them --
-    see `docs/research/interpretable_pipeline_plan.md` section 2 and
+    see `docs/archive/interpretable_pipeline_plan.md` section 2 and
     `knowledge/eloquence_map.yaml`'s forbidden vocabulary.
     """
     far_summary = {**_anatomy_summary(), "distance_to_eloquent_mm": 250.0}

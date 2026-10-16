@@ -2,7 +2,7 @@
 # WHO CNS5 classification, and a lookup from ENTERED pathology to the CNS5
 # integrated diagnosis name.
 #
-# T5.1 of docs/research/tool_completion_plan.md. Same discipline as
+# T5.1 of docs/archive/tool_completion_plan.md. Same discipline as
 # eloquence_map.yaml: the source owns every claim; this file owns only the
 # vocabulary and the mapping. NOTHING HERE IS DERIVED FROM IMAGING. Every value
 # that reaches a report through this file was typed in by a user from a

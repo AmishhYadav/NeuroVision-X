@@ -1,6 +1,6 @@
 """Anatomical localisation: which SRI24 structures a tumour mask touches, and how badly.
 
-Phase 1 of `docs/research/interpretable_pipeline_plan.md` §5. Given a binary
+Phase 1 of `docs/archive/interpretable_pipeline_plan.md` §5. Given a binary
 region mask (ET / TC / WT, from `neurovision.anatomy.burden.region_mask`) and
 the loaded `Atlas`, this module answers two, deliberately separate, questions
 per structure:
@@ -260,7 +260,7 @@ def load_knowledge(
     """Loads and validates the two committed knowledge YAML files against an atlas.
 
     Validation is deliberately strict, because these files are the artifacts
-    a non-expert reviewer audits (`docs/research/interpretable_pipeline_plan.md`
+    a non-expert reviewer audits (`docs/archive/interpretable_pipeline_plan.md`
     §5 Phase 2, Finding E): every eloquence entry must name a real atlas
     structure, every eloquence value must come from the file's own declared
     vocabulary, and every atlas structure's base name must resolve in the

@@ -11,7 +11,7 @@ Project instructions for Claude Code. Read this before doing anything in this re
 | `docs/research_docs/experiments.md` | Every run and every measured result, notes 1–44 |
 | `docs/research_docs/claims_and_evidence.md` | The gate on what may be written. A claim not in that table does not go in the paper |
 | `docs/research_docs/lessons.md` | The traps, with evidence. Each one already cost GPU hours, a wrong number, or a silent bug |
-| `docs/project_state.md` | The Milestone 1–3 build record, archived |
+| `docs/archive/project_state.md` | The Milestone 1–3 build record, archived |
 | `docs/gpu_session_checklist.md` | Rules for a GPU session, each written against a loss already suffered |
 | `docs/research_docs/reproducibility.md` | Which artifacts are caches, and the exact command to rebuild each |
 | `docs/research_docs/project_history.md` | The whole journey in time order — every build, GPU run, result, dead claim and major decision. Add a line when a gate fires |
@@ -222,7 +222,7 @@ usable mask for 85% / 78% / 24% of test / SSA / PED studies, with silent failure
 49.5% (note 47). Gate C is MIXED (one cell of five). D0 heavy augmentation and D1 seed 43 are both
 12/12 inconclusive. The founding hypothesis is a pre-registered null.
 
-**What is built.** Everything through Milestone 3 (`docs/project_state.md`), plus lesion-wise
+**What is built.** Everything through Milestone 3 (`docs/archive/project_state.md`), plus lesion-wise
 metrics, TTA (measured, note 59: ET +0.0007, inconclusive), conformal risk control, the QC model, the end-to-end error budget,
 and the full clinical pipeline — DICOM zip in → ingest → input QC → co-registration / SRI24 /
 HD-BET → input QC → segmentation (deployed `neurovision` seed 42) → QC-model + conformal signals →

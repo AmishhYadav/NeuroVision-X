@@ -13,7 +13,7 @@ is what makes it measurable: the maps were generated on 2026-08-23
 difference -- at n=60 that is indistinguishable from an underpowered study,
 and this project has six underpowered nulls already. It is tested with a
 paired TOST (`neurovision.analysis.equivalence`) against a margin of **0.03
-AUROC fixed in `docs/research/execution_plan.md` Phase 2 before any external
+AUROC fixed in `docs/archive/execution_plan.md` Phase 2 before any external
 MC map existed**.
 
 ## All three quantities are read at the SAME voxels
@@ -211,7 +211,7 @@ def run_mc_comparison(cfg: DictConfig) -> Path:
     write_json(
         {
             "tost_margin": margin,
-            "margin_source": "docs/research/execution_plan.md Phase 2, fixed before any "
+            "margin_source": "docs/archive/execution_plan.md Phase 2, fixed before any "
             "external-cohort MC map existed",
             "pre_registered": False,
             "note": "Secondary analysis, outside the Gate 1 and Gate 2 families.",

@@ -5,7 +5,7 @@
 **Written:** 2026-08-19 · **Horizon:** ~6 weeks · **Status:** superseded (see banner)
 
 **Relationship to other documents.** This supersedes the *sequencing and gates* of
-`docs/research/improvement_plan.md` wherever the two disagree; that document's
+`docs/archive/improvement_plan.md` wherever the two disagree; that document's
 measurements, cost table and fallback analysis remain valid and are cited here
 rather than repeated. Read `docs/research_docs/experiments.md` notes 11–30 for the numbers
 behind every claim below. `docs/research_docs/contribution.md` holds the P1–P5

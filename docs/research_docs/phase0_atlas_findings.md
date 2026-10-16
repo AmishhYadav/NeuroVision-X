@@ -2,7 +2,7 @@
 
 Measured 2026-08-16 against the real atlas files and the real 1,251-case
 preprocessed BraTS 2021 tree. Everything here is a measurement, not a citation.
-Read alongside `docs/research/interpretable_pipeline_plan.md` §3 (Finding A) and
+Read alongside `docs/archive/interpretable_pipeline_plan.md` §3 (Finding A) and
 §5 Phase 0 — **two of that plan's assumptions were wrong and are corrected here.**
 
 ---

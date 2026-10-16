@@ -194,7 +194,7 @@ population:
   figures: true
 
 detection:
-  # Gate 1 of docs/research/execution_plan.md -- does per-voxel inter-branch
+  # Gate 1 of docs/archive/execution_plan.md -- does per-voxel inter-branch
   # disagreement carry failure-detection signal that single-pass predictive
   # entropy does not already have? Registered in
   # docs/research_docs/preregistrations/preregistration_ambiguity.md BEFORE any of this ran; read
@@ -388,7 +388,7 @@ mc_comparison:
     max_voxels_per_case: 20000
     seed: ${seed}
 
-  # FIXED IN docs/research/execution_plan.md Phase 2, before any external MC
+  # FIXED IN docs/archive/execution_plan.md Phase 2, before any external MC
   # map existed. A margin chosen after seeing the data is not a margin.
   tost_margin: 0.03
 

@@ -714,7 +714,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     **What this does and does not change.** It removes a claim the project did
     not yet have. It does NOT touch the in-domain results (notes 11-21), which
     are unaffected. And it strengthens the motivation for the failure-detection
-    direction in `docs/research/improvement_plan.md`: a model that degrades
+    direction in `docs/archive/improvement_plan.md`: a model that degrades
     off-distribution *and gives no signal that it has* is exactly what a
     per-case trust score exists for. That hypothesis remains untested.
 
@@ -1110,7 +1110,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     three signals scored at the SAME label-free sampled voxels, per case, as
     AUROC for per-voxel error. Secondary analysis, outside the pre-registered
     families; the TOST margin of 0.03 AUROC was fixed in
-    `docs/research/execution_plan.md` Phase 2 before any external MC map
+    `docs/archive/execution_plan.md` Phase 2 before any external MC map
     existed.
 
     | Cohort | entropy | disagreement | MC-dropout (N=10) |
@@ -1568,7 +1568,7 @@ sessions by resume is still ONE row — sum the GPU hours.
 45. **FIRST REAL DICOM STUDIES THROUGH THE CLINICAL PIPELINE: ONE `done`/PROCEED
     IN 361 s ON THE M4, ONE `refused` REPRODUCIBLY ON `predicted_dice`, AND
     SEVEN THINGS THE GREEN SUITE COULD NOT HAVE CAUGHT.** Run 2026-09-18,
-    tool-completion plan T0 (`docs/research/tool_completion_plan.md`).
+    tool-completion plan T0 (`docs/archive/tool_completion_plan.md`).
     Fixtures: TCIA **UPENN-GBM-00001/00002/00003** (public REST API, CC BY 4.0;
     manifests `docs/data_manifests/fixture_dicom_upenn_gbm_0000{1,2,3}_sha256.txt`).
     The Kaggle RSNA-MICCAI `train/00000` fixture the plan named returned 403
@@ -1600,7 +1600,7 @@ sessions by resume is still ONE row — sum the GPU hours.
     max 15.7 mm.
 
     **Findings, in the order they were hit (F1-F7 in
-    `docs/research/tool_completion_log.md`, each with its fix commit):**
+    `docs/archive/tool_completion_log.md`, each with its fix commit):**
 
     1. **Pre-E2 input QC refused every real study on `geometry_consistency`.**
        Before co-registration the four series legitimately sit on different

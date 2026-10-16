@@ -429,7 +429,7 @@ def test_load_knowledge_and_load_classification_cannot_disagree(tmp_path: Path) 
 @pytest.mark.parametrize("field", ["name", "eloquent_structures_verbatim", "primary_citation"])
 def test_load_classification_raises_on_an_empty_required_field(tmp_path: Path, field: str) -> None:
     """The evidence sentence is this project's substitute for the expert review it does not
-    have (see docs/research/interpretable_pipeline_plan.md Finding E), so an empty one is a
+    have (see docs/archive/interpretable_pipeline_plan.md Finding E), so an empty one is a
     hard failure rather than an empty string flowing into a report."""
     elo_path = tmp_path / "eloquence_map.yaml"
     _write_eloquence_yaml(

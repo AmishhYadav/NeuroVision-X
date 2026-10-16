@@ -16,7 +16,7 @@ evidence of difference.
 
 The margin here is **not** chosen in this module. It is passed in, and for the
 MC-dropout comparison it was fixed at 0.03 AUROC in
-`docs/research/execution_plan.md` §Phase 2 before any MC-dropout map for an
+`docs/archive/execution_plan.md` §Phase 2 before any MC-dropout map for an
 external cohort existed. A margin chosen after seeing the data is not a margin.
 """
 

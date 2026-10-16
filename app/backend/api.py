@@ -729,7 +729,7 @@ def get_clinical_job_geometry(job_id: str) -> dict[str, Any]:
     `/conformal-band`, `/gradcam`) only ever puts `shape` on the wire, via
     the `X-Volume-Shape` header, and never `spacing` or `bbox` at all. This
     is the one clinical route that serves geometry, and T3/T6 in
-    `docs/research/tool_completion_plan.md` both reuse it rather than each
+    `docs/archive/tool_completion_plan.md` both reuse it rather than each
     growing their own copy of this lookup.
 
     The response is exactly `CaseMeta.to_json()` -- the same dict shape

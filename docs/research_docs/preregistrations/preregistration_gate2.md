@@ -1,7 +1,7 @@
 # Pre-registration — Gate 2, respecified around voxel-level localisation
 
 **Written 2026-08-23, BEFORE any Gate 2 quantity was computed.** It supersedes
-the Gate 2 row of `docs/research/execution_plan.md` §Phase 2, which was written
+the Gate 2 row of `docs/archive/execution_plan.md` §Phase 2, which was written
 before Gate 1 had numbers. Nothing below may be edited after the first endpoint
 is computed; results go in §Result at the bottom.
 

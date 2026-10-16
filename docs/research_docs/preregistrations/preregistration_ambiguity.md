@@ -5,7 +5,7 @@ before any ambiguity map had been extracted from a trained checkpoint. The git
 timestamp on this file is the evidence for that ordering, which is the entire
 point of writing it down first.
 
-**Scope.** This registers Gate 1 of `docs/research/execution_plan.md` — the test
+**Scope.** This registers Gate 1 of `docs/archive/execution_plan.md` — the test
 that decides whether the project's pivot is real. It costs zero GPU hours.
 
 ---

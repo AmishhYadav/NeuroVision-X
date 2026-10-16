@@ -1,6 +1,6 @@
 """Population-level anatomical statistics across a whole split (Phase 5).
 
-`docs/research/interpretable_pipeline_plan.md` names "population-level
+`docs/archive/interpretable_pipeline_plan.md` names "population-level
 anatomical statistics across all 1,251 cases as a headline figure -- it is
 both a validation and a genuinely interesting result." This module is the
 aggregation layer that turns the two per-case tables Phase 1 already writes

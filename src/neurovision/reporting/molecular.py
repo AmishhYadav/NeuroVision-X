@@ -1,6 +1,6 @@
 """Molecular pathology block: ENTERED marker values -> a WHO CNS5 diagnosis NAME.
 
-T5.1 of `docs/research/tool_completion_plan.md`. This module is the code
+T5.1 of `docs/archive/tool_completion_plan.md`. This module is the code
 counterpart of `knowledge/molecular_markers.yaml`: that file owns every claim
 (the marker vocabulary, the CNS5 lookup rows, and the copy shown to a user),
 this module owns only the mechanics of loading it, validating what a user
@@ -295,7 +295,7 @@ def empty_molecular_block(knowledge: MolecularKnowledge) -> dict:
     Returns:
         A plain dict with keys `caveat`, `citation`, `scope`, `histology`,
         `markers`, `cns5`. See the module's `empty_molecular_block` spec in
-        `docs/research/tool_completion_plan.md` (T5.1) for the exact shape.
+        `docs/archive/tool_completion_plan.md` (T5.1) for the exact shape.
     """
     markers_block: dict[str, dict] = {}
     for name in MARKERS:

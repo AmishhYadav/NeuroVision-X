@@ -1,6 +1,6 @@
 """Hydra entry point that runs the live clinical pipeline on ONE raw DICOM study.
 
-T0.2 of `docs/research/tool_completion_plan.md`: "makes T0 a command, not a
+T0.2 of `docs/archive/tool_completion_plan.md`: "makes T0 a command, not a
 story". Before this script existed, exercising the real clinical pipeline
 (`app.backend.clinical_jobs`) end to end on a real DICOM study directory --
 E1 ingest through E6 DICOM-SEG export and the Phase 4 report -- meant driving

@@ -9,7 +9,7 @@
 fallback analyses remain valid and are cited here rather than repeated. The authoritative record of
 what was measured is `docs/research_docs/experiments.md`; the gate on what may be written is
 `docs/research_docs/claims_and_evidence.md`; the traps that cost real money are `docs/research_docs/lessons.md`; the
-Milestone 1–3 build record is `docs/project_state.md`.
+Milestone 1–3 build record is `docs/archive/project_state.md`.
 
 > **Starting a session cold, with no context? Go straight to §4, *Execution order*.** It carries
 > the reading order, the queue with its current state, the dependency arrows, and the working
@@ -191,8 +191,8 @@ GPU run is pre-registered and launch-ready; the **capstone** in summer 2027; a *
 submission ~April 2027. The college card is **≤16 GB — treat it as T4-class** until a probe says
 otherwise; access method (SLURM vs SSH) unknown. **IDH (Phase F): go/no-go on 2027-01-15**, parked
 until then. The superseded plans (`execution_plan.md`, `improvement_plan.md`,
-`interpretable_pipeline_plan.md`) stay where they are — too many code comments cite them to move —
-and are archive-only; `tool_completion_plan.md`/`_log.md` join them once T0.4 closes.
+`interpretable_pipeline_plan.md`, `tool_completion_plan.md`/`_log.md`) moved to `docs/archive/` on
+2026-10-16 (author decision); every code comment and doc that cited them was repointed there.
 
 | # | Item | State | Done when |
 |---|---|---|---|
@@ -382,8 +382,8 @@ Registered in `docs/research_docs/preregistrations/preregistration_qc.md` on 202
 
 #### Track 1 continued — the tool-completion queue T0–T7. CPU. Built 2026-09-18.
 
-**Lives in `docs/research/tool_completion_plan.md` (the plan) and
-`docs/research/tool_completion_log.md` (the board + findings F1–F8).** One line here so this
+**Lives in `docs/archive/tool_completion_plan.md` (the plan) and
+`docs/archive/tool_completion_log.md` (the board + findings F1–F8).** One line here so this
 section stays the map: T0 real-DICOM run `[x]` (T0.4 comparison `[-]` blocked on the Kaggle fixture)
 · T0.5 job persistence `[x]` · T1 twin on the clinical screen `[x]` · T2 uncertainty/Grad-CAM painted
 on the twin `[x]` · T3 atlas shells + structure detail `[x]` · T4 shape descriptors (optional

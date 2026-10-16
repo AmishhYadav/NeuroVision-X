@@ -1,4 +1,4 @@
-// T5.6 of docs/research/tool_completion_plan.md - the "Confirmed pathology"
+// T5.6 of docs/archive/tool_completion_plan.md - the "Confirmed pathology"
 // panel `ReportPanel` mounts on a clinical job's report. This is the most
 // diagnosis-shaped surface in the tool, so the copy discipline in CLAUDE.md
 // is load-bearing here specifically:
