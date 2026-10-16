@@ -507,6 +507,45 @@ global step, best metric, W&B run id, every RNG state (Python, NumPy, torch, CUD
 
 ---
 
+## Part 3b — The 16 W&B training charts
+
+Logged by `training/trainer.py`. Example values: `neurovision_seed43` (W&B `iriee13d`, session 1,
+epochs 0–33), start → end. Nine charts are logged every 20 optimizer steps (noisy: one step is 4
+random patches); seven once per epoch (875 steps, smooth). X-axis = optimizer step.
+
+**Every 20 steps**
+
+| Chart | What it is | Healthy looks like |
+|---|---|---|
+| `train/loss` | total loss of one step, weighted sum of the terms below | falls, noisy: 1.80 → ~0.30–0.44 |
+| `train/loss_total` | the same number, reported by the loss module | identical to `train/loss` (sanity duplicate) |
+| `train/loss_seg` | segmentation Dice + BCE over 3 deep-supervision levels, weight 1.0 — the main objective | 1.22 → ~0.19–0.28 |
+| `train/loss_boundary` | boundary head vs 1-voxel surface shell, weight 0.3 | highest term (thin shells are hard): 1.57 → ~0.28–0.42 |
+| `train/loss_confidence` | confidence head ("is the seg right here?"), weight 0.05 | 0.71 → ~0.12 |
+| `train/loss_branch` | fusion block's CNN / Swin probes vs label, weight 0.1 | 0.72 → ~0.23 |
+| `train/loss_surface` | surface-distance term, switched off (weight 0) | flat at 0, expected |
+| `train/lr` | learning rate: 5-epoch warm-up to 1e-4, cosine to 1e-6, changes once per epoch | staircase up, smooth fall |
+| `train/grad_norm` | gradient size before clipping at 5.0 | mostly ~0.4–2, rare spikes; NaN = trouble |
+
+**Once per epoch**
+
+| Chart | What it is | Healthy looks like |
+|---|---|---|
+| `train/loss_epoch` | mean loss over the epoch — the curve to show | 1.27 → 0.52 by epoch 33 |
+| `train/grad_norm_median` | typical gradient size | 1.34 → 0.75 |
+| `train/grad_norm_p90` | large-but-normal gradients | ~2–3, under the 5.0 clip |
+| `train/grad_norm_max` | largest gradient | **Infinity at epoch 0 is normal**: AMP's GradScaler starts with a huge scale, first fp16 steps overflow and are skipped. Later ~16 |
+| `train/grad_norm_clipped_frac` | share of steps clipped | ~1–2% (was 66–70% at clip 1.0) |
+| `train/epoch_time_seconds` | wall time per epoch, incl. validation | ~1,000 s; bump every 10th epoch |
+| `train/peak_vram_gb` | peak GPU memory (GB, 1e9 bytes) | 6.6–7.2 of a T4's ~15.6 GB usable |
+
+The `val/` section (15 charts: Dice / IoU / HD95 per region and means, plus constant `gt_empty_*`)
+has ~8 points per line because validation runs every 10 epochs; `val/dice_mean` picks `best.pt`.
+Runs: `nz5y7li7` old U-Net (predates loss components and grad norms) · `iriee13d` seed 43, session
+1 only · `k7b8l3h2` heavy augmentation (D0). The deployed run `cc2l5j1c` is not in W&B.
+
+---
+
 ## Part 4 — The notebooks
 
 All notebooks are **thin drivers**: no logic in cells. They call functions from `src/` and
