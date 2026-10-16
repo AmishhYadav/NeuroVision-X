@@ -681,6 +681,14 @@ you have to — one job takes ~6 min and ~12 GB of RAM. Have the screen recordin
 | D | Where the bound breaks (4 min) | C13 → C14 → C22 → C24 | "Holds in distribution, breaks in proportion to shift, the gate can't fix it, and a site needs 10–40 local cases — except paediatric tumour core." |
 | E | Honest scoreboard (2 min) | C1 beside nnU-Net's 0.8879 | "One positive against a matched recipe; nnU-Net beats us; the contribution is the bound, the gate and the pipeline." |
 
+**Figures to show** (all in `docs/research_docs/semester_report/figures/`, all current):
+`fig_dice_vs_baselines.png` (U-Net vs ours vs nnU-Net, story E), `fig_error_budget.png` (outcome per
+cohort, story D), `fig_realised_vs_nominal.png` (bound holds / breaks, story D),
+`fig_local_recalibration.png` (cases a site needs, story D). **Do not show** `outputs/paper/figures/`
+or `outputs/figures/` — they plot the old superseded U-Net. W&B project `neurovision-x` holds the old
+baseline, `neurovision_seed43` (session 1 only) and `neurovision_heavy_aug`; the deployed run
+`cc2l5j1c` was never synced.
+
 **Never say:** "safe to deploy", "guaranteed per patient", "clinically validated",
 "state of the art", "detects/diagnoses".
 
