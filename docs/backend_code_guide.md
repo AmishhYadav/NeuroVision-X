@@ -67,7 +67,7 @@ Both were tested and refuted; saying so is part of the project's credibility.
 | Real-DICOM front end | 40% thick-slice refusals, WT −0.23 Dice | note 55 |
 | Model size | 34.9M parameters | `scripts/extract_ambiguity_serial.py` |
 | CPU evaluation speed on the M4 | ~1.4 min per case | `CLAUDE.md` |
-| Test suite | 2,230 passing, 35 skipped, ~60 s | `CLAUDE.md` (2026-09-24) |
+| Test suite | 2,641 passing, 36 skipped, ~71 s | `CLAUDE.md` (2026-10-11) |
 
 SSA = BraTS-Africa (60 cases, a different scanner population). PED = BraTS paediatric
 (99 cases, children). Both are **external cohorts**: never trained on.
@@ -606,7 +606,7 @@ prediction back into 240×240×155 using `meta.json`'s bbox. No argmax anywhere.
 
 **`inference/tta.py`** — test-time augmentation: run the model on the volume and its 7 other
 flipped copies (2³ flip combinations), un-flip, average **probabilities**. Small Dice gain
-plus softer, better-calibrated output. Wired but not measured yet.
+plus softer, better-calibrated output. Measured 2026-10-11 (note 59, C28): ET +0.0007, inconclusive; deployment keeps TTA off.
 
 **`inference/mc_dropout.py`** — Monte Carlo dropout.
 - `dropout_enabled(model)`: context manager that switches **only dropout modules** into train
@@ -1244,7 +1244,7 @@ outputs.
 **`report_agreement.py`** — Phase 5: does a more accurate segmentation produce a report that
 agrees more with the ground-truth report? Came back negative.
 
-### 5.9 nnU-Net comparison (Gate A, in progress)
+### 5.9 nnU-Net comparison (Gate A — RETIRED 2026-10-12, note 61, C29)
 
 **`export_nnunet_dataset.py`** — converts our frozen split into nnU-Net v2's raw dataset layout
 (`imagesTr`, `labelsTr`, `dataset.json`, `splits_final.json`), so nnU-Net trains on exactly our
@@ -1492,8 +1492,8 @@ probes), not only on branch content. It is gated windowed cross-attention:
 **Did the novelty work?** Honestly: the full model beats a matched U-Net on ET Dice by +0.0267
 (p_holm 1.4e-21, n=189), ~79% from architecture. But the content-only gate (no ambiguity
 signal) matches the full model, so the gain comes from gated fusion itself, not the ambiguity
-conditioning. The founding hypothesis was a pre-registered null. And it has not yet been
-compared with nnU-Net (Gate A is running).
+conditioning. The founding hypothesis was a pre-registered null. And nnU-Net beats it (Gate A
+RETIRED 2026-10-12, note 61, C29: ET 0.8879 vs 0.8709), so the architecture claim is withdrawn.
 
 **Why three sigmoid outputs and not softmax?** The regions overlap (ET ⊂ TC ⊂ WT). Softmax
 would make them compete.

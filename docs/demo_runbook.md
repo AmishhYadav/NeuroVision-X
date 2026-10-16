@@ -98,8 +98,9 @@ Figure: the P1.1 recalibration curves (`outputs/local_recalibration/`).
 ### E. The honest scoreboard (2 min, one slide)
 
 - One positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n = 189), ~13× the seed
-  noise floor (C1). Say it is **not yet tested against nnU-Net** (Gate A running; update this line
-  if the verdict is in).
+  noise floor (C1). **nnU-Net beats it** (Gate A RETIRED 2026-10-12, note 61, C29): ET 0.8879 vs
+  0.8709, lesion-wise −0.0309, both Holm-significant. Quote C1 only "over a matched-recipe U-Net",
+  with nnU-Net's 0.8879 beside it; the contribution is the bound, the gate and the pipeline.
 - Eight nulls or negatives, all pre-registered — name two: the founding hypothesis (null), heavy
   augmentation D0 (null).
 
@@ -109,7 +110,7 @@ Figure: the P1.1 recalibration curves (`outputs/local_recalibration/`).
 
 | Question | Answer, with its source |
 |---|---|
-| "Is it better than nnU-Net?" | Not yet known — Gate A is running on Kaggle, full 1000-epoch recipe, scored on our 189 test cases through our metric path (`preregistration_strong_baseline.md`). |
+| "Is it better than nnU-Net?" | No. Gate A RETIRED (note 61, C29): nnU-Net v2 default recipe, same 875 train cases, ET 0.8879 vs 0.8709 (−0.0170 [−0.0309, −0.0069]), lesion-wise ET −0.0309; nnU-Net also beats the matched U-Net by +0.044, so the weak link is our 80-epoch/64³ recipe. ~59 vs ~22 GPU-h — not a fair-cost comparison, but the rule was fixed in advance. |
 | "Why refuse instead of just showing the mask?" | Silent failure: on PED, 53/99 accepted masks were unusable before scoping (note 51). |
 | "Is the guarantee per patient?" | No. Average over studies, in distribution (model card, P0.5). |
 | "Did you train on the demo patient?" | Yes, possibly — note 50. That is why story A is plumbing only. |
@@ -120,7 +121,7 @@ Figure: the P1.1 recalibration curves (`outputs/local_recalibration/`).
 ## 5. Before the day — fill in
 
 - [ ] P1.2 note number and headline (usable rate end to end, front-end cost) → §3.D / §4.
-- [ ] Gate A verdict if available → §3.E.
+- [x] Gate A verdict → §3.E (RETIRED, note 61, C29; filled 2026-10-16).
 - [ ] Multiseed Amendment 1 verdict (headline at seed 43) → §3.E.
 - [ ] Cold-start rehearsal done, date: ____
 - [ ] Fallback recording made, date: ____
