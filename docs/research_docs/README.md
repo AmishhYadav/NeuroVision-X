@@ -57,7 +57,8 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
 
 Some pre-registrations cite these, so they are listed here too:
 
-- `docs/research/master_plan.md` — the active plan and queue (not paper content)
+- `docs/research/MasterPlan.md` — the active plan and board (not paper content); it was written from
+  `project_review_2026-11-15.md` in this folder
 - `docs/research/gpu_request.md` — the college GPU request draft
 - `docs/demo_runbook.md` — the semester demo script and day-before checks
 - `docs/archive/execution_plan.md`, `docs/archive/interpretable_pipeline_plan.md` — earlier plans

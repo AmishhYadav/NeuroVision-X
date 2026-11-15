@@ -314,7 +314,7 @@ Read in this order depending on what you came for.
 | Can I re-derive a number? Seeds, versions, hardware, runtimes | [`docs/research_docs/reproducibility.md`](docs/research_docs/reproducibility.md) |
 | How do I train on Kaggle and survive the 12-hour cap | [`docs/kaggle_workflow.md`](docs/kaggle_workflow.md) |
 | What is the actual research contribution | [`docs/research_docs/contribution.md`](docs/research_docs/contribution.md) |
-| What is being done next, and in what order | [`docs/research/master_plan.md`](docs/research/master_plan.md) §4.3 — the one live plan |
+| What is being done next, and in what order | [`docs/research/MasterPlan.md`](docs/research/MasterPlan.md) §B5 — the one live plan (why: [`project_review_2026-11-15.md`](docs/research_docs/project_review_2026-11-15.md)) |
 | What may and may not be claimed | [`docs/research_docs/claims_and_evidence.md`](docs/research_docs/claims_and_evidence.md) |
 | What the atlas actually does (supersedes the plan) | [`docs/research_docs/phase0_atlas_findings.md`](docs/research_docs/phase0_atlas_findings.md) |
 | Every non-obvious design decision and the bug that motivated it | [`CLAUDE.md`](CLAUDE.md) |

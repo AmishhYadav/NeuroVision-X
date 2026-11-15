@@ -6,7 +6,8 @@ Project instructions for Claude Code. Read this before doing anything in this re
 
 | File | What it holds |
 |---|---|
-| `docs/research/master_plan.md` | **THE ACTIVE PLAN.** Read it before planning any work. Starting cold? Its §4 *Execution order* is the queue, the dependency arrows and the working agreement |
+| `docs/research/MasterPlan.md` | **THE ACTIVE PLAN (from 2026-11-15).** Read it before planning any work. Starting cold? §B1–B3 are the goal and the binding rules, §B5 is the board. The Milestone 4–5 plan is archived at `docs/archive/master_plan_m4_m5.md` |
+| `docs/research_docs/project_review_2026-11-15.md` | Why the plan changed: the owner's review of the science, the process, the paper and the semester report |
 | `docs/research_docs/` | **Everything the paper is written from** — results, claims, pre-registrations, protocols, reproducibility. Index: its `README.md` |
 | `docs/research_docs/experiments.md` | Every run and every measured result, notes 1–44 |
 | `docs/research_docs/claims_and_evidence.md` | The gate on what may be written. A claim not in that table does not go in the paper |
@@ -27,12 +28,17 @@ Model: dual encoder (3D CNN + Swin Transformer) → adaptive gated cross-attenti
 decoder → three heads (segmentation, confidence, boundary). Plus MC-dropout uncertainty, calibration,
 explainability, an atlas-based anatomical report, and a demo viewer with live upload.
 
-**The thesis, as of Milestone 5 (rewritten 2026-09-26 to match the evidence):**
+**The thesis (rewritten 2026-11-15, `MasterPlan.md` §B1):**
 
-> A tumour segmentation model wrapped in a distribution-free error bound and a refusal gate: the
-> bound holds in distribution, fails under distribution shift in proportion to the shift, and the
-> gate cannot see cohort-level shift. We measure where it breaks, and what a new site needs in order
-> to restore it.
+> A conformal bound and a refusal gate around a tumour segmentation model hold where the data are
+> exchangeable with the calibration set. Under acquisition and population change the bound degrades
+> and a stronger model shrinks the damage; where the label definition changes it fails outright for
+> every model and no threshold repairs it. The gate sees bad masks, not changed cohorts. We measure
+> each failure, and what local data restores.
+
+**Not** "fails in proportion to the shift" — the 2026-09-26 wording. Three cohorts cannot order
+shifts by size, and the largest failure (PED tumour core) is mostly a label-definition mismatch.
+Retired until the severity ladder (`MasterPlan.md` W3.2) measures it.
 
 **Not** "safe to deploy on data it was not trained on" — that was the Milestone 4 thesis and note 47
 refuted it (paediatric silent-failure rate 49.5%; the gate is nearly inert on SSA).
@@ -198,12 +204,19 @@ package's `__init__.py` for the decorator to run.
 
 ---
 
-## Current status — 2026-09-27
+## Current status — 2026-11-15
 
-**Start with `docs/research_docs/status_2026-09-27.md`** — done / left / how to restart each thread.
-**Phase: Milestone 5. The live queue is `docs/research/master_plan.md` §4.3, the "Milestone 5" block
-at its top** — read it before planning anything. Why it changed shape:
-`docs/research_docs/project_review_2026-09-24.md`. Everything else in `master_plan.md` §4.3 is history.
+**The live plan is `docs/research/MasterPlan.md`; its board is §B5.** Why it replaced the Milestone 5
+plan: `docs/research_docs/project_review_2026-11-15.md`. `status_2026-09-27.md` is history.
+
+**Open right now (MasterPlan W0, in this order):** (1) no result file is in git — back up `outputs/`
+small files and the checkpoints (W0.1) before anything else; (2) two finished runs are unread:
+nnU-Net conformal (`outputs/conformal/nnunet_gatea/`, needs note 62 / C30) and D2 pooled
+(`outputs/neurovision_pooled/checkpoints/best.pt`, never evaluated, needs note 63 / C31); (3) the
+ledger, status doc, `related_work.md` and the semester report still say "in proportion to the
+shift" (W0.3); (4) the semester report has 15 listed errors (review §A4) and is due ~2026-11-24.
+**Binding new rules:** `MasterPlan.md` §B3 — results backed up the day they exist, no new run while
+one is unread, lockbox for new cohorts, tool feature freeze, no further `neurovision` training.
 
 **Since 2026-09-26:** C1 replicated at a second seed pair (note 54); real-DICOM front-end run done
 (note 55, C25: 40% thick-slice refusals, WT −0.23, mostly registration disagreement); `intended_use`
@@ -217,7 +230,7 @@ anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 
 +0.0021) — but **nnU-Net beats it**
 (Gate A RETIRED 2026-10-12, note 61, C29: ET 0.8879 vs 0.8709, lesion-wise −0.0309), so the
 architecture claim is withdrawn and C1 is quoted only against the matched-recipe U-Net. Conformal risk control holds in
-distribution and breaks under shift in proportion to the shift (C13/C14). The pipeline returns a
+distribution and is violated under shift in 7 of 12 cells, worst where the label definition differs (C13/C14). The pipeline returns a
 usable mask for 85% / 78% / 24% of test / SSA / PED studies, with silent failure 4.2% / 18.3% /
 49.5% (note 47). Gate C is MIXED (one cell of five). D0 heavy augmentation and D1 seed 43 are both
 12/12 inconclusive. The founding hypothesis is a pre-registered null.

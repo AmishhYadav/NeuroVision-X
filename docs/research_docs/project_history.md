@@ -773,6 +773,26 @@ Full detail and restart commands: `status_2026-09-27.md`. In short:
 
 ---
 
+## 9b. 2026-10-12 → 2026-11-15: Gate A retired, two runs left unread, the plan replaced
+
+- **2026-10-12 — Gate A RETIRED** (note 61, C29). nnU-Net beats `neurovision` on both co-primary
+  endpoints. The architecture claim is withdrawn.
+- **2026-10-21 — D2 pooled training finished** (80/80 epochs, `outputs/neurovision_pooled`). **Not
+  evaluated as of 2026-11-15.**
+- **2026-10-22 — nnU-Net conformal run finished** (bridge PASS, results in
+  `outputs/conformal/nnunet_gatea/`). **No note or claim as of 2026-11-15.** Raw reading: test
+  holds at every α; PED tumour core still 0.55–0.63; fewer SSA violations than `neurovision`.
+- **2026-10-31 — semester report produced** as Word/PDF (not committed).
+- **2026-11-15 — owner's review and new plan.** `project_review_2026-11-15.md` finds: the "in
+  proportion to the shift" claim is unsupported; the headline PED number is label mismatch; the only
+  clean shift cohort is n = 60; the audited model is not the standard one; no clean holdout remains;
+  no result file is under version control; the paper is stale (2026-10-04) and in the wrong format
+  for MELBA; the semester report has 15 errors. `docs/research/MasterPlan.md` replaces
+  `master_plan.md` (archived as `docs/archive/master_plan_m4_m5.md`). Thesis sentence rewritten in
+  `CLAUDE.md`.
+
+---
+
 ## 10. Using this history in the paper
 
 - **The story arc.** A model that was built to be *more reliable* turned out to be *more accurate
