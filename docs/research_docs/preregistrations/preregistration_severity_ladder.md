@@ -155,6 +155,22 @@ on a T4 (notes 61–62) instead of 1.3, about +7 GPU-h over 189 × 21 conditions
 real figure; if the projection exceeds 20 GPU-h the cost-cut order above applies unchanged (drop
 level 1 of every kind first). TTA off is **not** a cost-cut option, because it breaks the bridge.
 
+## Amendment 2 — 2026-11-24, after the probe, before any corrupted in-house number
+
+The probe (`neurovision-w32-probe` v1, 0.65 GPU-h, `c4fbfd6`) passed the nnU-Net bridge exactly and **failed both
+in-house bridges** (neurovision WT 0.0033; baseline_unet3d ET 0.0178), so by the rule above no corrupted in-house
+shard ran. Cause, found on CPU: the driver built the in-house models without their experiment config, so it slid
+96³ windows over models trained and evaluated at 64³. Fixed by building each in-house model from its reference
+evaluation's own config (`eval_config.yaml`) with a guard that raises on any roi/overlap/mode mismatch; CPU
+re-check on the same 5 cases: **PASS**, neurovision ≤ 0.00003, baseline 0.00000. No design element changes
+(kinds, levels, seeds, thresholds, α, bars, trend test). The nnU-Net corrupted shards the probe produced were not
+looked at for effects and are not reused.
+
+**Cost, from the probe:** nnU-Net 19.4 s/case at 5-case chunks, ≈ 55 s of it fixed per call; at the registered
+25-case chunks the measured steady rate is 8.2 s/case (note 62) → ≈ 11–12 GPU-h for 189 × 21 conditions. In-house
+timings were measured at the wrong ROI and are re-measured by a second, in-house-only probe (5 cases, all
+conditions) before the main run. Projection stays below 20 GPU-h unless that probe says otherwise; no cut yet.
+
 ---
 
 ## Result

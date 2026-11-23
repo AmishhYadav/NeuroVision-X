@@ -71,11 +71,45 @@ def _write_cohort(prep: Path) -> None:
         )
 
 
+def _write_eval_config(path: Path, **sw: Any) -> None:
+    """A tiny resolved eval config like `results/<run>/eval_config.yaml` (patch 16, not 96)."""
+    window = {
+        "roi_size": [16, 16, 16],
+        "sw_batch_size": 4,
+        "overlap": 0.25,
+        "mode": "constant",
+        "sigma_scale": 0.125,
+        "output_device": None,
+        "padding_mode": "constant",
+        **sw,
+    }
+    post = {
+        "threshold": 0.5,
+        "enforce_nesting": True,
+        "min_component_size": 0,
+        "connectivity": 1,
+        "keep_largest_only": False,
+        "et_min_volume": 0,
+    }
+    ref = {
+        "model": {**TINY_MODEL, "in_channels": 4},
+        "data": {
+            "patch_size": [16, 16, 16],
+            "in_channels": 4,
+            "num_classes": 3,
+            "root_dir": "/kaggle/dead",
+        },
+        "training": {"loss": {"name": "multitask"}},
+        "inference": {"sliding_window": window, "postprocess": post},
+        "evaluation": {"checkpoint": "/kaggle/dead/best.pt"},
+    }
+    path.write_text(yaml.safe_dump(ref), encoding="utf-8")
+
+
 def _make_cfg(tmp_path: Path, **overrides: Any) -> DictConfig:
     """A small config shaped like the composed one; `overrides` merge into severity_ladder."""
     # Like the real model YAMLs, in_channels is an interpolation into the rest of the config.
-    model_yaml = {**TINY_MODEL, "in_channels": "${data.in_channels}"}
-    (tmp_path / "model.yaml").write_text(yaml.safe_dump(model_yaml), encoding="utf-8")
+    _write_eval_config(tmp_path / "eval_config.yaml")
     (tmp_path / "splits.yaml").write_text(
         yaml.safe_dump({"train": ["x"], "val": ["y"], "test": CASES}), encoding="utf-8"
     )
@@ -100,7 +134,7 @@ def _make_cfg(tmp_path: Path, **overrides: Any) -> DictConfig:
         "models": {
             "m1": {
                 "backend": "inhouse",
-                "model_config": str(tmp_path / "model.yaml"),
+                "eval_config": str(tmp_path / "eval_config.yaml"),
                 "checkpoint": str(tmp_path / "ckpt" / "best.pt"),
                 "reference_metrics": str(tmp_path / "ref.csv"),
                 "conformal_fit": None,
@@ -581,15 +615,41 @@ def test_resolve_nnunet_model_requires_search_root() -> None:
         ladder.resolve_nnunet_model({"model_search_root": None}, "cpu")
 
 
-def test_build_inhouse_cfg_swaps_model_resolves_and_merges_overrides(tmp_path: Path) -> None:
+def test_build_inhouse_cfg_takes_patch_size_from_eval_config(tmp_path: Path) -> None:
     cfg = _make_cfg(tmp_path)
+    ref = tmp_path / "eval_config.yaml"
+    _write_eval_config(ref, roi_size=[64, 64, 64])  # after _make_cfg, which writes a 16^3 one
+    # The run (base) config says 96^3, exactly like configs/config.yaml.
+    cfg.data.patch_size = [96, 96, 96]
+    cfg.inference.sliding_window.roi_size = "${data.patch_size}"
+    cfg.inference.sliding_window.sw_batch_size = 1
     cfg.model = {"name": "other"}
-    out = ladder.build_inhouse_cfg(
-        cfg, tmp_path / "model.yaml", {"training": {"loss": {"name": "multitask"}}}
-    )
-    assert out.model.name == "unet3d" and out.model.in_channels == 4  # interpolation resolved
-    assert out.training.loss.name == "multitask"
-    assert out.inference.sliding_window.roi_size == [16, 16, 16]  # the rest is untouched
+    out = ladder.build_inhouse_cfg(cfg, ref)
+    assert list(out.inference.sliding_window.roi_size) == [64, 64, 64]
+    assert out.model.name == "unet3d" and out.training.loss.name == "multitask"
+    assert out.inference.sliding_window.sw_batch_size == 1  # run's memory setting wins
+    assert out.inference.sliding_window.overlap == 0.25
+    assert out.device == "cpu" and "root_dir" not in out.data  # run-owned keys stay the run's
+
+
+def test_build_inhouse_cfg_never_uses_eval_config_checkpoint(tmp_path: Path) -> None:
+    cfg = _make_cfg(tmp_path)
+    out = ladder.build_inhouse_cfg(cfg, tmp_path / "eval_config.yaml")
+    assert "/kaggle/dead" not in OmegaConf.to_yaml(out)
+
+
+@pytest.mark.parametrize(
+    "key,value", [("roi_size", [96, 96, 96]), ("overlap", 0.5), ("mode", "gaussian")]
+)
+def test_guard_raises_when_inference_differs_from_reference(
+    tmp_path: Path, key: str, value: Any
+) -> None:
+    ref = tmp_path / "eval_config.yaml"
+    cfg = ladder.build_inhouse_cfg(_make_cfg(tmp_path), ref)
+    ladder.check_inference_matches_reference(cfg, ref)  # consistent: no raise
+    cfg.inference.sliding_window[key] = value
+    with pytest.raises(ValueError, match=key):
+        ladder.check_inference_matches_reference(cfg, ref)
 
 
 @pytest.mark.parametrize("flag", [False, True])

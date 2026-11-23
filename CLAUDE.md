@@ -218,8 +218,7 @@ exists only under `outputs/`. Checkpoint hashes: `docs/data_manifests/checkpoint
 checkpoints themselves are in the private Kaggle dataset `amishyadav123/neurovision-checkpoints`.
 
 **Open right now:** external registration of three protocols (W7.3, author) — it blocks W2.1, W2.3,
-the W3.2 main GPU run; the W3.2 in-house bridge (probe 2026-11-24: nnU-Net PASS, in-house FAIL, suspected
-fp16 autocast vs CPU fp32 references); W2.5 run; semester report D2 paragraph (W1.1). D2 closed
+the W3.2 main GPU run; the W3.2 in-house probe v2 (v1 caught a 96³-vs-64³ ROI bug, fixed, Amendment 2); W2.5 run; semester report D2 paragraph (W1.1). D2 closed
 2026-11-24 (note 63, C31). **Binding rules:** `MasterPlan.md` §B3 — results backed up the day they exist, no new run
 while one is unread, lockbox for new cohorts, tool feature freeze (`app/` changes only to fix a
 measured defect or to label something honestly), no further `neurovision` training.

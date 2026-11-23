@@ -1343,16 +1343,16 @@ severity_ladder:
     # conformal_fit = that model's v1 fit.json (frozen thresholds; nothing is fitted on corrupted data).
     neurovision:
       backend: inhouse
-      model_config: configs/model/neurovision.yaml
-      # What configs/experiment/neurovision.yaml sets under training.loss: build_model checks the
-      # model's deep_supervision_levels against it, so the model cannot be built without it.
-      cfg_overrides: {training: {loss: {name: multitask, deep_supervision: {enabled: true, weights: null}, multitask: {branch: {enabled: true}}}}}
+      # The tracked config of the reference evaluation. The network, patch size (64^3, NOT the
+      # base config's 96^3), training.loss and inference.{sliding_window,postprocess} are taken
+      # from it so level 0 reproduces the saved clean run. Its evaluation.checkpoint is ignored.
+      eval_config: results/neurovision/eval_test/eval_config.yaml
       checkpoint: outputs/neurovision/checkpoints/best.pt
       reference_metrics: results/neurovision/eval_test/per_case_metrics.csv
       conformal_fit: results/conformal/neurovision/fit.json
     baseline_unet3d:
       backend: inhouse
-      model_config: configs/model/unet3d.yaml
+      eval_config: results/eval_test_baseline_unet3d/eval_config.yaml
       checkpoint: outputs/checkpoints/baseline_unet3d/best.pt
       reference_metrics: results/eval_test_baseline_unet3d/per_case_metrics.csv
       conformal_fit: results/conformal/baseline_unet3d/fit.json

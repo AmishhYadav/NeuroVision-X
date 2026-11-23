@@ -189,29 +189,107 @@ def plan_shards(sl_cfg: Mapping[str, Any], models: Sequence[str]) -> list[Shard]
 # ---------------------------------------------------------------------------
 
 
-def build_inhouse_cfg(
-    cfg: DictConfig, model_config: Path, cfg_overrides: Mapping[str, Any] | None = None
-) -> DictConfig:
-    """Returns a copy of `cfg` whose `model` group is replaced by the YAML at `model_config`.
+# Keys of the reference eval config that decide what the network is and how logits are made.
+_REF_DATA_KEYS = ("patch_size", "in_channels", "num_classes", "regions", "modalities")
+# Sliding-window settings that change the OUTPUT (sw_batch_size only changes memory, so it is
+# not here and stays whatever the run says).
+_REF_SW_OUTPUT_KEYS = ("roi_size", "overlap", "mode")
 
-    `cfg_overrides` is merged on top (e.g. the `training.loss` block of an experiment file):
-    `build_model` cross-checks `model.deep_supervision_levels` against `training.loss`, so a
-    model built outside its experiment config must carry the experiment's loss settings too.
 
-    The two in-house models differ in nothing the evaluation reads except `cfg.model`
-    (sliding-window and post-processing settings are shared), so swapping that one group is
-    enough to build either from the same composed config.
+def build_inhouse_cfg(cfg: DictConfig, eval_config: Path) -> DictConfig:
+    """Returns `cfg` with the network and inference path taken from a reference eval config.
+
+    WHY: the two in-house models were trained and evaluated at 64^3 patches (their experiment
+    config sets `data.patch_size: [64, 64, 64]`), but the base `configs/config.yaml` says 96^3
+    and `inference.sliding_window.roi_size` is `${data.patch_size}`. Building the model from the
+    base config silently re-ran inference with a 96^3 window, so level-0 logits did not match the
+    saved clean evaluation and the bridge failed. The fix is to build from the config that
+    actually produced the reference numbers: the tracked, fully resolved `eval_config.yaml`.
+
+    Taken from `eval_config`: the whole `model` group, `training.loss` (`build_model` cross-checks
+    deep-supervision levels against it), `data.{patch_size, in_channels, num_classes, regions,
+    modalities}`, and `inference.{sliding_window, postprocess}`. Everything else (device, paths,
+    the driver's own `analysis` block) and `sliding_window.sw_batch_size` come from `cfg`.
+    `evaluation.checkpoint` is never read; the checkpoint is `models.<m>.checkpoint`.
+
+    Args:
+        cfg: The run's composed config.
+        eval_config: Tracked `eval_config.yaml` of the model's reference evaluation.
+
+    Returns:
+        A resolved copy of `cfg`.
     """
-    # Merge UNRESOLVED, then resolve: model YAMLs interpolate from the rest of the config
-    # (e.g. `in_channels: ${data.in_channels}`), so they can only be resolved in place.
+    ref = OmegaConf.to_container(OmegaConf.load(eval_config), resolve=True)
+    assert isinstance(ref, dict)
     container = OmegaConf.to_container(cfg, resolve=False)
     assert isinstance(container, dict)
-    container["model"] = OmegaConf.to_container(OmegaConf.load(model_config), resolve=False)
+    container["model"] = ref["model"]  # replaced wholesale: no stale keys from the base model
+    container.setdefault("training", {})["loss"] = ref["training"]["loss"]
+    data = container.setdefault("data", {})
+    for key in _REF_DATA_KEYS:
+        if key in ref["data"]:
+            data[key] = ref["data"][key]
+    inference = container.setdefault("inference", {})
+    run_sw = inference.get("sliding_window") or {}
+    sliding_window = dict(ref["inference"]["sliding_window"])
+    if "sw_batch_size" in run_sw:  # a memory setting: the run may choose it freely
+        sliding_window["sw_batch_size"] = run_sw["sw_batch_size"]
+    inference["sliding_window"] = sliding_window
+    deployed_pp = OmegaConf.to_container(OmegaConf.create(inference.get("postprocess") or {}))
+    inference["postprocess"] = ref["inference"]["postprocess"]
+    differing = sorted(
+        k
+        for k in set(deployed_pp) | set(inference["postprocess"])  # type: ignore[arg-type]
+        if deployed_pp.get(k) != inference["postprocess"].get(k)  # type: ignore[union-attr]
+    )
+    if differing:
+        logger.warning(
+            "severity_ladder: reference postprocess differs from the run config in %s; "
+            "using the reference's (it produced the saved clean numbers).",
+            differing,
+        )
     merged = OmegaConf.create(container)
-    if cfg_overrides:
-        merged = OmegaConf.merge(merged, OmegaConf.create(dict(cfg_overrides)))
     OmegaConf.resolve(merged)
+    check_inference_matches_reference(merged, eval_config)
     return merged
+
+
+def _plain(value: Any) -> Any:
+    """Lists and tuples compare equal; everything else is left alone."""
+    return list(value) if isinstance(value, (list, tuple)) else value
+
+
+def check_inference_matches_reference(cfg: DictConfig, eval_config: Path) -> None:
+    """Raises `ValueError` if roi_size / overlap / mode differ from the reference eval config.
+
+    A cheap, loud check of the exact failure that once shipped (96^3 window vs the 64^3 the
+    reference used). Also logs the resolved settings.
+    """
+    ref = OmegaConf.to_container(OmegaConf.load(eval_config), resolve=True)
+    assert isinstance(ref, dict)
+    have = OmegaConf.to_container(cfg.inference.sliding_window, resolve=True)
+    assert isinstance(have, dict)
+    want = ref["inference"]["sliding_window"]
+    logger.info(
+        "severity_ladder: sliding window roi_size=%s overlap=%s mode=%s sigma_scale=%s "
+        "(sw_batch_size=%s, memory only)",
+        have.get("roi_size"),
+        have.get("overlap"),
+        have.get("mode"),
+        have.get("sigma_scale"),
+        have.get("sw_batch_size"),
+    )
+    # roi_size may be a list or a tuple; compare as plain lists.
+    bad = {
+        k: (have.get(k), want.get(k))
+        for k in _REF_SW_OUTPUT_KEYS
+        if _plain(have.get(k)) != _plain(want.get(k))
+    }
+    if bad:
+        raise ValueError(
+            f"severity_ladder: inference settings differ from the reference eval {eval_config} "
+            f"(key: (resolved, reference)): {bad}. Level-0 would not reproduce the saved run."
+        )
 
 
 class InhouseBackend:
@@ -222,21 +300,20 @@ class InhouseBackend:
     def __init__(
         self,
         cfg: DictConfig,
-        model_config: Path,
+        eval_config: Path,
         checkpoint: Path,
         device: torch.device,
-        cfg_overrides: Mapping[str, Any] | None = None,
     ) -> None:
         """Builds the model and loads its checkpoint via `scripts/evaluate.py::load_eval_model`.
 
         Args:
             cfg: The full composed config.
-            model_config: YAML of the model group (e.g. `configs/model/neurovision.yaml`).
+            eval_config: Tracked `eval_config.yaml` of the reference evaluation
+                (see `build_inhouse_cfg`).
             checkpoint: Checkpoint file.
             device: Resolved device.
-            cfg_overrides: Extra config merged before building (see `build_inhouse_cfg`).
         """
-        self.cfg = build_inhouse_cfg(cfg, model_config, cfg_overrides)
+        self.cfg = build_inhouse_cfg(cfg, eval_config)
         self.device = device
         if not checkpoint.is_file():
             raise FileNotFoundError(f"severity_ladder: no checkpoint at {checkpoint}.")
@@ -794,10 +871,9 @@ def build_backend(
     if backend == "inhouse":
         return InhouseBackend(
             cfg,
-            _resolve(repo_root, entry["model_config"]),
+            _resolve(repo_root, entry["eval_config"]),
             _resolve(repo_root, entry["checkpoint"]),
             device,
-            OmegaConf.to_container(entry["cfg_overrides"]) if entry.get("cfg_overrides") else None,
         )
     if backend == "nnunet":
         nn_cfg = sl_cfg["nnunet"]
