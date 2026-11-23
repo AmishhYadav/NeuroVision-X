@@ -26,7 +26,7 @@ The Gate A preprocessing ran as a **CPU** kernel (`neurovision-gatea-prep`), no 
 
 | Date | Session | `GIT_REF` | GPU-h | Outcome |
 |---|---|---|---|---|
-| — | none yet | — | — | — |
+| 2026-11-24 | `neurovision-w32-probe` v1 — W3.2 severity-ladder probe, 5 test cases × 21 conditions × 3 models (protocol Amendment 1: nnU-Net TTA on); watchdog 2.5 h; checkpoints SHA-checked in the notebook | `c4fbfd6c593fce5f69d52e310d7d49a0d16c7870` | running | — |
 
 Non-GPU Kaggle actions: 2026-11-23 private dataset `amishyadav123/neurovision-checkpoints` created
 (15 checkpoints, hashes in `docs/data_manifests/checkpoints.sha256`; MasterPlan W0.1).
