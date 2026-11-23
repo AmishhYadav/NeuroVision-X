@@ -1,0 +1,44 @@
+04:13:24 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+04:13:24 | WARNING  | __main__ | compare_family: cohort 'ssa' side 'a' -- dropped 1 row(s) via exclude_case_ids: ['BraTS-PED-00121-000']
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: case sets differ -- 237 case(s) only in neurovision_pooled, 30 only in neurovision. Comparing on the 30-case intersection.
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: dice_TC is WITHIN NOISE (inconclusive) for neurovision_pooled vs neurovision -- mean diff -0.004626, CI [-0.03602, 0.02056], p_holm=0.3285. Do NOT claim this difference in the paper.
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: dice_WT is WITHIN NOISE (inconclusive) for neurovision_pooled vs neurovision -- mean diff 0.005473, CI [-0.002769, 0.01562], p_holm=0.2097. Do NOT claim this difference in the paper.
+04:13:24 | INFO     | __main__ | compare_family: cohort 'ssa' -- scored 3 metric(s).
+04:13:24 | WARNING  | __main__ | compare_family: cohort 'ssa_lesionwise' side 'a' -- dropped 1 row(s) via exclude_case_ids: ['BraTS-PED-00121-000']
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: case sets differ -- 237 case(s) only in neurovision_pooled, 30 only in neurovision. Comparing on the 30-case intersection.
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: lwdice_ET is WITHIN NOISE (inconclusive) for neurovision_pooled vs neurovision -- mean diff 0.06014, CI [-0.001648, 0.1262], p_holm=0.00155. Do NOT claim this difference in the paper.
+04:13:24 | INFO     | __main__ | compare_family: cohort 'ssa_lesionwise' -- scored 1 metric(s).
+04:13:24 | WARNING  | __main__ | compare_family: cohort 'ped' side 'a' -- dropped 1 row(s) via exclude_case_ids: ['BraTS-PED-00121-000']
+04:13:24 | WARNING  | __main__ | compare_family: cohort 'ped' side 'b' -- dropped 2 row(s) via exclude_case_ids: ['BraTS-PED-00121-000', 'BraTS-PED-00137-000']
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: case sets differ -- 219 case(s) only in neurovision_pooled, 49 only in neurovision. Comparing on the 48-case intersection.
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: dice_ET is WITHIN NOISE (inconclusive) for neurovision_pooled vs neurovision -- mean diff 0.02624, CI [0.002535, 0.05721], p_holm=0.4728. Do NOT claim this difference in the paper.
+04:13:24 | INFO     | __main__ | compare_family: cohort 'ped' -- scored 3 metric(s).
+04:13:24 | WARNING  | __main__ | compare_family: cohort 'ped_lesionwise' side 'a' -- dropped 1 row(s) via exclude_case_ids: ['BraTS-PED-00121-000']
+04:13:24 | WARNING  | __main__ | compare_family: cohort 'ped_lesionwise' side 'b' -- dropped 2 row(s) via exclude_case_ids: ['BraTS-PED-00121-000', 'BraTS-PED-00137-000']
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: case sets differ -- 219 case(s) only in neurovision_pooled, 49 only in neurovision. Comparing on the 48-case intersection.
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: lwdice_ET is WITHIN NOISE (inconclusive) for neurovision_pooled vs neurovision -- mean diff 0.009427, CI [-0.0299, 0.04554], p_holm=0.6654. Do NOT claim this difference in the paper.
+04:13:24 | INFO     | __main__ | compare_family: cohort 'ped_lesionwise' -- scored 1 metric(s).
+04:13:24 | WARNING  | __main__ | compare_family: cohort 'test' side 'a' -- dropped 1 row(s) via exclude_case_ids: ['BraTS-PED-00121-000']
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: case sets differ -- 78 case(s) only in neurovision_pooled, 0 only in neurovision. Comparing on the 189-case intersection.
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: dice_ET is WITHIN NOISE (inconclusive) for neurovision_pooled vs neurovision -- mean diff 0.0009107, CI [-0.001784, 0.003907], p_holm=0.5718. Do NOT claim this difference in the paper.
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: dice_TC is WITHIN NOISE (inconclusive) for neurovision_pooled vs neurovision -- mean diff -0.004218, CI [-0.01352, 0.004228], p_holm=0.5718. Do NOT claim this difference in the paper.
+04:13:24 | WARNING  | neurovision.analysis.statistics | compare_models: dice_WT is WITHIN NOISE (inconclusive) for neurovision_pooled vs neurovision -- mean diff -0.000207, CI [-0.002489, 0.00183], p_holm=0.9423. Do NOT claim this difference in the paper.
+04:13:24 | INFO     | __main__ | compare_family: cohort 'test' -- scored 3 metric(s).
+04:13:24 | WARNING  | __main__ | compare_family: 9/11 row(s) are inconclusive under the family-wide Holm correction (m=11) -- do NOT claim these as real differences.
+04:13:24 | INFO     | __main__ | compare_family: wrote outputs/compare_family/d2_pooled_sens_nodup/family.csv
+04:13:24 | INFO     | __main__ | compare_family: wrote outputs/compare_family/d2_pooled_sens_nodup/compare_family_config.yaml
+========================================================================================
+compare_family: d2_pooled_sens_nodup (neurovision_pooled vs neurovision) -- family size m=11 -- out_dir=outputs/compare_family/d2_pooled_sens_nodup
+========================================================================================
+               ssa |    dice_ET | n=  30 mean_neurovision_pooled=0.8233 mean_neurovision=0.7673 improvement=+0.0560 CI=[+0.0228, +0.0980] p_holm_family=4.712e-06 -> BETTER
+               ssa |    dice_TC | n=  30 mean_neurovision_pooled=0.8092 mean_neurovision=0.8138 improvement=-0.0046 CI=[-0.0360, +0.0206] p_holm_family=1 -> INCONCLUSIVE
+               ssa |    dice_WT | n=  30 mean_neurovision_pooled=0.9272 mean_neurovision=0.9217 improvement=+0.0055 CI=[-0.0028, +0.0156] p_holm_family=0.7339 -> INCONCLUSIVE
+    ssa_lesionwise |  lwdice_ET | n=  30 mean_neurovision_pooled=0.5529 mean_neurovision=0.4927 improvement=+0.0601 CI=[-0.0016, +0.1262] p_holm_family=0.01395 -> INCONCLUSIVE
+               ped |    dice_ET | n=  48 mean_neurovision_pooled=0.6575 mean_neurovision=0.6313 improvement=+0.0262 CI=[+0.0025, +0.0572] p_holm_family=1 -> INCONCLUSIVE
+               ped |    dice_TC | n=  48 mean_neurovision_pooled=0.7126 mean_neurovision=0.4879 improvement=+0.2248 CI=[+0.1468, +0.3045] p_holm_family=5.928e-10 -> BETTER
+               ped |    dice_WT | n=  48 mean_neurovision_pooled=0.8858 mean_neurovision=0.8748 improvement=+0.0110 CI=[+0.0038, +0.0203] p_holm_family=0.1627 -> INCONCLUSIVE
+    ped_lesionwise |  lwdice_ET | n=  48 mean_neurovision_pooled=0.4924 mean_neurovision=0.4829 improvement=+0.0094 CI=[-0.0299, +0.0455] p_holm_family=1 -> INCONCLUSIVE
+              test |    dice_ET | n= 189 mean_neurovision_pooled=0.8718 mean_neurovision=0.8709 improvement=+0.0009 CI=[-0.0018, +0.0039] p_holm_family=1 -> INCONCLUSIVE
+              test |    dice_TC | n= 189 mean_neurovision_pooled=0.9118 mean_neurovision=0.9161 improvement=-0.0042 CI=[-0.0135, +0.0042] p_holm_family=1 -> INCONCLUSIVE
+              test |    dice_WT | n= 189 mean_neurovision_pooled=0.9319 mean_neurovision=0.9321 improvement=-0.0002 CI=[-0.0025, +0.0018] p_holm_family=1 -> INCONCLUSIVE
+----------------------------------------------------------------------------------------

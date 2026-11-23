@@ -120,3 +120,63 @@ epochs; an aborted run is reported as aborted, never as a shorter-schedule resul
 
 *(To be completed after the run. Nothing above this line may be edited once the first number
 exists.)*
+
+**Written 2026-11-24, from one evaluation run.** Training: three chained Kaggle T4 sessions
+(2026-10-17 → 10-21, ≈ 25 GPU-h, recipe unchanged), `best.pt` = epoch 79, pooled-val `dice_mean`
+0.8855 (`docs/data_manifests/checkpoints.sha256`). Evaluation: `scripts/evaluate.py` on the Mac CPU,
+268 pooled-test cases, `save_logits=true`, finished 2026-11-24 02:54; lesion-wise replay
+(self-consistency |Δ| ≤ 4.4e-17 against the evaluation's own table). Family: `scripts/compare_family.py
+analysis=d2_pooled` (`configs/analysis/d2_pooled.yaml`); comparisons run on the `case_id` intersection,
+which is exactly the held-out cases — n = 30 / 49 / 189, checked. **CROSS-FITTED ON ONE FOLD, NOT
+EXTERNAL VALIDATION.**
+
+**The family of 11 (pooled − frozen, paired bootstrap 95% CI, Holm across all 11):**
+
+| Cohort | Metric | n | Pooled | Frozen | Δ [95% CI] | p_holm | Verdict |
+|---|---|---|---|---|---|---|---|
+| SSA | `dice_ET` | 30 | 0.8233 | 0.7673 | +0.0560 [+0.0228, +0.0980] | 4.7e-06 | better |
+| SSA | **`dice_TC`** | 30 | 0.8092 | 0.8138 | **−0.0046 [−0.0360, +0.0206]** | 1.00 | inconclusive |
+| SSA | `dice_WT` | 30 | 0.9272 | 0.9217 | +0.0055 [−0.0028, +0.0156] | 0.73 | inconclusive |
+| SSA | `lwdice_ET` | 30 | 0.5529 | 0.4927 | +0.0601 [−0.0016, +0.1262] | 0.014 | inconclusive (CI contains 0) |
+| PED | `dice_ET` | 49 | 0.6619 | 0.6365 | +0.0254 [+0.0026, +0.0563] | 1.00 | inconclusive |
+| PED | **`dice_TC`** | 49 | 0.7116 | 0.4886 | **+0.2231 [+0.1471, +0.3045]** | 3.0e-10 | **better** |
+| PED | `dice_WT` | 49 | 0.8869 | 0.8762 | +0.0107 [+0.0034, +0.0200] | 0.23 | inconclusive |
+| PED | `lwdice_ET` | 49 | 0.4839 | 0.4794 | +0.0045 [−0.0366, +0.0399] | 1.00 | inconclusive |
+| BraTS test | `dice_ET` | 189 | 0.8718 | 0.8709 | +0.0009 [−0.0018, +0.0039] | 1.00 | inconclusive |
+| BraTS test | `dice_TC` | 189 | 0.9118 | 0.9161 | −0.0042 [−0.0138, +0.0043] | 1.00 | inconclusive |
+| BraTS test | `dice_WT` | 189 | 0.9319 | 0.9321 | −0.0002 [−0.0025, +0.0018] | 1.00 | inconclusive |
+
+**Verdicts, by the rule fixed above:**
+
+- **SSA · TC: NO MEASURABLE RECOVERY** (resolution-limited at n = 30; the point estimate is −0.005).
+- **PED · TC: RECOVERS** (+0.223).
+- **BraTS test: no measurable in-distribution cost** (all three |Δ| ≤ 0.0042, every CI contains 0).
+
+Outside the primary: SSA `dice_ET` +0.056 is Holm-significant (better). It is reported, not promoted:
+the registered question was tumour core.
+
+**Registered predictions.** (1) SSA · TC smaller than D3 fold 0 on the same 30 cases — **held**
+(D2 −0.005 vs frozen; D3 fold 0 0.8441 vs D2 0.8092, D2 − D3 = −0.035). (2) PED · TC improves and the
+predicted TC/WT ratio moves toward 1, but less than D3 — **held** (median ratio frozen 0.31 → D2 0.64 →
+D3 0.93 on the same 49 cases; cases below 0.5: 73% → 41% → 6%). (3) BraTS test no measurable cost —
+**held**.
+
+**Secondaries (descriptive).**
+
+1. *D2 − D3 fold 0, same held-out cases* (`dice_TC`): SSA −0.035, PED −0.130 (D2 0.7116 vs D3 0.8419).
+   The dedicated fine-tune is the larger fix on both cohorts.
+2. *PED · TC recalibratable?* Curves on D2's held-out PED logits (`scripts/conformal.py`, BraTS-val fit,
+   `outputs/conformal/neurovision_pooled_d2/`). R(τ_min), τ_min = 1e-4, same 49 cases: frozen 0.311,
+   **D2 0.053**, D3 0.010 — below the 0.20 line, so a local recalibration is feasible. At the frozen
+   BraTS-val thresholds the PED · TC miss rate is still 0.246 / 0.388 / 0.507 at α 0.05 / 0.10 / 0.20:
+   pooled training moves the floor, not the deployed thresholds.
+3. *Predicted TC/WT ratio:* PED above; SSA median 0.41 frozen → 0.43 D2 → 0.33 D3 (no label-convention
+   change to learn on SSA, as expected).
+4. *Duplicate sensitivity* (`d2_pooled_sens_nodup`, PED n = 48): **no verdict changes**; PED `dice_TC`
+   +0.2248 [+0.1468, +0.3045].
+
+**What it means.** Putting a few dozen paediatric cases in the training set teaches the model the
+paediatric tumour-core convention without measurable cost on adult test cases — but it recovers less
+than a fine-tune on the same cases, and it does not move SSA tumour core at all. Pooling narrows the
+label-definition failure; it does not remove the need for a site-side check, because the deployed
+thresholds stay miscalibrated on PED. Note 63, claim C31.

@@ -2943,6 +2943,50 @@ evidence about the setup, and forgetting it means repeating it.
     `name_a=nnunet_gatea`, `name_b=neurovision`, items SSA and PED on
     {dice_ET, dice_TC, dice_WT}.
 
+63. **D2 POOLED TRAINING -- PED TUMOUR CORE RECOVERS, SSA DOES NOT, NO
+    IN-DISTRIBUTION COST (MasterPlan W0.2b; `preregistration_pooled.md`
+    Result).** `neurovision_pooled` (seed 42, deployed recipe, trained from
+    scratch on 875 BraTS + 25 SSA + 45 PED, ≈ 25 T4-h, `best.pt` epoch 79)
+    against the frozen deployed model on the held-out cases. CROSS-FITTED ON
+    ONE FOLD, NOT EXTERNAL VALIDATION. Registered family of 11, Holm:
+
+    | Cohort | primary `dice_TC` Δ [95% CI] | verdict |
+    |---|---|---|
+    | SSA (n 30) | −0.0046 [−0.0360, +0.0206] | NO MEASURABLE RECOVERY |
+    | PED (n 49) | **+0.2231 [+0.1471, +0.3045]**, p_holm 3.0e-10 | **RECOVERS** |
+    | BraTS test (n 189) | ET +0.0009, TC −0.0042, WT −0.0002, all CIs span 0 | no measurable cost |
+
+    SSA `dice_ET` +0.0560 [+0.0228, +0.0980] is also Holm-significant (not the
+    registered primary). All three registered predictions held. Against D3
+    fold 0 on the same cases the fine-tune is the larger fix (TC: SSA −0.035,
+    PED −0.130 for D2 − D3). Mechanism: the predicted PED TC/WT ratio moves
+    0.31 → 0.64 (D3 0.93), i.e. pooling half-teaches the paediatric core
+    convention (note 58). PED · TC R(τ_min): frozen 0.311 → D2 0.053 → D3
+    0.010 (same 49 cases), so recalibration becomes feasible; but at the
+    frozen BraTS-val thresholds the PED · TC miss rate is still 0.25 / 0.39 /
+    0.51 at α 0.05 / 0.10 / 0.20. Duplicate-pair sensitivity (n 48): no verdict
+    changes. Full table: protocol Result section. Claim C31.
+
+    Artifacts (tracked): `results/eval_pooled_test_neurovision_pooled/`,
+    `results/replay_lesionwise/eval_pooled_test_neurovision_pooled/`,
+    `results/compare_family/d2_pooled{,_sens_nodup}/`,
+    `results/conformal/neurovision_pooled_d2/`,
+    `results/label_composition_d2/`. Commands:
+    `.venv-analysis/bin/python scripts/replay_logits.py
+    +analysis.replay.eval_dir=outputs/eval_pooled_test_neurovision_pooled
+    analysis.replay.prep_dir=data/preprocessed/pooled
+    analysis.replay.out_dir=outputs/replay_lesionwise
+    analysis.replay.lesionwise.enabled=true data.num_workers=0`;
+    `.venv/bin/python scripts/compare_family.py analysis=d2_pooled` (and with
+    `exclude_case_ids=[BraTS-PED-00121-000,BraTS-PED-00137-000]
+    name=d2_pooled_sens_nodup`); conformal curves on per-cohort views of the
+    pooled eval (`outputs/eval_d2_heldout_{ped,ssa}`: symlinked logits +
+    filtered `per_case_metrics.csv`) with `scripts/conformal.py
+    calibration.conformal.calib_dir=outputs/neurovision/eval_val ...
+    out_dir=outputs/conformal/neurovision_pooled_d2`; TC/WT ratios with
+    `scripts/label_composition.py
+    analysis.label_composition.out_dir=outputs/label_composition_d2`.
+
 64. **THE C1 HEADLINE CI WAS UNTRACEABLE; THE REGISTERED ONE IS
     [+0.0143, +0.0432] (correction, 2026-11-24, MasterPlan W1.2).** From the
     claims table's first commit (`e23ad53`, 2026-08-23) the C1 headline was

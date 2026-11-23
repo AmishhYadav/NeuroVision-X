@@ -217,8 +217,10 @@ run it the day a result exists — MasterPlan §B3 rule 1). Cite `results/…` i
 exists only under `outputs/`. Checkpoint hashes: `docs/data_manifests/checkpoints.sha256`; the
 checkpoints themselves are in the private Kaggle dataset `amishyadav123/neurovision-checkpoints`.
 
-**Open right now:** D2 pooled evaluation (W0.2b → note 63 / C31), then the semester report correction
-pass (W1). **Binding rules:** `MasterPlan.md` §B3 — results backed up the day they exist, no new run
+**Open right now:** external registration of three protocols (W7.3, author) — it blocks W2.1, W2.3,
+the W3.2 main GPU run; the W3.2 in-house bridge (probe 2026-11-24: nnU-Net PASS, in-house FAIL, suspected
+fp16 autocast vs CPU fp32 references); W2.5 run; semester report D2 paragraph (W1.1). D2 closed
+2026-11-24 (note 63, C31). **Binding rules:** `MasterPlan.md` §B3 — results backed up the day they exist, no new run
 while one is unread, lockbox for new cohorts, tool feature freeze (`app/` changes only to fix a
 measured defect or to label something honestly), no further `neurovision` training.
 

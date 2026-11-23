@@ -811,6 +811,11 @@ Full detail and restart commands: `status_2026-09-27.md`. In short:
 
 ## 10. Using this history in the paper
 
+- **2026-11-24 — D2 read: PED tumour core RECOVERS (+0.223), SSA does not, no in-distribution cost**
+  (note 63, C31). Pooling half-teaches the paediatric core convention (TC/WT 0.31 → 0.64); the fine-tune
+  (C27) is the larger fix. Same day: the C1 headline CI corrected to the registered [0.0143, 0.0432]
+  (note 64 — the [0.0166, 0.0393] quoted since August had no file behind it); the W3.2 probe caught a
+  TTA mismatch (Amendment 1) and failing in-house bridges before the main GPU run.
 - **The story arc.** A model that was built to be *more reliable* turned out to be *more accurate
   but not more reliable*; its claimed novelty turned out not to carry the gain; and the reliability
   question was rebuilt as a measurable property of a wrapper — which holds in distribution and

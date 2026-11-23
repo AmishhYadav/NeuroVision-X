@@ -1,0 +1,78 @@
+04:13:32 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+04:13:32 | INFO     | __main__ | conformal: verifying saved logits reproduce their own published metrics before trusting them (guard 3).
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+04:13:56 | INFO     | neurovision.analysis.replay | per_case_replay: processed 25/187 case(s)
+04:14:20 | INFO     | neurovision.analysis.replay | per_case_replay: processed 50/187 case(s)
+04:14:45 | INFO     | neurovision.analysis.replay | per_case_replay: processed 75/187 case(s)
+04:15:09 | INFO     | neurovision.analysis.replay | per_case_replay: processed 100/187 case(s)
+04:15:32 | INFO     | neurovision.analysis.replay | per_case_replay: processed 125/187 case(s)
+04:15:56 | INFO     | neurovision.analysis.replay | per_case_replay: processed 150/187 case(s)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+04:16:19 | INFO     | neurovision.analysis.replay | per_case_replay: processed 175/187 case(s)
+04:16:30 | INFO     | __main__ | conformal: replay self-consistency mean absolute deltas for outputs/neurovision/eval_val vs outputs/neurovision/eval_val/per_case_metrics.csv (n=187 shared case(s)): {'dice_ET': 3.3757533310586103e-17, 'dice_TC': 3.200425664235286e-17, 'dice_WT': 4.8386725404786237e-17}
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+04:16:51 | INFO     | neurovision.analysis.replay | per_case_replay: processed 25/49 case(s)
+04:17:13 | INFO     | __main__ | conformal: replay self-consistency mean absolute deltas for outputs/eval_d2_heldout_ped vs outputs/eval_d2_heldout_ped/per_case_metrics.csv (n=49 shared case(s)): {'dice_ET': 1.232007693142712e-17, 'dice_TC': 1.699320956058913e-17, 'dice_WT': 3.172065784643304e-17}
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+04:17:39 | INFO     | neurovision.analysis.replay | per_case_replay: processed 25/30 case(s)
+04:17:44 | INFO     | __main__ | conformal: replay self-consistency mean absolute deltas for outputs/eval_d2_heldout_ssa vs outputs/eval_d2_heldout_ssa/per_case_metrics.csv (n=30 shared case(s)): {'dice_ET': 1.6653345369377347e-17, 'dice_TC': 3.86265093984169e-17, 'dice_WT': 4.070817756958907e-17}
+04:17:44 | INFO     | __main__ | conformal: extracting/loading loss curves for calib_dir=outputs/neurovision/eval_val.
+04:17:51 | INFO     | __main__ | extract: processed 25/187 case(s) from outputs/neurovision/eval_val
+04:17:58 | INFO     | __main__ | extract: processed 50/187 case(s) from outputs/neurovision/eval_val
+04:18:04 | INFO     | __main__ | extract: processed 75/187 case(s) from outputs/neurovision/eval_val
+04:18:11 | INFO     | __main__ | extract: processed 100/187 case(s) from outputs/neurovision/eval_val
+04:18:18 | INFO     | __main__ | extract: processed 125/187 case(s) from outputs/neurovision/eval_val
+04:18:25 | INFO     | __main__ | extract: processed 150/187 case(s) from outputs/neurovision/eval_val
+04:18:31 | INFO     | __main__ | extract: processed 175/187 case(s) from outputs/neurovision/eval_val
+04:18:34 | INFO     | __main__ | extract: built loss curves for 187/187 case(s) x 2 region(s) from outputs/neurovision/eval_val.
+04:18:34 | INFO     | __main__ | extract: wrote outputs/conformal/neurovision_pooled_d2/eval_val/curves.npz and outputs/conformal/neurovision_pooled_d2/eval_val/curves_manifest.json.
+04:18:34 | INFO     | __main__ | conformal: extracting/loading loss curves for apply_dir=outputs/eval_d2_heldout_ped.
+04:18:41 | INFO     | __main__ | extract: processed 25/49 case(s) from outputs/eval_d2_heldout_ped
+04:18:47 | INFO     | __main__ | extract: built loss curves for 49/49 case(s) x 2 region(s) from outputs/eval_d2_heldout_ped.
+04:18:47 | INFO     | __main__ | extract: wrote outputs/conformal/neurovision_pooled_d2/eval_d2_heldout_ped/curves.npz and outputs/conformal/neurovision_pooled_d2/eval_d2_heldout_ped/curves_manifest.json.
+04:18:47 | INFO     | __main__ | conformal: extracting/loading loss curves for apply_dir=outputs/eval_d2_heldout_ssa.
+04:18:54 | INFO     | __main__ | extract: processed 25/30 case(s) from outputs/eval_d2_heldout_ssa
+04:18:55 | INFO     | __main__ | extract: built loss curves for 30/30 case(s) x 2 region(s) from outputs/eval_d2_heldout_ssa.
+04:18:55 | INFO     | __main__ | extract: wrote outputs/conformal/neurovision_pooled_d2/eval_d2_heldout_ssa/curves.npz and outputs/conformal/neurovision_pooled_d2/eval_d2_heldout_ssa/curves_manifest.json.
+04:18:55 | INFO     | __main__ | conformal: self-check OK -- alpha=1.0 selects threshold=0.95 (the largest grid value) for region WT, as the degenerate-endpoint falsifier requires.
+04:18:55 | INFO     | __main__ | conformal: self-check OK -- alpha=1.0 selects threshold=0.95 (the largest grid value) for region TC, as the degenerate-endpoint falsifier requires.
+04:18:55 | INFO     | __main__ | fit: region=WT alpha=0.0500 -> threshold=0.1, calibrated_risk=0.0446299 (n_calibration=187, n_excluded_empty=0).
+04:18:55 | INFO     | __main__ | fit: region=WT alpha=0.1000 -> threshold=0.725, calibrated_risk=0.0928897 (n_calibration=187, n_excluded_empty=0).
+04:18:55 | INFO     | __main__ | fit: region=WT alpha=0.2000 -> threshold=0.95, calibrated_risk=0.151159 (n_calibration=187, n_excluded_empty=0).
+04:18:55 | INFO     | __main__ | fit: region=TC alpha=0.0500 -> threshold=0.0158489, calibrated_risk=0.0432705 (n_calibration=187, n_excluded_empty=0).
+04:18:55 | INFO     | __main__ | fit: region=TC alpha=0.1000 -> threshold=0.6, calibrated_risk=0.0940927 (n_calibration=187, n_excluded_empty=0).
+04:18:55 | INFO     | __main__ | fit: region=TC alpha=0.2000 -> threshold=0.95, calibrated_risk=0.146535 (n_calibration=187, n_excluded_empty=0).
+04:18:55 | INFO     | __main__ | conformal: wrote outputs/conformal/neurovision_pooled_d2/fit.json
+04:18:55 | INFO     | __main__ | conformal: wrote outputs/conformal/neurovision_pooled_d2/realised_risk.csv and outputs/conformal/neurovision_pooled_d2/inflation.csv
+04:18:55 | INFO     | __main__ | conformal: wrote outputs/conformal/neurovision_pooled_d2/conformal_config.yaml
+======================================================================
+Conformal risk control summary -- out_dir=outputs/conformal/neurovision_pooled_d2
+======================================================================
+  outputs/eval_d2_heldout_ped |  WT | alpha=0.05 | tau=0.1 | mean_miss_rate=0.0618 CI=[0.0398, 0.0886] (n=49, excluded=0)
+  outputs/eval_d2_heldout_ped |  WT | alpha=0.10 | tau=0.725 | mean_miss_rate=0.1057 CI=[0.0773, 0.1420] (n=49, excluded=0)
+  outputs/eval_d2_heldout_ped |  WT | alpha=0.20 | tau=0.95 | mean_miss_rate=0.1470 CI=[0.1150, 0.1855] (n=49, excluded=0)
+  outputs/eval_d2_heldout_ped |  TC | alpha=0.05 | tau=0.01585 | mean_miss_rate=0.2460 CI=[0.1785, 0.3163] (n=49, excluded=0)
+  outputs/eval_d2_heldout_ped |  TC | alpha=0.10 | tau=0.6 | mean_miss_rate=0.3880 CI=[0.3168, 0.4626] (n=49, excluded=0)
+  outputs/eval_d2_heldout_ped |  TC | alpha=0.20 | tau=0.95 | mean_miss_rate=0.5065 CI=[0.4369, 0.5744] (n=49, excluded=0)
+  outputs/eval_d2_heldout_ssa |  WT | alpha=0.05 | tau=0.1 | mean_miss_rate=0.0426 CI=[0.0249, 0.0679] (n=30, excluded=0)
+  outputs/eval_d2_heldout_ssa |  WT | alpha=0.10 | tau=0.725 | mean_miss_rate=0.0949 CI=[0.0691, 0.1319] (n=30, excluded=0)
+  outputs/eval_d2_heldout_ssa |  WT | alpha=0.20 | tau=0.95 | mean_miss_rate=0.1550 CI=[0.1230, 0.1996] (n=30, excluded=0)
+  outputs/eval_d2_heldout_ssa |  TC | alpha=0.05 | tau=0.01585 | mean_miss_rate=0.0484 CI=[0.0215, 0.0821] (n=30, excluded=0)
+  outputs/eval_d2_heldout_ssa |  TC | alpha=0.10 | tau=0.6 | mean_miss_rate=0.1553 CI=[0.1036, 0.2162] (n=30, excluded=0)
+  outputs/eval_d2_heldout_ssa |  TC | alpha=0.20 | tau=0.95 | mean_miss_rate=0.2659 CI=[0.2036, 0.3356] (n=30, excluded=0)

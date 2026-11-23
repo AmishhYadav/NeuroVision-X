@@ -1,0 +1,19 @@
+03:25:50 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+03:25:50 | INFO     | __main__ | label_composition: reference brats: n=1251, skipped 0
+03:25:50 | INFO     | __main__ | label_composition: reference ssa: n=60, skipped 0
+03:25:50 | INFO     | __main__ | label_composition: reference ped: n=99, skipped 0
+03:25:53 | INFO     | __main__ | label_composition: prediction d2_pooled: n=268, skipped 0
+03:25:56 | INFO     | __main__ | label_composition: prediction ped_frozen: n=98, skipped 1
+03:25:58 | INFO     | __main__ | label_composition: prediction ssa_frozen: n=59, skipped 1
+03:25:59 | INFO     | __main__ | label_composition: prediction ped_finetuned: n=49, skipped 0
+03:26:00 | INFO     | __main__ | label_composition: prediction ssa_finetuned: n=30, skipped 0
+03:26:00 | INFO     | __main__ | label_composition summary:
+      kind          name    n  n_skipped  median_ncr_share  median_ed_share  median_et_share  median_tc_wt  frac_tc_wt_below_low_ratio  frac_ed_share_below_low_ed_share
+ reference         brats 1251          0            0.0881           0.6507           0.2163        0.3493                      0.7234                            0.0032
+ reference           ssa   60          0            0.0545           0.6600           0.2303        0.3400                      0.7333                            0.0000
+ reference           ped   99          0            0.8371           0.0001           0.1129        0.9999                      0.0606                            0.7475
+prediction     d2_pooled  268          0               NaN              NaN              NaN        0.3884                      0.6381                               NaN
+prediction    ped_frozen   98          1               NaN              NaN              NaN        0.2689                      0.7449                               NaN
+prediction    ssa_frozen   59          1               NaN              NaN              NaN        0.3548                      0.7627                               NaN
+prediction ped_finetuned   49          0               NaN              NaN              NaN        0.9330                      0.0612                               NaN
+prediction ssa_finetuned   30          0               NaN              NaN              NaN        0.3260                      0.7000                               NaN
