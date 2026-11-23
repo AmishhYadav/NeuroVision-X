@@ -2321,7 +2321,7 @@ evidence about the setup, and forgetting it means repeating it.
 
     | reading | test `dice_ET` |
     |---|---|
-    | seed-42 pair (published, C1) | +0.0267 [+0.0166, +0.0393] |
+    | seed-42 pair (published, C1) | +0.0267 [+0.0143, +0.0432] (CI corrected 2026-11-24, note 64) |
     | **seed-43 pair** | **+0.0247 [+0.0116, +0.0420]**, p 1.8e-18 |
     | seed-averaged (descriptive) | +0.0257 [+0.0133, +0.0423] |
     | `neurovision` seed noise (note 49) | +0.0021 [−0.0018, +0.0068] |
@@ -2551,7 +2551,7 @@ evidence about the setup, and forgetting it means repeating it.
     the empty-ET breakdown from the saved per-case CSVs into `outputs/ref_et/`. It
     reproduces all 8 values and CIs to 4 decimals. Its "all"-case CIs use a
     fresh per-row generator, so they differ from the headline CIs of the original
-    registered comparison ([0.0166, 0.0393]); the paper keeps the registered ones.
+    registered comparison ([0.0143, 0.0432] — the [0.0166, 0.0393] once written here was untraceable, note 64); the paper keeps the registered ones.
 
     **Silent failures by region (2026-10-04, exploratory, post-review; paper
     review rev4 item M2).** `python scripts/silent_failure_by_region.py`
@@ -2942,3 +2942,37 @@ evidence about the setup, and forgetting it means repeating it.
     and `scripts/compare_family.py` with `name=nnunet_conformal_shift_dice`,
     `name_a=nnunet_gatea`, `name_b=neurovision`, items SSA and PED on
     {dice_ET, dice_TC, dice_WT}.
+
+64. **THE C1 HEADLINE CI WAS UNTRACEABLE; THE REGISTERED ONE IS
+    [+0.0143, +0.0432] (correction, 2026-11-24, MasterPlan W1.2).** From the
+    claims table's first commit (`e23ad53`, 2026-08-23) the C1 headline was
+    quoted as +0.0267, CI **[0.0166, 0.0393]** — in the claims ledger, the model
+    card, the demo guide, the semester report and its figure, the model
+    submission builders, and two protocol texts. No result file holds that
+    interval and no method reproduces it: re-running the registered comparison
+    (`compare_models`, paired percentile bootstrap, n_boot 10,000, seed 42, the
+    six-metric Holm family of note 12) gives **ET +0.0267 [+0.0143, +0.0432],
+    p_holm 1.44e-21; TC +0.0103 [+0.0033, +0.0180], p_holm 1.16e-10; WT +0.0045
+    [−0.0007, +0.0098] inconclusive; all three HD95 inconclusive** — every value
+    identical to note 12 to four decimals, and to
+    `results/ref_et/ref_et_comparisons.csv`. A BCa bootstrap gives
+    [0.0165, 0.0512], also not the quoted interval. So note 12 was right all
+    along; the transcription into the claims table was wrong, and every later
+    document copied the claims table.
+
+    **What changes.** Only the interval. The mean, p_holm, verdict, and C1's
+    strength are unchanged; the corrected CI is wider on the upper side, which
+    makes the claim no stronger. Corrected in one commit: claims C1, model card,
+    demo guide, report master (2 places), `results.md`, `corrections.md`,
+    `fig_m3_noise.png` (regenerated from `diagrams2.py`), `model2.js`,
+    `model3.js`, `build.js`, note 54's table and the note-50s ref-ET remark, and
+    the multiseed Amendment 1 result text (marked). Left as written, because they
+    sit above a protocol's locked line: `preregistration_strong_baseline.md` line
+    15 and `preregistration_multiseed.md` Amendment 1 design text — both quote
+    the old interval as background, not as a result.
+
+    **The lesson** (rule 10, `lessons.md`): a number copied from a prose note
+    into a ledger needs a file behind it the day it is copied. The C1 family is
+    now a tracked file: `results/compare_family/c1_headline/family.csv`
+    (`scripts/compare_family.py analysis=c1_headline`), and the report's number
+    audit registers both CI ends against it (118 entries, 0 mismatches).

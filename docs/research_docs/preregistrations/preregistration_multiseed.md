@@ -246,7 +246,7 @@ always below resolution. PED ET moves −0.026 with a CI excluding 0 but does no
 **Endpoint 2 — the headline re-read at seed 43** (`multiseed_a1_headline_seed43`), test `dice_ET`,
 `neurovision_seed43` − `baseline_unet3d_seed43`: **+0.0247, CI [+0.0116, +0.0420],
 p = 1.8e-18, n = 189 → same sign, CI excludes 0.** Beside the seed-42 margin +0.0267
-[0.0166, 0.0393]. By the rule fixed above: **C1 is replicated across two seed pairs.**
+[0.0143, 0.0432] (CI corrected 2026-11-24, note 64). By the rule fixed above: **C1 is replicated across two seed pairs.**
 
 **Endpoint 3 — seed-averaged margin** (descriptive; `multiseed_a1_seed_averaged`, per-case mean of
 the two seeds of each model): **+0.0257, CI [+0.0133, +0.0423].**

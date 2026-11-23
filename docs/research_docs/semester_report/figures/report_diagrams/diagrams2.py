@@ -307,8 +307,8 @@ def m3_noise():
     labels = ["Headline:\nModel 2 − U-Net\n(seed 42)", "Replication:\nseed-43 pair", "Seed noise:\nModel 2 seed 43\n− seed 42",
               "Seed noise:\nU-Net seed 43\n− seed 42", "Flip TTA\n(8 flips)"]
     vals = [0.0267, 0.0247, 0.0021, 0.0041, 0.0007]
-    lo = [0.0166, 0.0116, -0.0018, 0.0016, -0.0004]
-    hi = [0.0393, 0.0420, 0.0068, 0.0072, 0.0017]
+    lo = [0.0143, 0.0116, -0.0018, 0.0016, -0.0004]
+    hi = [0.0432, 0.0420, 0.0068, 0.0072, 0.0017]
     cols = [ORANGE, ORANGE, GREY, GREY, BLUE]
     bs = ax.bar(labels, vals, color=cols, width=0.55)
     ax.errorbar(range(5), vals, yerr=[[v - l for v, l in zip(vals, lo)], [h - v for v, h in zip(vals, hi)]],

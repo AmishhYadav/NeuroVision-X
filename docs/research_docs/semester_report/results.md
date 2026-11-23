@@ -13,7 +13,7 @@ submission.
 ### 4.1 Segmentation accuracy in distribution
 
 On the 189-case BraTS 2021 test split, the dual-encoder model improves enhancing-tumour (ET) Dice
-over a matched 3D U-Net by **+0.0267** (95% CI 0.0166–0.0393; Holm-adjusted p = 1.4 × 10⁻²¹,
+over a matched 3D U-Net by **+0.0267** (95% CI 0.0143–0.0432; Holm-adjusted p = 1.4 × 10⁻²¹,
 paired) [C1]. A second training seed of the proposed model moves test ET Dice by only +0.0021
 (CI −0.0018 to +0.0068), about thirteen times smaller than the margin [C1]. A width-matched U-Net
 (34.83 M vs 34.91 M parameters) recovers only +0.0055 of the gain, attributing roughly 79% of it

@@ -51,7 +51,7 @@ const body = [
   H2("2.1 Seed noise and replication"),
   P("A single training run can be lucky. Model 2 was retrained with a second seed (43), and so was the U-Net (Figure 2, Table 1)."),
   ...table("Robustness of the enhancing-tumour gain on the test split (n = 189).", ["Comparison", "Change in ET Dice", "95% CI", "Meaning"], [
-    ["Model 2 − U-Net, seed 42 (headline)", "+0.0267", "0.0166 to 0.0393", "The Model 2 result"],
+    ["Model 2 − U-Net, seed 42 (headline)", "+0.0267", "0.0143 to 0.0432", "The Model 2 result"],
     ["Model 2 − U-Net, seed 43", "+0.0247", "0.0116 to 0.0420", "Replicates"],
     ["Model 2 seed 43 − seed 42", "+0.0021", "−0.0018 to +0.0068", "Seed noise, model"],
     ["U-Net seed 43 − seed 42", "+0.0041", "0.0016 to 0.0072", "Seed noise, baseline"],

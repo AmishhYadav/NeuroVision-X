@@ -4,9 +4,8 @@ Companion to `number_registry.yaml` (MasterPlan W1.2). Each row is a result numb
 
 | Section | Printed text | Why | Claim |
 |---|---|---|---|
-| Abstract, 6.1 | 95% CI 0.0166 to 0.0393 (the registered +0.0267 comparison) | no file: `results/ref_et/ref_et_comparisons.csv` holds the same mean (+0.0267) but a different bootstrap, CI 0.0143 to 0.0432 (experiments.md note 12 and the ref-ET note say the paper keeps the registered CI); the registered comparison output is not in `results/` | C1 |
-| Abstract, 6.1 | Holm-adjusted p = 1.4 x 10^-21 | no file: ref_et file has raw Wilcoxon 2.4e-22 only; the Holm value is in notes 12/54 | C1 |
-| 6.1, Table 8 | TC +0.0103 | no file: no comparison row for NeuroVision-X vs matched U-Net on TC in `results/`; equals the difference of the two `summary.csv` means (derived) | C1 |
+| Abstract, 6.1 | Holm-adjusted p = 1.4 x 10^-21 | in file since 2026-11-24 (`results/compare_family/c1_headline/family.csv`, `p_holm_family` 1.44e-21) but the audit script compares fixed decimals, not scientific notation | C1 |
+| 6.1, Table 8 | TC +0.0103 | now in `results/compare_family/c1_headline/family.csv` (2026-11-24); not yet registered | C1 |
 | 6.1 | "about six times", "about four times" the retraining shift; "about 40%" | derived (ratios of registered numbers; 40% = empty_contribution 0.0106 / 0.0267) | C1 |
 | 6.1 | "two of the five test cases with no enhancing tumour" | derived (count over `results/ref_et/empty_et_cases.csv`, needs a conditional) | C1 |
 | 6.2, Table 8, Table 10 | ~80% architecture; 0.79 / 0.80 share | derived (ratio of `capacity_r2` and `ref_et` differences to +0.0267) | C2 |

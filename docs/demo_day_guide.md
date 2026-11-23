@@ -74,7 +74,7 @@ What it is **not**: not "state of the art" (nnU-Net beats it), not "safe to depl
 |---|---|
 | Test-set Dice, `neurovision` (n = 189) | ET **0.871** · TC **0.916** · WT **0.932** |
 | Same, matched `baseline_unet3d` | ET 0.844 · TC 0.906 · WT 0.928 |
-| ET gain over the matched U-Net | **+0.0267**, CI [0.0166, 0.0393], p_holm 1.4e-21 |
+| ET gain over the matched U-Net | **+0.0267**, CI [0.0143, 0.0432], p_holm 1.4e-21 |
 | Replicated at a second seed pair | +0.0247 (seed 43) |
 | Seed noise floor (same model, two seeds) | +0.0021 |
 | nnU-Net (the field's standard) ET Dice | **0.8879** — beats us by 0.0170 (Gate A RETIRED) |

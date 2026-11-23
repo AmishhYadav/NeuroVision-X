@@ -1,0 +1,18 @@
+# C1 headline comparison, re-run reproducibly (experiments.md note 12; note 64 records why).
+# The registered family: neurovision vs matched-recipe baseline_unet3d on the 189 test cases,
+# six metrics (Dice and HD95 for ET, TC, WT), one Holm correction. Selected with
+# `analysis=c1_headline`; everything else inherited from analysis/default.yaml.
+defaults:
+  - default
+  - _self_
+
+compare_family:
+  name: c1_headline
+  name_a: neurovision
+  name_b: baseline_unet3d
+  exclude_case_ids: []
+  comparisons:
+    - cohort: test
+      a: outputs/neurovision/eval_test/per_case_metrics.csv
+      b: outputs/eval_test_baseline_unet3d/per_case_metrics.csv
+      metrics: [dice_ET, dice_TC, dice_WT, hd95_ET, hd95_TC, hd95_WT]

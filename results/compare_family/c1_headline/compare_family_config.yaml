@@ -1,0 +1,20 @@
+out_dir: outputs/compare_family/c1_headline
+name: c1_headline
+name_a: neurovision
+name_b: baseline_unet3d
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+exclude_case_ids: []
+comparisons:
+- cohort: test
+  a: outputs/neurovision/eval_test/per_case_metrics.csv
+  b: outputs/eval_test_baseline_unet3d/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+  - hd95_ET
+  - hd95_TC
+  - hd95_WT

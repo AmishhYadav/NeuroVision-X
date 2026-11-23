@@ -15,6 +15,8 @@
 numbers:
   # ---- Abstract, 6.1, Table 6: headline gain, replication, noise floors (C1)
   - {"id": "c1_et_gain", "text": "+0.0267", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "all"}, "column": "mean_diff", "decimals": 4, "sign": true, "occurrences": 6}
+  - {"id": "c1_et_ci_lo", "text": "CI 0.0143 to", "claim": "C1", "file": "results/compare_family/c1_headline/family.csv", "where": {"cohort": "test", "metric": "dice_ET"}, "column": "ci_lo", "decimals": 4, "occurrences": 2}
+  - {"id": "c1_et_ci_hi", "text": "to 0.0432", "claim": "C1", "file": "results/compare_family/c1_headline/family.csv", "where": {"cohort": "test", "metric": "dice_ET"}, "column": "ci_hi", "decimals": 4, "occurrences": 2}
   - {"id": "c1_et_gain_ref_et", "text": "+0.0165", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "ref_et"}, "column": "mean_diff", "decimals": 4, "sign": true, "occurrences": 3}
   - {"id": "c1_ref_et_ci_lo", "text": "CI 0.0125 to", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "ref_et"}, "column": "ci_lo", "decimals": 4, "occurrences": 1}
   - {"id": "c1_ref_et_ci_hi", "text": "to 0.0211)", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "ref_et"}, "column": "ci_hi", "decimals": 4, "occurrences": 1}
