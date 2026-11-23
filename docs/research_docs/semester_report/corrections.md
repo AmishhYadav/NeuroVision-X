@@ -21,9 +21,9 @@ truncated with …
 | R10 "tests first" | fixed | §5.5 |
 | R11 nnU-Net conformal / D2 | nnU-Net fixed (§6.7, Table 8, §10.2); **D2 pending** its evaluation (note 63) | §6.8, Appendix A |
 | R12 front matter | **open** — needs the college template and the author's details (W1.3) | front matter |
-| R13 Fig. 15 from the baseline | **open** — regenerate from the deployed model with one failure per cohort (W1.4) | Appendix B |
+| R13 Fig. 15 from the baseline | **fixed 2026-11-24** — `fig_examples_deployed.png` (deployed model, typical + failure per cohort, `f676b27`) wired into Appendix B | Appendix B |
 | R14 ethics / data licence | fixed (new §3.4); PROCEED-case limitation already present (§8 item 9) | §3.4 |
-| R15 references unverified | **open** — each reference to be opened at its source (W1.5) | References |
+| R15 references unverified | **fixed 2026-11-24** — all 22 opened at source (`reference_audit.md`: 19 verified, 3 corrected, 0 unsupported); author initials added to [16]–[18]; §2 table wording narrowed per the audit ("some organs not within 25 cases", "tested on text question answering") | References, §2 |
 | also | QC-model loss count corrected to match C18 (one significant loss, one at p_holm 0.0504) | §6.9 |
 
 ## Every change, before → after

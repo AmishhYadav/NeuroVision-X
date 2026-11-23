@@ -196,8 +196,8 @@ Three 2026 papers are direct neighbours and limit what this project may claim as
 | Work | What it shows | Difference from this project |
 | --- | --- | --- |
 | Shahid, arXiv 2606.20115 (2026) | Pooled conformal risk control on FeTS-2022 brain tumours violates the false-negative target at 40% of individual hospitals | Their shift is between sites within one adult population; ours is across populations and a label-definition change, without a claimed ordering by shift size |
-| Adhikary et al., arXiv 2608.18193 (2026) | Per-organ recall control in CT fails after transfer; ~10–40 local cases re-certify, some organs never | Same shape of answer in CT organs; ours is MRI tumour sub-regions with the infeasible case derived before the run |
-| Liu et al., arXiv 2608.10893 (2026) | Theory for certified selective risk control under bounded covariate shift (text data) | Their refusal is certified; our gate is not, and we measure that it cannot see cohort shift |
+| Adhikary et al., arXiv 2608.18193 (2026) | Per-organ recall control in CT fails after transfer; ~10–40 local cases re-certify, some organs not within 25 cases | Same shape of answer in CT organs; ours is MRI tumour sub-regions with the infeasible case derived before the run |
+| Liu et al., arXiv 2608.10893 (2026) | Theory for certified selective risk control under bounded covariate shift (tested on text question answering) | Their refusal is certified; our gate is not, and we measure that it cannot see cohort shift |
 
 ## 2.6 Clinical pipelines and structured reporting
 
@@ -597,11 +597,11 @@ NeuroVision-X delivers a complete, tested brain tumour segmentation system, from
 
 [15] Gal, Y., and Ghahramani, Z. Dropout as a Bayesian approximation: representing model uncertainty in deep learning. International Conference on Machine Learning (ICML), 2016.
 
-[16] Shahid. When average calibration fails: site-conditional federated conformal risk control. arXiv:2606.20115, 2026.
+[16] Shahid, N. F. When average calibration fails: site-conditional federated conformal risk control. arXiv:2606.20115, 2026.
 
-[17] Adhikary, Chabi, and Mastmeyer. Bound-aware per-organ recall risk control for multi-organ CT segmentation under clinical domain shift. arXiv:2608.18193, 2026.
+[17] Adhikary, S., Chabi, N., and Mastmeyer, A. Bound-aware per-organ recall risk control for multi-organ CT segmentation under clinical domain shift. arXiv:2608.18193, 2026.
 
-[18] Liu, Qiao, Zhang, and Chen. Certify or refuse: a cross-model map for selective risk control with coverage floors under covariate shift. arXiv:2608.10893, 2026.
+[18] Liu, J., Qiao, D., Zhang, Y., and Chen, X. Certify or refuse: a cross-model map for selective risk control with coverage floors under covariate shift. arXiv:2608.10893, 2026.
 
 [19] Rohlfing, T., Zahr, N. M., Sullivan, E. V., and Pfefferbaum, A. The SRI24 multichannel atlas of normal adult human brain structure. Human Brain Mapping, 31(5), 798–819, 2010.
 
@@ -639,6 +639,6 @@ The repository records every result in docs/research_docs/experiments.md (number
 
 # Appendix B. Example segmentations
 
-![Example BraTS cases (worst, median and best by Dice for a baseline 3D U-Net): FLAIR, ground truth and prediction, with the three label classes NCR/NET, ED and ET.](../../../outputs/paper/figures/qualitative_panel.png)
+![Deployed model (NeuroVision-X, seed 42) on one typical case and one failure case per cohort: FLAIR, T1CE, reference and prediction.](figures/fig_examples_deployed.png)
 
-**Figure 15.** Example BraTS cases (worst, median and best by Dice for a baseline 3D U-Net): FLAIR, ground truth and prediction, with the three label classes NCR/NET, ED and ET.
+**Figure 15.** The deployed model (NeuroVision-X, seed 42, deployed post-processing) on one typical case (per-case mean Dice closest to the cohort median) and one failure case (lowest tumour-core Dice) for each cohort: BraTS test, BraTS-Africa and paediatric. Axial slice with the largest reference whole-tumour area; radiological orientation (patient left on image right). Overlays: NCR/NET (yellow), oedema (blue), enhancing tumour (orange). The paediatric rows show the label-definition mismatch: the reference calls most of the non-enhancing tumour core, while the adult-trained model calls it oedema. Selection rules, commands and sources: `figures/fig_examples_deployed.txt`.
