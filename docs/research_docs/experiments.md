@@ -3094,7 +3094,7 @@ evidence about the setup, and forgetting it means repeating it.
     sub-label Dice 0.75 / 0.66 / 0.56, per-channel intensity r 0.88–0.94, crop
     boxes offset by 1–2 voxels. That is the pattern of the same child scanned
     twice (or re-annotated), not of two patients; BraTS 2021 pairs never exceed
-    0.775. **Author eyeball pending** (`fig`-free: open the two FLAIRs side by
+    0.775. **Author eyeball pending** (open the two FLAIRs side by
     side). Treated as a leak until ruled out.
 
     **Sensitivity (both PED pairs out of every table they touch).** D2 family
