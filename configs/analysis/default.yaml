@@ -1255,6 +1255,41 @@ volume_endpoint:
   ci: 0.95
   boot_seed: 42
 
+failure_detection:
+  # MasterPlan W2.3, docs/research_docs/preregistrations/preregistration_failure_detection.md --
+  # scripts/failure_detection.py. Signals, targets, members, bars and the family are FIXED by that
+  # protocol; do not change them after any ENS-PD / ENS-ENT / T-Vol detection number exists.
+  # cohorts: name -> members (DEPLOYED FIRST; their saved logits are replayed) plus the per-case
+  # tables joined in stage 2. volume_table is what scripts/volume_endpoint.py writes
+  # (<volume_endpoint.out_dir>/<name>/per_case_volumes.csv, column usable_volume).
+  out_dir: outputs/failure_detection
+  cohorts:
+    test:
+      members: [outputs/neurovision/eval_test, outputs/eval_test_neurovision_seed43, outputs/eval_test_neurovision_heavy_aug]
+      qc_table: results/qc_validation/per_case_test.csv
+      ood_table: results/ood/test_ood_score.csv
+      volume_table: outputs/volume_endpoint/neurovision_test/per_case_volumes.csv
+    ssa:
+      members: [outputs/eval_ssa_neurovision, outputs/eval_ssa_neurovision_seed43, outputs/eval_ssa_neurovision_heavy_aug]
+      qc_table: results/qc_validation/per_case_ssa.csv
+      ood_table: results/ood/ssa_ood_score.csv
+      volume_table: outputs/volume_endpoint/neurovision_ssa/per_case_volumes.csv
+    ped:
+      members: [outputs/eval_ped_neurovision, outputs/eval_ped_neurovision_seed43, outputs/eval_ped_neurovision_heavy_aug]
+      qc_table: results/qc_validation/per_case_ped.csv
+      ood_table: results/ood/ped_ood_score.csv
+      volume_table: outputs/volume_endpoint/neurovision_ped/per_case_volumes.csv
+  signals: [QC, ENS-PD, ENS-ENT, OOD] # each is compared against baseline_signal
+  baseline_signal: ENT
+  dice_bar: 0.7 # T-Dice: unusable <=> dice_WT < bar or dice_TC < bar
+  min_each: 5 # a cell with fewer unusable or fewer usable cases is "not estimable"
+  n_boot: 10000
+  boot_seed: 42
+  ci: 0.95
+  alpha: 0.05
+  case_limit: null # int -> first N cases per cohort (smoke runs only)
+  overwrite: false # false -> skip a cohort whose signals_<cohort>.csv exists (resume)
+
 severity_ladder:
   # MasterPlan W3.2, docs/research_docs/preregistrations/preregistration_severity_ladder.md --
   # scripts/severity_ladder.py. Kinds, levels, seed, bridge tolerance and the saved quantities are
