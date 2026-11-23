@@ -51,6 +51,8 @@ adjusted p exceeds alpha).
 | `neurovision` vs `capacity_control` | **+0.0211**, p_holm 7.3e-19 | **+0.0068**, p_holm 5.1e-07 | inconclusive |
 | `capacity_control` vs `baseline_unet3d` | **+0.0055**, p_holm 1.6e-09 | inconclusive | inconclusive |
 
+On the 184 test cases with reference ET the gain is **+0.0165** [0.0125, 0.0211] (two empty-ET cases carry ~40% of the +0.0267), and nnU-Net beats `neurovision` outright (ET 0.8879 vs 0.8709, note 61) — so this is a matched-recipe result, not an architecture advance.
+
 **The +0.0267 ET gain decomposes as ~20.6% capacity, ~79.4% architecture.** The
 capacity control is a plain U-Net widened to 34.83M parameters — matched to
 `neurovision` within 0.23% — with all fourteen other controlled variables verified

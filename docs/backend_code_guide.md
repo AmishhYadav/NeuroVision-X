@@ -687,7 +687,7 @@ one well; it is the thesis.**
   is mandatory to report.
 - Empty-ground-truth cases are 0/0: excluded and counted, never scored as 0 or 1.
 - `realised_risk` measures the actual miss rate at a fixed τ on another set (test, SSA, PED).
-  Holds on test; breaks on SSA and PED in proportion to the shift.
+  Holds on test; breaks on SSA and PED (7 of 12 cells), worst on PED tumour core, where the label definition differs.
 - `load_curves_npz` reloads cached curves; `uncertainty/__init__.py` re-exports the public API.
 
 **`uncertainty/risk_coverage.py`** — selective prediction.
@@ -1503,8 +1503,8 @@ gradients. Patches train; a Gaussian-blended sliding window predicts whole volum
 
 **What does the conformal bound guarantee?** That on new cases exchangeable with the
 calibration set, the conservative mask `{p ≥ τ̂}` misses on average at most α (10%) of the true
-tumour. It holds on the BraTS test set and breaks on SSA and PED in proportion to the shift —
-the thesis. `local_recalibration.py` measures how many local labelled cases restore it.
+tumour. It holds on the BraTS test set and breaks on SSA and PED — worst on PED tumour core,
+where the label definition differs (no ordering by shift size is claimed). `local_recalibration.py` measures how many local labelled cases restore it.
 
 **What does the gate do?** Combines label-free signals — input QC, the QC model's predicted
 Dice, patient age (adults only) — and returns the worst of PROCEED / CAUTION / REFUSE.

@@ -131,8 +131,8 @@ function Hero({ reduce, anchorRef, caption }: HeroProps) {
             style={{ y: bodyY, opacity: fade }}
           >
             A 3D brain-tumour segmentation model wrapped in a distribution-free error bound and a refusal gate. The
-            bound holds in distribution, fails under distribution shift in proportion to the shift, and the gate
-            cannot see cohort-level shift. This project measures where it breaks, and what a new site needs to
+            bound holds in distribution, degrades under acquisition and population change, and fails outright where
+            the label definition changes. The gate sees bad masks, not changed cohorts. This project measures where it breaks, and what a new site needs to
             restore it.
           </motion.p>
         </motion.div>

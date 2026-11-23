@@ -112,3 +112,85 @@ notebook.
 
 *(To be completed after the run. Nothing above this line may be edited once the first number
 exists.)*
+
+**Recorded 2026-11-23. Verdict: REPLICATES.** (Experiments note 62, claim C30.) Read strictly
+against the rules above; nothing above the `## Result` line was edited.
+
+**Run.** Kaggle `neurovision-gatea-conformal` v2, `GIT_REF 539534b`, 2.20 GPU-h (inside the 5 GPU-h
+abort bound; v1 crashed in the bridge cell after 0.8 GPU-h on a CSV-format bug and was re-run
+unchanged). Gate A's `checkpoint_final.pth` (epoch 1000), nnU-Net 2.8.1, mirroring on,
+`--save_probabilities`; 187 val, 189 test, 60 SSA, 99 PED cases, 7.8–8.2 s/case. Region conversion
+check: thresholding the converted probabilities at 0.5 reproduced nnU-Net's own label map in every
+case (largest mismatching voxel fraction 6.4e-7, tolerance 1e-5).
+
+**Bridge check: PASS**, recorded before any SSA/PED number was read. Test split through our
+preprocessed route vs Gate A's raw route: ΔDice ET +0.0002, TC −0.0001, WT +0.00002 (bound 0.003).
+`results/conformal/nnunet_gatea/bridge.json`.
+
+**N1 — in distribution (test, n = 189).** Holds in 6/6 cells.
+
+| Region | α | τ̂ (val) | realised mean FNR [95% CI] | rule |
+|---|---|---|---|---|
+| WT | 0.05 | 0.0158 | 0.0296 [0.0228, 0.0370] | holds |
+| WT | 0.10 | 0.875 | 0.0749 [0.0639, 0.0863] | holds |
+| WT | 0.20 | 0.95 | 0.0873 [0.0760, 0.0995] | holds |
+| TC | 0.05 | 0.0032 | 0.0443 [0.0301, 0.0611] | holds |
+| TC | 0.10 | 0.90 | 0.0944 [0.0759, 0.1154] | holds |
+| TC | 0.20 | 0.95 | 0.1017 [0.0824, 0.1227] | holds |
+
+**N2 — under shift.** VIOLATED = CI lower bound > α; holds = CI upper bound ≤ α; else inconclusive.
+
+| Cohort · region | α 0.05 | α 0.10 | α 0.20 |
+|---|---|---|---|
+| SSA · WT (n = 60) | 0.0521 [0.0290, 0.0904] inconclusive | 0.1210 [0.0952, 0.1579] inconclusive | 0.1391 [0.1129, 0.1766] holds |
+| SSA · TC | 0.0866 [0.0448, 0.1418] inconclusive | **0.1823 [0.1347, 0.2369] VIOLATED** | 0.1950 [0.1462, 0.2530] inconclusive |
+| PED · WT (n = 99) | **0.0678 [0.0532, 0.0847] VIOLATED** | 0.1133 [0.0945, 0.1346] inconclusive | 0.1229 [0.1033, 0.1440] holds |
+| PED · TC | **0.5549 [0.4899, 0.6195] VIOLATED** | **0.6240 [0.5647, 0.6832] VIOLATED** | **0.6302 [0.5717, 0.6878] VIOLATED** |
+
+5 of 12 cells VIOLATED (`neurovision`: 7 of 12, note 42).
+
+**Applying the verdict rule.** (i) PED · TC VIOLATED at all three α: yes. (ii) For each primary
+region, mean realised/α over the three α larger on PED than on SSA: WT 1.035 vs 0.982, yes; TC 6.83
+vs 1.51, yes. Both conditions met → **REPLICATES**: the failure under shift is not an artefact of
+the weaker recipe; the field's standard model fails the same way, worst on paediatric tumour core.
+
+**How the verdict is quoted under the 2026-11-15 thesis (MasterPlan §B1).** Condition (ii) was
+written when the thesis was "in proportion to the shift". With three cohorts it cannot order shifts
+by size, and the largest failure (PED · TC) is mostly a label-definition mismatch (note 58). The
+verdict is reported as registered; condition (ii) is quoted only as "PED fails more than SSA on
+both regions", never as a dose–response.
+
+**Mandatory secondary: the cost.** Mask inflation |M(τ̂)|/|M(0.5)| on test: α 0.05 WT 1.11×, TC
+1.15×; α 0.10 0.97× / 0.97×; α 0.20 0.94× / 0.95× (the guaranteed mask is *smaller* than the
+default at the looser α, as for `neurovision`, C15). Under shift the same pattern, except PED · TC at
+α 0.05: mean 1.68× (median 1.18×; 8 of 99 cases skipped for an empty default mask).
+**Grid caveat:** at α 0.20 τ̂ = 0.95 is the top of the registered threshold grid for both regions
+(val risk at 0.95: WT 0.105, TC 0.100, well under 0.20), so the α 0.20 cells measure the risk at the
+grid ceiling, not at a binding threshold. MasterPlan W2.1(b) extends the grid; nothing here is
+re-fitted.
+
+**Secondary 1 — is PED · TC restorable?** No. R̂(τ_min = 1e-4) on PED · TC = **0.486**
+(`neurovision`: 0.356, note 52): even a mask of every voxel with p ≥ 1e-4 misses half of the
+paediatric tumour core. Local recalibration (`scripts/local_recalibration.py`, unchanged, 1000
+splits per k, seed 42; counterfactual, never this cohort's coverage): PED · TC infeasible at every
+k and α. Restorable elsewhere with the floors: SSA WT 30/11/5, SSA TC never/19/6, PED WT 27/11/5
+labelled cases at α 0.05/0.10/0.20 (`neurovision`: SSA TC 39/13/5). SSA · TC at α 0.05 is now
+infeasible for nnU-Net because its own floor (R̂(τ_min) = 0.0525) sits above α: sharper
+probabilities leave less room at the permissive end. `results/local_recalibration_nnunet/`.
+
+**Secondary 2 — segmentation under shift** (nnU-Net − `neurovision`, Holm family of 6, paired
+bootstrap 10,000 + Wilcoxon, `results/compare_family/nnunet_conformal_shift_dice/family.csv`):
+
+| Cohort | dice_ET | dice_TC | dice_WT |
+|---|---|---|---|
+| SSA (n = 60) | −0.0162 [−0.0573, +0.0191] inconclusive | +0.0245 [+0.0027, +0.0507] inconclusive (p_holm 0.20) | **+0.0238 [+0.0103, +0.0412] better** |
+| PED (n = 99) | +0.0148 [−0.0346, +0.0616] inconclusive | **+0.0471 [+0.0124, +0.0843] better** | **+0.0423 [+0.0202, +0.0702] better** |
+
+nnU-Net's in-distribution lead survives shift on WT (both cohorts) and PED TC; ET is not resolved
+on either cohort.
+
+**What this changes.** C14 is now quoted for both models: the bound breaks under shift for the
+standard model too. Beside it, descriptive and not registered: nnU-Net's realised risk is lower
+than `neurovision`'s in 9 of the 12 shifted cells (all 6 PED cells; higher in SSA WT α 0.10 and
+SSA TC α 0.05/0.10), and it violates 5 cells to `neurovision`'s 7 — "a stronger model shrinks the
+damage" where the label definition is unchanged, and fails at a higher floor where it is not.

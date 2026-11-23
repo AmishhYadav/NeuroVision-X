@@ -26,7 +26,8 @@ detail.
 - **What differs.** Their shift is *between hospitals inside one adult glioma population* (FeTS
   institutions are all BraTS-style adult gliomas). Ours is *between populations*: adult glioma →
   sub-Saharan African adult glioma (BraTS-Africa) → paediatric tumours
-  (different disease). We report the violation *ordered by the size of the shift* (C14), a
+  (different disease). We report the violation on three models and separate the label-definition failure
+  (PED tumour core) from covariate shift (C14, C30; no ordering by shift size is claimed), a
   sub-region that no recalibration can rescue (PED · TC, C24), and what a refusal gate does and
   does not see (C22).
 - **Forces.** C14 can no longer say "nobody has measured conformal coverage under shift for 3D

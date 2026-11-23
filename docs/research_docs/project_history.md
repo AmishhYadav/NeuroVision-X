@@ -47,7 +47,7 @@ The project has had **three identities**. Each one was replaced because the evid
 |---|---|---|---|
 | 1 | **"A disagreement-conditioned fusion gate makes a better, more reliable segmenter."** The gate reads how much the CNN and Swin branches disagree at each voxel. The promised benefit was better calibration and boundaries, not raw Dice | 2026-08-04 → 08-16 | The model **was more accurate** (ET Dice +0.0267, note 12), and ~79% of that is architecture, not width (note 19). But calibration, boundary accuracy and MC-dropout risk-coverage all came back **within noise** (notes 13, 16, 17). Accurate, not reliable. Later the P2 ablation showed the disagreement conditioning itself adds **nothing measurable** (note 38) — the founding hypothesis is a pre-registered null |
 | 2 | **"An interpretable pipeline"** (scan → atlas-grounded structured report), then **"disagreement is a free failure detector"** | 2026-08-16 → 08-23 | The report is **stable** whatever the segmenter (1 of 25 metrics differ, note 23), so a better model does not make a better report. Disagreement says *where* a mask is wrong (Gate 1, note 35) but does not improve a working detector (Gate 2, note 37) and is worse than free entropy (note 39). The accuracy gain **does not transfer** to BraTS-Africa or paediatric data (notes 26, 30) |
-| 3 | **"A segmentation model wrapped in a distribution-free error bound and a refusal gate — measured where it breaks"** | 2026-08-23 → now | The bound holds in distribution and **breaks under shift in proportion to the shift** (note 42). The refusal gate cannot see cohort-level shift (note 47). A new site can restore the bound with ~10–40 labelled cases, except paediatric tumour core (note 52). On real hospital DICOM the front end loses a lot (note 55). This is the current thesis |
+| 3 | **"A segmentation model wrapped in a distribution-free error bound and a refusal gate — measured where it breaks"** | 2026-08-23 → 2026-11-15 | The bound holds in distribution and **breaks under shift** (note 42; then read as "in proportion to the shift", a reading retired 2026-11-15). The refusal gate cannot see cohort-level shift (note 47). A new site can restore the bound with ~10–40 labelled cases, except paediatric tumour core (note 52). On real hospital DICOM the front end loses a lot (note 55). This is the current thesis |
 
 **The one clean positive:** ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189),
 replicated at a second seed pair (+0.0247, note 54), ~13x the seed noise floor (note 49). **Against
@@ -60,6 +60,8 @@ as a matched-recipe result and the architecture claim is withdrawn from the pape
 > bound holds in distribution, fails under distribution shift in proportion to the shift, and the
 > gate cannot see cohort-level shift. We measure where it breaks, and what a new site needs in order
 > to restore it.
+
+*(Quoted as written in 2026-09; "in proportion to the shift" retired 2026-11-15 — MasterPlan §B1.)*
 
 ---
 
@@ -370,7 +372,7 @@ Gate A (`preregistration_strong_baseline.md`) and the conformal study were pre-r
   core is a floor (0.234 for both models, 64 of 99 exact ties). Exploratory.
 - **B1/B2 — note 42, conformal risk control.** Threshold fitted on val, applied frozen. **In
   distribution the bound holds, 6/6 cells, both models.** Under shift, **7 of 12 cells violated for
-  each model**, ordered by the size of the shift: SSA WT ~1.1x nominal, PED WT 1.4–1.9x, **PED TC
+  each model**, then read as ordered by the size of the shift (reading retired 2026-11-15): SSA WT ~1.1x nominal, PED WT 1.4–1.9x, **PED TC
   3.5–11.5x**. The cost of the guarantee is small, and at looser α negative (C15).
 - **A4 — note 43:** flip TTA wired; its measurement is ~34 h on the Mac, so it moved to the GPU.
 - **A5 — note 44:** the confidence head, never scored before, is **beaten by free entropy on all
@@ -791,6 +793,20 @@ Full detail and restart commands: `status_2026-09-27.md`. In short:
   `master_plan.md` (archived as `docs/archive/master_plan_m4_m5.md`). Thesis sentence rewritten in
   `CLAUDE.md`.
 
+## 9c. 2026-11-15 → now: the MasterPlan's emergency close-out (W0)
+
+- **2026-11-23 — W0.1 results backed up.** `scripts/sync_results.py` mirrors the small result
+  files of `outputs/` into the tracked `results/` (662 files, 42 MB; volumes refused by a hard deny
+  list). Checkpoint SHA-256 manifest committed (`docs/data_manifests/checkpoints.sha256`, 15
+  files); the checkpoints uploaded to a private Kaggle dataset.
+- **2026-11-23 — nnU-Net conformal read: REPLICATES** (note 62, C30). Holds in distribution 6/6;
+  5 of 12 shifted cells violated (vs 7 for `neurovision`); PED tumour core violated at every α with
+  a higher floor than `neurovision` (R̂(τ_min) 0.486 vs 0.356). A stronger model shrinks the damage
+  where the label definition is unchanged and does not repair it where it changes.
+- **2026-11-23 — truth pass on wording (W0.3).** C14 rewritten ("violated in 7/12 cells; largest
+  where the label definition differs; no ordering by shift size is claimed"); live documents and
+  the landing-page copy updated; historical records marked "retired reading" rather than edited.
+
 ---
 
 ## 10. Using this history in the paper
@@ -798,7 +814,7 @@ Full detail and restart commands: `status_2026-09-27.md`. In short:
 - **The story arc.** A model that was built to be *more reliable* turned out to be *more accurate
   but not more reliable*; its claimed novelty turned out not to carry the gain; and the reliability
   question was rebuilt as a measurable property of a wrapper — which holds in distribution and
-  breaks in proportion to shift. The negatives are the evidence for the final claim, not an
+  breaks under deployment change, worst where the label definition differs. The negatives are the evidence for the final claim, not an
   embarrassment inside it.
 - **Methods:** §3.1–3.4 (data, split, schedule, the 64³/80-epoch re-plan and why), §6 (statistics
   and pre-registration rules), `reproducibility.md`, the pre-registrations.

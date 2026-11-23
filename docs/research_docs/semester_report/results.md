@@ -61,8 +61,10 @@ inconclusive, and the pooled tumour-core change (+0.0117) is the same size as se
 A threshold calibrated on validation with conformal risk control bounds the fraction of tumour
 voxels the mask misses. In distribution the bound holds in all six cells, with realised risk at
 0.64–0.96× the nominal level [C13], at small or even negative cost in mask size [C15]. Under
-shift it fails, and by an amount ordered by the distance of the shift: SSA whole tumour ~1.1× the
-nominal risk, PED whole tumour 1.4–1.9×, PED tumour core 3.5–11.5× [C14].
+shift it fails in 7 of 12 cells: SSA whole tumour ~1.1× the nominal risk, PED whole tumour
+1.4–1.9×, PED tumour core 3.5–11.5× [C14]. The largest failure, PED tumour core, is mostly a
+difference in what the label means, not only in the images; three cohorts cannot order shifts by
+size, so no such ordering is claimed.
 
 **Figure 2** — realised vs nominal risk, per cohort and region. *(Source: note 42 tables,
 `outputs/conformal/`.)*

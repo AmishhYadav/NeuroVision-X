@@ -8,9 +8,11 @@ and run the checks in §2 the day before.** Every claim spoken in the demo must 
 
 ## 1. What the demo shows, in one sentence
 
-A tumour segmentation model wrapped in a distribution-free error bound and a refusal gate: the bound
-holds in distribution, fails under shift in proportion to the shift, and the gate cannot see
-cohort-level shift. We show where it breaks, and what a new site needs to restore it.
+A conformal bound and a refusal gate around a tumour segmentation model hold where the data are
+exchangeable with the calibration set. Under acquisition and population change the bound degrades
+and a stronger model shrinks the damage; where the label definition changes it fails outright for
+every model and no threshold repairs it. The gate sees bad masks, not changed cohorts. We measure
+each failure, and what local data restores.
 
 **Do not say:** "safe to deploy", "guaranteed per patient", "clinically validated", "state of the
 art". The bound is an **average over studies, in distribution, not per patient** (P0.5 wording).

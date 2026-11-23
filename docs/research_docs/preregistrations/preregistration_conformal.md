@@ -268,6 +268,10 @@ Same λ̂, frozen, nothing fitted on either cohort.
 **Seven of twelve violated, five inconclusive, none holds.** This is the outcome this pre-registration
 called "the expected result", and the number it asked for is now measured.
 
+*[Retired reading, 2026-11-15 (MasterPlan §B1, C14): the numbers in this section stand; the
+"ordered by how far the shift is" interpretation in the next paragraph does not — three cohorts
+cannot order shifts by size, and PED · TC is mostly a label-definition mismatch (note 58).]*
+
 The structure of the failure is the finding, not the fact of it. The excess risk is **ordered by how
 far the shift is**: BraTS-Africa is a scanner and population shift within the same disease and its WT
 coverage is essentially at nominal (1.07–1.10×), while BraTS-PEDs is a different disease entity and

@@ -1375,6 +1375,10 @@ sessions by resume is still ONE row — sum the GPU hours.
     | PED (n=99) | WT | 1.39-1.94x (**violated** at α=0.05, 0.10) | 1.18-1.38x (**violated** at α=0.05) |
     | PED | TC | **3.50x-11.47x** (violated at all three) | **3.44x-10.66x** (violated at all three) |
 
+    *[Retired reading, 2026-11-15 (MasterPlan §B1, C14): three cohorts cannot
+    order shifts by size, and PED · TC is mostly a label-definition mismatch
+    (note 58). The numbers above stand; the "ordered by the shift" reading
+    below does not.]*
     **The structure of the failure is the finding.** Excess risk is ordered by
     how far the shift is -- BraTS-Africa is a scanner and population shift
     within the same disease and barely dents WT coverage; BraTS-PEDs is a
@@ -2876,3 +2880,65 @@ evidence about the setup, and forgetting it means repeating it.
     Note: the Kaggle CLI's `kernels files` listing reported ~931 B per
     prediction; the real files are ~25 KB full-grid label maps -- the listing
     size is wrong, not the files.
+
+62. **nnU-NET CONFORMAL -- REPLICATES: THE BOUND HOLDS IN DISTRIBUTION AND
+    BREAKS UNDER SHIFT FOR THE STANDARD MODEL TOO; PAEDIATRIC TUMOUR CORE FAILS
+    AT A HIGHER FLOOR THAN FOR `neurovision`.** Run 2026-10-21 on Kaggle T4
+    (`neurovision-gatea-conformal` v2, `GIT_REF 539534b`, 2.20 GPU-h),
+    interpreted 2026-11-23 strictly against
+    `preregistrations/preregistration_conformal_nnunet.md` (written 2026-10-13,
+    before any nnU-Net probability existed). Gate A's model unchanged
+    (`checkpoint_final.pth`, epoch 1000, mirroring on); `scripts/conformal.py`
+    unchanged; τ̂ fitted on BraTS val (n = 187), applied frozen to test (189),
+    SSA (60), PED (99). Bridge check PASS before any shifted number was read
+    (ΔDice ET +0.0002, TC −0.0001, WT +0.00002; bound 0.003).
+
+    **In distribution: holds 6/6** (realised/α 0.44×–0.94×; e.g. TC α 0.10:
+    0.0944 [0.0759, 0.1154]).
+
+    **Under shift: 5 of 12 cells VIOLATED** (`neurovision`: 7 of 12).
+
+    | Cohort · region | α 0.05 | α 0.10 | α 0.20 |
+    |---|---|---|---|
+    | SSA · WT | 0.052 inc. | 0.121 inc. | 0.139 holds |
+    | SSA · TC | 0.087 inc. | **0.182 VIOL.** | 0.195 inc. |
+    | PED · WT | **0.068 VIOL.** | 0.113 inc. | 0.123 holds |
+    | PED · TC | **0.555 VIOL.** | **0.624 VIOL.** | **0.630 VIOL.** |
+
+    **Verdict: REPLICATES** (PED · TC violated at all α; PED worse than SSA on
+    both regions). Under the 2026-11-15 thesis this is quoted as "the failure is
+    a property of the method under these changes, not of our recipe", never as
+    an ordering by shift size.
+
+    **Descriptive beside it (not registered).** nnU-Net's realised risk is lower
+    than `neurovision`'s in 9 of 12 shifted cells, all six PED cells among them
+    (PED WT α 0.10: 0.113 vs 0.139; PED TC α 0.20: 0.630 vs 0.700). The
+    exception is PED · TC's floor: at τ_min = 1e-4 nnU-Net still misses
+    **0.486** of the reference tumour core (`neurovision` 0.356), so local
+    recalibration is infeasible at every k and α -- for both models, and for
+    nnU-Net with less room. SSA · TC at α 0.05 also becomes infeasible for
+    nnU-Net (floor 0.0525). Segmentation under shift (Holm family of 6):
+    nnU-Net better on SSA WT (+0.024), PED WT (+0.042) and PED TC (+0.047);
+    ET inconclusive on both cohorts; SSA TC inconclusive (+0.024, p_holm 0.20).
+
+    **Grid caveat.** At α 0.20, τ̂ = 0.95 is the ceiling of the registered grid
+    (val risk there 0.10), so α 0.20 measures risk at the ceiling, not at a
+    binding threshold. Same for `neurovision`. MasterPlan W2.1(b) fixes it.
+
+    **What it means.** "A stronger model shrinks the damage" holds where the
+    label definition is the same (adult SSA, PED whole tumour); where the label
+    definition changes (PED tumour core) it fails for both models, and the
+    sharper model fails at a higher floor. That is the thesis of
+    `MasterPlan.md` §B1, now measured on the field's standard model. Claim C30.
+
+    Artifacts (tracked): `results/conformal/nnunet_gatea/` (bridge,
+    `fit.json`, `realised_risk.csv`, `inflation.csv`, per-cohort curves and
+    per-case tables), `results/local_recalibration_nnunet/`,
+    `results/compare_family/nnunet_conformal_shift_dice/`. Regenerate the
+    secondaries: `.venv-analysis/bin/python scripts/local_recalibration.py
+    analysis.local_recalibration.out_dir=outputs/local_recalibration_nnunet
+    "~analysis.local_recalibration.models"
+    "+analysis.local_recalibration.models={nnunet_gatea:{conformal_dir:outputs/conformal/nnunet_gatea/conformal_nnunet,cohorts:{test:eval_test,ssa:eval_ssa,ped:eval_ped}}}"`
+    and `scripts/compare_family.py` with `name=nnunet_conformal_shift_dice`,
+    `name_a=nnunet_gatea`, `name_b=neurovision`, items SSA and PED on
+    {dice_ET, dice_TC, dice_WT}.

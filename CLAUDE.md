@@ -225,7 +225,7 @@ D2 pooled training on Kaggle from 2026-10-12; P1.4 OOD score run (note 56, C26):
 but not which masks fail — misses its switch-on rule, stays display-only.
 
 **Where the science stands** (authority: `docs/research_docs/claims_and_evidence.md`, read it before writing
-anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189),
+anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189; **+0.0165** on the 184 ET-present cases — quote both),
 ~79–80% architecture / ~20% capacity (two draws, note 60), now checked against a measured seed noise floor (D1, note 49:
 +0.0021) — but **nnU-Net beats it**
 (Gate A RETIRED 2026-10-12, note 61, C29: ET 0.8879 vs 0.8709, lesion-wise −0.0309), so the

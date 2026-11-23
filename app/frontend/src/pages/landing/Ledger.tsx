@@ -53,7 +53,7 @@ const FINDINGS: { tone: Tone; tag: string; text: string }[] = [
   {
     tone: "caution",
     tag: "Breaks",
-    text: "Under shift the bound fails in proportion to the shift — SSA whole tumour ~1.1× nominal, PED whole tumour 1.4–1.9×; PED tumour core is worse still, partly from a label-definition mismatch.",
+    text: "Under shift the bound breaks in 7 of 12 cells — SSA whole tumour ~1.1× nominal, PED whole tumour 1.4–1.9×; worst on PED tumour core, mostly from a label-definition mismatch. nnU-Net fails the same way.",
   },
   {
     tone: "caution",

@@ -220,7 +220,7 @@ condition (trap 9), results pulled and synced to `results/` the same day.
 
 | Week of | Items |
 |---|---|
-| 2026-11-15 | W0.1 `[ ]` · W0.2a `[ ]` · W0.2b `[ ]` (overnight) · W0.3 `[ ]` · W0.4 `[ ]` · W0.5 `[ ]` · W1.1–W1.2 `[ ]` |
+| 2026-11-15 | W0.1 `[~]` (results/ tracked 2026-11-23, `eae12ac`; checkpoint manifest committed; private Kaggle upload in progress) · W0.2a `[x]` (note 62, C30: REPLICATES) · W0.2b `[~]` (evaluation running 2026-11-23) · W0.3 `[x]` (remaining grep hits: archived files, the project reviews, protocol text above a `## Result` line that may not be edited, and passages marked "retired reading") · W0.4 `[ ]` · W0.5 `[ ]` · W1.1–W1.2 `[ ]` |
 | 2026-11-20 | W1.3–W1.9 `[ ]` · W8.2 `[ ]` · **D-A due 11-24** |
 | 2026-11-25 | W2.7 `[ ]` · W2.1 `[ ]` · W5.9 `[ ]` · W7.3 set up `[ ]` · W8.1 unit 1 |
 | 2026-12-02 | W2.3 `[ ]` · W2.5 `[ ]` · W5.1 `[ ]` · W3.1 cohort checks and downloads `[ ]` |

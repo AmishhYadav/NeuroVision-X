@@ -24,10 +24,11 @@ comes from a different population.
 
 ### 0.2 The thesis (say it this way)
 
-> A tumour segmentation model wrapped in a distribution-free error bound and a refusal gate: the
-> bound holds in distribution, fails under distribution shift in proportion to the shift, and the
-> gate cannot see cohort-level shift. We measure where it breaks, and what a new site needs in order
-> to restore it.
+> A conformal bound and a refusal gate around a tumour segmentation model hold where the data are
+> exchangeable with the calibration set. Under acquisition and population change the bound degrades
+> and a stronger model shrinks the damage; where the label definition changes it fails outright for
+> every model and no threshold repairs it. The gate sees bad masks, not changed cohorts. We measure
+> each failure, and what local data restores.
 
 What it is **not**: not "state of the art" (nnU-Net beats it), not "safe to deploy", not clinical.
 
@@ -723,7 +724,7 @@ prognosis, malignancy, "detects", "diagnoses". Tests scan the copy for forbidden
 | ❌ | **nnU-Net beats it**: ET 0.8879 vs 0.8709; lesion-wise −0.0309 — architecture claim withdrawn | C29 |
 | ❌ | Founding hypothesis (disagreement-conditioned gate) — pre-registered null | P2 |
 | ✅ | Conformal bound holds in distribution (0.64–0.96 × nominal) | C13 |
-| ✅ | …and breaks under shift **in proportion to the shift** (SSA WT ~1.1×, PED WT 1.4–1.9×, PED TC 3.5–11.5×) | C14 |
+| ✅ | …and breaks under shift: 7 of 12 cells (5 of 12 for nnU-Net), worst on PED tumour core where the label definition differs (SSA WT ~1.1×, PED WT 1.4–1.9×, PED TC 3.5–11.5×). **Not** "in proportion to the shift" (retired 2026-11-15) | C14, C30 |
 | ✅ | Gate acceptance does not repair it (PED TC 0.573 on accepted cases at nominal 0.10) | C22 |
 | ✅ | A new site needs ~10–40 of its own labelled cases to restore the bound; PED TC never (frozen model) | C24 |
 | ✅ | Cross-fitted fine-tune recovers TC (SSA +0.043, PED +0.368) — mostly learning the paediatric label definition | C27 |
@@ -755,7 +756,7 @@ you have to — one job takes ~6 min and ~12 GB of RAM. Have the screen recordin
 | A | PROCEED (3 min) | job `9c2cc294`: stepper, series matrix, 3D twin, report (WT 176.0 mL), gate: predicted Dice WT 0.901 / TC 0.895 | "This patient was in our training set — this demonstrates the plumbing, not accuracy." |
 | B | REFUSE on quality (2 min) | job `67b67b1d`: predicted Dice WT 0.626 < cut 0.707 → REFUSE, reason in banner | "A refusal is a successful outcome. Thresholds are validation-set quantiles, frozen before use, never from ground truth." |
 | C | REFUSE on intended use (1 min) | slide: with `intended_use` on, PED accepted 0.798 → 0.000 | "A labelling rule, not detection. It refuses every child by construction." |
-| D | Where the bound breaks (4 min) | C13 → C14 → C22 → C24 | "Holds in distribution, breaks in proportion to shift, the gate can't fix it, and a site needs 10–40 local cases — except paediatric tumour core." |
+| D | Where the bound breaks (4 min) | C13 → C14 → C22 → C24 | "Holds in distribution, breaks under shift (worst where the label definition differs; nnU-Net too), the gate can't fix it, and a site needs 10–40 local cases — except paediatric tumour core." |
 | E | Honest scoreboard (2 min) | C1 beside nnU-Net's 0.8879 | "One positive against a matched recipe; nnU-Net beats us; the contribution is the bound, the gate and the pipeline." |
 
 **Figures to show** (all in `docs/research_docs/semester_report/figures/`, all current):
@@ -864,7 +865,7 @@ DICOM-SEG and API response says so.
    boundary heads. 34.9 M params, 64³ patches, 80 epochs, 23.1 GPU-h.
 4. +0.0267 ET over a matched U-Net is real and replicated; nnU-Net beats us; the founding idea was null.
 5. Saved fp16 logits feed every analysis — zero re-inference.
-6. Conformal risk control: holds in distribution, breaks in proportion to shift.
+6. Conformal risk control: holds in distribution, breaks under shift — worst on paediatric tumour core, where the label definition differs, for every model.
 7. A new site needs ~10–40 labelled cases to restore it — paediatric tumour core never (frozen).
 8. The gate: worst of input QC + predicted Dice + age; thresholds from val quantiles; label-free.
 9. Usable 85 / 78 / 24%, silent failure 4.2 / 18.3 / 49.5% — the gate is blind to cohort shift.

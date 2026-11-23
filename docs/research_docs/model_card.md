@@ -65,7 +65,7 @@ set.
 | Dice WT | 0.9321 | 0.9276 |
 | HD95 ET (mm) | 4.20 | 4.91 |
 
-The ET margin is +0.0267 (CI [0.0166, 0.0393], p_holm 1.4e-21, n=189 paired). A width-matched capacity
+The ET margin over a matched-recipe U-Net is +0.0267 (CI [0.0166, 0.0393], p_holm 1.4e-21, n=189 paired); on the 184 cases with reference ET it is +0.0165 [0.0125, 0.0211] — two empty-ET cases carry ~40% of the full-set margin. nnU-Net beats this model (ET 0.8879 vs 0.8709; Gate A, note 61). A width-matched capacity
 control attributes ~79% of it to architecture and ~21% to parameter count. Within the architecture,
 the gain comes from gated cross-attention fusion; conditioning the gate on inter-branch disagreement —
 the project's founding hypothesis — contributes nothing measurable (+0.0022, CI −0.0067 to +0.0152).
