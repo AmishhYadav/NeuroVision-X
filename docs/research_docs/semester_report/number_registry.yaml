@@ -1,0 +1,152 @@
+# Number registry for the semester report (MasterPlan W1.2).
+#
+# Checked by scripts/audit_report_numbers.py:
+#   .venv/bin/python scripts/audit_report_numbers.py \
+#       --doc docs/research_docs/semester_report/report.md \
+#       --registry docs/research_docs/semester_report/number_registry.yaml
+#
+# Every entry recomputes one printed number from a tracked file under results/.
+# `text` is an exact string from report.md; where the same digits appear in several
+# places, the string carries a few words of context so the match is unambiguous (only
+# the first number inside `text` is compared). `occurrences` is the number of times the
+# string appeared when this file was generated, so a later edit that deletes one is caught.
+# Numbers that could not be registered are listed in number_registry_untraceable.md.
+# Pending D2 (note 63) numbers are deliberately NOT registered.
+numbers:
+  # ---- Abstract, 6.1, Table 6: headline gain, replication, noise floors (C1)
+  - {"id": "c1_et_gain", "text": "+0.0267", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "all"}, "column": "mean_diff", "decimals": 4, "sign": true, "occurrences": 6}
+  - {"id": "c1_et_gain_ref_et", "text": "+0.0165", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "ref_et"}, "column": "mean_diff", "decimals": 4, "sign": true, "occurrences": 3}
+  - {"id": "c1_ref_et_ci_lo", "text": "CI 0.0125 to", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "ref_et"}, "column": "ci_lo", "decimals": 4, "occurrences": 1}
+  - {"id": "c1_ref_et_ci_hi", "text": "to 0.0211)", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "ref_et"}, "column": "ci_hi", "decimals": 4, "occurrences": 1}
+  - {"id": "c1_seed43_gain", "text": "+0.0247", "claim": "C1", "file": "results/compare_family/multiseed_a1_headline_seed43/family.csv", "where": {"cohort": "test", "metric": "dice_ET"}, "column": "improvement", "decimals": 4, "sign": true, "occurrences": 2}
+  - {"id": "c1_seed43_ci_lo", "text": "CI 0.0116 to", "claim": "C1", "file": "results/compare_family/multiseed_a1_headline_seed43/family.csv", "where": {"cohort": "test", "metric": "dice_ET"}, "column": "improvement_lo", "decimals": 4, "occurrences": 1}
+  - {"id": "c1_seed43_ci_hi", "text": "to 0.0420)", "claim": "C1", "file": "results/compare_family/multiseed_a1_headline_seed43/family.csv", "where": {"cohort": "test", "metric": "dice_ET"}, "column": "improvement_hi", "decimals": 4, "occurrences": 1}
+  - {"id": "d1_nv_seed_noise", "text": "+0.0021", "claim": "C1", "file": "results/compare_family/d1_seed_noise_floor/family.csv", "where": {"cohort": "test", "metric": "dice_ET"}, "column": "improvement", "decimals": 4, "sign": true, "occurrences": 2}
+  - {"id": "baseline_seed_noise", "text": "+0.0041", "claim": "C1", "file": "results/compare_family/multiseed_a1_baseline_noise_floor/family.csv", "where": {"cohort": "test", "metric": "dice_ET"}, "column": "improvement", "decimals": 4, "sign": true, "occurrences": 2}
+  - {"id": "tta_et", "text": "+0.0007", "claim": "C28", "file": "results/compare_family/tta_flip/family.csv", "where": {"cohort": "test", "metric": "dice_ET"}, "column": "improvement", "decimals": 4, "sign": true, "occurrences": 2}
+  - {"id": "t6_nv_et", "text": "0.8709", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_ET"}, "column": "mean_A", "decimals": 4, "occurrences": 6}
+  - {"id": "t6_nv_tc", "text": "0.9161", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_TC"}, "column": "mean_A", "decimals": 4, "occurrences": 2}
+  - {"id": "t6_nv_wt", "text": "0.9321", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_WT"}, "column": "mean_A", "decimals": 4, "occurrences": 3}
+  - {"id": "t6_nnunet_et", "text": "0.8879", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_ET"}, "column": "mean_B", "decimals": 4, "occurrences": 5}
+  - {"id": "t6_nnunet_tc", "text": "0.9247", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_TC"}, "column": "mean_B", "decimals": 4, "occurrences": 1}
+  - {"id": "t6_nnunet_wt", "text": "0.9424", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_WT"}, "column": "mean_B", "decimals": 4, "occurrences": 1}
+  - {"id": "t6_unet_et", "text": "0.8442", "claim": "C1", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nnunet_minus_baseline", "metric": "dice_ET"}, "column": "mean_B", "decimals": 4, "occurrences": 2}
+  - {"id": "t6_unet_tc", "text": "0.9058", "claim": "C1", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nnunet_minus_baseline", "metric": "dice_TC"}, "column": "mean_B", "decimals": 4, "occurrences": 1}
+  - {"id": "t6_unet_wt", "text": "0.9276", "claim": "C1", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nnunet_minus_baseline", "metric": "dice_WT"}, "column": "mean_B", "decimals": 4, "occurrences": 1}
+  - {"id": "t6_nv_lwet", "text": "0.7550", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "lwdice_ET"}, "column": "mean_A", "decimals": 4, "occurrences": 2}
+  - {"id": "t6_nnunet_lwet", "text": "0.7859", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "lwdice_ET"}, "column": "mean_B", "decimals": 4, "occurrences": 2}
+  - {"id": "t6_nv_hd95_et", "text": "4.20", "claim": "C1", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "hd95_ET"}, "column": "mean_A", "decimals": 2, "occurrences": 1}
+  - {"id": "t6_unet_hd95_et", "text": "4.91", "claim": "C1", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nnunet_minus_baseline", "metric": "hd95_ET"}, "column": "mean_B", "decimals": 2, "occurrences": 1}
+
+  # ---- 6.2: where the gain comes from (C2, C3)
+  - {"id": "c2_width_gain", "text": "+0.0055", "claim": "C2", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "capacity_control", "b": "baseline_unet3d", "subset": "all"}, "column": "mean_diff", "decimals": 4, "sign": true, "occurrences": 2}
+  - {"id": "c3_ablation_diff", "text": "+0.0022", "claim": "C3", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "ablation_content_only_gate", "subset": "all"}, "column": "mean_diff", "decimals": 4, "sign": true, "occurrences": 2}
+  - {"id": "c3_ablation_ci_lo", "text": "−0.0067 to", "claim": "C3", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "ablation_content_only_gate", "subset": "all"}, "column": "ci_lo", "decimals": 4, "occurrences": 2}
+  - {"id": "c3_ablation_ci_hi", "text": "to +0.0152)", "claim": "C3", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "ablation_content_only_gate", "subset": "all"}, "column": "ci_hi", "decimals": 4, "sign": true, "occurrences": 1}
+
+  # ---- 6.3: nnU-Net (C29)
+  - {"id": "c29_et_diff", "text": "−0.0170", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_ET"}, "column": "improvement", "decimals": 4, "occurrences": 1}
+  - {"id": "c29_et_ci_lo", "text": "−0.0309 to", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_ET"}, "column": "improvement_lo", "decimals": 4, "occurrences": 1}
+  - {"id": "c29_et_ci_hi", "text": "to −0.0069", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_ET"}, "column": "improvement_hi", "decimals": 4, "occurrences": 1}
+  - {"id": "c29_et_p_holm", "text": "1.0 × 10⁻⁷", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "dice_ET"}, "column": "p_holm_family", "scale": 10000000.0, "decimals": 1, "occurrences": 1}
+  - {"id": "c29_lw_diff", "text": "−0.0309, CI", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "lwdice_ET"}, "column": "improvement", "decimals": 4, "occurrences": 1}
+  - {"id": "c29_lw_ci_lo", "text": "−0.0605 to", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "lwdice_ET"}, "column": "improvement_lo", "decimals": 4, "occurrences": 1}
+  - {"id": "c29_lw_ci_hi", "text": "to −0.0020)", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "lwdice_ET"}, "column": "improvement_hi", "decimals": 4, "occurrences": 1}
+  - {"id": "c29_nnunet_vs_unet", "text": "+0.0437", "claim": "C29", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nnunet_minus_baseline", "metric": "dice_ET"}, "column": "improvement", "decimals": 4, "sign": true, "occurrences": 1}
+
+  # ---- 6.4: lesion-wise scoring (C12)
+  - {"id": "c12_nv_lwwt", "text": "0.7183", "claim": "C12", "file": "results/compare_family/gatea/family.csv", "where": {"cohort": "test_nv_minus_nnunet", "metric": "lwdice_WT"}, "column": "mean_A", "decimals": 4, "occurrences": 1}
+
+  # ---- 6.5, Table 7: out of distribution (C7, C23)
+  - {"id": "c7_pooled_tc_diff", "text": "−0.0333", "claim": "C7", "file": "results/compare_shift/neurovision_vs_baseline_pooled_ssa_ped.csv", "where": {"metric": "dice_TC"}, "column": "improvement", "decimals": 4, "occurrences": 1}
+  - {"id": "c7_pooled_tc_p", "text": "p_holm = 0.0132", "claim": "C7", "file": "results/compare_shift/neurovision_vs_baseline_pooled_ssa_ped.csv", "where": {"metric": "dice_TC"}, "column": "p_holm", "decimals": 4, "occurrences": 1}
+  - {"id": "c23_pooled_tc", "text": "+0.0117", "claim": "C23", "file": "results/compare_family/d0_heavy_aug/family.csv", "where": {"cohort": "pooled_ssa_ped", "metric": "dice_TC"}, "column": "improvement", "decimals": 4, "sign": true, "occurrences": 1}
+  - {"id": "c23_n_inconclusive", "text": "12 of 12 pre-registered", "claim": "C23", "file": "results/compare_family/d0_heavy_aug/family.csv", "where": {"verdict_within_item": "inconclusive"}, "column": "n", "agg": "count", "decimals": 0, "occurrences": 1}
+  - {"id": "t7_ssa_et", "text": "0.7784", "claim": "C7", "file": "results/eval_ssa_neurovision/summary.csv", "where": {"Unnamed: 0": "dice_ET"}, "column": "mean", "decimals": 4, "occurrences": 1}
+  - {"id": "t7_ssa_tc", "text": "0.7846", "claim": "C7", "file": "results/eval_ssa_neurovision/summary.csv", "where": {"Unnamed: 0": "dice_TC"}, "column": "mean", "decimals": 4, "occurrences": 1}
+  - {"id": "t7_ssa_wt", "text": "0.8959", "claim": "C7", "file": "results/eval_ssa_neurovision/summary.csv", "where": {"Unnamed: 0": "dice_WT"}, "column": "mean", "decimals": 4, "occurrences": 1}
+  - {"id": "t7_ped_et", "text": "0.5634", "claim": "C7", "file": "results/eval_ped_neurovision/summary.csv", "where": {"Unnamed: 0": "dice_ET"}, "column": "mean", "decimals": 4, "occurrences": 1}
+  - {"id": "t7_ped_tc", "text": "0.4394", "claim": "C7", "file": "results/eval_ped_neurovision/summary.csv", "where": {"Unnamed: 0": "dice_TC"}, "column": "mean", "decimals": 4, "occurrences": 1}
+  - {"id": "t7_ped_wt", "text": "0.8490", "claim": "C7", "file": "results/eval_ped_neurovision/summary.csv", "where": {"Unnamed: 0": "dice_WT"}, "column": "mean", "decimals": 4, "occurrences": 1}
+
+  # ---- 6.6: uncertainty mechanisms (C4, C9, C16)
+  - {"id": "c9_disagree_ssa", "text": "0.157 AUROC", "claim": "C9", "file": "results/mc_comparison/mc_comparison.csv", "where": {"cohort": "ssa", "arm": "disagreement"}, "column": "difference", "scale": -1, "decimals": 3, "occurrences": 1}
+  - {"id": "c9_disagree_ped", "text": "0.056 on PED", "claim": "C9", "file": "results/mc_comparison/mc_comparison.csv", "where": {"cohort": "ped", "arm": "disagreement"}, "column": "difference", "scale": -1, "decimals": 3, "occurrences": 1}
+  - {"id": "c16_conf_et", "text": "ET 0.855", "claim": "C16", "file": "results/confidence/neurovision_test/confidence_vs_entropy.csv", "where": {"metric": "auroc_ET"}, "column": "mean_confidence", "decimals": 3, "occurrences": 1}
+  - {"id": "c16_ent_et", "text": "vs 0.912", "claim": "C16", "file": "results/confidence/neurovision_test/confidence_vs_entropy.csv", "where": {"metric": "auroc_ET"}, "column": "mean_entropy", "decimals": 3, "occurrences": 1}
+  - {"id": "c4_resid_test", "text": "0.578,", "claim": "C4", "file": "results/detection/detection_voxel_level.csv", "where": {"cohort": "brats_test", "region": "ANY"}, "column": "auroc_residual", "decimals": 3, "occurrences": 1}
+  - {"id": "c4_resid_ssa", "text": "0.569 and", "claim": "C4", "file": "results/detection/detection_voxel_level.csv", "where": {"cohort": "ssa", "region": "ANY"}, "column": "auroc_residual", "decimals": 3, "occurrences": 1}
+  - {"id": "c4_resid_ped", "text": "and 0.677 on", "claim": "C4", "file": "results/detection/detection_voxel_level.csv", "where": {"cohort": "ped", "region": "ANY"}, "column": "auroc_residual", "decimals": 3, "occurrences": 1}
+
+  # ---- 6.7: conformal bound (C13, C14, C15, C30)
+  - {"id": "c13_ratio_min", "text": "0.64 to", "claim": "C13", "file": "results/conformal/baseline_unet3d/realised_risk.csv", "where": {"apply_dir": "outputs/eval_test_baseline_unet3d", "region": "WT", "alpha": 0.05}, "column": "mean_miss_rate", "scale": 20, "decimals": 2, "occurrences": 1}
+  - {"id": "c13_ratio_max", "text": "to 0.96 times", "claim": "C13", "file": "results/conformal/baseline_unet3d/realised_risk.csv", "where": {"apply_dir": "outputs/eval_test_baseline_unet3d", "region": "TC", "alpha": 0.1}, "column": "mean_miss_rate", "scale": 10, "decimals": 2, "occurrences": 1}
+  - {"id": "c15_infl_wt", "text": "1.10 times (WT)", "claim": "C15", "file": "results/conformal/neurovision/inflation.csv", "where": {"apply_dir": "outputs/neurovision/eval_test", "region": "WT", "alpha": 0.05}, "column": "mean_inflation", "decimals": 2, "occurrences": 1}
+  - {"id": "c15_infl_tc", "text": "1.18 times (TC)", "claim": "C15", "file": "results/conformal/neurovision/inflation.csv", "where": {"apply_dir": "outputs/neurovision/eval_test", "region": "TC", "alpha": 0.05}, "column": "mean_inflation", "decimals": 2, "occurrences": 1}
+  - {"id": "c14_ssa_wt_a", "text": "about 1.1 times nominal", "claim": "C14", "file": "results/conformal/neurovision/realised_risk.csv", "where": {"apply_dir": "outputs/eval_ssa_neurovision", "region": "WT", "alpha": 0.05}, "column": "mean_miss_rate", "scale": 20, "decimals": 1, "occurrences": 1}
+  - {"id": "c14_ssa_wt_b", "text": "about 1.1 times the nominal", "claim": "C14", "file": "results/conformal/neurovision/realised_risk.csv", "where": {"apply_dir": "outputs/eval_ssa_neurovision", "region": "WT", "alpha": 0.05}, "column": "mean_miss_rate", "scale": 20, "decimals": 1, "occurrences": 1}
+  - {"id": "c14_ped_wt_lo", "text": "1.4 to", "claim": "C14", "file": "results/conformal/neurovision/realised_risk.csv", "where": {"apply_dir": "outputs/eval_ped_neurovision", "region": "WT", "alpha": 0.1}, "column": "mean_miss_rate", "scale": 10, "decimals": 1, "occurrences": 1}
+  - {"id": "c14_ped_wt_hi", "text": "to 1.9 times", "claim": "C14", "file": "results/conformal/neurovision/realised_risk.csv", "where": {"apply_dir": "outputs/eval_ped_neurovision", "region": "WT", "alpha": 0.05}, "column": "mean_miss_rate", "scale": 20, "decimals": 1, "occurrences": 1}
+  - {"id": "c14_ped_tc_lo", "text": "3.5 to", "claim": "C14", "file": "results/conformal/neurovision/realised_risk.csv", "where": {"apply_dir": "outputs/eval_ped_neurovision", "region": "TC", "alpha": 0.2}, "column": "mean_miss_rate", "scale": 5, "decimals": 1, "occurrences": 1}
+  - {"id": "c14_ped_tc_hi", "text": "to 11.5 times", "claim": "C14", "file": "results/conformal/neurovision/realised_risk.csv", "where": {"apply_dir": "outputs/eval_ped_neurovision", "region": "TC", "alpha": 0.05}, "column": "mean_miss_rate", "scale": 20, "decimals": 1, "occurrences": 2}
+  - {"id": "c14_ped_tc_hi_abs", "text": "up to 11.5 times", "claim": "C14", "file": "results/conformal/neurovision/realised_risk.csv", "where": {"apply_dir": "outputs/eval_ped_neurovision", "region": "TC", "alpha": 0.05}, "column": "mean_miss_rate", "scale": 20, "decimals": 1, "occurrences": 1}
+  - {"id": "c30_nnunet_ped_tc_05", "text": "0.555,", "claim": "C30", "file": "results/conformal/nnunet_gatea/conformal_nnunet/realised_risk.csv", "where": {"apply_dir": "/tmp/evals/eval_ped", "region": "TC", "alpha": 0.05}, "column": "mean_miss_rate", "decimals": 3, "occurrences": 1}
+  - {"id": "c30_nnunet_ped_tc_10", "text": "0.624 and", "claim": "C30", "file": "results/conformal/nnunet_gatea/conformal_nnunet/realised_risk.csv", "where": {"apply_dir": "/tmp/evals/eval_ped", "region": "TC", "alpha": 0.1}, "column": "mean_miss_rate", "decimals": 3, "occurrences": 1}
+  - {"id": "c30_nnunet_ped_tc_20", "text": "0.630 against", "claim": "C30", "file": "results/conformal/nnunet_gatea/conformal_nnunet/realised_risk.csv", "where": {"apply_dir": "/tmp/evals/eval_ped", "region": "TC", "alpha": 0.2}, "column": "mean_miss_rate", "decimals": 3, "occurrences": 1}
+  - {"id": "c30_nnunet_ssa_wt_dice", "text": "+0.024, paediatric", "claim": "C30", "file": "results/compare_family/nnunet_conformal_shift_dice/family.csv", "where": {"cohort": "ssa", "metric": "dice_WT"}, "column": "improvement", "decimals": 3, "sign": true, "occurrences": 1}
+  - {"id": "c30_nnunet_ped_wt_dice", "text": "paediatric +0.042 Dice", "claim": "C30", "file": "results/compare_family/nnunet_conformal_shift_dice/family.csv", "where": {"cohort": "ped", "metric": "dice_WT"}, "column": "improvement", "decimals": 3, "sign": true, "occurrences": 1}
+  - {"id": "c14_label_ncr_share", "text": "median 84%", "claim": "C14", "file": "results/label_composition/summary.csv", "where": {"kind": "reference", "name": "ped"}, "column": "median_ncr_share", "scale": 100, "decimals": 0, "occurrences": 1}
+
+  # ---- 6.8: local recalibration and fine-tuning (C24, C27)
+  - {"id": "c27_ssa_tc_gain", "text": "+0.0433", "claim": "C27", "file": "results/compare_family/d3_finetune_crossfit/family.csv", "where": {"cohort": "ssa", "metric": "dice_TC"}, "column": "improvement", "decimals": 4, "sign": true, "occurrences": 1}
+  - {"id": "c27_ssa_tc_before", "text": "0.785 →", "claim": "C27", "file": "results/compare_family/d3_finetune_crossfit/family.csv", "where": {"cohort": "ssa", "metric": "dice_TC"}, "column": "mean_neurovision", "decimals": 3, "occurrences": 1}
+  - {"id": "c27_ssa_tc_after", "text": "→ 0.828", "claim": "C27", "file": "results/compare_family/d3_finetune_crossfit/family.csv", "where": {"cohort": "ssa", "metric": "dice_TC"}, "column": "mean_neurovision_ft_crossfit", "decimals": 3, "occurrences": 1}
+  - {"id": "c27_ped_tc_gain", "text": "+0.3676", "claim": "C27", "file": "results/compare_family/d3_finetune_crossfit/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "improvement", "decimals": 4, "sign": true, "occurrences": 1}
+  - {"id": "c27_ped_tc_before", "text": "0.439 →", "claim": "C27", "file": "results/compare_family/d3_finetune_crossfit/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "mean_neurovision", "decimals": 3, "occurrences": 1}
+  - {"id": "c27_ped_tc_after", "text": "→ 0.807", "claim": "C27", "file": "results/compare_family/d3_finetune_crossfit/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "mean_neurovision_ft_crossfit", "decimals": 3, "occurrences": 1}
+  - {"id": "c27_t8_ssa", "text": "SSA +0.043,", "claim": "C27", "file": "results/compare_family/d3_finetune_crossfit/family.csv", "where": {"cohort": "ssa", "metric": "dice_TC"}, "column": "improvement", "decimals": 3, "sign": true, "occurrences": 1}
+  - {"id": "c27_t8_ped", "text": "PED +0.368 (", "claim": "C27", "file": "results/compare_family/d3_finetune_crossfit/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "improvement", "decimals": 3, "sign": true, "occurrences": 1}
+  - {"id": "c27_ratio_before", "text": "0.27 to", "claim": "C27", "file": "results/label_composition/summary.csv", "where": {"kind": "prediction", "name": "ped_frozen"}, "column": "median_tc_wt", "decimals": 2, "occurrences": 1}
+  - {"id": "c27_ratio_after", "text": "to 0.95)", "claim": "C27", "file": "results/label_composition/summary.csv", "where": {"kind": "prediction", "name": "ped_finetuned"}, "column": "median_tc_wt", "decimals": 2, "occurrences": 1}
+
+  # ---- 6.9, Table 8: end-to-end pipeline and refusal gate (C20, C21, C22, C18)
+  - {"id": "c20_usable_test", "text": "85.2%", "claim": "C20", "file": "results/error_budget/summary.csv", "where": {"cohort": "test", "bar": 0.7}, "column": "p_accepted_and_usable", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c20_usable_test_abs", "text": "85%,", "claim": "C20", "file": "results/error_budget/summary.csv", "where": {"cohort": "test", "bar": 0.7}, "column": "p_accepted_and_usable", "scale": 100, "decimals": 0, "occurrences": 1}
+  - {"id": "c20_usable_ssa", "text": "78.3%", "claim": "C20", "file": "results/error_budget/summary.csv", "where": {"cohort": "ssa", "bar": 0.7}, "column": "p_accepted_and_usable", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c20_usable_ssa_abs", "text": "78% and", "claim": "C20", "file": "results/error_budget/summary.csv", "where": {"cohort": "ssa", "bar": 0.7}, "column": "p_accepted_and_usable", "scale": 100, "decimals": 0, "occurrences": 1}
+  - {"id": "c20_usable_ped", "text": "24.2%", "claim": "C20", "file": "results/error_budget/summary.csv", "where": {"cohort": "ped", "bar": 0.7}, "column": "p_accepted_and_usable", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c20_usable_ped_abs", "text": "24% of", "claim": "C20", "file": "results/error_budget/summary.csv", "where": {"cohort": "ped", "bar": 0.7}, "column": "p_accepted_and_usable", "scale": 100, "decimals": 0, "occurrences": 1}
+  - {"id": "c20_silent_test", "text": "4.2%,", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "test"}, "column": "silent_rate", "scale": 100, "decimals": 1, "occurrences": 2}
+  - {"id": "c20_silent_ssa", "text": "18.3% and", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ssa"}, "column": "silent_rate", "scale": 100, "decimals": 1, "occurrences": 2}
+  - {"id": "c20_silent_ped", "text": "49.5%", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ped"}, "column": "silent_rate", "scale": 100, "decimals": 1, "occurrences": 3}
+  - {"id": "c20_t8_silent_test", "text": "Silent failure 4.2", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "test"}, "column": "silent_rate", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c20_t8_silent_ssa", "text": "/ 18.3 /", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ssa"}, "column": "silent_rate", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c20_t8_silent_ped", "text": "/ 49.5%", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ped"}, "column": "silent_rate", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c20_tc_only_test", "text": "(8 of 8", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "test"}, "column": "only_TC", "decimals": 0, "occurrences": 1}
+  - {"id": "c20_tc_only_ssa", "text": "9 of 11", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ssa"}, "column": "only_TC", "decimals": 0, "occurrences": 1}
+  - {"id": "c20_tc_only_ped", "text": "44 of 49", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ped"}, "column": "only_TC", "decimals": 0, "occurrences": 1}
+  - {"id": "c20_silent_n_ssa", "text": "of 11 on BraTS-Africa", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ssa"}, "column": "n_silent", "decimals": 0, "occurrences": 1}
+  - {"id": "c20_silent_n_ped", "text": "of 49 on paediatric", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ped"}, "column": "n_silent", "decimals": 0, "occurrences": 1}
+  - {"id": "c20_wt_only_test", "text": "would be 0%,", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "test"}, "column": "silent_rate_if_WT_only", "scale": 100, "decimals": 0, "occurrences": 1}
+  - {"id": "c20_wt_only_ssa", "text": "3.3% and", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ssa"}, "column": "silent_rate_if_WT_only", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c20_wt_only_ped", "text": "5.1%", "claim": "C20", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ped"}, "column": "silent_rate_if_WT_only", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c21_ssa_silent", "text": "passing 11 of 12", "claim": "C21", "file": "results/error_budget/silent_failure_by_region/silent_failure_by_region.csv", "where": {"cohort": "ssa"}, "column": "n_silent", "decimals": 0, "occurrences": 1}
+  - {"id": "c21_ssa_unusable", "text": "of 12 unusable", "claim": "C21", "file": "results/ood/auroc.csv", "where": {"cohort": "ssa"}, "column": "n_unusable", "decimals": 0, "occurrences": 1}
+  - {"id": "c21_ped_correct_refusals", "text": "23 of 26 refusals", "claim": "C21", "file": "results/error_budget/taxonomy.csv", "where": {"cohort": "ped", "cell": "correct_refusal"}, "column": "n", "agg": "sum", "decimals": 0, "occurrences": 1}
+  - {"id": "c22_ped_tc_accepted_risk", "text": "0.573 on accepted", "claim": "C22", "file": "results/error_budget/per_case_ped.csv", "where": {"accepted": "True"}, "column": "miss_rate_TC", "agg": "mean", "decimals": 3, "occurrences": 1}
+  - {"id": "c18_ssa_tc_p_holm", "text": "p = 0.0504", "claim": "C18", "file": "results/qc_validation/cells.csv", "where": {"cohort": "ssa", "region": "TC"}, "column": "p_holm", "decimals": 4, "occurrences": 1}
+
+  # ---- 6.10: real DICOM and OOD score (C25, C26)
+  - {"id": "c25_refused_thick", "text": "refuses 40% of studies", "claim": "C25", "file": "results/real_dicom_validation/summary.json", "key": "completion.by_status_and_stage.1.n", "scale": 2.5, "decimals": 0, "occurrences": 1}
+  - {"id": "c25_accepted_n", "text": "of the 22 it accepts", "claim": "C25", "file": "results/real_dicom_validation/summary.json", "key": "completion.by_status.done", "decimals": 0, "occurrences": 1}
+  - {"id": "c25_usable_given_accepted", "text": "only 36%", "claim": "C25", "file": "results/real_dicom_validation/summary.json", "key": "usable_rate.p_usable_given_accepted", "scale": 100, "decimals": 0, "occurrences": 1}
+  - {"id": "c25_wt_median_cost", "text": "a median 0.23", "claim": "C25", "file": "results/real_dicom_validation/summary.json", "key": "front_end_cost.2.median_diff", "scale": -1, "decimals": 2, "occurrences": 1}
+  - {"id": "c25_wt_median_cost_t8", "text": "Median −0.23", "claim": "C25", "file": "results/real_dicom_validation/summary.json", "key": "front_end_cost.2.median_diff", "decimals": 2, "occurrences": 1}
+  - {"id": "c25_reg_shift_mm", "text": "median 5.9 mm", "claim": "C25", "file": "results/real_dicom_validation/posthoc_shift_diagnostic.csv", "column": "shift_mm", "agg": "median", "decimals": 1, "occurrences": 1}
+  - {"id": "c26_flag_ssa", "text": "flags 60%", "claim": "C26", "file": "results/ood/flag_rates.csv", "where": {"cohort": "ssa"}, "column": "caution_or_worse", "scale": 100, "decimals": 0, "occurrences": 1}
+  - {"id": "c26_flag_test", "text": "9.5% of test", "claim": "C26", "file": "results/ood/flag_rates.csv", "where": {"cohort": "test"}, "column": "caution_or_worse", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "c26_auroc_lo", "text": "AUROC 0.56 to", "claim": "C26", "file": "results/ood/auroc.csv", "where": {"cohort": "test"}, "column": "auroc", "decimals": 2, "occurrences": 1}
+  - {"id": "c26_auroc_hi", "text": "to 0.60)", "claim": "C26", "file": "results/ood/auroc.csv", "where": {"cohort": "ped"}, "column": "auroc", "decimals": 2, "occurrences": 1}
+
+  # ---- 6.11, Table 8: report agreement (C6)
+  - {"id": "c6_conclusive_report_metrics", "text": "1 of 25 report metrics", "claim": "C6", "file": "results/report_agreement/comparison_neurovision_vs_baseline_unet3d.csv", "where": {"verdict": "better"}, "column": "n", "agg": "count", "decimals": 0, "occurrences": 1}
