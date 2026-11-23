@@ -1171,3 +1171,16 @@ label_composition:
     ped_finetuned: [outputs/eval_ft_ped_cf0, outputs/eval_ft_ped_cf1]
     ssa_frozen: [outputs/eval_ssa_neurovision]
     ssa_finetuned: [outputs/eval_ft_ssa_cf0, outputs/eval_ft_ssa_cf1]
+
+leakage:
+  # MasterPlan W2.7. Exact + near-duplicate scan across frozen splits, from preprocessed arrays.
+  # Ranks candidate pairs for a human to check; it does not decide alone. Positive control:
+  # run it on BraTS-PED (splits_ped_cf0.yaml), where BraTS-PED-00121-000 / -00137-000 are
+  # byte-identical (note 58).
+  prep_dir: data/preprocessed/brats
+  splits_path: configs/data/splits.yaml
+  out_dir: outputs/leakage/brats
+  grid: [24, 24, 16]
+  top_k: 50
+  flag_threshold: 0.99
+  flag_tumour_threshold: 0.9
