@@ -1,0 +1,28 @@
+Figure 15 (R13): example segmentations, deployed model (neurovision, seed 42).
+
+Command: /Users/amish/NeuroVision-X/.venv/bin/python scripts/plot_semester_figures.py analysis.semester_figures.only=examples device=cpu
+
+Orientation: arrays are LPS; panels are radiological, anterior at top, patient LEFT is on the image RIGHT.
+Slice: axial slice with the largest reference WT area (predicted WT if reference empty).
+Overlay: NCR/NET = TC minus ET (orange), ED = WT minus TC (blue), ET (vermilion); alpha 0.45. Prediction = saved logits + deployed inference.postprocess.
+
+Selected cases:
+  BraTS test | typical | BraTS2021_00464 | Dice ET 0.9259 TC 0.9520 WT 0.9492 | rule: per-case mean of dice_ET/TC/WT closest to the cohort median, ties by case_id
+  BraTS test | failure | BraTS2021_00412 | Dice ET 0.0000 TC 0.0000 WT 0.9763 | rule: lowest dice_TC in the cohort, ties by case_id
+  BraTS-Africa | typical | BraTS-SSA-00041-000 | Dice ET 0.8781 TC 0.8606 WT 0.9129 | rule: per-case mean of dice_ET/TC/WT closest to the cohort median, ties by case_id
+  BraTS-Africa | failure | BraTS-SSA-00215-000 | Dice ET 0.0000 TC 0.0000 WT 0.0000 | rule: lowest dice_TC in the cohort, ties by case_id
+  Paediatric | typical | BraTS-PED-00124-000 | Dice ET 0.8206 TC 0.2577 WT 0.8810 | rule: per-case mean of dice_ET/TC/WT closest to the cohort median, ties by case_id
+  Paediatric | failure | BraTS-PED-00009-000 | Dice ET 0.0000 TC 0.0000 WT 0.8401 | rule: lowest dice_TC in the cohort, ties by case_id
+
+Sources read:
+  outputs/neurovision/eval_test/per_case_metrics.csv
+  outputs/neurovision/eval_test/logits
+  data/preprocessed/brats
+  outputs/eval_ssa_neurovision/per_case_metrics.csv
+  outputs/eval_ssa_neurovision/logits
+  data/preprocessed/brats_ssa
+  outputs/eval_ped_neurovision/per_case_metrics.csv
+  outputs/eval_ped_neurovision/logits
+  data/preprocessed/brats_ped
+
+PED reference labels count most non-enhancing tumour as core (note 58)

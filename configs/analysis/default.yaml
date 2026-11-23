@@ -1002,6 +1002,19 @@ semester_figures:
 
   dpi: 200
 
+  # "all" (default) builds every figure; "examples" builds only
+  # fig_examples_deployed (override: analysis.semester_figures.only=examples).
+  only: all
+
+  # Figure 15 (R13): example segmentations from the deployed model.
+  examples:
+    enabled: true
+    cohorts:
+      - {name: "BraTS test", per_case: outputs/neurovision/eval_test/per_case_metrics.csv, eval_dir: outputs/neurovision/eval_test, prep_dir: data/preprocessed/brats}
+      - {name: "BraTS-Africa", per_case: outputs/eval_ssa_neurovision/per_case_metrics.csv, eval_dir: outputs/eval_ssa_neurovision, prep_dir: data/preprocessed/brats_ssa}
+      - {name: "Paediatric", per_case: outputs/eval_ped_neurovision/per_case_metrics.csv, eval_dir: outputs/eval_ped_neurovision, prep_dir: data/preprocessed/brats_ped}
+    out_name: fig_examples_deployed.png
+
 
 ood:
   # Milestone 5 P1.4 -- docs/research_docs/preregistrations/preregistration_ood.md.
@@ -1184,3 +1197,30 @@ leakage:
   top_k: 50
   flag_threshold: 0.99
   flag_tumour_threshold: 0.9
+
+conformal_v2:
+  # MasterPlan W2.1, preregistration_conformal_v2.md. Every value here is FIXED by that protocol.
+  out_dir: outputs/conformal_v2
+  alphas: [0.05, 0.10, 0.20]
+  delta: 0.1
+  regions: [ET, TC, WT]
+  # ET uses the 'zero' empty-reference convention (loss 0 when the reference ET is empty);
+  # WT and TC use 'exclude' (v1), which is identical for them since no BraTS case is empty.
+  empty: {ET: zero, TC: exclude, WT: exclude}
+  rcps_order_seed: 42
+  n_boot: 10000
+  boot_seed: 42
+  n_resplits: 1000
+  resplit_seed: 42
+  prep_dirs: {val: data/preprocessed/brats, test: data/preprocessed/brats, ssa: data/preprocessed/brats_ssa, ped: data/preprocessed/brats_ped}
+  models:
+    neurovision:
+      eval_dirs: {val: outputs/neurovision/eval_val, test: outputs/neurovision/eval_test, ssa: outputs/eval_ssa_neurovision, ped: outputs/eval_ped_neurovision}
+      v1_conformal_dir: outputs/conformal/neurovision
+    baseline_unet3d:
+      eval_dirs: {val: outputs/eval_val_baseline_unet3d, test: outputs/eval_test_baseline_unet3d, ssa: outputs/eval_ssa_baseline_unet3d, ped: outputs/eval_ped_baseline_unet3d}
+      v1_conformal_dir: outputs/conformal/baseline_unet3d
+    nnunet_gatea:
+      # No logits (discarded on Kaggle): saved v1 curves only (WT, TC; v1 grid; raw mask).
+      curves: {val: outputs/conformal/nnunet_gatea/conformal_nnunet/eval_val/curves.npz, test: outputs/conformal/nnunet_gatea/conformal_nnunet/eval_test/curves.npz, ssa: outputs/conformal/nnunet_gatea/conformal_nnunet/eval_ssa/curves.npz, ped: outputs/conformal/nnunet_gatea/conformal_nnunet/eval_ped/curves.npz}
+  postprocess: true

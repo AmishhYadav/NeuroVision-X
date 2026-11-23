@@ -16,24 +16,35 @@ verbatim.
    realised miss rate at the frozen BraTS-val threshold, applied to each
    cohort, against the nominal alpha it was supposed to control.
 
+3. `fig_examples_deployed.png` -- example segmentations from the DEPLOYED model
+   (`neurovision`, seed 42): per cohort one typical and one failure case, drawn
+   from the saved fp16 logits with the deployed post-processing (review row R13).
+   This is the only figure that reads volumes; it needs no model and no GPU.
+   Run it alone with `analysis.semester_figures.only=examples`.
+
 Style and the `save_figure` idiom (PNG, `out_dir` created on demand) are
 reused from `neurovision.visualization.figures` rather than reinvented here.
 
 Example usage:
 
     python scripts/plot_semester_figures.py
+    python scripts/plot_semester_figures.py analysis.semester_figures.only=examples
 """
 
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import hydra
 import matplotlib
+import matplotlib.colors
+import matplotlib.patches
 import numpy as np
 import pandas as pd
+import torch
 from matplotlib.figure import Figure
 from omegaconf import DictConfig
 
@@ -44,6 +55,9 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 
+from neurovision.analysis.replay import load_case_logits  # noqa: E402
+from neurovision.inference.postprocess import postprocess_logits  # noqa: E402
+from neurovision.metrics.segmentation import classes_to_regions, dice_score  # noqa: E402
 from neurovision.utils.logging import setup_logging  # noqa: E402
 from neurovision.visualization.figures import REGION_COLORS, save_figure  # noqa: E402
 
@@ -371,6 +385,324 @@ def plot_realised_vs_nominal(
 
 
 # --------------------------------------------------------------------------- #
+# Figure 3 -- example segmentations from the deployed model (review row R13)
+# --------------------------------------------------------------------------- #
+_REGION_NAMES: tuple[str, str, str] = ("ET", "TC", "WT")
+
+# Class index -> (legend name, colour). Okabe-Ito colour-blind-safe palette.
+# Class 0 is background and is never drawn.
+_EXAMPLE_CLASSES: dict[int, tuple[str, str]] = {
+    1: ("NCR/NET", "#E69F00"),
+    2: ("ED", "#56B4E9"),
+    3: ("ET", "#D55E00"),
+}
+_OVERLAY_ALPHA = 0.45
+
+# Channel order of image.npy (z-scored): t1, t1ce, t2, flair.
+_FLAIR_CHANNEL = 3
+_T1CE_CHANNEL = 1
+
+_EXAMPLE_COLUMNS: tuple[str, ...] = ("FLAIR", "T1CE", "Reference", "Prediction")
+_SERIF_FALLBACKS = ["Times New Roman", "Liberation Serif", "Times", "DejaVu Serif"]
+_DICE_TOLERANCE = 1e-3
+_PED_NOTE = "PED reference labels count most non-enhancing tumour as core (note 58)"
+
+
+def select_example_cases(per_case: pd.DataFrame) -> dict[str, str]:
+    """Picks the typical and the failure case of one cohort from its per-case table.
+
+    TYPICAL: the case whose mean of dice_ET, dice_TC, dice_WT is closest to the
+    cohort median of that mean (ties broken by case_id). FAILURE: the lowest
+    dice_TC (ties broken by case_id). Cases with a NaN Dice are ignored.
+
+    Args:
+        per_case: Table with columns `case_id, dice_ET, dice_TC, dice_WT`.
+
+    Returns:
+        `{"typical": case_id, "failure": case_id}`.
+
+    Raises:
+        ValueError: No case has all three Dice values.
+    """
+    cols = ["dice_ET", "dice_TC", "dice_WT"]
+    table = per_case.dropna(subset=cols).copy()
+    if table.empty:
+        raise ValueError("select_example_cases: no case has finite dice_ET, dice_TC and dice_WT.")
+    table["case_id"] = table["case_id"].astype(str)
+    mean_dice = table[cols].mean(axis=1)
+    distance = (mean_dice - mean_dice.median()).abs()
+    # Sort by (distance, case_id): the id is only a tie-breaker.
+    typical = table.assign(_d=distance).sort_values(["_d", "case_id"]).iloc[0]["case_id"]
+    failure = table.sort_values(["dice_TC", "case_id"]).iloc[0]["case_id"]
+    return {"typical": str(typical), "failure": str(failure)}
+
+
+def regions_to_classes(regions: np.ndarray) -> np.ndarray:
+    """Converts nested binary regions into the three BraTS display classes.
+
+    ET = ET; NCR/NET = TC minus ET; ED = WT minus TC.
+
+    Args:
+        regions: Binary array `(3, D, H, W)`, channel order (ET, TC, WT).
+
+    Returns:
+        Integer array `(D, H, W)`: 0 background, 1 NCR/NET, 2 ED, 3 ET.
+    """
+    et, tc, wt = (regions[i] > 0.5 for i in range(3))
+    classes = np.zeros(et.shape, dtype=np.uint8)
+    # Written outermost first so inner regions overwrite the outer ones.
+    classes[wt & ~tc & ~et] = 2
+    classes[tc & ~et] = 1
+    classes[et] = 3
+    return classes
+
+
+def choose_axial_slice(reference: np.ndarray, prediction: np.ndarray) -> int:
+    """Index of the axial slice with the largest whole-tumour area.
+
+    Uses the reference WT channel; if the reference WT is empty, the predicted WT.
+    The axial axis is the LAST array axis (arrays are LPS, so axis 2 is S).
+
+    Args:
+        reference: Binary reference regions `(3, D, H, W)`.
+        prediction: Binary predicted regions `(3, D, H, W)`.
+
+    Returns:
+        Slice index along the last axis (0 if both are empty).
+    """
+    for regions in (reference, prediction):
+        area = (regions[2] > 0.5).sum(axis=(0, 1))
+        if area.max() > 0:
+            return int(np.argmax(area))
+    return 0
+
+
+def check_dice_matches_table(
+    prediction: np.ndarray, reference: np.ndarray, row: pd.Series, case_id: str
+) -> dict[str, float]:
+    """Asserts our recomputed Dice equals the per-case table (guards wrong case/logits).
+
+    Args:
+        prediction: Post-processed binary regions `(3, D, H, W)`.
+        reference: Reference binary regions `(3, D, H, W)`.
+        row: The case's row of the per-case table (`dice_ET`, `dice_TC`, `dice_WT`).
+        case_id: Used in the error message.
+
+    Returns:
+        Region name -> recomputed Dice.
+
+    Raises:
+        AssertionError: Any region differs from the table by more than 1e-3.
+    """
+    scores = dice_score(torch.from_numpy(prediction)[None], torch.from_numpy(reference)[None])[0]
+    recomputed = {name: float(scores[i]) for i, name in enumerate(_REGION_NAMES)}
+    for name, value in recomputed.items():
+        expected = float(row[f"dice_{name}"])
+        assert abs(value - expected) <= _DICE_TOLERANCE, (
+            f"Dice sanity check failed for {case_id} {name}: recomputed {value:.4f} from the "
+            f"logits and label, but the per-case table says {expected:.4f}. Wrong case, wrong "
+            "logits directory, or different post-processing."
+        )
+    return recomputed
+
+
+def _window(slice_2d: np.ndarray) -> tuple[float, float]:
+    """Per-slice 1st to 99th percentile display window."""
+    lo, hi = np.percentile(slice_2d, [1, 99])
+    return float(lo), float(hi) if hi > lo else float(lo) + 1.0
+
+
+def _show(ax: plt.Axes, slice_2d: np.ndarray, classes_2d: np.ndarray | None = None) -> None:
+    """Draws one panel. `.T` puts anterior at the top and patient-left on the image right.
+
+    Arrays are LPS (axis 0 grows toward patient left, axis 1 toward posterior), so after
+    the transpose rows run anterior->posterior and columns run right->left-of-patient,
+    which is the radiological convention.
+    """
+    lo, hi = _window(slice_2d)
+    ax.imshow(slice_2d.T, cmap="gray", vmin=lo, vmax=hi, origin="upper", interpolation="nearest")
+    if classes_2d is not None:
+        overlay = np.zeros((*classes_2d.T.shape, 4), dtype=float)
+        for index, (_, colour) in _EXAMPLE_CLASSES.items():
+            overlay[classes_2d.T == index] = (*matplotlib.colors.to_rgb(colour), _OVERLAY_ALPHA)
+        ax.imshow(overlay, origin="upper", interpolation="nearest")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+
+def _draw_example_row(
+    axes_row: Sequence[plt.Axes],
+    cohort: Mapping[str, str],
+    kind: str,
+    case_id: str,
+    row: pd.Series,
+    cfg: DictConfig,
+) -> dict[str, float]:
+    """Loads ONE case, runs the sanity check, draws four panels, returns its Dice.
+
+    Only this case's arrays are alive; they are released when the call returns.
+    """
+    prep_case = Path(str(cohort["prep_dir"])) / case_id
+    logits = load_case_logits(str(cohort["eval_dir"]), case_id)  # (3, D, H, W)
+    prediction = postprocess_logits(torch.from_numpy(logits)[None], cfg)[0].numpy()
+    label = np.load(prep_case / "label.npy")  # (D, H, W), values 0..3
+    reference = classes_to_regions(torch.from_numpy(label.astype(np.int64)))[0].numpy()
+    dice = check_dice_matches_table(prediction, reference, row, case_id)
+
+    k = choose_axial_slice(reference, prediction)
+    image = np.load(prep_case / "image.npy", mmap_mode="r")  # (4, D, H, W)
+    flair = np.asarray(image[_FLAIR_CHANNEL][:, :, k], dtype=np.float32)
+    t1ce = np.asarray(image[_T1CE_CHANNEL][:, :, k], dtype=np.float32)
+    ref_classes = regions_to_classes(reference[..., k : k + 1])[:, :, 0]
+    pred_classes = regions_to_classes(prediction[..., k : k + 1])[:, :, 0]
+
+    _show(axes_row[0], flair)
+    _show(axes_row[1], t1ce)
+    _show(axes_row[2], flair, ref_classes)
+    _show(axes_row[3], flair, pred_classes)
+    axes_row[0].text(
+        -0.04,
+        0.5,
+        f"{cohort['name']} \u00b7 {kind} \u00b7\n{case_id}\n"
+        f"Dice ET {dice['ET']:.2f} \u00b7 TC {dice['TC']:.2f} \u00b7 WT {dice['WT']:.2f}",
+        transform=axes_row[0].transAxes,
+        ha="right",
+        va="center",
+    )
+    return dice
+
+
+def plot_example_segmentations(
+    cohorts: Sequence[Mapping[str, str]],
+    selections: Sequence[dict[str, str]],
+    per_case_tables: Sequence[pd.DataFrame],
+    cfg: DictConfig,
+) -> tuple[Figure, list[dict[str, object]]]:
+    """Draws the (2 x n_cohorts) x 4 grid of example segmentations.
+
+    Args:
+        cohorts: Per cohort `name, eval_dir, prep_dir` (and `per_case`).
+        selections: Per cohort `{"typical": id, "failure": id}`.
+        per_case_tables: Per cohort per-case table (for the Dice sanity check).
+        cfg: Composed config; `inference.postprocess` drives the post-processing.
+
+    Returns:
+        The figure and one record per row (cohort, kind, case_id, dice).
+    """
+    n_rows = 2 * len(cohorts)
+    records: list[dict[str, object]] = []
+    with plt.rc_context(
+        {
+            "font.family": "serif",
+            "font.serif": _SERIF_FALLBACKS,
+            "font.size": 9,
+            "figure.facecolor": "white",
+            "savefig.facecolor": "white",
+        }
+    ):
+        fig, axes = plt.subplots(
+            n_rows, 4, figsize=(7.6, 1.85 * n_rows + 0.5), squeeze=False, facecolor="white"
+        )
+        fig.subplots_adjust(left=0.30, right=0.99, top=0.95, bottom=0.07, wspace=0.03, hspace=0.04)
+        r = 0
+        for cohort, selection, table in zip(cohorts, selections, per_case_tables, strict=True):
+            lookup = table.astype({"case_id": str}).set_index("case_id", drop=False)
+            for kind in ("typical", "failure"):
+                case_id = selection[kind]
+                dice = _draw_example_row(axes[r], cohort, kind, case_id, lookup.loc[case_id], cfg)
+                records.append(
+                    {"cohort": cohort["name"], "kind": kind, "case_id": case_id, "dice": dice}
+                )
+                r += 1
+        for ax, title in zip(axes[0], _EXAMPLE_COLUMNS, strict=True):
+            ax.set_title(title)
+        handles = [
+            matplotlib.patches.Patch(facecolor=c, alpha=_OVERLAY_ALPHA + 0.2, label=n)
+            for n, c in _EXAMPLE_CLASSES.values()
+        ]
+        fig.legend(handles=handles, loc="lower center", ncol=3, frameon=False)
+    return fig, records
+
+
+def save_examples_sidecar(
+    path: Path,
+    records: Sequence[Mapping[str, object]],
+    sources: Sequence[str],
+) -> None:
+    """Writes `fig_examples_deployed.txt`: command, sources, selections, caveats.
+
+    Args:
+        path: Destination `.txt`.
+        records: Rows returned by `plot_example_segmentations`.
+        sources: Every file path read.
+    """
+    rules = {
+        "typical": "per-case mean of dice_ET/TC/WT closest to the cohort median, ties by case_id",
+        "failure": "lowest dice_TC in the cohort, ties by case_id",
+    }
+    lines = [
+        "Figure 15 (R13): example segmentations, deployed model (neurovision, seed 42).",
+        "",
+        "Command: " + " ".join([sys.executable, *sys.argv]),
+        "",
+        "Orientation: arrays are LPS; panels are radiological, anterior at top, "
+        "patient LEFT is on the image RIGHT.",
+        "Slice: axial slice with the largest reference WT area (predicted WT if reference empty).",
+        "Overlay: NCR/NET = TC minus ET (orange), ED = WT minus TC (blue), ET (vermilion); "
+        "alpha 0.45. Prediction = saved logits + deployed inference.postprocess.",
+        "",
+        "Selected cases:",
+    ]
+    for rec in records:
+        d = rec["dice"]
+        lines.append(
+            f"  {rec['cohort']} | {rec['kind']} | {rec['case_id']} | "
+            f"Dice ET {d['ET']:.4f} TC {d['TC']:.4f} WT {d['WT']:.4f} | "
+            f"rule: {rules[str(rec['kind'])]}"
+        )
+    lines += ["", "Sources read:", *[f"  {s}" for s in sources], "", _PED_NOTE, ""]
+    path.write_text("\n".join(lines), encoding="utf-8")
+    logger.info("plot_semester_figures: wrote %s", path)
+
+
+def run_examples_figure(cfg: DictConfig) -> list[Path]:
+    """Builds and saves `fig_examples_deployed.png` and its sidecar.
+
+    Args:
+        cfg: Composed config; reads `analysis.semester_figures.examples` and
+            `inference.postprocess`.
+
+    Returns:
+        The written paths: PNG, then sidecar.
+    """
+    figures_cfg = cfg.analysis.semester_figures
+    ex_cfg = figures_cfg.examples
+    out_dir = Path(str(figures_cfg.out_dir))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cohorts = [{k: str(v) for k, v in c.items()} for c in ex_cfg.cohorts]
+    tables, selections, sources = [], [], []
+    for cohort in cohorts:
+        table = pd.read_csv(cohort["per_case"])
+        tables.append(table)
+        selections.append(select_example_cases(table))
+        sources += [
+            cohort["per_case"],
+            str(Path(cohort["eval_dir"]) / "logits"),
+            cohort["prep_dir"],
+        ]
+    fig, records = plot_example_segmentations(cohorts, selections, tables, cfg)
+    png_path = out_dir / str(ex_cfg.out_name)
+    fig.savefig(png_path, dpi=300, facecolor="white")
+    plt.close(fig)
+    sidecar = png_path.with_suffix(".txt")
+    save_examples_sidecar(sidecar, records, sources)
+    logger.info("plot_semester_figures: wrote %s", png_path)
+    return [png_path, sidecar]
+
+
+# --------------------------------------------------------------------------- #
 # Hydra driver
 # --------------------------------------------------------------------------- #
 def _load_realised_risk_with_cohort(path: Path) -> pd.DataFrame | None:
@@ -422,6 +754,14 @@ def run_plot_semester_figures(cfg: DictConfig) -> dict[str, list[Path]]:
 
     written: dict[str, list[Path]] = {}
 
+    # `only=examples` runs just the example figure; the default ("all") keeps the
+    # original two figures and adds the example figure when examples.enabled.
+    only = str(figures_cfg.get("only", "all"))
+    if only == "examples":
+        written["fig_examples_deployed"] = run_examples_figure(cfg)
+        _log_summary(written)
+        return written
+
     local_recal_path = Path(str(figures_cfg.local_recalibration_summary))
     logger.info("plot_semester_figures: reading %s", local_recal_path)
     summary = pd.read_csv(local_recal_path)
@@ -436,6 +776,9 @@ def run_plot_semester_figures(cfg: DictConfig) -> dict[str, list[Path]]:
             fig2, out_dir, "fig_realised_vs_nominal", formats=("png",), dpi=dpi, close=True
         )
 
+    if figures_cfg.get("examples") is not None and bool(figures_cfg.examples.enabled):
+        written["fig_examples_deployed"] = run_examples_figure(cfg)
+
     _log_summary(written)
     return written
 
@@ -443,7 +786,7 @@ def run_plot_semester_figures(cfg: DictConfig) -> dict[str, list[Path]]:
 def _log_summary(written: Mapping[str, list[Path]]) -> None:
     """Logs and prints a compact end-of-run summary, matching the other analysis drivers."""
     lines = ["=" * 70, "Semester figures summary", "=" * 70]
-    for stem in ("fig_local_recalibration", "fig_realised_vs_nominal"):
+    for stem in ("fig_local_recalibration", "fig_realised_vs_nominal", "fig_examples_deployed"):
         if stem in written:
             lines.append(f"  {stem}: {[str(p) for p in written[stem]]}")
         else:
