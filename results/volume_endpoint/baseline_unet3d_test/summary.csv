@@ -1,0 +1,2 @@
+name,n,p_usable_dice,p_usable_dice_lo,p_usable_dice_hi,p_usable_volume,p_usable_volume_lo,p_usable_volume_hi,p_usable_both,p_usable_both_lo,p_usable_both_hi,agreement_rate,n_ref_empty_ET,median_vol_rel_err_WT,median_vol_rel_err_ET
+baseline_unet3d_test,189,0.9259259259259259,0.8888888888888888,0.9629629629629629,0.783068783068783,0.7248677248677249,0.8412698412698413,0.7671957671957672,0.7037037037037037,0.8253968253968254,0.8253968253968254,5,0.038570386579139394,0.0615423440381493

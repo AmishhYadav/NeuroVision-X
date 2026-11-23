@@ -832,3 +832,4 @@ Full detail and restart commands: `status_2026-09-27.md`. In short:
   published BraTS numbers; lesion-wise results are exploratory; α=0.20 conformal thresholds are
   grid-censored; the conformal bound is an average over studies, never per patient; recalibration
   results are counterfactual; real-DICOM results are not external validation.
+- 2026-11-24 — W2.5 volume endpoint measured (note 65, C32). W3.2 in-house bridge failure traced to a 96³-vs-64³ ROI bug in the driver, fixed (`c88b494`), CPU bridge PASS; probe v2 and the W2.6 nnU-Net probability export launched on Kaggle.

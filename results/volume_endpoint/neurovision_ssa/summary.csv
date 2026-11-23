@@ -1,0 +1,2 @@
+name,n,p_usable_dice,p_usable_dice_lo,p_usable_dice_hi,p_usable_volume,p_usable_volume_lo,p_usable_volume_hi,p_usable_both,p_usable_both_lo,p_usable_both_hi,agreement_rate,n_ref_empty_ET,median_vol_rel_err_WT,median_vol_rel_err_ET
+neurovision_ssa,60,0.8,0.7,0.9,0.5333333333333333,0.4,0.6666666666666666,0.4666666666666667,0.3333333333333333,0.6,0.6,0,0.0347710091707415,0.21838453926278678

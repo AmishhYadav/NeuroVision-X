@@ -1,0 +1,2 @@
+name,n,p_usable_dice,p_usable_dice_lo,p_usable_dice_hi,p_usable_volume,p_usable_volume_lo,p_usable_volume_hi,p_usable_both,p_usable_both_lo,p_usable_both_hi,agreement_rate,n_ref_empty_ET,median_vol_rel_err_WT,median_vol_rel_err_ET
+neurovision_val,187,0.9037433155080213,0.8609625668449198,0.946524064171123,0.8128342245989305,0.7540106951871658,0.8663101604278075,0.786096256684492,0.7272727272727273,0.839572192513369,0.8556149732620321,2,0.038015093232862236,0.06702619414483829

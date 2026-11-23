@@ -3020,3 +3020,52 @@ evidence about the setup, and forgetting it means repeating it.
     now a tracked file: `results/compare_family/c1_headline/family.csv`
     (`scripts/compare_family.py analysis=c1_headline`), and the report's number
     audit registers both CI ends against it (118 entries, 0 mismatches).
+
+65. **W2.5 VOLUME ENDPOINT -- A SECOND "USABLE" DEFINITION IS STRICTER IN
+    DISTRIBUTION, LOOSER ON PED, AND MOSTLY AN ENHANCING-TUMOUR ENDPOINT
+    (2026-11-24, MasterPlan W2.5).** Descriptive, no protocol, no hypothesis
+    test. `scripts/volume_endpoint.py` (library `c4f43c5`) replayed the saved
+    fp16 logits of `neurovision` and `baseline_unet3d` on val/test/SSA/PED with
+    deployed post-processing (~17 CPU-min, one job). A case is **volume-usable**
+    iff relative volume error ≤ 25% on WT and on ET (empty reference ET: any
+    predicted ET voxel fails). The replayed Dice equals each eval's
+    `per_case_metrics.csv` (max |Δ| ≈ 1e-16), so the Dice column is the
+    published one. Results: `results/volume_endpoint/summary.csv`,
+    per case `results/volume_endpoint/<model>_<cohort>/per_case_volumes.csv`;
+    95% CIs are case-bootstrap percentiles.
+
+    | `neurovision` | n | usable (Dice) | usable (volume) | both | agree |
+    |---|---|---|---|---|---|
+    | val | 187 | 0.904 [0.861, 0.947] | 0.813 [0.754, 0.866] | 0.786 | 0.856 |
+    | test | 189 | 0.937 [0.899, 0.968] | 0.804 [0.746, 0.862] | 0.788 | 0.836 |
+    | SSA | 60 | 0.800 [0.700, 0.900] | 0.533 [0.400, 0.667] | 0.467 | 0.600 |
+    | PED | 99 | 0.273 [0.182, 0.364] | 0.414 [0.323, 0.515] | 0.162 | 0.636 |
+
+    `baseline_unet3d` is indistinguishable everywhere (test 0.926 / 0.783;
+    SSA 0.800 / 0.583; PED 0.293 / 0.465): the model choice does not move
+    either rate at these n.
+
+    **What the second definition sees.** (i) It is **mostly an ET endpoint**:
+    of the volume failures, ET alone fails in 23 of 27 on test and 21 of 26 on
+    SSA; median relative ET volume error is 0.053 on test but **0.218 on SSA**
+    and 0.397 on PED, against 0.04 / 0.04 / 0.11 for WT. (ii) It disagrees
+    with Dice in both directions: 28 test cases are Dice-usable but
+    volume-unusable (mostly small-ET volume errors a Dice ≥ 0.7 on WT and TC
+    never looks at), 3 the reverse. (iii) On **PED it is looser than Dice**
+    (0.41 vs 0.27) because it does not look at TC, where the PED
+    label-definition failure lives (note 58): 25 PED cases are volume-usable
+    but Dice-unusable. Half of PED's ET volume failures (24 of 51) are cases
+    with reference ET < 1 ml or empty, where a relative-volume rule is
+    unstable. So the 25%-on-WT-and-ET rule is not a stricter version of the
+    Dice rule; it measures something different, and under shift it measures
+    ET volume.
+
+    **How it is used.** Every usable table now carries both columns (MasterPlan
+    W2.5). W2.3's second target (T-Vol) is this definition, unchanged; the PED
+    T-Vol cell must be read as "ET and WT volume", not as the TC failure. No
+    threshold was tuned on these numbers. **Author to verify the anchor before
+    the paper cites it:** 25% is the RANO 2D (bidimensional product) progression
+    threshold; volumetric RANO equivalents are larger (≈ +40% progression), so
+    the paper must call 25% a strict, RANO-motivated choice, not a RANO rule.
+    The 0.7 Dice bar's inter-rater anchor from the BraTS literature is still to
+    be quoted with its source.

@@ -1,0 +1,2 @@
+name,n,p_usable_dice,p_usable_dice_lo,p_usable_dice_hi,p_usable_volume,p_usable_volume_lo,p_usable_volume_hi,p_usable_both,p_usable_both_lo,p_usable_both_hi,agreement_rate,n_ref_empty_ET,median_vol_rel_err_WT,median_vol_rel_err_ET
+baseline_unet3d_ssa,60,0.8,0.7,0.9,0.5833333333333334,0.4662500000000037,0.7,0.5,0.36666666666666664,0.6166666666666667,0.6166666666666667,0,0.03340548573556951,0.196162627842761
