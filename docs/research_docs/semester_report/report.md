@@ -28,7 +28,7 @@ Deep-learning models for brain tumour segmentation are usually validated on clea
 
 The segmentation model is a dual encoder, a 3D convolutional network and a Swin Transformer, joined by adaptive gated cross-attention fusion at four scales, a U-Net decoder and three output heads (34.9 million parameters). It was trained on a frozen random split of the BraTS 2021 training set (875 / 187 / 189 cases) and tested on two external cohorts, BraTS-Africa (60 cases) and paediatric BraTS (99 cases), and on real clinical DICOM of 40 patients. Around the model sits a full clinical pipeline: DICOM ingest, co-registration to the SRI24 atlas, skull stripping, label-free input quality control, a quality-control model, conformal risk control, and a refusal gate that returns PROCEED, CAUTION or REFUSE, served through a web application with a 3D viewer and an atlas-based anatomical report.
 
-Against a U-Net trained with the same recipe, the model improves enhancing-tumour Dice by +0.0267 (95% CI 0.0166 to 0.0393, Holm-adjusted p = 1.4 × 10⁻²¹, n = 189), replicated at a second seed pair and about 80% attributable to architecture rather than parameter count. A properly configured nnU-Net, however, beats it (0.8879 vs 0.8709), so the architecture claim was withdrawn. The project's founding hypothesis, that conditioning the fusion gate on branch disagreement produces the gain, returned a pre-registered null. A distribution-free bound on the fraction of tumour the mask misses holds in distribution in all six tested cells, and breaks under distribution shift by an amount ordered by the size of the shift: about 1.1 times the nominal level on BraTS-Africa whole tumour, up to 11.5 times on paediatric tumour core. End to end, the pipeline returns a usable mask for 85%, 78% and 24% of in-distribution, African and paediatric studies, with silent failure rates of 4.2%, 18.3% and 49.5%; the refusal gate cannot see cohort-level shift. A counterfactual analysis shows that 10 to 40 labelled local cases restore the bound at a new site, except for paediatric tumour core, which cross-fitted fine-tuning recovers.
+Against a U-Net trained with the same recipe, the model improves enhancing-tumour Dice by +0.0267 (95% CI 0.0166 to 0.0393, Holm-adjusted p = 1.4 × 10⁻²¹, n = 189), and the result replicated at a second seed pair. About 40% of that margin comes from two test cases with no enhancing tumour in the reference; on the 184 cases that have one, the gain is +0.0165. A width-matched control suggests that most of the gain comes from the architecture rather than the parameter count, but those arms are single-seed, so the split is descriptive. A properly configured nnU-Net beats the model (0.8879 vs 0.8709), so the architecture claim was withdrawn. The project's founding hypothesis, that conditioning the fusion gate on branch disagreement produces the gain, returned a pre-registered null. A distribution-free bound on the fraction of tumour the mask misses holds in distribution in all six tested cells, for the matched U-Net, the proposed model and nnU-Net. Under deployment change it breaks in 7 of 12 shifted cells (5 of 12 for nnU-Net): modestly on BraTS-Africa (whole tumour about 1.1 times the nominal level), and outright on paediatric tumour core (up to 11.5 times), where the reference labels define the core differently and no threshold repairs it for any model. End to end, the pipeline returns a usable mask for 85%, 78% and 24% of in-distribution, African and paediatric studies, with silent failure rates of 4.2%, 18.3% and 49.5%; the refusal gate cannot see cohort-level shift. A counterfactual analysis shows that 10 to 40 labelled local cases restore the bound at a new site, except for paediatric tumour core, which cross-fitted fine-tuning recovers.
 
 **Keywords:** brain tumour segmentation, BraTS, Swin Transformer, conformal risk control, distribution shift, refusal gate, pre-registration, clinical imaging pipeline.
 
@@ -100,7 +100,7 @@ This project builds a full brain tumour segmentation system and answers those qu
 
 The project started with an architectural idea: a dual-encoder network whose fusion gate reads how much its two branches disagree at each voxel, expected to give better calibrated and better bounded segmentations. Every claim was pre-registered, that is, written down with its decision rule before the data existed. The evidence then reshaped the project three times (Figure 1). The model turned out to be more accurate but not more reliable; its claimed novelty was not what produced the gain; and in the end a properly configured nnU-Net beat it. Instead of hiding these results, the project rebuilt the reliability question as a measurable property of a wrapper around *any* model. The final thesis is:
 
-> *A tumour segmentation model wrapped in a distribution-free error bound and a refusal gate: the bound holds in distribution, fails under distribution shift in proportion to the shift, and the gate cannot see cohort-level shift. We measure where it breaks, and what a new site needs in order to restore it.*
+> *A conformal bound and a refusal gate around a tumour segmentation model hold where the data are exchangeable with the calibration set. Under acquisition and population change the bound degrades and a stronger model shrinks the damage; where the label definition changes it fails outright for every model and no threshold repairs it. The gate sees bad masks, not changed cohorts. We measure each failure, and what local data restores.*
 
 ![Project timeline and its three identities. Each change was forced by a measured result.](figures/report_diagrams/fig_timeline.png)
 
@@ -122,10 +122,10 @@ The project is a college course project (semester demo and report, November 2026
 ## 1.6 Contributions
 
 - A controlled study of what a dual-encoder fusion architecture does and does not buy, including a width-matched capacity control, a parameter-matched ablation of the founding mechanism, a two-seed noise floor and a full-recipe nnU-Net comparison, all pre-registered.
-- A measurement of conformal risk control under a graded distribution shift (adult glioma → African adult glioma → paediatric tumours) showing that the violation grows with the size of the shift.
+- A measurement of conformal risk control on three models under two kinds of deployment change (adult glioma → African adult glioma, a change of acquisition and population; → paediatric tumours, which also changes what the tumour-core label means), separating the label-definition failure from the imaging shift. With three cohorts, no ordering by shift size is claimed.
 - An end-to-end DICOM-in pipeline with a refusal gate, and an honest error budget of what it returns per cohort, including its silent-failure rate.
 - A counterfactual estimate of how many labelled local cases restore the bound, a sub-region shown before the run to be unrecoverable by recalibration, and evidence that fine-tuning recovers it.
-- A reproducible, tested code base (about 2,670 automated CPU tests), eleven pre-registrations and a public record of every negative result.
+- A reproducible, tested code base (about 2,670 automated CPU tests), fourteen pre-registration documents with their amendments, and a public record of every negative result.
 
 ## 1.7 Organisation of the report
 
@@ -153,13 +153,13 @@ Conformal prediction gives distribution-free guarantees from a held-out calibrat
 
 ## 2.5 Closest prior work
 
-Three 2026 papers are direct neighbours and limit what this project may claim as new (Table 2). Coverage failure under shift for brain tumour segmentation is therefore already reported; what this project adds is a graded shift across populations, a sub-region shown in advance to be unrecoverable, and an end-to-end pipeline measured against the bound.
+Three 2026 papers are direct neighbours and limit what this project may claim as new (Table 2). Coverage failure under shift for brain tumour segmentation is therefore already reported; what this project adds is a comparison across populations and across a change in label definition on three models, a sub-region shown in advance to be unrecoverable by recalibration, and an end-to-end pipeline measured against the bound.
 
 **Table 2.** Closest prior work and how this project differs.
 
 | Work | What it shows | Difference from this project |
 | --- | --- | --- |
-| Shahid, arXiv 2606.20115 (2026) | Pooled conformal risk control on FeTS-2022 brain tumours violates the false-negative target at 40% of individual hospitals | Their shift is between sites within one adult population; ours is across populations, ordered by distance |
+| Shahid, arXiv 2606.20115 (2026) | Pooled conformal risk control on FeTS-2022 brain tumours violates the false-negative target at 40% of individual hospitals | Their shift is between sites within one adult population; ours is across populations and a label-definition change, without a claimed ordering by shift size |
 | Adhikary et al., arXiv 2608.18193 (2026) | Per-organ recall control in CT fails after transfer; ~10–40 local cases re-certify, some organs never | Same shape of answer in CT organs; ours is MRI tumour sub-regions with the infeasible case derived before the run |
 | Liu et al., arXiv 2608.10893 (2026) | Theory for certified selective risk control under bounded covariate shift (text data) | Their refusal is certified; our gate is not, and we measure that it cannot see cohort shift |
 
@@ -173,7 +173,7 @@ Turning research segmentation into a clinical tool requires DICOM conversion (dc
 
 ## 3.1 BraTS 2021
 
-The training data is the BraTS 2021 training set: 1,251 adult glioma cases, each with four co-registered, skull-stripped MRI sequences (T1, T1CE, T2, FLAIR) at 1 mm isotropic resolution on a 240 × 240 × 155 grid, and an expert label map with three classes (necrotic/non-enhancing core, oedema, enhancing tumour). The cases were split once, with a seeded random generator, into **875 training, 187 validation and 189 test** cases, and the split was frozen in configuration (Figure 2). Nothing outside the training split was ever fitted: not the networks, not the calibration temperature, not the conformal threshold and not the refusal gate thresholds, which were all set on validation.
+The training data is the BraTS 2021 training set: 1,251 adult glioma cases, each with four co-registered, skull-stripped MRI sequences (T1, T1CE, T2, FLAIR) at 1 mm isotropic resolution on a 240 × 240 × 155 grid, and an expert label map with three classes (necrotic/non-enhancing core, oedema, enhancing tumour). The cases were split once, with a seeded random generator, into **875 training, 187 validation and 189 test** cases, and the split was frozen in configuration (Figure 2). The networks were trained on the training split only. The validation split was used for more than checkpoint selection: the calibration temperature, the conformal threshold, the QC model's cut-points and the refusal-gate thresholds were all fitted on it. The test split was never used to fit anything.
 
 Because the split is a random split of the BraTS *training* set, the numbers in this report are not comparable to published BraTS leaderboard numbers, which are measured on the official validation set.
 
@@ -192,7 +192,7 @@ Because the split is a random split of the BraTS *training* set, the numbers in 
 | Dataset | Cases | Role | Used for fitting? |
 | --- | --- | --- | --- |
 | BraTS 2021 train split | 875 | Train every model | Yes |
-| BraTS 2021 validation split | 187 | Checkpoint selection, calibration, conformal threshold, gate thresholds | Selection only |
+| BraTS 2021 validation split | 187 | Checkpoint selection, calibration, conformal threshold, gate thresholds | Yes: selection, temperature, conformal threshold, QC cut-points, gate thresholds |
 | BraTS 2021 test split | 189 | In-distribution evaluation | No |
 | BraTS-Africa 2023 | 60 | External evaluation (imaging shift) | No (except cross-fitted fine-tune, §6.8) |
 | BraTS-PEDs 2023 | 99 | External evaluation (population and label shift) | No (except cross-fitted fine-tune, §6.8) |
@@ -202,13 +202,17 @@ Because the split is a random split of the BraTS *training* set, the numbers in 
 
 Each case is reoriented from its own affine, kept at 1 mm isotropic spacing, normalised with a z-score computed over non-zero (brain) voxels for each sequence, and cropped to the bounding box of the brain. Images are stored as float16 and labels as uint8 NumPy arrays with a per-case metadata file recording the crop box and orientation, so predictions can be restored exactly to the original grid. The raw labels are converted to the three nested region channels (ET ⊂ TC ⊂ WT) used for training and scoring. All 1,251 cases were preprocessed without failure (34.2 GB). SHA-256 manifests are committed for the external cohorts.
 
+## 3.4 Ethics and data licences
+
+All imaging data are public, de-identified research releases used under their published terms: BraTS 2021 (RSNA-ASNR-MICCAI challenge data), BraTS-Africa 2023 and BraTS-PEDs 2023 (Synapse challenge releases), and the RSNA-MICCAI Brain Tumor Radiogenomic Classification DICOM (Kaggle competition data, rules accepted 2026-09-26). No new data were collected from people and no ethics approval was required for this secondary analysis. The data terms forbid redistribution: the preprocessed copies used for GPU training are held in private Kaggle datasets, and no image or label is published with this report or the code. Model weights trained on these data are not released until their terms have been checked (recorded as a release task).
+
 <!-- pagebreak -->
 
 # 4. Methodology
 
 ## 4.1 Proposed model: NeuroVision-X
 
-The model (Figure 3) has five parts. A **3D CNN encoder** of residual blocks produces five feature levels, from a full-resolution stem of 32 channels down to 320 channels at stride 16. A **Swin Transformer encoder** with four stages processes the same input through patch embedding and shifted-window self-attention, providing long-range context. At each of the four Swin levels an **adaptive gated cross-attention fusion block** merges the two streams. A **U-Net decoder** with attention gates upsamples the fused features. Three **heads** produce the outputs: a segmentation head with deep supervision emitting ET, TC and WT logits, plus a confidence head and a boundary head used as auxiliary training signals. The model has **34,911,341 parameters**; most of them are in the CNN encoder (18.9 M) and decoder (12.9 M), while the Swin branch has only 2.0 M and the fusion blocks 1.0 M.
+The model (Figure 3) has five parts. A **3D CNN encoder** of residual blocks produces five feature levels, from a full-resolution stem of 32 channels down to 320 channels at stride 16. A **Swin Transformer encoder** with four stages processes the same input through patch embedding and shifted-window self-attention, providing long-range context. At each of the four Swin levels an **adaptive gated cross-attention fusion block** merges the two streams. A **U-Net decoder** upsamples the fused features with learned transposed convolutions and skip connections (attention gates exist in the code but are switched off in every trained model). Three **heads** produce the outputs: a segmentation head with deep supervision emitting ET, TC and WT logits, plus a confidence head and a boundary head used as auxiliary training signals. The model has **34,911,341 parameters**; most of them are in the CNN encoder (18.9 M) and decoder (12.9 M), while the Swin branch has only 2.0 M and the fusion blocks 1.0 M.
 
 ![NeuroVision-X architecture: dual encoder, gated cross-attention fusion at four scales, U-Net decoder and three heads.](figures/report_diagrams/fig_architecture.png)
 
@@ -246,7 +250,7 @@ Training ran on Kaggle Tesla T4 GPUs (14.56 GiB usable) in sessions capped at 12
 
 ## 4.4 Inference and post-processing
 
-Whole volumes are segmented with a sliding window of 64³, overlap 0.5 and Gaussian blending. Post-processing enforces the nesting ET ⊂ TC ⊂ WT and removes connected components smaller than 50 voxels, and predictions are restored to the original 240 × 240 × 155 grid with the saved crop box. Inference takes about 4 s per case on a T4 and about 1.4 minutes per case on the author's laptop CPU. Logits for every evaluated split are saved in float16, so all later re-scoring (new metrics, conformal analysis, recalibration) needs no new inference.
+Whole volumes are segmented with a sliding window of 64³, overlap 0.5 and Gaussian blending. Post-processing enforces the nesting ET ⊂ TC ⊂ WT and removes connected components smaller than 50 voxels, and predictions are restored to the original 240 × 240 × 155 grid with the saved crop box. Inference took 11.9 s per case on a T4 (189 test cases in 35 min 43 s) and about 1.4 minutes per case on the author's laptop CPU. Logits for every evaluated split are saved in float16, so all later re-scoring (new metrics, conformal analysis, recalibration) needs no new inference.
 
 ## 4.5 Evaluation metrics
 
@@ -260,7 +264,7 @@ Whole volumes are segmented with a sliding window of 64³, overlap 0.5 and Gauss
 
 Every comparison is **paired** over the same cases. Confidence intervals come from a paired bootstrap that resamples case indices (10,000 resamples), p-values from the Wilcoxon signed-rank test, and every family of comparisons is corrected with the Holm–Bonferroni method. A difference is called better or worse only if its CI excludes zero and its Holm-adjusted p is below 0.05; otherwise it is *inconclusive*, which is never read as equivalence.
 
-Each experiment that could change a claim was **pre-registered**: a document stating the hypothesis, the endpoints, the decision rule and an abort budget was committed to version control, with a timestamp, before the first number existed. Eleven such documents govern the results in this report. This discipline is why the negative results below can be trusted as much as the positive ones.
+Each experiment that could change a claim was **pre-registered**: a document stating the hypothesis, the endpoints, the decision rule and an abort budget was committed to version control, with a timestamp, before the first number existed. Fourteen such documents, several with dated amendments, govern the results in this report. Not every one was written before every related output existed: some were written after a neighbouring analysis had been seen, and the repository's timeline table records that ordering for each. Within those limits, this discipline is why the negative results below can be trusted as much as the positive ones.
 
 ## 4.7 Uncertainty and quality signals
 
@@ -330,7 +334,7 @@ The FastAPI backend serves precomputed research results and runs live clinical j
 
 ## 5.5 Engineering practices
 
-- **Tests first for every component.** Every model part has a CPU shape test on tiny tensors that runs in under a second; losses and metrics are tested against hand-computed values; data tests use synthetic volumes. The full suite runs on a laptop CPU in about 70 seconds.
+- **Tests written with every component.** Each module was implemented together with its tests, in the same step, by the implementing agent; tests were not written before the code. Every model part has a CPU shape test on tiny tensors that runs in under a second; losses and metrics are tested against hand-computed values; data tests use synthetic volumes. The full suite runs on a laptop CPU in about 70 seconds.
 - **Resume and provenance.** Every GPU run is pinned to a specific git commit and checked for resume correctness by seven dedicated tests; a four-second end-to-end smoke test runs before every GPU session.
 - **Analysis fixes are verified on real data.** A fix is accepted only when re-running the real analysis moves the output in the predicted direction, after a calibration bug once survived a green test suite.
 - **Caches versus results.** Volume-sized arrays (logits, predictions) are treated as rebuildable caches while their checkpoint exists; small CSV results are kept forever.
@@ -347,7 +351,7 @@ Every number in this chapter is taken from the project's claims-and-evidence tab
 
 ## 6.1 Segmentation accuracy in distribution
 
-On the 189-case test split, NeuroVision-X improves enhancing-tumour Dice over the matched U-Net by **+0.0267** (95% CI 0.0166 to 0.0393; Holm-adjusted p = 1.4 × 10⁻²¹) and tumour-core Dice by +0.0103; the whole-tumour difference is inconclusive (Table 6, Figure 9). The result replicates at a second seed of both models (+0.0247, CI 0.0116 to 0.0420). A second seed of NeuroVision-X alone moves test ET Dice by only +0.0021, so the margin is about thirteen times the seed noise floor. Flip test-time augmentation changes ET Dice by +0.0007, not resolvable at n = 189, so the margin is not an artefact of inference settings.
+On the 189-case test split, NeuroVision-X improves enhancing-tumour Dice over the matched U-Net by **+0.0267** (95% CI 0.0166 to 0.0393; Holm-adjusted p = 1.4 × 10⁻²¹) and tumour-core Dice by +0.0103; the whole-tumour difference is inconclusive (Table 6, Figure 9). The result replicates at a second seed of both models (+0.0247, CI 0.0116 to 0.0420). A second seed of NeuroVision-X alone moves test ET Dice by +0.0021 and a second seed of the U-Net by +0.0041, so the margin is about six times the larger of these retraining shifts. About 40% of the +0.0267 comes from two of the five test cases with no enhancing tumour in the reference, which NeuroVision-X scores as 1 and the U-Net as 0 at both seeds; on the 184 cases with enhancing tumour the gain is **+0.0165** (CI 0.0125 to 0.0211), about four times the larger retraining shift. Both figures are reported; the direction is unchanged. Flip test-time augmentation changes ET Dice by +0.0007, not resolvable at n = 189, so the margin is not an artefact of inference settings.
 
 **Table 6.** Test-set results (BraTS 2021 test split, n = 189). Higher Dice and lower HD95 are better.
 
@@ -365,7 +369,7 @@ On the 189-case test split, NeuroVision-X improves enhancing-tumour Dice over th
 
 ## 6.2 Where the gain comes from
 
-The width-matched capacity control (34.83 M vs 34.91 M parameters) recovers only +0.0055 of the ET gain, so about **80%** of it is architecture rather than capacity (0.79 and 0.80 over two independent training draws). Within the architecture, the content-only gate ablation scores within noise of the full model (+0.0022, CI −0.0067 to +0.0152): the gain comes from **gated cross-attention fusion itself**, and the disagreement conditioning, the project's founding hypothesis, adds nothing measurable (Figure 10). This is a pre-registered null and is reported as one.
+The width-matched capacity control (34.83 M vs 34.91 M parameters) recovers +0.0055 of the ET gain, which would attribute about 80% of it to architecture rather than capacity (0.79 and 0.80 over two independent training draws of the control). This split is descriptive, not a measured proportion: each arm is a single seed of its model, and the width term (+0.0055) is the same size as the seed-to-seed shift (+0.0041), so the decomposition is within noise of quite different splits. Within the architecture, the content-only gate ablation scores within noise of the full model (+0.0022, CI −0.0067 to +0.0152): the gain comes from **gated cross-attention fusion itself**, and the disagreement conditioning, the project's founding hypothesis, adds nothing measurable (Figure 10). This is a pre-registered null and is reported as one.
 
 ![Decomposition of the enhancing-tumour Dice gain over the matched U-Net, with nnU-Net for reference.](figures/report_diagrams/fig_decomposition.png)
 
@@ -401,7 +405,9 @@ Single-pass predictive entropy was never beaten as a per-voxel error localiser. 
 
 ## 6.7 The error bound: where it holds and where it breaks
 
-Calibrated on validation and applied frozen, the conformal bound **holds in distribution in all six cells** (WT and TC at three α levels), with realised risk at 0.64 to 0.96 times nominal, for both NeuroVision-X and the U-Net. Its cost is small: at α = 0.05 the conservative mask grows 1.10 times (WT) and 1.18 times (TC), and at looser α it is even smaller than the default mask. Under shift the bound **fails, by an amount ordered by the size of the shift** (Figure 12): BraTS-Africa whole tumour about 1.1 times nominal, paediatric whole tumour 1.4 to 1.9 times, and paediatric tumour core 3.5 to 11.5 times. Seven of twelve shifted cells are violated for each model. Part of the paediatric tumour-core failure is a difference in label definition rather than imaging alone: the paediatric reference counts most non-enhancing tumour as core (median 84% of the core), which the adult convention calls oedema.
+Calibrated on validation and applied frozen, the conformal bound **holds in distribution in all six cells** (WT and TC at three α levels), with realised risk at 0.64 to 0.96 times nominal, for both NeuroVision-X and the U-Net. Its cost is small: at α = 0.05 the conservative mask grows 1.10 times (WT) and 1.18 times (TC), and at looser α it is even smaller than the default mask. Under deployment change the bound **breaks** (Figure 12): BraTS-Africa whole tumour about 1.1 times nominal, paediatric whole tumour 1.4 to 1.9 times, and paediatric tumour core 3.5 to 11.5 times. Seven of twelve shifted cells are violated for each model. Most of the paediatric tumour-core failure is a difference in label definition rather than imaging alone: the paediatric reference counts most non-enhancing tumour as core (median 84% of the core), which the adult convention calls oedema. With only three cohorts, the failures cannot be ordered by the size of the shift, and no such ordering is claimed.
+
+**The same analysis on nnU-Net** (pre-registered before any nnU-Net probability existed) asks whether this is a weakness of the project's model or of the method. The registered verdict is **REPLICATES**. nnU-Net holds the bound in all six in-distribution cells and breaks it in 5 of 12 shifted cells, including paediatric tumour core at every α (realised miss rate 0.555, 0.624 and 0.630 against α = 0.05, 0.10 and 0.20). Descriptively, the stronger model shrinks the damage where the label definition is unchanged: its realised risk is lower than NeuroVision-X's in 9 of the 12 shifted cells, and it segments better under shift on whole tumour (BraTS-Africa +0.024, paediatric +0.042 Dice). It does not repair the label case. Even at the most permissive threshold, nnU-Net misses 48.6% of the paediatric tumour core (NeuroVision-X: 35.6%), so no threshold reaches the target for either model. At α = 0.20 the fitted threshold sits at the top of the search grid for every model, so those cells measure risk at the grid ceiling.
 
 ![Realised versus nominal risk for whole tumour and tumour core per cohort. Points above the diagonal violate the bound.](figures/fig_realised_vs_nominal.png)
 
@@ -419,7 +425,7 @@ Changing the model does what recalibration cannot. Cross-fitted fine-tuning on h
 
 ## 6.9 The end-to-end pipeline and its refusal gate
 
-Measured through every stage with the deployed, frozen gate (Figure 14), the pipeline returns a usable mask for **85.2%** of in-distribution studies, **78.3%** of BraTS-Africa studies and **24.2%** of paediatric studies, with silent-failure rates of **4.2%, 18.3% and 49.5%**. The gate has decent precision and poor recall, and it is blind to cohort-level shift: on BraTS-Africa it refuses 2 of 60 studies while passing 11 of 12 unusable masks; on paediatric data 23 of 26 refusals are correct but it catches only 32% of unusable masks. Gate acceptance does not repair the bound where it is broken (paediatric tumour-core risk 0.573 on accepted cases at a nominal 0.10). The QC model behind the gate beats entropy in one of five pre-registered cells, loses in two, and becomes more optimistic under shift in all six external cells. An adults-only intended-use rule removes every paediatric study by construction, which is scoping, not detection.
+Measured through every stage with the deployed, frozen gate (Figure 14), the pipeline returns a usable mask for **85.2%** of in-distribution studies, **78.3%** of BraTS-Africa studies and **24.2%** of paediatric studies, with silent-failure rates of **4.2%, 18.3% and 49.5%**. Almost all silent failures fail on tumour core alone (8 of 8 in distribution, 9 of 11 on BraTS-Africa, 44 of 49 on paediatric data); judged on whole tumour alone the silent-failure rates would be 0%, 3.3% and 5.1%, so the paediatric figure is largely the changed tumour-core label. The gate has decent precision and poor recall, and it is blind to cohort-level shift: on BraTS-Africa it refuses 2 of 60 studies while passing 11 of 12 unusable masks; on paediatric data 23 of 26 refusals are correct but it catches only 32% of unusable masks. Gate acceptance does not repair the bound where it is broken (paediatric tumour-core risk 0.573 on accepted cases at a nominal 0.10). The QC model behind the gate beats entropy in one of five pre-registered cells, loses significantly in one, loses in a third by a margin just outside the registered bar (Holm-adjusted p = 0.0504), and becomes more optimistic under shift in all six external cells. An adults-only intended-use rule removes every paediatric study by construction, which is scoping, not detection.
 
 ![End-to-end outcome of each study with the frozen refusal gate, per cohort.](figures/fig_error_budget.png)
 
@@ -437,16 +443,17 @@ Table 8 lists every hypothesis the project tested, in order, with its verdict.
 
 | Hypothesis | Verdict | Key evidence |
 | --- | --- | --- |
-| Dual encoder beats a matched U-Net on Dice | Supported | ET +0.0267, TC +0.0103; WT inconclusive |
+| Dual encoder beats a matched U-Net on Dice | Supported | ET +0.0267 (+0.0165 on ET-present cases), TC +0.0103; WT inconclusive |
 | …with better calibration, boundaries, risk-coverage | Refuted | All within noise |
-| The gain is architecture, not width | Supported | ~80% architecture, two draws |
+| The gain is architecture, not width | Supported, descriptive | ~80% architecture over two control draws; single-seed arms, width term at seed-noise size |
 | Disagreement conditioning produces the gain (founding hypothesis) | Null | +0.0022, CI −0.0067 to +0.0152 |
 | A better segmentation gives a better report | Refuted | 1 of 25 report metrics |
 | The gain transfers to external cohorts | Refuted | Gone on SSA and PED; TC worse |
 | Disagreement detects failure beyond entropy | Partial | Per voxel yes, per case no |
 | Disagreement matches MC dropout at a tenth of the cost | Refuted | Worse; entropy equals MC dropout |
 | Conformal bound holds in distribution | Supported | 6 of 6 cells |
-| …and survives distribution shift | Refuted | Breaks, graded by shift size |
+| …and survives distribution shift | Refuted | Breaks in 7 of 12 cells; worst on PED TC (label definition) |
+| The shift failure is specific to the weaker model | Refuted | Replicates on nnU-Net: 5 of 12 violated, PED TC at every α |
 | QC model beats entropy at flagging bad masks | Mixed | 1 win, 1 loss, 1 borderline of 5 |
 | The refusal gate makes the pipeline safe under shift | Refuted | Silent failure 4.2 / 18.3 / 49.5% |
 | Heavy augmentation closes the shift gap | Null | 12 of 12 inconclusive |
@@ -464,7 +471,7 @@ Table 8 lists every hypothesis the project tested, in order, with its verdict.
 
 The architecture result is modest, in distribution, and relative. Gated cross-attention fusion does produce a real, attributable enhancing-tumour gain over a matched U-Net, but a standard nnU-Net with a longer training recipe exceeds it, the gain does not transfer to new populations, and the mechanism the project was built around is not what produces it. This matches the broader finding of *nnU-Net Revisited* that architectural gains over weak baselines tend to evaporate against a properly configured CNN, and it is the reason the project's contribution moved away from the architecture.
 
-The more useful result concerns the reliability machinery around any model. A distribution-free bound is only as good as the exchangeability behind it. It held in every in-distribution cell, at small cost, and it degraded in proportion to the shift, from barely noticeable on African adult gliomas to an order of magnitude on paediatric tumour core. A learned refusal gate did not see that shift coming, because each of its inputs is calibrated on the same distribution that the shift moves away from; the QC model even became more confident where the segmentation was worst. What restored the bound was local data: tens of labelled cases at a new site, except where the model's failure is so large that no threshold can meet the target. There, changing the model helped, largely by teaching it a different label convention, which is itself a finding about what "shift" means between datasets.
+The more useful result concerns the reliability machinery around any model. A distribution-free bound is only as good as the exchangeability behind it. It held in every in-distribution cell, at small cost, for all three models. Under deployment change it degraded in two different ways. On African adult gliomas, where the images change but the labels mean the same thing, the excess was small and a stronger model (nnU-Net) reduced it. On paediatric tumour core, where the reference labels define the core differently, it failed by an order of magnitude for every model, and no threshold could meet the target. A learned refusal gate did not see that shift coming, because each of its inputs is calibrated on the same distribution that the shift moves away from; the QC model even became more confident where the segmentation was worst. What restored the bound was local data: tens of labelled cases at a new site, except where the model's failure is so large that no threshold can meet the target. There, changing the model helped, largely by teaching it a different label convention, which is itself a finding about what "shift" means between datasets.
 
 Two practical lessons follow. First, a single accuracy number, even with a confidence interval, is a weak description of a clinical segmentation tool; the silent-failure rate per population and the cost of the front end on real DICOM say much more. Second, free single-pass entropy was never beaten by the more elaborate uncertainty mechanisms built here, so any new mechanism should be compared against it first.
 
@@ -510,12 +517,11 @@ Several traps cost real GPU hours, wrong numbers or silent bugs. They are record
 
 ## 10.1 Conclusion
 
-NeuroVision-X delivers a complete, tested brain tumour segmentation system, from a DICOM study to a gated, explained result in a web application, and a measured account of how far its reliability machinery can be trusted. Its dual-encoder model improves enhancing-tumour Dice over a matched U-Net by +0.0267, mostly through gated cross-attention fusion, but nnU-Net beats it and its founding hypothesis returned a null. A conformal bound on the mask's miss rate holds in distribution and breaks under shift in proportion to the shift; the refusal gate cannot see cohort-level shift; and a new site needs roughly 10 to 40 labelled cases to restore the bound, or a fine-tuned model where the failure is too large for any threshold. The project's lasting contribution is less a model than a method: pre-registered, honestly reported measurement of where a medical-imaging AI system holds and where it breaks.
+NeuroVision-X delivers a complete, tested brain tumour segmentation system, from a DICOM study to a gated, explained result in a web application, and a measured account of how far its reliability machinery can be trusted. Its dual-encoder model improves enhancing-tumour Dice over a matched U-Net by +0.0267, mostly through gated cross-attention fusion, but nnU-Net beats it and its founding hypothesis returned a null. A conformal bound on the mask's miss rate holds in distribution for all three models tested, degrades under acquisition and population change, and fails outright where the label definition changes, for nnU-Net as well; the refusal gate sees bad masks, not changed cohorts; and a new site needs roughly 10 to 40 labelled cases to restore the bound, or a fine-tuned model where the failure is too large for any threshold. The project's lasting contribution is less a model than a method: pre-registered, honestly reported measurement of where a medical-imaging AI system holds and where it breaks.
 
 ## 10.2 Future work
 
 - Evaluate the pooled multi-cohort training run (BraTS + BraTS-Africa + paediatric, completed in October 2026) under its pre-registration.
-- Repeat the conformal analysis on nnU-Net to test whether the graded shift failure replicates with a stronger model (predictions already produced, interpretation pending).
 - Run at least three seeds per model so that equivalence, not just difference, can be tested.
 - Replace the uncertified refusal gate with a certified selective risk-control approach, and test site-conditional recalibration on a real multi-site cohort.
 - Decide in January 2027 whether to add IDH molecular subtyping on UCSF-PDGM for the capstone, then write and submit the MELBA journal paper around April 2027.
