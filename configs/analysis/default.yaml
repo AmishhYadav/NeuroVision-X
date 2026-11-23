@@ -1300,6 +1300,9 @@ severity_ladder:
     expect_epoch: ${analysis.nnunet_probs.expect_epoch}
     label_check_tol: ${analysis.nnunet_probs.label_check_tol}
     chunk_size: 25                       # cases per nnU-Net call (bounds transient disk, ~50 MB/case/copy)
+    # false = nnU-Net's default mirroring TTA, which is what the bridge reference and the frozen conformal fit were
+    # produced with; true is ~6x faster (1.3 vs ~8 s/case on a T4) but breaks the bridge - only set via a dated protocol amendment.
+    disable_tta: false
   models:
     # reference_metrics = the saved clean test per-case metrics the bridge compares with.
     # conformal_fit = that model's v1 fit.json (frozen thresholds; nothing is fitted on corrupted data).

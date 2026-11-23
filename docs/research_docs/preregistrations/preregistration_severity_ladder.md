@@ -26,7 +26,8 @@ Labels are never altered: what is being measured is how the same truth is segmen
 image.
 
 **Models.** `neurovision` (seed 42, deployed), `baseline_unet3d` (matched-recipe U-Net), nnU-Net
-(Gate A, `checkpoint_final.pth`, TTA off as in note 61's `--disable_tta` arm). Nothing is trained.
+(Gate A, `checkpoint_final.pth`, nnU-Net's default mirroring TTA **on** — see Amendment 1). Nothing is
+trained.
 
 **Corruptions** (`src/neurovision/data/corruptions.py`; applied to the preprocessed image in a
 positive magnitude domain inside the original brain mask, then re-z-scored over that mask, as the
@@ -136,6 +137,23 @@ GPU: 189 × 21 conditions × 3 models ≈ 11,900 inferences. Measured clean spee
 without TTA on a T4 (note 61); the two in-house models are timed by the probe. Estimate 15–18 GPU-h
 over two sessions (resumable per (model, kind, level) shard, each shard's output written on
 completion). CPU: the analysis is arithmetic over the saved per-case tables (< 1 CPU-h).
+
+## Amendment 1 — 2026-11-24, before the probe and before any corrupted number
+
+The design above first said nnU-Net would run with TTA **off** (note 61's `--disable_tta` arm, 1.3 s/case).
+That contradicts two other fixed parts of this protocol: the bridge reference
+(`results/conformal/nnunet_gatea/evals/eval_test/`) and the frozen threshold
+(`results/conformal/nnunet_gatea/conformal_nnunet/fit.json`) were both produced with TTA **on**
+(`disable_tta: false` in that directory's `nnunet_probs_summary.json`). On clean test the two arms differ
+by about 0.006 mean ET Dice — above the 0.003 bridge tolerance — so the nnU-Net bridge would fail by
+construction, and a frozen τ fitted on TTA-on probabilities would be applied to a different model
+output. Found by reading the driver against its references, before any GPU time was spent.
+
+**Change:** nnU-Net runs with TTA on (`analysis.severity_ladder.nnunet.disable_tta: false`), the same
+arm as every nnU-Net number this project quotes (ET 0.8879, C29/C30). **Cost:** measured 7.1–8.2 s/case
+on a T4 (notes 61–62) instead of 1.3, about +7 GPU-h over 189 × 21 conditions. The probe measures the
+real figure; if the projection exceeds 20 GPU-h the cost-cut order above applies unchanged (drop
+level 1 of every kind first). TTA off is **not** a cost-cut option, because it breaks the bridge.
 
 ---
 

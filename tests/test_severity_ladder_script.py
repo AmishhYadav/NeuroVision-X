@@ -8,6 +8,7 @@ with `run_prediction` monkeypatched by a fake that writes what nnU-Net writes.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -523,7 +524,7 @@ def test_nnunet_backend_writes_converts_and_cleans_up(
     monkeypatch.setattr(ladder._NNUNET, "run_prediction", _fake_nnunet(state))
     work = tmp_path / "work"
     backend = ladder.NnunetBackend(
-        tmp_path / "model_folder", ".nii", world / "prep", work, "cpu", 25, 1e-5
+        tmp_path / "model_folder", ".nii", world / "prep", work, "cpu", 25, 1e-5, disable_tta=True
     )
     corrupted = {
         c: np.random.default_rng(i).standard_normal((4, *SHAPE)).astype(np.float32)
@@ -550,7 +551,7 @@ def test_run_shard_with_nnunet_backend_chunks(
     monkeypatch.setattr(ladder._NNUNET, "run_prediction", _fake_nnunet(state))
     cfg = _make_cfg(world)
     backend = ladder.NnunetBackend(
-        tmp_path / "mf", ".nii", world / "prep", tmp_path / "work", "cpu", 2, 1e-5
+        tmp_path / "mf", ".nii", world / "prep", tmp_path / "work", "cpu", 2, 1e-5, disable_tta=True
     )
     gate = ladder.build_gate_signals(
         cfg.analysis.severity_ladder, cfg, {"conformal_fit": None}, world, torch.device("cpu")
@@ -571,6 +572,8 @@ def test_run_shard_with_nnunet_backend_chunks(
     assert list(df["case_id"]) == CASES[:3]
     # The fake predicts the true regions exactly, so Dice is 1.
     assert df["dice_WT"].round(6).eq(1.0).all()
+    meta = json.loads((tmp_path / "out" / "nn" / "none" / "level0" / "shard_meta.json").read_text())
+    assert meta["nnunet_disable_tta"] is True
 
 
 def test_resolve_nnunet_model_requires_search_root() -> None:
@@ -587,3 +590,38 @@ def test_build_inhouse_cfg_swaps_model_resolves_and_merges_overrides(tmp_path: P
     assert out.model.name == "unet3d" and out.model.in_channels == 4  # interpolation resolved
     assert out.training.loss.name == "multitask"
     assert out.inference.sliding_window.roi_size == [16, 16, 16]  # the rest is untouched
+
+
+@pytest.mark.parametrize("flag", [False, True])
+def test_nnunet_backend_passes_disable_tta_to_command_builder(
+    world: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: bool
+) -> None:
+    seen: list[Any] = []
+    real = ladder._NNUNET.build_predict_command
+
+    def spy(*args: Any, **kwargs: Any) -> list[str]:
+        seen.append(args[4] if len(args) > 4 else kwargs["disable_tta"])
+        return real(*args, **kwargs)
+
+    state: dict[str, Any] = {}
+    monkeypatch.setattr(ladder._NNUNET, "build_predict_command", spy)
+    monkeypatch.setattr(ladder._NNUNET, "run_prediction", _fake_nnunet(state))
+    backend = ladder.NnunetBackend(
+        tmp_path / "mf",
+        ".nii",
+        world / "prep",
+        tmp_path / "work",
+        "cpu",
+        25,
+        1e-5,
+        disable_tta=flag,
+    )
+    image = np.zeros((4, *SHAPE), np.float32)
+    backend.predict({CASES[0]: image})
+    assert seen == [flag]
+    assert ("--disable_tta" in state["cmd"]) is flag
+
+
+def test_default_config_leaves_tta_on() -> None:
+    cfg = OmegaConf.load(Path(__file__).parents[1] / "configs" / "analysis" / "default.yaml")
+    assert cfg.severity_ladder.nnunet.disable_tta is False

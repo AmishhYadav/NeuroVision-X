@@ -284,7 +284,7 @@ def resolve_nnunet_model(nn_cfg: Mapping[str, Any], device: str) -> tuple[Path, 
 
 
 class NnunetBackend:
-    """The Gate A nnU-Net, TTA off (note 61's `--disable_tta` arm), via the existing glue."""
+    """The Gate A nnU-Net via the existing glue; TTA on/off follows `disable_tta` (config)."""
 
     def __init__(
         self,
@@ -295,6 +295,8 @@ class NnunetBackend:
         device: str,
         chunk_size: int,
         label_check_tol: float,
+        *,
+        disable_tta: bool,
     ) -> None:
         """Stores what one batched prediction needs.
 
@@ -306,6 +308,8 @@ class NnunetBackend:
             device: `"cuda"` or `"cpu"` for nnU-Net's `-device`.
             chunk_size: Cases per nnU-Net call (bounds transient disk: ~50 MB/case/copy).
             label_check_tol: Largest allowed per-region mismatch with nnU-Net's own label map.
+            disable_tta: True passes `--disable_tta` (faster, but differs from the TTA-on
+                reference the bridge and frozen conformal fit were made with).
         """
         self.model_folder = model_folder
         self.file_ending = file_ending
@@ -314,6 +318,7 @@ class NnunetBackend:
         self.device = device
         self.chunk_size = chunk_size
         self.label_check_tol = label_check_tol
+        self.disable_tta = disable_tta
 
     def predict(self, images: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
         """One batched nnU-Net call over this chunk's corrupted images.
@@ -344,7 +349,7 @@ class NnunetBackend:
             shutil.rmtree(tmp_prep)  # corrupted volumes live on disk only until here
 
             cmd = _NNUNET.build_predict_command(
-                input_dir, raw_dir, self.model_folder, self.device, True  # disable_tta=True
+                input_dir, raw_dir, self.model_folder, self.device, self.disable_tta
             )
             cmd.append("--save_probabilities")
             _NNUNET.run_prediction(cmd)
@@ -695,18 +700,18 @@ def run_shard(
     }
     write_json(manifest, partial_dir / "curves_manifest.json")
     s_per_case = float(per_case["seconds"].mean())
-    write_json(
-        {
-            "model": shard.model,
-            "kind": shard.kind,
-            "level_index": shard.level_index,
-            "severity": shard.severity,
-            "base_seed": base_seed,
-            "case_ids": list(case_ids),
-            "s_per_case": s_per_case,
-        },
-        partial_dir / "shard_meta.json",
-    )
+    shard_meta: dict[str, Any] = {
+        "model": shard.model,
+        "kind": shard.kind,
+        "level_index": shard.level_index,
+        "severity": shard.severity,
+        "base_seed": base_seed,
+        "case_ids": list(case_ids),
+        "s_per_case": s_per_case,
+    }
+    if isinstance(backend, NnunetBackend):
+        shard_meta["nnunet_disable_tta"] = backend.disable_tta  # key absent for in-house shards
+    write_json(shard_meta, partial_dir / "shard_meta.json")
     (partial_dir / DONE_MARKER).write_text("done\n", encoding="utf-8")
     partial_dir.rename(final_dir)  # the atomic step: DONE only ever appears with a full shard
 
@@ -808,6 +813,7 @@ def build_backend(
             device_str,
             int(nn_cfg["chunk_size"]),
             float(nn_cfg["label_check_tol"]),
+            disable_tta=bool(nn_cfg.get("disable_tta", False)),
         )
     raise ValueError(f"model {name!r}: backend must be 'inhouse' or 'nnunet', got {backend!r}.")
 
