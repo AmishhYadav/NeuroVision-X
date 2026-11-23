@@ -1,0 +1,20 @@
+gt_dir: outputs/report_gt/reports
+pred_dirs:
+  neurovision: outputs/report_neurovision/reports
+  baseline: outputs/report_baseline/reports
+  capacity_control: outputs/report_capacity_control/reports
+comparisons: []
+cases: null
+n_boot: 10000
+alpha: 0.05
+report_agreement_version: 1
+resolved_gt_dir: /Users/amish/NeuroVision-X/outputs/report_gt/reports
+resolved_pred_dirs:
+  neurovision: /Users/amish/NeuroVision-X/outputs/report_neurovision/reports
+  baseline: /Users/amish/NeuroVision-X/outputs/report_baseline/reports
+  capacity_control: /Users/amish/NeuroVision-X/outputs/report_capacity_control/reports
+n_cases:
+  neurovision: 189
+  baseline: 189
+  capacity_control: 189
+seed: 42

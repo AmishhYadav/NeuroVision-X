@@ -1,0 +1,17 @@
+out_dir: outputs/compare_family/tta_flip
+name: tta_flip
+name_a: neurovision_tta
+name_b: neurovision
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+exclude_case_ids: []
+comparisons:
+- cohort: test
+  a: outputs/eval_test_neurovision_tta/per_case_metrics.csv
+  b: outputs/neurovision/eval_test/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT

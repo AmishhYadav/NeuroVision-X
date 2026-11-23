@@ -1,0 +1,27 @@
+{
+  "dice_ET": {
+    "best_threshold": 0.55,
+    "best_value": 0.5590754367524025,
+    "value_at_0.5": 0.5589649796984487,
+    "delta_over_0.5": 0.00011045705395373862
+  },
+  "dice_TC": {
+    "best_threshold": 0.3,
+    "best_value": 0.4772077272591008,
+    "value_at_0.5": 0.4647492978962478,
+    "delta_over_0.5": 0.012458429362853018
+  },
+  "dice_WT": {
+    "best_threshold": 0.7,
+    "best_value": 0.8517895434239898,
+    "value_at_0.5": 0.8500850521253817,
+    "delta_over_0.5": 0.0017044912986081684
+  },
+  "dice_mean": {
+    "best_threshold": 0.3,
+    "best_value": 0.6271435147283053,
+    "value_at_0.5": 0.6245997762589743,
+    "delta_over_0.5": 0.0025437384693309806
+  },
+  "caveat": "This threshold was selected on the SAME split it is reported on, which is optimistically biased (selection on the test data itself). It must be re-selected on the val split and shown to transfer to test before it can support any claim in the paper -- this project evaluates every checkpoint on both val and test specifically so that distinction can be made."
+}

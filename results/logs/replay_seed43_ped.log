@@ -1,0 +1,210 @@
+07:42:36 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+07:42:36 | INFO     | __main__ | replay_logits: eval_dir=outputs/eval_ped_neurovision_seed43 prep_dir=data/preprocessed/brats_ped out_dir=outputs/replay_lesionwise/eval_ped_neurovision_seed43 case_ids=every case with saved logits
+07:42:36 | INFO     | __main__ | replay_logits: running threshold sweep over 7 threshold(s).
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:43:00 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:43:20 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 50/99 case(s)
+07:43:44 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:44:30 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:44:50 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 50/99 case(s)
+07:45:14 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:46:01 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:46:21 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 50/99 case(s)
+07:46:45 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:47:32 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:47:52 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 50/99 case(s)
+07:48:16 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:49:03 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:49:23 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 50/99 case(s)
+07:49:47 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:50:34 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:50:54 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 50/99 case(s)
+07:51:18 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:52:05 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:52:25 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 50/99 case(s)
+07:52:49 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 75/99 case(s)
+07:53:12 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_ped_neurovision_seed43/threshold_sweep.csv
+07:53:12 | INFO     | __main__ | replay_logits: running post-processing ablation over 5 variant(s): ['default', 'no_small_component_removal', 'no_nesting', 'keep_largest_only', 'raw'].
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:53:36 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:53:56 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 50/99 case(s)
+07:54:20 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:54:47 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:54:49 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 50/99 case(s)
+07:54:52 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:55:19 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:55:38 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 50/99 case(s)
+07:56:02 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:56:51 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:57:12 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 50/99 case(s)
+07:57:37 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 75/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:58:05 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:58:07 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 50/99 case(s)
+07:58:10 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 75/99 case(s)
+07:58:12 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_ped_neurovision_seed43/postprocess_ablation.csv
+07:58:12 | INFO     | __main__ | replay_logits: replaying every selected case at project default settings.
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:58:50 | INFO     | neurovision.analysis.replay | per_case_replay: processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+07:59:21 | INFO     | neurovision.analysis.replay | per_case_replay: processed 50/99 case(s)
+07:59:59 | INFO     | neurovision.analysis.replay | per_case_replay: processed 75/99 case(s)
+08:00:35 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_ped_neurovision_seed43/per_case_default.csv
+08:00:35 | INFO     | __main__ | replay_logits: self-consistency mean absolute deltas vs outputs/eval_ped_neurovision_seed43/per_case_metrics.csv (n=99 shared case(s)): {'dice_ET': 1.019807134362123e-17, 'dice_TC': 2.1373019796188995e-17, 'dice_WT': 2.2428747972225384e-17}
+08:00:35 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_ped_neurovision_seed43/best_threshold.json
+08:00:35 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_ped_neurovision_seed43/replay_config.yaml
+======================================================================
+Logit replay summary -- eval_dir=outputs/eval_ped_neurovision_seed43
+======================================================================
+  out_dir: outputs/replay_lesionwise/eval_ped_neurovision_seed43
+  threshold_sweep.csv: 7 row(s)
+  postprocess_ablation.csv: 5 row(s)
+  per_case_default.csv: 99 row(s)
+  comparison_default.csv: skipped (disabled in config)

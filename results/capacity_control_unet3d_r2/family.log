@@ -1,0 +1,29 @@
+17:10:26 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+17:10:26 | WARNING  | neurovision.analysis.statistics | compare_models: dice_WT is WITHIN NOISE (inconclusive) for A vs B -- mean diff 0.003934, CI [-0.0009596, 0.009418], p_holm=6.189e-05. Do NOT claim this difference in the paper.
+17:10:26 | WARNING  | neurovision.analysis.statistics | compare_models: lwdice_WT is WITHIN NOISE (inconclusive) for A vs B -- mean diff 0.008411, CI [-0.02217, 0.03903], p_holm=0.001962. Do NOT claim this difference in the paper.
+17:10:26 | INFO     | __main__ | compare_family: cohort 'test_nv_minus_r2' -- scored 6 metric(s).
+17:10:26 | WARNING  | neurovision.analysis.statistics | compare_models: dice_TC is WITHIN NOISE (inconclusive) for A vs B -- mean diff 0.001861, CI [-0.002153, 0.005841], p_holm=3.18e-05. Do NOT claim this difference in the paper.
+17:10:26 | WARNING  | neurovision.analysis.statistics | compare_models: dice_WT is WITHIN NOISE (inconclusive) for A vs B -- mean diff 0.0005492, CI [-0.001692, 0.002572], p_holm=0.0001713. Do NOT claim this difference in the paper.
+17:10:26 | WARNING  | neurovision.analysis.statistics | compare_models: lwdice_ET is WITHIN NOISE (inconclusive) for A vs B -- mean diff 0.01847, CI [-0.005864, 0.04383], p_holm=1.808e-06. Do NOT claim this difference in the paper.
+17:10:26 | WARNING  | neurovision.analysis.statistics | compare_models: lwdice_TC is WITHIN NOISE (inconclusive) for A vs B -- mean diff 0.006529, CI [-0.01801, 0.03072], p_holm=3.582e-05. Do NOT claim this difference in the paper.
+17:10:26 | WARNING  | neurovision.analysis.statistics | compare_models: lwdice_WT is WITHIN NOISE (inconclusive) for A vs B -- mean diff 0.02155, CI [-0.005269, 0.04968], p_holm=0.01646. Do NOT claim this difference in the paper.
+17:10:26 | INFO     | __main__ | compare_family: cohort 'test_r2_minus_baseline' -- scored 6 metric(s).
+17:10:26 | WARNING  | __main__ | compare_family: 7/12 row(s) are inconclusive under the family-wide Holm correction (m=12) -- do NOT claim these as real differences.
+17:10:26 | INFO     | __main__ | compare_family: wrote outputs/compare_family/capacity_r2/family.csv
+17:10:26 | INFO     | __main__ | compare_family: wrote outputs/compare_family/capacity_r2/compare_family_config.yaml
+========================================================================================
+compare_family: capacity_r2 (A vs B) -- family size m=12 -- out_dir=outputs/compare_family/capacity_r2
+========================================================================================
+  test_nv_minus_r2 |    dice_ET | n= 189 mean_A=0.8709 mean_B=0.8495 improvement=+0.0213 CI=[+0.0092, +0.0381] p_holm_family=5.942e-16 -> BETTER
+  test_nv_minus_r2 |    dice_TC | n= 189 mean_A=0.9161 mean_B=0.9077 improvement=+0.0084 CI=[+0.0014, +0.0172] p_holm_family=1.948e-06 -> BETTER
+  test_nv_minus_r2 |    dice_WT | n= 189 mean_A=0.9321 mean_B=0.9281 improvement=+0.0039 CI=[-0.0010, +0.0094] p_holm_family=0.0001238 -> INCONCLUSIVE
+  test_nv_minus_r2 |  lwdice_ET | n= 189 mean_A=0.7550 mean_B=0.7227 improvement=+0.0323 CI=[+0.0050, +0.0597] p_holm_family=8.329e-11 -> BETTER
+  test_nv_minus_r2 |  lwdice_TC | n= 189 mean_A=0.8150 mean_B=0.7845 improvement=+0.0305 CI=[+0.0041, +0.0573] p_holm_family=1.178e-06 -> BETTER
+  test_nv_minus_r2 |  lwdice_WT | n= 189 mean_A=0.7183 mean_B=0.7099 improvement=+0.0084 CI=[-0.0222, +0.0390] p_holm_family=0.003923 -> INCONCLUSIVE
+  test_r2_minus_baseline |    dice_ET | n= 189 mean_A=0.8495 mean_B=0.8442 improvement=+0.0053 CI=[+0.0029, +0.0080] p_holm_family=1.189e-08 -> BETTER
+  test_r2_minus_baseline |    dice_TC | n= 189 mean_A=0.9077 mean_B=0.9058 improvement=+0.0019 CI=[-0.0022, +0.0058] p_holm_family=4.77e-05 -> INCONCLUSIVE
+  test_r2_minus_baseline |    dice_WT | n= 189 mean_A=0.9281 mean_B=0.9276 improvement=+0.0005 CI=[-0.0017, +0.0026] p_holm_family=0.0002569 -> INCONCLUSIVE
+  test_r2_minus_baseline |  lwdice_ET | n= 189 mean_A=0.7227 mean_B=0.7042 improvement=+0.0185 CI=[-0.0059, +0.0438] p_holm_family=2.531e-06 -> INCONCLUSIVE
+  test_r2_minus_baseline |  lwdice_TC | n= 189 mean_A=0.7845 mean_B=0.7779 improvement=+0.0065 CI=[-0.0180, +0.0307] p_holm_family=5.97e-05 -> INCONCLUSIVE
+  test_r2_minus_baseline |  lwdice_WT | n= 189 mean_A=0.7099 mean_B=0.6884 improvement=+0.0215 CI=[-0.0053, +0.0497] p_holm_family=0.01646 -> INCONCLUSIVE
+----------------------------------------------------------------------------------------

@@ -1,0 +1,44 @@
+{
+  "verdict": "partial",
+  "thresholds": {
+    "rho_partial_abs": 0.2,
+    "auroc_residual": 0.6
+  },
+  "external_cohorts": [
+    "ssa",
+    "ped"
+  ],
+  "passed_cohorts": [],
+  "partial_cohorts": [
+    "brats_test",
+    "ped",
+    "ssa"
+  ],
+  "per_cohort": {
+    "brats_test": {
+      "external": false,
+      "rho_partial": -0.3932739688061152,
+      "rho_ci_excludes_zero": true,
+      "auroc_residual": 0.5780061962008277,
+      "auroc_ci_excludes_half": true,
+      "meets_threshold": false
+    },
+    "ped": {
+      "external": true,
+      "rho_partial": 0.00014409361053082737,
+      "rho_ci_excludes_zero": false,
+      "auroc_residual": 0.6768390863935939,
+      "auroc_ci_excludes_half": true,
+      "meets_threshold": false
+    },
+    "ssa": {
+      "external": true,
+      "rho_partial": -0.17250752311491419,
+      "rho_ci_excludes_zero": false,
+      "auroc_residual": 0.5686960915872535,
+      "auroc_ci_excludes_half": true,
+      "meets_threshold": false
+    }
+  },
+  "preregistration": "docs/research/preregistration_ambiguity.md"
+}

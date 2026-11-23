@@ -1,0 +1,14 @@
+out_dir: outputs/compare_family/multiseed_a1_headline_seed43
+name: multiseed_a1_headline_seed43
+name_a: neurovision_seed43
+name_b: baseline_unet3d_seed43
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+comparisons:
+- cohort: test
+  a: outputs/eval_test_neurovision_seed43/per_case_metrics.csv
+  b: outputs/eval_test_baseline_unet3d_seed43/per_case_metrics.csv
+  metrics:
+  - dice_ET

@@ -1,0 +1,466 @@
+[{"stream_name":"stderr","time":9.029181983,"data":"/usr/local/lib/python3.12/dist-packages/nbformat/__init__.py:96: MissingIDFieldWarning: Cell is missing an id field, this will become a hard error in future nbformat versions. You may want to use `normalize()` on your notebooks before validations (available since nbformat 5.1.4). Previous versions of nbformat are fixing this issue transparently, and will stop doing so in the future.\n"}
+,{"stream_name":"stderr","time":9.029245415,"data":"  validate(nb)\n"}
+,{"stream_name":"stderr","time":10.220978763,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":10.221006815,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":10.221012254,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":10.22101628,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stderr","time":10.950826508,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":10.950853477999999,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":10.95085905,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":10.950862867,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stdout","time":13.866590497,"data":"cloned https://github.com/AmishhYadav/NeuroVision-X.git at fa6446af213e5b43707e90b17a7c1c70d096999d\n"}
+,{"stream_name":"stdout","time":13.866685637,"data":"installing: monai==1.6.0 einops==0.8.2 nibabel==5.4.2 SimpleITK==2.5.6 hydra-core==1.3.4 wandb==0.28.1 tqdm==4.70.0\n"}
+,{"stream_name":"stdout","time":17.408900621,"data":"     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 57.3/57.3 kB 2.0 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":17.610712085,"data":"     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 57.3/57.3 kB 2.0 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":17.677205627,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 25.8 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":17.879718374,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 25.8 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":18.159392662,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 52.8/52.8 MB 38.7 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":18.188118952,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 155.5/155.5 kB 12.0 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":18.361321703,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 52.8/52.8 MB 38.7 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":18.361347621,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 155.5/155.5 kB 12.0 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":18.427511532,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 26.5/26.5 MB 68.8 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":18.456380505,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.2/80.2 kB 5.4 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":18.629368316,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 26.5/26.5 MB 68.8 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":18.629398338,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.2/80.2 kB 5.4 MB/s eta 0:00:00\n"}
+,{"stream_name":"stderr","time":65.164162349,"data":"ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.\n"}
+,{"stream_name":"stderr","time":65.164192449,"data":"dopamine-rl 4.1.2 requires gym\u003c=0.25.2, but you have gym 0.26.2 which is incompatible.\n"}
+,{"stream_name":"stderr","time":65.164198409,"data":"moviepy 1.0.3 requires decorator\u003c5.0,\u003e=4.0.2, but you have decorator 5.3.1 which is incompatible.\n"}
+,{"stream_name":"stderr","time":65.27210843,"data":"ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.\n"}
+,{"stream_name":"stderr","time":65.272139336,"data":"dopamine-rl 4.1.2 requires gym\u003c=0.25.2, but you have gym 0.26.2 which is incompatible.\n"}
+,{"stream_name":"stderr","time":65.272145926,"data":"moviepy 1.0.3 requires decorator\u003c5.0,\u003e=4.0.2, but you have decorator 5.3.1 which is incompatible.\n"}
+,{"stream_name":"stderr","time":65.27215099,"data":"\n"}
+,{"stream_name":"stderr","time":65.272155287,"data":"ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.\n"}
+,{"stream_name":"stderr","time":65.272160644,"data":"dopamine-rl 4.1.2 requires gym\u003c=0.25.2, but you have gym 0.26.2 which is incompatible.\n"}
+,{"stream_name":"stderr","time":65.27216549,"data":"moviepy 1.0.3 requires decorator\u003c5.0,\u003e=4.0.2, but you have decorator 5.3.1 which is incompatible.\n"}
+,{"stream_name":"stdout","time":74.708312583,"data":"Tesla T4  sm_75  torch 2.10.0+cu128  python 3.12.13\n"}
+,{"stream_name":"stdout","time":80.838667128,"data":"data       : /kaggle/input/datasets/amishyadav123/neurovision-brats-ssa-prep/preprocessed\n"}
+,{"stream_name":"stdout","time":80.838697904,"data":"checkpoint : /kaggle/input/notebooks/amishyadav123/neurovision-run2-s2/checkpoints/best.pt\n"}
+,{"stream_name":"stdout","time":80.838703428,"data":"  epoch=69  val/dice_mean=0.8938  wandb_run_id=cc2l5j1c\n"}
+,{"stream_name":"stdout","time":80.83870807,"data":"  finite: 358 parameter tensors, no NaN/Inf\n"}
+,{"stream_name":"stderr","time":132.413624811,"data":"\rEvaluating (test):   0%|          | 0/60 [00:00\u003c?, ?it/s]\n"}
+,{"stream_name":"stderr","time":206.111389636,"data":"\rEvaluating (test):   0%|          | 0/60 [00:00\u003c?, ?it/s]MC-dropout save_fields=['mutual_information']: first case's array is 18.87 MB, projecting to ~1.13 GB across 60 case(s).\n"}
+,{"stream_name":"stderr","time":206.111430119,"data":"\n"}
+,{"stream_name":"stderr","time":206.111436506,"data":"MC-dropout save_fields=['mutual_information']: first case's array is 18.87 MB, projecting to ~1.13 GB across 60 case(s).\n"}
+,{"stream_name":"stderr","time":207.266700664,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":207.266749493,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":207.266753295,"data":"\n"}
+,{"stream_name":"stderr","time":207.266756232,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":207.266759158,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":207.800488253,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":207.800527554,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":207.800533354,"data":"\n"}
+,{"stream_name":"stderr","time":207.800537039,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":207.800542495,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":211.556706536,"data":"\rEvaluating (test):   2%|▏         | 1/60 [01:19\u003c1:17:49, 79.15s/it]\n"}
+,{"stream_name":"stderr","time":286.115106718,"data":"\rEvaluating (test):   2%|▏         | 1/60 [01:19\u003c1:17:49, 79.15s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":286.115197956,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":286.115205841,"data":"\n"}
+,{"stream_name":"stderr","time":286.115211361,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":286.115218092,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":290.749319091,"data":"\rEvaluating (test):   3%|▎         | 2/60 [02:38\u003c1:16:32, 79.17s/it]\n"}
+,{"stream_name":"stderr","time":365.900258941,"data":"\rEvaluating (test):   3%|▎         | 2/60 [02:38\u003c1:16:32, 79.17s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":365.900310651,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":365.90033613,"data":"\n"}
+,{"stream_name":"stderr","time":365.900340011,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":365.900344807,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":369.917433498,"data":"\rEvaluating (test):   5%|▌         | 3/60 [03:57\u003c1:15:12, 79.17s/it]\n"}
+,{"stream_name":"stderr","time":445.030900747,"data":"\rEvaluating (test):   5%|▌         | 3/60 [03:57\u003c1:15:12, 79.17s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":445.030958739,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":445.030966249,"data":"\n"}
+,{"stream_name":"stderr","time":445.030971032,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":445.030977115,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":448.868847649,"data":"\rEvaluating (test):   7%|▋         | 4/60 [05:16\u003c1:13:48, 79.08s/it]\n"}
+,{"stream_name":"stderr","time":523.94842813,"data":"\rEvaluating (test):   7%|▋         | 4/60 [05:16\u003c1:13:48, 79.08s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":523.948472792,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":523.948479777,"data":"\n"}
+,{"stream_name":"stderr","time":523.948485392,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":523.948492507,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":527.447995727,"data":"\rEvaluating (test):   8%|▊         | 5/60 [06:35\u003c1:12:19, 78.90s/it]\n"}
+,{"stream_name":"stderr","time":602.35824976,"data":"\rEvaluating (test):   8%|▊         | 5/60 [06:35\u003c1:12:19, 78.90s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":602.358306994,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":602.358320761,"data":"\n"}
+,{"stream_name":"stderr","time":602.358324349,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":602.358328611,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":605.518155938,"data":"\rEvaluating (test):  10%|█         | 6/60 [07:53\u003c1:10:45, 78.62s/it]\n"}
+,{"stream_name":"stderr","time":680.626777691,"data":"\rEvaluating (test):  10%|█         | 6/60 [07:53\u003c1:10:45, 78.62s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":680.62682337,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":680.626830367,"data":"\n"}
+,{"stream_name":"stderr","time":680.626835094,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":680.626840877,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":684.152508861,"data":"\rEvaluating (test):  12%|█▏        | 7/60 [09:11\u003c1:09:27, 78.62s/it]\n"}
+,{"stream_name":"stderr","time":759.623453548,"data":"\rEvaluating (test):  12%|█▏        | 7/60 [09:11\u003c1:09:27, 78.62s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":759.62353423,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":759.623540725,"data":"\n"}
+,{"stream_name":"stderr","time":759.623545407,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":759.623551551,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":764.948431366,"data":"\rEvaluating (test):  13%|█▎        | 8/60 [10:32\u003c1:08:44, 79.32s/it]\n"}
+,{"stream_name":"stderr","time":840.56002497,"data":"\rEvaluating (test):  13%|█▎        | 8/60 [10:32\u003c1:08:44, 79.32s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":840.560067542,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":840.560084438,"data":"\n"}
+,{"stream_name":"stderr","time":840.560088378,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":840.560093452,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":845.807776291,"data":"\rEvaluating (test):  15%|█▌        | 9/60 [11:53\u003c1:07:49, 79.80s/it]\n"}
+,{"stream_name":"stderr","time":920.941650486,"data":"\rEvaluating (test):  15%|█▌        | 9/60 [11:53\u003c1:07:49, 79.80s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":920.94170463,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":920.941712045,"data":"\n"}
+,{"stream_name":"stderr","time":920.94171667,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":920.941722717,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":924.61027066,"data":"\rEvaluating (test):  17%|█▋        | 10/60 [13:12\u003c1:06:14, 79.49s/it]\n"}
+,{"stream_name":"stderr","time":999.664113742,"data":"\rEvaluating (test):  17%|█▋        | 10/60 [13:12\u003c1:06:14, 79.49s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":999.66414811,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":999.664152836,"data":"\n"}
+,{"stream_name":"stderr","time":999.664156809,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":999.664162075,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1003.318922866,"data":"\rEvaluating (test):  18%|█▊        | 11/60 [14:30\u003c1:04:43, 79.25s/it]\n"}
+,{"stream_name":"stderr","time":1078.428792479,"data":"\rEvaluating (test):  18%|█▊        | 11/60 [14:30\u003c1:04:43, 79.25s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1078.428837202,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1078.428855167,"data":"\n"}
+,{"stream_name":"stderr","time":1078.428859207,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1078.428863874,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1081.530877568,"data":"\rEvaluating (test):  20%|██        | 12/60 [15:49\u003c1:03:08, 78.94s/it]\n"}
+,{"stream_name":"stderr","time":1126.92723549,"data":"\rEvaluating (test):  20%|██        | 12/60 [15:49\u003c1:03:08, 78.94s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1126.927281906,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1126.927288807,"data":"\n"}
+,{"stream_name":"stderr","time":1126.927293637,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1126.927299677,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1129.309489408,"data":"\rEvaluating (test):  22%|██▏       | 13/60 [16:36\u003c54:26, 69.50s/it]  \n"}
+,{"stream_name":"stderr","time":1185.74049231,"data":"\rEvaluating (test):  22%|██▏       | 13/60 [16:36\u003c54:26, 69.50s/it]  /usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1185.74054156,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1185.740550288,"data":"\n"}
+,{"stream_name":"stderr","time":1185.740556586,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1185.740563524,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1189.346129403,"data":"\rEvaluating (test):  23%|██▎       | 14/60 [17:36\u003c51:05, 66.64s/it]\n"}
+,{"stream_name":"stderr","time":1264.182120426,"data":"\rEvaluating (test):  23%|██▎       | 14/60 [17:36\u003c51:05, 66.64s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1264.18216472,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1264.182181857,"data":"\n"}
+,{"stream_name":"stderr","time":1264.182186463,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1264.18219141,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1266.814805975,"data":"\rEvaluating (test):  25%|██▌       | 15/60 [18:54\u003c52:25, 69.90s/it]\n"}
+,{"stream_name":"stderr","time":1341.759798834,"data":"\rEvaluating (test):  25%|██▌       | 15/60 [18:54\u003c52:25, 69.90s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1341.759837119,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1341.759843197,"data":"\n"}
+,{"stream_name":"stderr","time":1341.759847852,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1341.759858571,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1345.144121437,"data":"\rEvaluating (test):  27%|██▋       | 16/60 [20:12\u003c53:07, 72.44s/it]\n"}
+,{"stream_name":"stderr","time":1420.369980076,"data":"\rEvaluating (test):  27%|██▋       | 16/60 [20:12\u003c53:07, 72.44s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1420.370021925,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1420.370027555,"data":"\n"}
+,{"stream_name":"stderr","time":1420.370032093,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1420.370037904,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1424.182053702,"data":"\rEvaluating (test):  28%|██▊       | 17/60 [21:31\u003c53:20, 74.42s/it]\n"}
+,{"stream_name":"stderr","time":1499.370409605,"data":"\rEvaluating (test):  28%|██▊       | 17/60 [21:31\u003c53:20, 74.42s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1499.370449547,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1499.370471985,"data":"\n"}
+,{"stream_name":"stderr","time":1499.37047483,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1499.370478002,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1502.835568127,"data":"\rEvaluating (test):  30%|███       | 18/60 [22:50\u003c52:59, 75.69s/it]\n"}
+,{"stream_name":"stderr","time":1548.15254942,"data":"\rEvaluating (test):  30%|███       | 18/60 [22:50\u003c52:59, 75.69s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1548.152589097,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1548.152605115,"data":"\n"}
+,{"stream_name":"stderr","time":1548.152610155,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1548.152631177,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1550.743068331,"data":"\rEvaluating (test):  32%|███▏      | 19/60 [23:38\u003c46:01, 67.35s/it]\n"}
+,{"stream_name":"stderr","time":1611.086323685,"data":"\rEvaluating (test):  32%|███▏      | 19/60 [23:38\u003c46:01, 67.35s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1611.086358848,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1611.086364709,"data":"\n"}
+,{"stream_name":"stderr","time":1611.086379058,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1611.086385712,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1614.53182949,"data":"\rEvaluating (test):  33%|███▎      | 20/60 [24:42\u003c44:11, 66.28s/it]\n"}
+,{"stream_name":"stderr","time":1689.590069818,"data":"\rEvaluating (test):  33%|███▎      | 20/60 [24:42\u003c44:11, 66.28s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1689.590111552,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1689.590126233,"data":"\n"}
+,{"stream_name":"stderr","time":1689.590130586,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1689.590135539,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1692.963754383,"data":"\rEvaluating (test):  35%|███▌      | 21/60 [26:00\u003c45:27, 69.93s/it]\n"}
+,{"stream_name":"stderr","time":1768.147465562,"data":"\rEvaluating (test):  35%|███▌      | 21/60 [26:00\u003c45:27, 69.93s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1768.147503745,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1768.147509069,"data":"\n"}
+,{"stream_name":"stderr","time":1768.147513862,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1768.147519502,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1772.259842183,"data":"\rEvaluating (test):  37%|███▋      | 22/60 [27:19\u003c46:04, 72.74s/it]\n"}
+,{"stream_name":"stderr","time":1817.666330049,"data":"\rEvaluating (test):  37%|███▋      | 22/60 [27:19\u003c46:04, 72.74s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1817.66638553,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1817.666392732,"data":"\n"}
+,{"stream_name":"stderr","time":1817.666397445,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1817.666402632,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1820.171107692,"data":"\rEvaluating (test):  38%|███▊      | 23/60 [28:07\u003c40:15, 65.29s/it]\n"}
+,{"stream_name":"stderr","time":1895.254699053,"data":"\rEvaluating (test):  38%|███▊      | 23/60 [28:07\u003c40:15, 65.29s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1895.254740021,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1895.254768972,"data":"\n"}
+,{"stream_name":"stderr","time":1895.254773916,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1895.254778924,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1898.858458046,"data":"\rEvaluating (test):  40%|████      | 24/60 [29:26\u003c41:35, 69.31s/it]\n"}
+,{"stream_name":"stderr","time":1973.94056496,"data":"\rEvaluating (test):  40%|████      | 24/60 [29:26\u003c41:35, 69.31s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1973.940636248,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1973.94064399,"data":"\n"}
+,{"stream_name":"stderr","time":1973.940648785,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":1973.940654302,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":1977.791468004,"data":"\rEvaluating (test):  42%|████▏     | 25/60 [30:45\u003c42:06, 72.20s/it]\n"}
+,{"stream_name":"stderr","time":2052.950067978,"data":"\rEvaluating (test):  42%|████▏     | 25/60 [30:45\u003c42:06, 72.20s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2052.950110441,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2052.950116421,"data":"\n"}
+,{"stream_name":"stderr","time":2052.950121091,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2052.950127369,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2056.697378012,"data":"\rEvaluating (test):  43%|████▎     | 26/60 [32:04\u003c42:03, 74.21s/it]\n"}
+,{"stream_name":"stderr","time":2113.225259405,"data":"\rEvaluating (test):  43%|████▎     | 26/60 [32:04\u003c42:03, 74.21s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2113.225307143,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2113.225313124,"data":"\n"}
+,{"stream_name":"stderr","time":2113.225317079,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2113.225321602,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2115.751278609,"data":"\rEvaluating (test):  45%|████▌     | 27/60 [33:03\u003c38:18, 69.66s/it]\n"}
+,{"stream_name":"stderr","time":2190.664441603,"data":"\rEvaluating (test):  45%|████▌     | 27/60 [33:03\u003c38:18, 69.66s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2190.664497485,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2190.664503676,"data":"\n"}
+,{"stream_name":"stderr","time":2190.66450812,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2190.664514878,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2194.669544291,"data":"\rEvaluating (test):  47%|████▋     | 28/60 [34:22\u003c38:38, 72.44s/it]\n"}
+,{"stream_name":"stderr","time":2269.875296234,"data":"\rEvaluating (test):  47%|████▋     | 28/60 [34:22\u003c38:38, 72.44s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2269.875335389,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2269.875341541,"data":"/usr/local/lib/python3.12/dist-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.\n"}
+,{"stream_name":"stderr","time":2269.875346868,"data":"  warnings.warn(\n"}
+,{"stream_name":"stderr","time":2269.875355204,"data":"\n"}
+,{"stream_name":"stderr","time":2269.875358925,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2269.875362748,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2269.875366029,"data":"/usr/local/lib/python3.12/dist-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.\n"}
+,{"stream_name":"stderr","time":2269.875369517,"data":"  warnings.warn(\n"}
+,{"stream_name":"stderr","time":2273.710988656,"data":"\rEvaluating (test):  48%|████▊     | 29/60 [35:41\u003c38:27, 74.42s/it]\n"}
+,{"stream_name":"stderr","time":2348.964444836,"data":"\rEvaluating (test):  48%|████▊     | 29/60 [35:41\u003c38:27, 74.42s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2348.964494466,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2348.96450026,"data":"\n"}
+,{"stream_name":"stderr","time":2348.964505256,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2348.964511028,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2352.502180893,"data":"\rEvaluating (test):  50%|█████     | 30/60 [37:00\u003c37:51, 75.73s/it]\n"}
+,{"stream_name":"stderr","time":2427.624202363,"data":"\rEvaluating (test):  50%|█████     | 30/60 [37:00\u003c37:51, 75.73s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2427.624284403,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2427.624289864,"data":"\n"}
+,{"stream_name":"stderr","time":2427.624294191,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2427.62429959,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2432.036148023,"data":"\rEvaluating (test):  52%|█████▏    | 31/60 [38:19\u003c37:09, 76.87s/it]\n"}
+,{"stream_name":"stderr","time":2507.179161319,"data":"\rEvaluating (test):  52%|█████▏    | 31/60 [38:19\u003c37:09, 76.87s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2507.179227392,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2507.179233674,"data":"\n"}
+,{"stream_name":"stderr","time":2507.179248074,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2507.179253022,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2510.954018549,"data":"\rEvaluating (test):  53%|█████▎    | 32/60 [39:38\u003c36:09, 77.49s/it]\n"}
+,{"stream_name":"stderr","time":2556.359572253,"data":"\rEvaluating (test):  53%|█████▎    | 32/60 [39:38\u003c36:09, 77.49s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2556.359635619,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2556.359644696,"data":"\n"}
+,{"stream_name":"stderr","time":2556.359649294,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2556.359659952,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2558.981032963,"data":"\rEvaluating (test):  55%|█████▌    | 33/60 [40:26\u003c30:53, 68.65s/it]\n"}
+,{"stream_name":"stderr","time":2615.315248012,"data":"\rEvaluating (test):  55%|█████▌    | 33/60 [40:26\u003c30:53, 68.65s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2615.315288828,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2615.315294754,"data":"\n"}
+,{"stream_name":"stderr","time":2615.315299408,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2615.315305178,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2618.146027759,"data":"\rEvaluating (test):  57%|█████▋    | 34/60 [41:25\u003c28:30, 65.80s/it]\n"}
+,{"stream_name":"stderr","time":2693.099598789,"data":"\rEvaluating (test):  57%|█████▋    | 34/60 [41:25\u003c28:30, 65.80s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2693.099653132,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2693.099659129,"data":"\n"}
+,{"stream_name":"stderr","time":2693.09966372,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2693.09966914,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2696.194483683,"data":"\rEvaluating (test):  58%|█████▊    | 35/60 [42:43\u003c28:56, 69.48s/it]\n"}
+,{"stream_name":"stderr","time":2752.885243725,"data":"\rEvaluating (test):  58%|█████▊    | 35/60 [42:43\u003c28:56, 69.48s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2752.885291713,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2752.885299655,"data":"\n"}
+,{"stream_name":"stderr","time":2752.88530504,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2752.885311477,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2757.371172776,"data":"\rEvaluating (test):  60%|██████    | 36/60 [43:44\u003c26:47, 66.99s/it]\n"}
+,{"stream_name":"stderr","time":2832.445666169,"data":"\rEvaluating (test):  60%|██████    | 36/60 [43:44\u003c26:47, 66.99s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2832.445703538,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2832.445708974,"data":"\n"}
+,{"stream_name":"stderr","time":2832.445714192,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2832.445720126,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2836.218739191,"data":"\rEvaluating (test):  62%|██████▏   | 37/60 [45:03\u003c27:02, 70.54s/it]\n"}
+,{"stream_name":"stderr","time":2893.018471292,"data":"\rEvaluating (test):  62%|██████▏   | 37/60 [45:03\u003c27:02, 70.54s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2893.018516878,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2893.018524845,"data":"\n"}
+,{"stream_name":"stderr","time":2893.018530599,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2893.018551514,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2897.444709295,"data":"\rEvaluating (test):  63%|██████▎   | 38/60 [46:05\u003c24:50, 67.75s/it]\n"}
+,{"stream_name":"stderr","time":2972.729639273,"data":"\rEvaluating (test):  63%|██████▎   | 38/60 [46:05\u003c24:50, 67.75s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2972.729678941,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2972.729684303,"data":"\n"}
+,{"stream_name":"stderr","time":2972.729689323,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":2972.729694933,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":2977.565328176,"data":"\rEvaluating (test):  65%|██████▌   | 39/60 [47:25\u003c25:00, 71.46s/it]\n"}
+,{"stream_name":"stderr","time":3034.073738473,"data":"\rEvaluating (test):  65%|██████▌   | 39/60 [47:25\u003c25:00, 71.46s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3034.073788745,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3034.073794991,"data":"\n"}
+,{"stream_name":"stderr","time":3034.073800351,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3034.073806108,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3037.09864873,"data":"\rEvaluating (test):  67%|██████▋   | 40/60 [48:24\u003c22:37, 67.88s/it]\n"}
+,{"stream_name":"stderr","time":3093.702689869,"data":"\rEvaluating (test):  67%|██████▋   | 40/60 [48:24\u003c22:37, 67.88s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3093.702741989,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3093.702748115,"data":"\n"}
+,{"stream_name":"stderr","time":3093.702753006,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3093.702769609,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3096.896508881,"data":"\rEvaluating (test):  68%|██████▊   | 41/60 [49:24\u003c20:43, 65.46s/it]\n"}
+,{"stream_name":"stderr","time":3171.891354635,"data":"\rEvaluating (test):  68%|██████▊   | 41/60 [49:24\u003c20:43, 65.46s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3171.891399067,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3171.89140663,"data":"\n"}
+,{"stream_name":"stderr","time":3171.891411741,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3171.891417361,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3175.837142718,"data":"\rEvaluating (test):  70%|███████   | 42/60 [50:43\u003c20:51, 69.50s/it]\n"}
+,{"stream_name":"stderr","time":3250.941695199,"data":"\rEvaluating (test):  70%|███████   | 42/60 [50:43\u003c20:51, 69.50s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3250.941739333,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3250.941745828,"data":"\n"}
+,{"stream_name":"stderr","time":3250.941751516,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3250.941758728,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3254.629108957,"data":"\rEvaluating (test):  72%|███████▏  | 43/60 [52:02\u003c20:28, 72.29s/it]\n"}
+,{"stream_name":"stderr","time":3311.18649336,"data":"\rEvaluating (test):  72%|███████▏  | 43/60 [52:02\u003c20:28, 72.29s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3311.186556603,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3311.186562142,"data":"\n"}
+,{"stream_name":"stderr","time":3311.186566471,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3311.186582912,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3314.201705506,"data":"\rEvaluating (test):  73%|███████▎  | 44/60 [53:01\u003c18:15, 68.47s/it]\n"}
+,{"stream_name":"stderr","time":3389.343790601,"data":"\rEvaluating (test):  73%|███████▎  | 44/60 [53:01\u003c18:15, 68.47s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3389.343838044,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3389.343845237,"data":"\n"}
+,{"stream_name":"stderr","time":3389.343850687,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3389.343857179,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3393.072026745,"data":"\rEvaluating (test):  75%|███████▌  | 45/60 [54:20\u003c17:53, 71.59s/it]\n"}
+,{"stream_name":"stderr","time":3468.08329524,"data":"\rEvaluating (test):  75%|███████▌  | 45/60 [54:20\u003c17:53, 71.59s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3468.083354143,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3468.083362778,"data":"\n"}
+,{"stream_name":"stderr","time":3468.083368315,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3468.083374476,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3471.880886963,"data":"\rEvaluating (test):  77%|███████▋  | 46/60 [55:39\u003c17:12, 73.76s/it]\n"}
+,{"stream_name":"stderr","time":3546.970091165,"data":"\rEvaluating (test):  77%|███████▋  | 46/60 [55:39\u003c17:12, 73.76s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3546.970133054,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3546.97013736,"data":"\n"}
+,{"stream_name":"stderr","time":3546.970140922,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3546.970153277,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3551.123700857,"data":"\rEvaluating (test):  78%|███████▊  | 47/60 [56:58\u003c16:20, 75.40s/it]\n"}
+,{"stream_name":"stderr","time":3626.242367883,"data":"\rEvaluating (test):  78%|███████▊  | 47/60 [56:58\u003c16:20, 75.40s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3626.242410535,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3626.242430941,"data":"\n"}
+,{"stream_name":"stderr","time":3626.242436397,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3626.242442108,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3630.171936726,"data":"\rEvaluating (test):  80%|████████  | 48/60 [58:17\u003c15:17, 76.50s/it]\n"}
+,{"stream_name":"stderr","time":3705.256888646,"data":"\rEvaluating (test):  80%|████████  | 48/60 [58:17\u003c15:17, 76.50s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3705.256947726,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3705.256954518,"data":"\n"}
+,{"stream_name":"stderr","time":3705.256959446,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3705.256965387,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3708.555850622,"data":"\rEvaluating (test):  82%|████████▏ | 49/60 [59:36\u003c14:07, 77.06s/it]\n"}
+,{"stream_name":"stderr","time":3765.137869325,"data":"\rEvaluating (test):  82%|████████▏ | 49/60 [59:36\u003c14:07, 77.06s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3765.137909547,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3765.137915627,"data":"\n"}
+,{"stream_name":"stderr","time":3765.137920187,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3765.137940811,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3767.980889887,"data":"\rEvaluating (test):  83%|████████▎ | 50/60 [1:00:35\u003c11:57, 71.77s/it]\n"}
+,{"stream_name":"stderr","time":3843.061467961,"data":"\rEvaluating (test):  83%|████████▎ | 50/60 [1:00:35\u003c11:57, 71.77s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3843.061563526,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3843.061573954,"data":"\n"}
+,{"stream_name":"stderr","time":3843.061587948,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3843.06159349,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3847.078644498,"data":"\rEvaluating (test):  85%|████████▌ | 51/60 [1:01:54\u003c11:05, 73.97s/it]\n"}
+,{"stream_name":"stderr","time":3922.2857192,"data":"\rEvaluating (test):  85%|████████▌ | 51/60 [1:01:54\u003c11:05, 73.97s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3922.285779053,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3922.285785791,"data":"\n"}
+,{"stream_name":"stderr","time":3922.285791159,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":3922.285797544,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":3925.918702851,"data":"\rEvaluating (test):  87%|████████▋ | 52/60 [1:03:13\u003c10:03, 75.43s/it]\n"}
+,{"stream_name":"stderr","time":4000.995337445,"data":"\rEvaluating (test):  87%|████████▋ | 52/60 [1:03:13\u003c10:03, 75.43s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4000.995415356,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4000.995422617,"data":"\n"}
+,{"stream_name":"stderr","time":4000.995427403,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4000.995479555,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4004.848668771,"data":"\rEvaluating (test):  88%|████████▊ | 53/60 [1:04:32\u003c08:55, 76.48s/it]\n"}
+,{"stream_name":"stderr","time":4079.752516171,"data":"\rEvaluating (test):  88%|████████▊ | 53/60 [1:04:32\u003c08:55, 76.48s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4079.752558224,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4079.752574945,"data":"\n"}
+,{"stream_name":"stderr","time":4079.752580449,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4079.75258667,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4082.773836304,"data":"\rEvaluating (test):  90%|█████████ | 54/60 [1:05:50\u003c07:41, 76.91s/it]\n"}
+,{"stream_name":"stderr","time":4139.461133964,"data":"\rEvaluating (test):  90%|█████████ | 54/60 [1:05:50\u003c07:41, 76.91s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4139.461178614,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4139.46118486,"data":"\n"}
+,{"stream_name":"stderr","time":4139.461189431,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4139.461196349,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4143.465118061,"data":"\rEvaluating (test):  92%|█████████▏| 55/60 [1:06:51\u003c06:00, 72.05s/it]\n"}
+,{"stream_name":"stderr","time":4199.579455182,"data":"\rEvaluating (test):  92%|█████████▏| 55/60 [1:06:51\u003c06:00, 72.05s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4199.579515814,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4199.579526505,"data":"/usr/local/lib/python3.12/dist-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.\n"}
+,{"stream_name":"stderr","time":4199.579542706,"data":"  warnings.warn(\n"}
+,{"stream_name":"stderr","time":4199.579546663,"data":"/usr/local/lib/python3.12/dist-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.\n"}
+,{"stream_name":"stderr","time":4199.579549997,"data":"  warnings.warn(\n"}
+,{"stream_name":"stderr","time":4199.579553173,"data":"/usr/local/lib/python3.12/dist-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.\n"}
+,{"stream_name":"stderr","time":4199.579556487,"data":"  warnings.warn(\n"}
+,{"stream_name":"stderr","time":4199.579559635,"data":"\n"}
+,{"stream_name":"stderr","time":4199.579563575,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4199.57956781,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4199.579571781,"data":"/usr/local/lib/python3.12/dist-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.\n"}
+,{"stream_name":"stderr","time":4199.579576254,"data":"  warnings.warn(\n"}
+,{"stream_name":"stderr","time":4199.57958016,"data":"/usr/local/lib/python3.12/dist-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.\n"}
+,{"stream_name":"stderr","time":4199.57958376,"data":"  warnings.warn(\n"}
+,{"stream_name":"stderr","time":4199.579587168,"data":"/usr/local/lib/python3.12/dist-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.\n"}
+,{"stream_name":"stderr","time":4199.579591732,"data":"  warnings.warn(\n"}
+,{"stream_name":"stderr","time":4201.698293194,"data":"\rEvaluating (test):  93%|█████████▎| 56/60 [1:07:49\u003c04:31, 67.90s/it]\n"}
+,{"stream_name":"stderr","time":4246.935565025,"data":"\rEvaluating (test):  93%|█████████▎| 56/60 [1:07:49\u003c04:31, 67.90s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4246.935601872,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4246.935619562,"data":"\n"}
+,{"stream_name":"stderr","time":4246.935632837,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4246.935638927,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4249.42167328,"data":"\rEvaluating (test):  95%|█████████▌| 57/60 [1:08:37\u003c03:05, 61.85s/it]\n"}
+,{"stream_name":"stderr","time":4324.385277372,"data":"\rEvaluating (test):  95%|█████████▌| 57/60 [1:08:37\u003c03:05, 61.85s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4324.385380145,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4324.385389695,"data":"\n"}
+,{"stream_name":"stderr","time":4324.385407052,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4324.385424472,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4327.663894096,"data":"\rEvaluating (test):  97%|█████████▋| 58/60 [1:09:55\u003c02:13, 66.77s/it]\n"}
+,{"stream_name":"stderr","time":4402.983562209,"data":"\rEvaluating (test):  97%|█████████▋| 58/60 [1:09:55\u003c02:13, 66.77s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4402.983679689,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4402.983690201,"data":"\n"}
+,{"stream_name":"stderr","time":4402.983696239,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4402.983703098,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4406.64658131,"data":"\rEvaluating (test):  98%|█████████▊| 59/60 [1:11:14\u003c01:10, 70.43s/it]\n"}
+,{"stream_name":"stderr","time":4481.554972692,"data":"\rEvaluating (test):  98%|█████████▊| 59/60 [1:11:14\u003c01:10, 70.43s/it]/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4481.555030328,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4481.555038053,"data":"\n"}
+,{"stream_name":"stderr","time":4481.555044013,"data":"/usr/local/lib/python3.12/dist-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.\n"}
+,{"stream_name":"stderr","time":4481.555050182,"data":"  warn_deprecated(argname, msg, warning_category)\n"}
+,{"stream_name":"stderr","time":4485.020536485,"data":"\rEvaluating (test): 100%|██████████| 60/60 [1:12:32\u003c00:00, 72.81s/it]\n"}
+,{"stream_name":"stderr","time":4485.024628867,"data":"\rEvaluating (test): 100%|██████████| 60/60 [1:12:32\u003c00:00, 72.81s/it]\rEvaluating (test): 100%|██████████| 60/60 [1:12:32\u003c00:00, 72.54s/it]\n"}
+,{"stream_name":"stdout","time":4485.173749978,"data":"======================================================================\n"}
+,{"stream_name":"stdout","time":4485.173779418,"data":"Evaluation summary -- split='test', 60 case(s), 0 skipped (unlabeled)\n"}
+,{"stream_name":"stdout","time":4485.173784571,"data":"======================================================================\n"}
+,{"stream_name":"stdout","time":4485.173788253,"data":"  ET: dice=0.7784  iou=0.6773  hd95=5.8353 mm\n"}
+,{"stream_name":"stdout","time":4485.173791952,"data":"  TC: dice=0.7846  iou=0.7043  hd95=13.4489 mm\n"}
+,{"stream_name":"stdout","time":4485.173795169,"data":"  WT: dice=0.8959  iou=0.8316  hd95=16.3500 mm\n"}
+,{"stream_name":"stdout","time":4485.173798628,"data":"  dice_mean = 0.8196\n"}
+,{"stream_name":"stdout","time":4485.173802147,"data":"  iou_mean = 0.7377\n"}
+,{"stream_name":"stdout","time":4485.173805498,"data":"  hd95_mean = 12.1402\n"}
+,{"stream_name":"stdout","time":4485.173809053,"data":"  fraction of cases with empty ground-truth ET (gt_empty_ET mean) = 0.0000\n"}
+,{"stream_name":"stderr","time":4485.174757661,"data":"\rEvaluating (test): 100%|██████████| 60/60 [1:12:32\u003c00:00, 72.54s/it]\n"}
+,{"stream_name":"stderr","time":4485.174777038,"data":"\n"}
+,{"stream_name":"stderr","time":4485.174781414,"data":"\n"}
+,{"stream_name":"stdout","time":4485.236861322,"data":"               mean     std  median  count  n_missing\n"}
+,{"stream_name":"stdout","time":4485.236909893,"data":"dice_ET      0.7784  0.2245  0.8569     60          0\n"}
+,{"stream_name":"stdout","time":4485.236916018,"data":"iou_ET       0.6773  0.2267  0.7497     60          0\n"}
+,{"stream_name":"stdout","time":4485.236919686,"data":"hd95_ET      5.8353  6.5663  3.1583     58          2\n"}
+,{"stream_name":"stdout","time":4485.236923571,"data":"gt_empty_ET  0.0000  0.0000  0.0000     60          0\n"}
+,{"stream_name":"stdout","time":4485.236927634,"data":"dice_TC      0.7846  0.2686  0.8971     60          0\n"}
+,{"stream_name":"stdout","time":4485.236931282,"data":"iou_TC       0.7043  0.2748  0.8134     60          0\n"}
+,{"stream_name":"stdout","time":4485.23693515,"data":"hd95_TC     13.4489 17.1211  5.3852     59          1\n"}
+,{"stream_name":"stdout","time":4485.236939012,"data":"gt_empty_TC  0.0000  0.0000  0.0000     60          0\n"}
+,{"stream_name":"stdout","time":4485.236943071,"data":"dice_WT      0.8959  0.1431  0.9448     60          0\n"}
+,{"stream_name":"stdout","time":4485.236947228,"data":"iou_WT       0.8316  0.1620  0.8954     60          0\n"}
+,{"stream_name":"stdout","time":4485.236951262,"data":"hd95_WT     16.3500 18.6981  5.8310     59          1\n"}
+,{"stream_name":"stdout","time":4485.236954847,"data":"gt_empty_WT  0.0000  0.0000  0.0000     60          0\n"}
+,{"stream_name":"stdout","time":4485.236958489,"data":"dice_mean    0.8196  0.1889  0.8856     60          0\n"}
+,{"stream_name":"stdout","time":4485.236961894,"data":"iou_mean     0.7377  0.1936  0.7996     60          0\n"}
+,{"stream_name":"stdout","time":4485.236965301,"data":"hd95_mean   12.1402 11.9919  8.3359     59          1\n"}
+,{"stream_name":"stdout","time":4485.236973672,"data":"\n"}
+,{"stream_name":"stdout","time":4485.236976302,"data":"cases scored: 60\n"}
+,{"stream_name":"stdout","time":4485.236978619,"data":"predictions : 0 files\n"}
+,{"stream_name":"stderr","time":4491.138722819,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":4491.138769564,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":4491.327088045,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":4491.327121669,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":4492.003500724,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to notebook\n"}
+,{"stream_name":"stderr","time":4492.321265222,"data":"[NbConvertApp] Writing 55719 bytes to __notebook__.ipynb\n"}
+,{"stream_name":"stderr","time":4494.623639839,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to html\n"}
+,{"stream_name":"stderr","time":4495.45804947,"data":"[NbConvertApp] Writing 352789 bytes to __results__.html\n"}
+]

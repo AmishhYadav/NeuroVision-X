@@ -1,0 +1,326 @@
+data:
+  name: brats
+  root_dir: ???
+  modalities:
+  - t1
+  - t1ce
+  - t2
+  - flair
+  in_channels: 4
+  regions:
+  - ET
+  - TC
+  - WT
+  num_classes: 3
+  spacing:
+  - 1.0
+  - 1.0
+  - 1.0
+  normalize: nonzero_z_score
+  crop_foreground: true
+  patch_size:
+  - 64
+  - 64
+  - 64
+  pos_neg_ratio:
+  - 1
+  - 1
+  samples_per_volume: 4
+  augment:
+    flip_prob: 0.5
+    rot90_prob: 0.5
+    scale_intensity_factor: 0.1
+    shift_intensity_offset: 0.1
+    noise_prob: 0.15
+    noise_std: 0.01
+  splits:
+    path: configs/data/splits.yaml
+    fractions:
+    - 0.7
+    - 0.15
+    - 0.15
+    seed: 42
+    overwrite: false
+  overfit_n: null
+  num_workers: 4
+  dataset_type: dataset
+  cache_dir: outputs/cache
+  cache_rate: 0.0
+  preprocessing:
+    out_dir: data/preprocessed/brats
+    num_workers: 8
+    overwrite: false
+    require_seg: true
+    limit: null
+    metadata_csv: metadata.csv
+model:
+  name: neurovision
+  in_channels: 4
+  out_channels: 3
+  encoder:
+    cnn:
+      channels:
+      - 32
+      - 64
+      - 128
+      - 256
+      - 320
+      blocks_per_stage:
+      - 2
+      - 2
+      - 2
+      - 2
+      - 2
+      num_groups: 8
+      dropout: 0.1
+      use_checkpoint: false
+      zero_init_residual: true
+    swin:
+      enabled: true
+      feature_size: 48
+      depths:
+      - 2
+      - 2
+      - 2
+      - 2
+      num_heads:
+      - 3
+      - 6
+      - 12
+      - 24
+      window_size: 7
+      patch_size: 2
+      num_levels: 4
+      drop_rate: 0.0
+      attn_drop_rate: 0.0
+      dropout_path_rate: 0.0
+      use_checkpoint: true
+      normalize: true
+  fusion:
+    name: adaptive_gated
+    num_heads: 4
+    window_size: 4
+    full_attention_max_tokens: 512
+    gate_channels: scalar
+    gate_reduction: 4
+    num_groups: 8
+    attn_dropout: 0.0
+    proj_dropout: 0.0
+    layer_scale_init: 0.0001
+    use_checkpoint: false
+    use_ambiguity: true
+  decoder:
+    channels: null
+    blocks_per_stage: 2
+    num_groups: 8
+    dropout: 0.0
+    upsample: deconv
+    use_attention_gates: false
+    use_checkpoint: false
+  head:
+    dropout: 0.1
+    confidence:
+      enabled: true
+      hidden_channels: null
+      num_groups: 8
+      dropout: 0.0
+    boundary:
+      enabled: true
+      hidden_channels: null
+      num_groups: 8
+      dropout: 0.0
+  deep_supervision_levels: 3
+training:
+  epochs: 80
+  batch_size: 1
+  grad_accum_steps: 1
+  amp: true
+  optimizer:
+    name: adamw
+    lr: 0.0001
+    weight_decay: 1.0e-05
+    betas:
+    - 0.9
+    - 0.999
+  scheduler:
+    name: cosine
+    warmup_epochs: 5
+    min_lr: 1.0e-06
+  loss:
+    name: multitask
+    dice_weight: 1.0
+    ce_weight: 1.0
+    sigmoid: true
+    softmax: false
+    include_background: true
+    squared_pred: false
+    smooth_nr: 1.0e-05
+    smooth_dr: 1.0e-05
+    deep_supervision:
+      enabled: true
+      weights: null
+    multitask:
+      seg_weight: 1.0
+      boundary:
+        enabled: true
+        weight: 0.3
+        kernel_size: 3
+        squared_pred: false
+      confidence:
+        enabled: true
+        weight: 0.05
+        threshold: 0.5
+      branch:
+        enabled: true
+        weight: 0.1
+      surface:
+        enabled: false
+        weight: 0.1
+        alpha: 2.0
+        log: false
+  grad_clip_norm: 5.0
+  val_interval: 10
+  log_interval: 20
+  sliding_window:
+    roi_size:
+    - 64
+    - 64
+    - 64
+    sw_batch_size: 4
+    overlap: 0.25
+  checkpoint:
+    dir: outputs/neurovision/checkpoints
+    save_every_n_epochs: 1
+    keep_last_n: 2
+    monitor: val/dice_mean
+    mode: max
+    resume: null
+  max_hours: 10.5
+inference:
+  sliding_window:
+    roi_size:
+    - 64
+    - 64
+    - 64
+    sw_batch_size: 4
+    overlap: 0.5
+    mode: gaussian
+    sigma_scale: 0.125
+    output_device: null
+    padding_mode: constant
+  mc_dropout:
+    enabled: false
+    num_samples: 10
+    seed: null
+    require_dropout: true
+    predictions_from: deterministic
+    save_fields:
+    - mutual_information
+  postprocess:
+    threshold: 0.5
+    enforce_nesting: true
+    min_component_size: 50
+    connectivity: 1
+    keep_largest_only: false
+    et_min_volume: 0
+  evaluation:
+    split: test
+    checkpoint: null
+    out_dir: outputs/neurovision/eval_test
+    save_predictions: true
+    save_probabilities: false
+    save_logits: false
+    strict_arch_check: true
+    boundary_bands:
+    - - 0.0
+      - 2.0
+    - - 2.0
+      - 5.0
+    - - 5.0
+      - 10.0
+    - - 10.0
+      - .inf
+calibration:
+  fit_dir: outputs/neurovision/eval_val
+  apply_dir: outputs/neurovision/eval_test
+  out_dir: outputs/neurovision/calibration_mc
+  source: auto
+  n_bins: 15
+  threshold: 0.5
+  mask_mode: predicted
+  per_channel: true
+  fit_voxels_per_case: 20000
+  seed: 42
+  temperature: null
+  risk_coverage:
+    enabled: true
+    uncertainty_column: mi_mean_fg_WT
+    score_column: dice_mean
+    score_higher_is_better: true
+    coverage_points:
+    - 1.0
+    - 0.9
+    - 0.8
+    - 0.7
+    - 0.6
+    - 0.5
+explainability:
+  gates:
+    split: test
+    checkpoint: null
+    out_dir: outputs/neurovision/gates_test
+    num_cases: 32
+    case_ids: null
+    patch_size:
+    - 64
+    - 64
+    - 64
+    center_on: label
+    save_image: true
+  attribution:
+    split: test
+    checkpoint: null
+    out_dir: outputs/neurovision/attribution_test
+    num_cases: 4
+    case_ids: null
+    patch_size:
+    - 64
+    - 64
+    - 64
+    regions:
+    - 0
+    - 2
+    save_image: true
+    integrated_gradients:
+      enabled: true
+      n_steps: 32
+      internal_batch_size: 1
+      delta_tolerance: 0.05
+      noise_scale: 1.0
+    grad_cam:
+      enabled: true
+      target_layer: null
+      relu: true
+    attention:
+      enabled: false
+      stage: layers3
+      residual_weight: 0.5
+      max_tokens: 4096
+    faithfulness:
+      enabled: true
+      n_points: 11
+      fill: zero
+    seed: 42
+experiment_name: neurovision
+seed: 42
+device: cpu
+output_dir: outputs/neurovision
+wandb:
+  project: neurovision-x
+  entity: null
+  mode: online
+  tags:
+  - baseline
+  - milestone1
+  group: milestone1_baselines
+  run_id: null

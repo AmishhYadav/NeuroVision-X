@@ -1,0 +1,47 @@
+{
+  "n_cases": 22,
+  "n_t_excluded": 0,
+  "t_vs_b": {
+    "axis0": {
+      "pearson_r": -0.46758814777249424,
+      "pearson_p": 0.028211394414695,
+      "spearman_rho": -0.422304889026276,
+      "spearman_p": 0.050245326604834446
+    },
+    "axis1": {
+      "pearson_r": -0.8623332104621105,
+      "pearson_p": 2.4694995470732033e-07,
+      "spearman_rho": -0.7549958656044881,
+      "spearman_p": 4.882819873142639e-05
+    },
+    "axis2": {
+      "pearson_r": -0.5157126084267476,
+      "pearson_p": 0.01402354599862499,
+      "spearman_rho": -0.6066380315648849,
+      "spearman_p": 0.002759763496590839
+    }
+  },
+  "t1_signs": {
+    "positive": 7,
+    "negative": 12,
+    "zero": 3
+  },
+  "median_wt_raw": 0.6578720377981301,
+  "median_tc_raw": 0.5794459614112749,
+  "usable_raw": 8,
+  "median_wt_brain_corrected": 0.7077626020678043,
+  "median_tc_brain_corrected": 0.6647319516687487,
+  "usable_brain_corrected": 9,
+  "median_wt_tumour_fit": 0.8275625365774664,
+  "median_tc_tumour_fit": 0.8586648013934383,
+  "usable_tumour_fit": 14,
+  "wilcoxon_p_brain_corrected_vs_raw": 0.017200946807861328,
+  "n_improved_wt_brain_corrected": 16,
+  "cohort_brain_to_atlas": {
+    "n": 189,
+    "norm_median": 3.3166247903554,
+    "frac_ge_3mm": 0.5978835978835979,
+    "frac_ge_5mm": 0.35978835978835977,
+    "norm_max": 20.248456731316587
+  }
+}

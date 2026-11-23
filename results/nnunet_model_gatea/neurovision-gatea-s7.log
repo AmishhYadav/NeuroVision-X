@@ -1,0 +1,353 @@
+[{"stream_name":"stderr","time":11.170791545,"data":"/usr/local/lib/python3.13/dist-packages/nbformat/validator.py:434: MissingIDFieldWarning: Cell is missing an id field, this will become a hard error in future nbformat versions. You may want to use `normalize()` on your notebooks before validations (available since nbformat 5.1.4). Previous versions of nbformat are fixing this issue transparently, and will stop doing so in the future.\n"}
+,{"stream_name":"stderr","time":11.170831933,"data":"  _validate(nbdict, ref, version, version_minor, relax_add_props)\n"}
+,{"stream_name":"stderr","time":12.684931519,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":12.684975852,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":12.684983663,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":12.684988646,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stderr","time":13.544350003,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":13.544401785,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":13.544407348,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":13.544411359,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stdout","time":17.026845413,"data":"repo at c7778c247fb014011c8b574e3ace98b02dcd2c0e\n"}
+,{"stream_name":"stdout","time":27.071008072,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 291.1/291.1 kB 4.9 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.106545059,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 53.6/53.6 kB 2.5 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.139953671,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43.7/43.7 kB 2.5 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.178613882,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 106.8/106.8 kB 4.4 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.225579809,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 79.5/79.5 kB 2.4 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.273862362,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 291.1/291.1 kB 4.9 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.273920316,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 53.6/53.6 kB 2.5 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.273929257,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 43.7/43.7 kB 2.5 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.273936245,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 106.8/106.8 kB 4.4 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.273943216,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 79.5/79.5 kB 2.4 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.524111085,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 28.4/28.4 MB 72.9 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.590600741,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.9/4.9 MB 102.5 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.726514819,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 28.4/28.4 MB 72.9 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":27.726546167,"data":"   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.9/4.9 MB 102.5 MB/s eta 0:00:00\n"}
+,{"stream_name":"stdout","time":29.481069106,"data":"nnunetv2 2.8.1 | blosc2 4.12.0\n"}
+,{"stream_name":"stdout","time":44.763588531,"data":"12:30:55 | INFO     | __main__ | CUDA smoke check passed: Tesla T4 (sm_75)\n"}
+,{"stream_name":"stdout","time":81.511987865,"data":"12:31:32 | INFO     | numexpr.utils | NumExpr defaulting to 4 threads.\n"}
+,{"stream_name":"stdout","time":99.666986931,"data":"Using device: cuda:0\n"}
+,{"stream_name":"stdout","time":99.668450107,"data":"\n"}
+,{"stream_name":"stdout","time":99.66978632,"data":"#######################################################################\n"}
+,{"stream_name":"stdout","time":99.670397022,"data":"Please cite the following paper when using nnU-Net:\n"}
+,{"stream_name":"stdout","time":99.671347512,"data":"Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., \u0026 Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.\n"}
+,{"stream_name":"stdout","time":99.672114623,"data":"#######################################################################\n"}
+,{"stream_name":"stdout","time":99.672882821,"data":"\n"}
+,{"stream_name":"stdout","time":99.673593587,"data":"2026-10-11 12:31:42.374341: Using torch.compile...\n"}
+,{"stream_name":"stdout","time":99.674337821,"data":"2026-10-11 12:31:50.778770: do_dummy_2d_data_aug: False\n"}
+,{"stream_name":"stdout","time":108.822864162,"data":"using pin_memory on device 0\n"}
+,{"stream_name":"stdout","time":133.516883173,"data":"W1011 12:32:24.642000 100 torch/_inductor/utils.py:1731] [0/0] Not enough SMs to use max_autotune_gemm mode\n"}
+,{"stream_name":"stdout","time":3056.256835565,"data":"using pin_memory on device 0\n"}
+,{"stream_name":"stdout","time":3056.258023175,"data":"\n"}
+,{"stream_name":"stdout","time":3056.261128046,"data":"This is the configuration used by this training:\n"}
+,{"stream_name":"stdout","time":3056.262925468,"data":"Configuration name: 3d_fullres\n"}
+,{"stream_name":"stdout","time":3056.263911843,"data":" {'data_identifier': 'nnUNetPlans_3d_fullres', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 2, 'patch_size': [128, 128, 128], 'median_image_size_in_voxels': [139.0, 171.0, 137.0], 'spacing': [1.0, 1.0, 1.0], 'normalization_schemes': ['ZScoreNormalization', 'ZScoreNormalization', 'ZScoreNormalization', 'ZScoreNormalization'], 'use_mask_for_norm': [True, True, True, True], 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'architecture': {'network_class_name': 'dynamic_network_architectures.architectures.unet.PlainConvUNet', 'arch_kwargs': {'n_stages': 6, 'features_per_stage': [32, 64, 128, 256, 320, 320], 'conv_op': 'torch.nn.modules.conv.Conv3d', 'kernel_sizes': [[3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3]], 'strides': [[1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2]], 'n_conv_per_stage': [2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2], 'conv_bias': True, 'norm_op': 'torch.nn.modules.instancenorm.InstanceNorm3d', 'norm_op_kwargs': {'eps': 1e-05, 'affine': True}, 'dropout_op': None, 'dropout_op_kwargs': None, 'nonlin': 'torch.nn.LeakyReLU', 'nonlin_kwargs': {'inplace': True}}, '_kw_requires_import': ['conv_op', 'norm_op', 'dropout_op', 'nonlin']}, 'batch_dice': False} \n"}
+,{"stream_name":"stdout","time":3056.269017051,"data":"\n"}
+,{"stream_name":"stdout","time":3056.273183164,"data":"These are the global plan.json settings:\n"}
+,{"stream_name":"stdout","time":3056.274125215,"data":" {'dataset_name': 'Dataset901_NeuroVisionXBraTS21', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [1.0, 1.0, 1.0], 'original_median_shape_after_transp': [139, 171, 137], 'image_reader_writer': 'NibabelIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 21113.0, 'mean': 837.6984252929688, 'median': 408.0, 'min': 0.10992202162742615, 'percentile_00_5': 51.0, 'percentile_99_5': 6540.0, 'std': 1059.8448486328125}, '1': {'max': 33548.49609375, 'mean': 1247.1578369140625, 'median': 555.0, 'min': 0.0, 'percentile_00_5': 45.0, 'percentile_99_5': 8281.460654296563, 'std': 1543.357666015625}, '2': {'max': 31365.0, 'mean': 971.9607543945312, 'median': 734.0, 'min': 0.0, 'percentile_00_5': 107.0, 'percentile_99_5': 10223.0, 'std': 1296.0946044921875}, '3': {'max': 36525.6953125, 'mean': 899.0909423828125, 'median': 510.0, 'min': 0.0, 'percentile_00_5': 101.0, 'percentile_99_5': 11951.0, 'std': 1563.77001953125}}} \n"}
+,{"stream_name":"stdout","time":3056.277900033,"data":"\n"}
+,{"stream_name":"stdout","time":3056.283364322,"data":"2026-10-11 12:32:02.749600: Unable to plot network architecture: nnUNet_compile is enabled!\n"}
+,{"stream_name":"stdout","time":3056.28409242,"data":"2026-10-11 12:32:02.900799: \n"}
+,{"stream_name":"stdout","time":3056.284978673,"data":"2026-10-11 12:32:02.901319: Epoch 969\n"}
+,{"stream_name":"stdout","time":3056.289347108,"data":"2026-10-11 12:32:02.902243: Current learning rate: 0.00044\n"}
+,{"stream_name":"stdout","time":3056.290341046,"data":"2026-10-11 12:37:02.461031: train_loss -0.908\n"}
+,{"stream_name":"stdout","time":3056.292304368,"data":"2026-10-11 12:37:02.461762: val_loss -0.915\n"}
+,{"stream_name":"stdout","time":3056.297061011,"data":"2026-10-11 12:37:02.462098: Pseudo dice [np.float32(0.9618), np.float32(0.954), np.float32(0.9389)]\n"}
+,{"stream_name":"stdout","time":3056.300037722,"data":"2026-10-11 12:37:02.462850: Epoch time: 299.56 s\n"}
+,{"stream_name":"stdout","time":3056.300872797,"data":"2026-10-11 12:37:05.040296: \n"}
+,{"stream_name":"stdout","time":3056.304973338,"data":"2026-10-11 12:37:05.040802: Epoch 970\n"}
+,{"stream_name":"stdout","time":3056.305853608,"data":"2026-10-11 12:37:05.040983: Current learning rate: 0.00043\n"}
+,{"stream_name":"stdout","time":3056.309158626,"data":"2026-10-11 12:40:32.835093: train_loss -0.9129\n"}
+,{"stream_name":"stdout","time":3056.312198064,"data":"2026-10-11 12:40:32.835916: val_loss -0.9288\n"}
+,{"stream_name":"stdout","time":3056.314206216,"data":"2026-10-11 12:40:32.836838: Pseudo dice [np.float32(0.9619), np.float32(0.968), np.float32(0.9421)]\n"}
+,{"stream_name":"stdout","time":3056.31506597,"data":"2026-10-11 12:40:32.837094: Epoch time: 207.8 s\n"}
+,{"stream_name":"stdout","time":3056.317187975,"data":"2026-10-11 12:40:35.203721: \n"}
+,{"stream_name":"stdout","time":3056.321374108,"data":"2026-10-11 12:40:35.204288: Epoch 971\n"}
+,{"stream_name":"stdout","time":3056.323324057,"data":"2026-10-11 12:40:35.204557: Current learning rate: 0.00041\n"}
+,{"stream_name":"stdout","time":3056.325115808,"data":"2026-10-11 12:44:04.399758: train_loss -0.9136\n"}
+,{"stream_name":"stdout","time":3056.327190707,"data":"2026-10-11 12:44:04.400522: val_loss -0.9366\n"}
+,{"stream_name":"stdout","time":3056.32930708,"data":"2026-10-11 12:44:04.400888: Pseudo dice [np.float32(0.9626), np.float32(0.9678), np.float32(0.941)]\n"}
+,{"stream_name":"stdout","time":3056.330134287,"data":"2026-10-11 12:44:04.401183: Epoch time: 209.2 s\n"}
+,{"stream_name":"stdout","time":3056.332182949,"data":"2026-10-11 12:44:04.885760: Yayy! New best EMA pseudo Dice: 0.954800009727478\n"}
+,{"stream_name":"stdout","time":3056.334847586,"data":"2026-10-11 12:44:07.194845: \n"}
+,{"stream_name":"stdout","time":3056.335723985,"data":"2026-10-11 12:44:07.195330: Epoch 972\n"}
+,{"stream_name":"stdout","time":3056.339755382,"data":"2026-10-11 12:44:07.195595: Current learning rate: 0.0004\n"}
+,{"stream_name":"stdout","time":3056.34071894,"data":"2026-10-11 12:47:33.295046: train_loss -0.9137\n"}
+,{"stream_name":"stdout","time":3056.341511401,"data":"2026-10-11 12:47:33.295791: val_loss -0.9259\n"}
+,{"stream_name":"stdout","time":3056.342408506,"data":"2026-10-11 12:47:33.296049: Pseudo dice [np.float32(0.9608), np.float32(0.9599), np.float32(0.9265)]\n"}
+,{"stream_name":"stdout","time":3056.345412236,"data":"2026-10-11 12:47:33.296280: Epoch time: 206.1 s\n"}
+,{"stream_name":"stdout","time":3056.346324163,"data":"2026-10-11 12:47:35.681893: \n"}
+,{"stream_name":"stdout","time":3056.349338537,"data":"2026-10-11 12:47:35.682268: Epoch 973\n"}
+,{"stream_name":"stdout","time":3056.350137483,"data":"2026-10-11 12:47:35.682439: Current learning rate: 0.00039\n"}
+,{"stream_name":"stdout","time":3056.351604605,"data":"2026-10-11 12:50:58.988037: train_loss -0.9128\n"}
+,{"stream_name":"stdout","time":3056.352462167,"data":"2026-10-11 12:50:58.988801: val_loss -0.9286\n"}
+,{"stream_name":"stdout","time":3056.356380768,"data":"2026-10-11 12:50:58.989048: Pseudo dice [np.float32(0.9579), np.float32(0.9624), np.float32(0.9439)]\n"}
+,{"stream_name":"stdout","time":3056.356593252,"data":"2026-10-11 12:50:58.989306: Epoch time: 203.31 s\n"}
+,{"stream_name":"stdout","time":3056.35962731,"data":"2026-10-11 12:51:01.368247: \n"}
+,{"stream_name":"stdout","time":3056.360524102,"data":"2026-10-11 12:51:01.368743: Epoch 974\n"}
+,{"stream_name":"stdout","time":3056.363493496,"data":"2026-10-11 12:51:01.368917: Current learning rate: 0.00037\n"}
+,{"stream_name":"stdout","time":3056.364316243,"data":"2026-10-11 12:54:24.080305: train_loss -0.9173\n"}
+,{"stream_name":"stdout","time":3056.366133277,"data":"2026-10-11 12:54:24.080806: val_loss -0.9275\n"}
+,{"stream_name":"stdout","time":3056.369979879,"data":"2026-10-11 12:54:24.080979: Pseudo dice [np.float32(0.9604), np.float32(0.9567), np.float32(0.9354)]\n"}
+,{"stream_name":"stdout","time":3056.371361714,"data":"2026-10-11 12:54:24.081154: Epoch time: 202.71 s\n"}
+,{"stream_name":"stdout","time":3056.377558006,"data":"2026-10-11 12:54:26.338609: \n"}
+,{"stream_name":"stdout","time":3056.378574395,"data":"2026-10-11 12:54:26.338984: Epoch 975\n"}
+,{"stream_name":"stdout","time":3056.380754006,"data":"2026-10-11 12:54:26.339166: Current learning rate: 0.00036\n"}
+,{"stream_name":"stdout","time":3056.383963547,"data":"2026-10-11 12:57:48.580657: train_loss -0.9159\n"}
+,{"stream_name":"stdout","time":3056.386332698,"data":"2026-10-11 12:57:48.581939: val_loss -0.9282\n"}
+,{"stream_name":"stdout","time":3056.388686466,"data":"2026-10-11 12:57:48.582512: Pseudo dice [np.float32(0.9615), np.float32(0.9622), np.float32(0.9441)]\n"}
+,{"stream_name":"stdout","time":3056.38950742,"data":"2026-10-11 12:57:48.583061: Epoch time: 202.24 s\n"}
+,{"stream_name":"stdout","time":3056.390360071,"data":"2026-10-11 12:57:50.885154: \n"}
+,{"stream_name":"stdout","time":3056.394375629,"data":"2026-10-11 12:57:50.885529: Epoch 976\n"}
+,{"stream_name":"stdout","time":3056.394489012,"data":"2026-10-11 12:57:50.885746: Current learning rate: 0.00035\n"}
+,{"stream_name":"stdout","time":3056.395322465,"data":"2026-10-11 13:01:02.410128: train_loss -0.9122\n"}
+,{"stream_name":"stdout","time":3056.397425369,"data":"2026-10-11 13:01:02.410586: val_loss -0.9211\n"}
+,{"stream_name":"stdout","time":3056.40043016,"data":"2026-10-11 13:01:02.410743: Pseudo dice [np.float32(0.9606), np.float32(0.9686), np.float32(0.9497)]\n"}
+,{"stream_name":"stdout","time":3056.401452606,"data":"2026-10-11 13:01:02.410889: Epoch time: 191.53 s\n"}
+,{"stream_name":"stdout","time":3056.402450232,"data":"2026-10-11 13:01:04.759291: \n"}
+,{"stream_name":"stdout","time":3056.405630589,"data":"2026-10-11 13:01:04.759600: Epoch 977\n"}
+,{"stream_name":"stdout","time":3056.406675608,"data":"2026-10-11 13:01:04.759819: Current learning rate: 0.00034\n"}
+,{"stream_name":"stdout","time":3056.410327145,"data":"2026-10-11 13:04:18.139141: train_loss -0.9131\n"}
+,{"stream_name":"stdout","time":3056.411021253,"data":"2026-10-11 13:04:18.139638: val_loss -0.9163\n"}
+,{"stream_name":"stdout","time":3056.412147626,"data":"2026-10-11 13:04:18.140053: Pseudo dice [np.float32(0.9644), np.float32(0.9615), np.float32(0.9343)]\n"}
+,{"stream_name":"stdout","time":3056.414170074,"data":"2026-10-11 13:04:18.140283: Epoch time: 193.38 s\n"}
+,{"stream_name":"stdout","time":3056.416671488,"data":"2026-10-11 13:04:20.485254: \n"}
+,{"stream_name":"stdout","time":3056.419140399,"data":"2026-10-11 13:04:20.485609: Epoch 978\n"}
+,{"stream_name":"stdout","time":3056.42110457,"data":"2026-10-11 13:04:20.485860: Current learning rate: 0.00032\n"}
+,{"stream_name":"stdout","time":3056.422331638,"data":"2026-10-11 13:07:37.329239: train_loss -0.9168\n"}
+,{"stream_name":"stdout","time":3056.423740663,"data":"2026-10-11 13:07:37.329796: val_loss -0.9165\n"}
+,{"stream_name":"stdout","time":3056.424548093,"data":"2026-10-11 13:07:37.330500: Pseudo dice [np.float32(0.9632), np.float32(0.9596), np.float32(0.9386)]\n"}
+,{"stream_name":"stdout","time":3056.42547527,"data":"2026-10-11 13:07:37.332794: Epoch time: 196.85 s\n"}
+,{"stream_name":"stdout","time":3056.429009814,"data":"2026-10-11 13:07:39.717120: \n"}
+,{"stream_name":"stdout","time":3056.430215327,"data":"2026-10-11 13:07:39.717695: Epoch 979\n"}
+,{"stream_name":"stdout","time":3056.431246223,"data":"2026-10-11 13:07:39.717941: Current learning rate: 0.00031\n"}
+,{"stream_name":"stdout","time":3056.434805252,"data":"2026-10-11 13:10:58.185934: train_loss -0.9105\n"}
+,{"stream_name":"stdout","time":3056.435925175,"data":"2026-10-11 13:10:58.186589: val_loss -0.9335\n"}
+,{"stream_name":"stdout","time":3056.437529137,"data":"2026-10-11 13:10:58.186846: Pseudo dice [np.float32(0.9666), np.float32(0.9682), np.float32(0.9465)]\n"}
+,{"stream_name":"stdout","time":3056.440359884,"data":"2026-10-11 13:10:58.187079: Epoch time: 198.47 s\n"}
+,{"stream_name":"stdout","time":3056.442445104,"data":"2026-10-11 13:10:58.897100: Yayy! New best EMA pseudo Dice: 0.9550999999046326\n"}
+,{"stream_name":"stdout","time":3056.443529632,"data":"2026-10-11 13:11:01.027452: \n"}
+,{"stream_name":"stdout","time":3056.445872955,"data":"2026-10-11 13:11:01.027886: Epoch 980\n"}
+,{"stream_name":"stdout","time":3056.446907474,"data":"2026-10-11 13:11:01.028052: Current learning rate: 0.0003\n"}
+,{"stream_name":"stdout","time":3056.450043199,"data":"2026-10-11 13:14:27.883279: train_loss -0.9218\n"}
+,{"stream_name":"stdout","time":3056.451156772,"data":"2026-10-11 13:14:27.884416: val_loss -0.9215\n"}
+,{"stream_name":"stdout","time":3056.453150124,"data":"2026-10-11 13:14:27.884897: Pseudo dice [np.float32(0.9588), np.float32(0.9619), np.float32(0.9346)]\n"}
+,{"stream_name":"stdout","time":3056.454339211,"data":"2026-10-11 13:14:27.885298: Epoch time: 206.86 s\n"}
+,{"stream_name":"stdout","time":3056.456466706,"data":"2026-10-11 13:14:30.444941: \n"}
+,{"stream_name":"stdout","time":3056.458541653,"data":"2026-10-11 13:14:30.445427: Epoch 981\n"}
+,{"stream_name":"stdout","time":3056.460751131,"data":"2026-10-11 13:14:30.445661: Current learning rate: 0.00028\n"}
+,{"stream_name":"stdout","time":3056.462737736,"data":"2026-10-11 13:17:45.367435: train_loss -0.9179\n"}
+,{"stream_name":"stdout","time":3056.466617223,"data":"2026-10-11 13:17:45.367960: val_loss -0.929\n"}
+,{"stream_name":"stdout","time":3056.467700322,"data":"2026-10-11 13:17:45.368181: Pseudo dice [np.float32(0.9616), np.float32(0.9697), np.float32(0.9394)]\n"}
+,{"stream_name":"stdout","time":3056.468777551,"data":"2026-10-11 13:17:45.368392: Epoch time: 194.92 s\n"}
+,{"stream_name":"stdout","time":3056.469912775,"data":"2026-10-11 13:17:47.735141: \n"}
+,{"stream_name":"stdout","time":3056.472353216,"data":"2026-10-11 13:17:47.735696: Epoch 982\n"}
+,{"stream_name":"stdout","time":3056.474910151,"data":"2026-10-11 13:17:47.735868: Current learning rate: 0.00027\n"}
+,{"stream_name":"stdout","time":3056.475999102,"data":"2026-10-11 13:21:07.371826: train_loss -0.9192\n"}
+,{"stream_name":"stdout","time":3056.477525575,"data":"2026-10-11 13:21:07.372537: val_loss -0.9237\n"}
+,{"stream_name":"stdout","time":6554.202632684,"data":"2026-10-11 13:21:07.372889: Pseudo dice [np.float32(0.9608), np.float32(0.956), np.float32(0.938)]\n"}
+,{"stream_name":"stdout","time":6554.203770676,"data":"2026-10-11 13:21:07.373353: Epoch time: 199.64 s\n"}
+,{"stream_name":"stdout","time":6554.204716779,"data":"2026-10-11 13:21:10.029567: \n"}
+,{"stream_name":"stdout","time":6554.205768007,"data":"2026-10-11 13:21:10.029997: Epoch 983\n"}
+,{"stream_name":"stdout","time":6554.206711563,"data":"2026-10-11 13:21:10.030175: Current learning rate: 0.00026\n"}
+,{"stream_name":"stdout","time":6554.207868308,"data":"2026-10-11 13:24:26.640985: train_loss -0.9067\n"}
+,{"stream_name":"stdout","time":6554.208849315,"data":"2026-10-11 13:24:26.644768: val_loss -0.9285\n"}
+,{"stream_name":"stdout","time":6554.209916713,"data":"2026-10-11 13:24:26.649001: Pseudo dice [np.float32(0.9628), np.float32(0.9619), np.float32(0.941)]\n"}
+,{"stream_name":"stdout","time":6554.211022955,"data":"2026-10-11 13:24:26.649587: Epoch time: 196.61 s\n"}
+,{"stream_name":"stdout","time":6554.212007821,"data":"2026-10-11 13:24:29.052719: \n"}
+,{"stream_name":"stdout","time":6554.212956941,"data":"2026-10-11 13:24:29.052966: Epoch 984\n"}
+,{"stream_name":"stdout","time":6554.213912362,"data":"2026-10-11 13:24:29.053175: Current learning rate: 0.00024\n"}
+,{"stream_name":"stdout","time":6554.214952829,"data":"2026-10-11 13:27:45.812242: train_loss -0.9127\n"}
+,{"stream_name":"stdout","time":6554.2159124,"data":"2026-10-11 13:27:45.812735: val_loss -0.9221\n"}
+,{"stream_name":"stdout","time":6554.217014271,"data":"2026-10-11 13:27:45.813003: Pseudo dice [np.float32(0.9593), np.float32(0.9659), np.float32(0.9363)]\n"}
+,{"stream_name":"stdout","time":6554.218036438,"data":"2026-10-11 13:27:45.813225: Epoch time: 196.76 s\n"}
+,{"stream_name":"stdout","time":6554.219078838,"data":"2026-10-11 13:27:48.112229: \n"}
+,{"stream_name":"stdout","time":6554.219944597,"data":"2026-10-11 13:27:48.112694: Epoch 985\n"}
+,{"stream_name":"stdout","time":6554.220943018,"data":"2026-10-11 13:27:48.112875: Current learning rate: 0.00023\n"}
+,{"stream_name":"stdout","time":6554.222010627,"data":"2026-10-11 13:31:06.788042: train_loss -0.9184\n"}
+,{"stream_name":"stdout","time":6554.222968406,"data":"2026-10-11 13:31:06.788669: val_loss -0.9346\n"}
+,{"stream_name":"stdout","time":6554.223908834,"data":"2026-10-11 13:31:06.789212: Pseudo dice [np.float32(0.9653), np.float32(0.9678), np.float32(0.9503)]\n"}
+,{"stream_name":"stdout","time":6554.224934492,"data":"2026-10-11 13:31:06.789535: Epoch time: 198.68 s\n"}
+,{"stream_name":"stdout","time":6554.225908309,"data":"2026-10-11 13:31:07.470222: Yayy! New best EMA pseudo Dice: 0.9552000164985657\n"}
+,{"stream_name":"stdout","time":6554.226945191,"data":"2026-10-11 13:31:09.654327: \n"}
+,{"stream_name":"stdout","time":6554.227874509,"data":"2026-10-11 13:31:09.654743: Epoch 986\n"}
+,{"stream_name":"stdout","time":6554.228932445,"data":"2026-10-11 13:31:09.654930: Current learning rate: 0.00021\n"}
+,{"stream_name":"stdout","time":6554.229853546,"data":"2026-10-11 13:34:25.384657: train_loss -0.9236\n"}
+,{"stream_name":"stdout","time":6554.230872794,"data":"2026-10-11 13:34:25.385188: val_loss -0.933\n"}
+,{"stream_name":"stdout","time":6554.231917504,"data":"2026-10-11 13:34:25.385566: Pseudo dice [np.float32(0.9625), np.float32(0.9602), np.float32(0.941)]\n"}
+,{"stream_name":"stdout","time":6554.232913946,"data":"2026-10-11 13:34:25.386899: Epoch time: 195.73 s\n"}
+,{"stream_name":"stdout","time":6554.233933605,"data":"2026-10-11 13:34:27.787970: \n"}
+,{"stream_name":"stdout","time":6554.234894456,"data":"2026-10-11 13:34:27.788409: Epoch 987\n"}
+,{"stream_name":"stdout","time":6554.235873641,"data":"2026-10-11 13:34:27.788626: Current learning rate: 0.0002\n"}
+,{"stream_name":"stdout","time":6554.236953602,"data":"2026-10-11 13:37:50.542064: train_loss -0.9156\n"}
+,{"stream_name":"stdout","time":6554.238061813,"data":"2026-10-11 13:37:50.545395: val_loss -0.9207\n"}
+,{"stream_name":"stdout","time":6554.239015179,"data":"2026-10-11 13:37:50.546724: Pseudo dice [np.float32(0.9582), np.float32(0.9658), np.float32(0.9428)]\n"}
+,{"stream_name":"stdout","time":6554.239906265,"data":"2026-10-11 13:37:50.547622: Epoch time: 202.76 s\n"}
+,{"stream_name":"stdout","time":6554.240843702,"data":"2026-10-11 13:37:53.603053: \n"}
+,{"stream_name":"stdout","time":6554.241831863,"data":"2026-10-11 13:37:53.603685: Epoch 988\n"}
+,{"stream_name":"stdout","time":6554.242850608,"data":"2026-10-11 13:37:53.603914: Current learning rate: 0.00019\n"}
+,{"stream_name":"stdout","time":6554.243937488,"data":"2026-10-11 13:41:16.214720: train_loss -0.9148\n"}
+,{"stream_name":"stdout","time":6554.245044648,"data":"2026-10-11 13:41:16.215599: val_loss -0.9182\n"}
+,{"stream_name":"stdout","time":6554.246247793,"data":"2026-10-11 13:41:16.216013: Pseudo dice [np.float32(0.957), np.float32(0.9615), np.float32(0.935)]\n"}
+,{"stream_name":"stdout","time":6554.24729404,"data":"2026-10-11 13:41:16.216356: Epoch time: 202.61 s\n"}
+,{"stream_name":"stdout","time":6554.248335159,"data":"2026-10-11 13:41:18.553249: \n"}
+,{"stream_name":"stdout","time":6554.249304881,"data":"2026-10-11 13:41:18.553599: Epoch 989\n"}
+,{"stream_name":"stdout","time":6554.250212759,"data":"2026-10-11 13:41:18.553872: Current learning rate: 0.00017\n"}
+,{"stream_name":"stdout","time":6554.251063313,"data":"2026-10-11 13:44:41.119804: train_loss -0.9167\n"}
+,{"stream_name":"stdout","time":6554.25213123,"data":"2026-10-11 13:44:41.121122: val_loss -0.9313\n"}
+,{"stream_name":"stdout","time":6554.253141931,"data":"2026-10-11 13:44:41.121375: Pseudo dice [np.float32(0.9621), np.float32(0.9636), np.float32(0.9417)]\n"}
+,{"stream_name":"stdout","time":6554.25421083,"data":"2026-10-11 13:44:41.121635: Epoch time: 202.57 s\n"}
+,{"stream_name":"stdout","time":6554.255133492,"data":"2026-10-11 13:44:43.665637: \n"}
+,{"stream_name":"stdout","time":6554.256058074,"data":"2026-10-11 13:44:43.666144: Epoch 990\n"}
+,{"stream_name":"stdout","time":6554.257053767,"data":"2026-10-11 13:44:43.666360: Current learning rate: 0.00016\n"}
+,{"stream_name":"stdout","time":6554.258173335,"data":"2026-10-11 13:48:16.289757: train_loss -0.911\n"}
+,{"stream_name":"stdout","time":6554.259288677,"data":"2026-10-11 13:48:16.290359: val_loss -0.9239\n"}
+,{"stream_name":"stdout","time":6554.260347519,"data":"2026-10-11 13:48:16.290698: Pseudo dice [np.float32(0.9619), np.float32(0.9689), np.float32(0.9454)]\n"}
+,{"stream_name":"stdout","time":6554.261298678,"data":"2026-10-11 13:48:16.290951: Epoch time: 212.63 s\n"}
+,{"stream_name":"stdout","time":6554.262302214,"data":"2026-10-11 13:48:16.904782: Yayy! New best EMA pseudo Dice: 0.955299973487854\n"}
+,{"stream_name":"stdout","time":6554.263362847,"data":"2026-10-11 13:48:19.049210: \n"}
+,{"stream_name":"stdout","time":6554.264307983,"data":"2026-10-11 13:48:19.049681: Epoch 991\n"}
+,{"stream_name":"stdout","time":6554.265287702,"data":"2026-10-11 13:48:19.049907: Current learning rate: 0.00014\n"}
+,{"stream_name":"stdout","time":6554.266260866,"data":"2026-10-11 13:51:48.499375: train_loss -0.9185\n"}
+,{"stream_name":"stdout","time":6554.267357066,"data":"2026-10-11 13:51:48.499934: val_loss -0.918\n"}
+,{"stream_name":"stdout","time":6554.268320791,"data":"2026-10-11 13:51:48.500242: Pseudo dice [np.float32(0.9618), np.float32(0.9653), np.float32(0.9372)]\n"}
+,{"stream_name":"stdout","time":6554.26935992,"data":"2026-10-11 13:51:48.500609: Epoch time: 209.45 s\n"}
+,{"stream_name":"stdout","time":6554.270437506,"data":"2026-10-11 13:51:50.821465: \n"}
+,{"stream_name":"stdout","time":6554.271351603,"data":"2026-10-11 13:51:50.821877: Epoch 992\n"}
+,{"stream_name":"stdout","time":6554.272332013,"data":"2026-10-11 13:51:50.822043: Current learning rate: 0.00013\n"}
+,{"stream_name":"stdout","time":6554.273357374,"data":"2026-10-11 13:55:14.516153: train_loss -0.9169\n"}
+,{"stream_name":"stdout","time":6554.274349098,"data":"2026-10-11 13:55:14.516975: val_loss -0.9119\n"}
+,{"stream_name":"stdout","time":6554.275699074,"data":"2026-10-11 13:55:14.517524: Pseudo dice [np.float32(0.9643), np.float32(0.9602), np.float32(0.9366)]\n"}
+,{"stream_name":"stdout","time":6554.276695709,"data":"2026-10-11 13:55:14.517923: Epoch time: 203.7 s\n"}
+,{"stream_name":"stdout","time":6554.27769062,"data":"2026-10-11 13:55:16.824264: \n"}
+,{"stream_name":"stdout","time":6554.278755718,"data":"2026-10-11 13:55:16.824611: Epoch 993\n"}
+,{"stream_name":"stdout","time":6554.279693084,"data":"2026-10-11 13:55:16.824849: Current learning rate: 0.00011\n"}
+,{"stream_name":"stdout","time":6554.280726917,"data":"2026-10-11 13:58:42.620176: train_loss -0.9205\n"}
+,{"stream_name":"stdout","time":6554.281632829,"data":"2026-10-11 13:58:42.620936: val_loss -0.9295\n"}
+,{"stream_name":"stdout","time":6554.282601324,"data":"2026-10-11 13:58:42.621193: Pseudo dice [np.float32(0.9643), np.float32(0.9666), np.float32(0.9412)]\n"}
+,{"stream_name":"stdout","time":6554.28335069,"data":"2026-10-11 13:58:42.621419: Epoch time: 205.8 s\n"}
+,{"stream_name":"stdout","time":6554.284223651,"data":"2026-10-11 13:58:43.233524: Yayy! New best EMA pseudo Dice: 0.955299973487854\n"}
+,{"stream_name":"stdout","time":6554.285029209,"data":"2026-10-11 13:58:45.390282: \n"}
+,{"stream_name":"stdout","time":6554.285971835,"data":"2026-10-11 13:58:45.390792: Epoch 994\n"}
+,{"stream_name":"stdout","time":6554.286863521,"data":"2026-10-11 13:58:45.390997: Current learning rate: 0.0001\n"}
+,{"stream_name":"stdout","time":6554.287777117,"data":"2026-10-11 14:02:02.512847: train_loss -0.917\n"}
+,{"stream_name":"stdout","time":6554.28884197,"data":"2026-10-11 14:02:02.513528: val_loss -0.9201\n"}
+,{"stream_name":"stdout","time":6554.289740202,"data":"2026-10-11 14:02:02.513934: Pseudo dice [np.float32(0.9652), np.float32(0.9695), np.float32(0.9425)]\n"}
+,{"stream_name":"stdout","time":6554.290784761,"data":"2026-10-11 14:02:02.514281: Epoch time: 197.12 s\n"}
+,{"stream_name":"stdout","time":6554.291939682,"data":"2026-10-11 14:02:03.186616: Yayy! New best EMA pseudo Dice: 0.9556999802589417\n"}
+,{"stream_name":"stdout","time":6554.292748714,"data":"2026-10-11 14:02:05.400798: \n"}
+,{"stream_name":"stdout","time":6554.29352376,"data":"2026-10-11 14:02:05.401285: Epoch 995\n"}
+,{"stream_name":"stdout","time":6554.294315373,"data":"2026-10-11 14:02:05.401464: Current learning rate: 8e-05\n"}
+,{"stream_name":"stdout","time":6554.295067967,"data":"2026-10-11 14:05:29.128540: train_loss -0.913\n"}
+,{"stream_name":"stdout","time":6554.295818785,"data":"2026-10-11 14:05:29.129526: val_loss -0.9233\n"}
+,{"stream_name":"stdout","time":6554.296597036,"data":"2026-10-11 14:05:29.129949: Pseudo dice [np.float32(0.9673), np.float32(0.9625), np.float32(0.9423)]\n"}
+,{"stream_name":"stdout","time":6554.297388441,"data":"2026-10-11 14:05:29.130300: Epoch time: 203.73 s\n"}
+,{"stream_name":"stdout","time":6554.29817849,"data":"2026-10-11 14:05:29.786094: Yayy! New best EMA pseudo Dice: 0.9559000134468079\n"}
+,{"stream_name":"stdout","time":6554.298954727,"data":"2026-10-11 14:05:31.962763: \n"}
+,{"stream_name":"stdout","time":6554.299860871,"data":"2026-10-11 14:05:31.963171: Epoch 996\n"}
+,{"stream_name":"stdout","time":6554.30080074,"data":"2026-10-11 14:05:31.963341: Current learning rate: 7e-05\n"}
+,{"stream_name":"stdout","time":6554.301569517,"data":"2026-10-11 14:08:56.107767: train_loss -0.9141\n"}
+,{"stream_name":"stdout","time":6554.30226622,"data":"2026-10-11 14:08:56.108545: val_loss -0.9035\n"}
+,{"stream_name":"stdout","time":6554.303032039,"data":"2026-10-11 14:08:56.109036: Pseudo dice [np.float32(0.9583), np.float32(0.9592), np.float32(0.9324)]\n"}
+,{"stream_name":"stdout","time":6554.303918296,"data":"2026-10-11 14:08:56.114535: Epoch time: 204.15 s\n"}
+,{"stream_name":"stdout","time":6554.304760284,"data":"2026-10-11 14:08:58.778750: \n"}
+,{"stream_name":"stdout","time":6554.305607648,"data":"2026-10-11 14:08:58.779237: Epoch 997\n"}
+,{"stream_name":"stdout","time":6554.306392294,"data":"2026-10-11 14:08:58.779528: Current learning rate: 5e-05\n"}
+,{"stream_name":"stdout","time":6554.30713925,"data":"2026-10-11 14:12:22.084206: train_loss -0.9219\n"}
+,{"stream_name":"stdout","time":6554.307893554,"data":"2026-10-11 14:12:22.086979: val_loss -0.9152\n"}
+,{"stream_name":"stdout","time":6554.308714244,"data":"2026-10-11 14:12:22.087193: Pseudo dice [np.float32(0.9657), np.float32(0.9675), np.float32(0.9428)]\n"}
+,{"stream_name":"stdout","time":6554.309567839,"data":"2026-10-11 14:12:22.087398: Epoch time: 203.31 s\n"}
+,{"stream_name":"stdout","time":6554.310299269,"data":"2026-10-11 14:12:24.523119: \n"}
+,{"stream_name":"stdout","time":6554.311052918,"data":"2026-10-11 14:12:24.523714: Epoch 998\n"}
+,{"stream_name":"stdout","time":6554.311893768,"data":"2026-10-11 14:12:24.523919: Current learning rate: 4e-05\n"}
+,{"stream_name":"stdout","time":6554.312704931,"data":"2026-10-11 14:15:50.528024: train_loss -0.9108\n"}
+,{"stream_name":"stdout","time":6554.31345852,"data":"2026-10-11 14:15:50.528770: val_loss -0.9402\n"}
+,{"stream_name":"stdout","time":6554.314208633,"data":"2026-10-11 14:15:50.529058: Pseudo dice [np.float32(0.9614), np.float32(0.9691), np.float32(0.9457)]\n"}
+,{"stream_name":"stdout","time":6554.315027284,"data":"2026-10-11 14:15:50.529348: Epoch time: 206.01 s\n"}
+,{"stream_name":"stdout","time":6554.316011664,"data":"2026-10-11 14:15:51.178219: Yayy! New best EMA pseudo Dice: 0.9559000134468079\n"}
+,{"stream_name":"stdout","time":6554.317009672,"data":"2026-10-11 14:15:53.359378: \n"}
+,{"stream_name":"stdout","time":6554.317894685,"data":"2026-10-11 14:15:53.359810: Epoch 999\n"}
+,{"stream_name":"stdout","time":6554.318764099,"data":"2026-10-11 14:15:53.360042: Current learning rate: 2e-05\n"}
+,{"stream_name":"stdout","time":6554.319837969,"data":"2026-10-11 14:19:22.443530: train_loss -0.9134\n"}
+,{"stream_name":"stdout","time":6554.320789942,"data":"2026-10-11 14:19:22.444921: val_loss -0.9226\n"}
+,{"stream_name":"stdout","time":6554.321609769,"data":"2026-10-11 14:19:22.445296: Pseudo dice [np.float32(0.9651), np.float32(0.9609), np.float32(0.9429)]\n"}
+,{"stream_name":"stdout","time":6554.322531939,"data":"2026-10-11 14:19:22.445630: Epoch time: 209.09 s\n"}
+,{"stream_name":"stdout","time":6554.32333675,"data":"2026-10-11 14:19:22.445861: Yayy! New best EMA pseudo Dice: 0.9559999704360962\n"}
+,{"stream_name":"stdout","time":6554.324386207,"data":"2026-10-11 14:19:25.312089: Training done.\n"}
+,{"stream_name":"stdout","time":6554.325186112,"data":"NVX_NNUNET_HEALTH: OK start=969 end=1000 finished=True\n"}
+,{"stream_name":"stdout","time":6565.459535127,"data":"exit code 0\n"}
+,{"stream_name":"stdout","time":6565.527445902,"data":"{\n"}
+,{"stream_name":"stdout","time":6565.527475412,"data":"  \"start_epoch\": 969,\n"}
+,{"stream_name":"stdout","time":6565.527497193,"data":"  \"end_epoch\": 1000,\n"}
+,{"stream_name":"stdout","time":6565.52749969,"data":"  \"epochs_run\": 31,\n"}
+,{"stream_name":"stdout","time":6565.527501864,"data":"  \"finished\": true,\n"}
+,{"stream_name":"stdout","time":6565.527504062,"data":"  \"mean_epoch_s\": 207.80225205858088,\n"}
+,{"stream_name":"stdout","time":6565.527506634,"data":"  \"last_pseudo_dice\": [\n"}
+,{"stream_name":"stdout","time":6565.527508821,"data":"    \"0.96509576\",\n"}
+,{"stream_name":"stdout","time":6565.527511043,"data":"    \"0.9608646\",\n"}
+,{"stream_name":"stdout","time":6565.527513336,"data":"    \"0.9429136\"\n"}
+,{"stream_name":"stdout","time":6565.527532253,"data":"  ],\n"}
+,{"stream_name":"stdout","time":6565.527535971,"data":"  \"last_ema_fg_dice\": \"0.955955\",\n"}
+,{"stream_name":"stdout","time":6565.527539946,"data":"  \"train_losses_finite\": true,\n"}
+,{"stream_name":"stdout","time":6565.52754372,"data":"  \"epoch_durations_s\": [\n"}
+,{"stream_name":"stdout","time":6565.527547203,"data":"    302.1419774410024,\n"}
+,{"stream_name":"stdout","time":6565.527551026,"data":"    210.16354568099996,\n"}
+,{"stream_name":"stdout","time":6565.527554721,"data":"    211.99095838599897,\n"}
+,{"stream_name":"stdout","time":6565.527558318,"data":"    208.48735106399909,\n"}
+,{"stream_name":"stdout","time":6565.52756135,"data":"    205.68621159599934,\n"}
+,{"stream_name":"stdout","time":6565.527564442,"data":"    204.97022798800026,\n"}
+,{"stream_name":"stdout","time":6565.527567676,"data":"    204.54658326500066,\n"}
+,{"stream_name":"stdout","time":6565.52757066,"data":"    193.87416938000024,\n"}
+,{"stream_name":"stdout","time":6565.527573883,"data":"    195.72604598999897,\n"}
+,{"stream_name":"stdout","time":6565.527586866,"data":"    199.2315057090018,\n"}
+,{"stream_name":"stdout","time":6565.527590952,"data":"    201.31049783800336,\n"}
+,{"stream_name":"stdout","time":6565.527595173,"data":"    209.41768867300198,\n"}
+,{"stream_name":"stdout","time":6565.527600974,"data":"    197.29012016300112,\n"}
+,{"stream_name":"stdout","time":6565.527604143,"data":"    202.29422506099945,\n"}
+,{"stream_name":"stdout","time":6565.527607631,"data":"    199.0234118039989,\n"}
+,{"stream_name":"stdout","time":6565.527610791,"data":"    199.05929665800068,\n"}
+,{"stream_name":"stdout","time":6565.527614027,"data":"    201.5422001549996,\n"}
+,{"stream_name":"stdout","time":6565.527617257,"data":"    198.1337561390028,\n"}
+,{"stream_name":"stdout","time":6565.527620757,"data":"    205.81487949000075,\n"}
+,{"stream_name":"stdout","time":6565.527624343,"data":"    204.9503292590016,\n"}
+,{"stream_name":"stdout","time":6565.527628619,"data":"    205.1121506399977,\n"}
+,{"stream_name":"stdout","time":6565.52763243,"data":"    215.38349067399758,\n"}
+,{"stream_name":"stdout","time":6565.527635629,"data":"    211.77252371099894,\n"}
+,{"stream_name":"stdout","time":6565.527638977,"data":"    206.002870160999,\n"}
+,{"stream_name":"stdout","time":6565.527642102,"data":"    208.56588536599884,\n"}
+,{"stream_name":"stdout","time":6565.527645577,"data":"    200.01048755699958,\n"}
+,{"stream_name":"stdout","time":6565.527648831,"data":"    206.56174738700065,\n"}
+,{"stream_name":"stdout","time":6565.5276522,"data":"    206.8160984970018,\n"}
+,{"stream_name":"stdout","time":6565.527655841,"data":"    205.74426245200084,\n"}
+,{"stream_name":"stdout","time":6565.527659576,"data":"    208.83643657399807,\n"}
+,{"stream_name":"stdout","time":6565.527662779,"data":"    211.4088790570022\n"}
+,{"stream_name":"stdout","time":6565.527666027,"data":"  ],\n"}
+,{"stream_name":"stdout","time":6565.527669302,"data":"  \"elapsed_s\": 6510.478825729999,\n"}
+,{"stream_name":"stdout","time":6565.527672805,"data":"  \"budget_hours\": 3.5,\n"}
+,{"stream_name":"stdout","time":6565.527676276,"data":"  \"gpu_name\": \"Tesla T4\",\n"}
+,{"stream_name":"stdout","time":6565.527679855,"data":"  \"torch_version\": \"2.11.0+cu128\",\n"}
+,{"stream_name":"stdout","time":6565.527683356,"data":"  \"nnunetv2_version\": \"2.8.1\"\n"}
+,{"stream_name":"stdout","time":6565.527686792,"data":"}\n"}
+,{"stream_name":"stdout","time":6565.527690172,"data":"      0.0 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/dataset.json\n"}
+,{"stream_name":"stdout","time":6565.527694442,"data":"      0.1 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/dataset_fingerprint.json\n"}
+,{"stream_name":"stdout","time":6565.527698286,"data":"    238.6 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/checkpoint_best.pth\n"}
+,{"stream_name":"stdout","time":6565.527702022,"data":"    238.6 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/checkpoint_final.pth\n"}
+,{"stream_name":"stdout","time":6565.527705499,"data":"      0.0 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/debug.json\n"}
+,{"stream_name":"stdout","time":6565.527709028,"data":"      0.8 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/progress.png\n"}
+,{"stream_name":"stdout","time":6565.527714936,"data":"      0.1 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/training_log_2026_10_10_18_32_36.txt\n"}
+,{"stream_name":"stdout","time":6565.52772548,"data":"      0.0 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/training_log_2026_10_11_12_31_41.txt\n"}
+,{"stream_name":"stdout","time":6565.527729532,"data":"      0.1 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/training_log_2026_10_3_13_28_15.txt\n"}
+,{"stream_name":"stdout","time":6565.527733356,"data":"      0.1 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/training_log_2026_10_4_09_00_58.txt\n"}
+,{"stream_name":"stdout","time":6565.527737676,"data":"      0.1 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/training_log_2026_9_26_17_52_48.txt\n"}
+,{"stream_name":"stdout","time":6565.527741402,"data":"      0.1 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/training_log_2026_9_27_05_28_31.txt\n"}
+,{"stream_name":"stdout","time":6565.527745527,"data":"      0.0 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/fold_all/training_log_2026_9_27_18_01_19.txt\n"}
+,{"stream_name":"stdout","time":6565.527750051,"data":"      0.0 MB  /kaggle/working/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres/plans.json\n"}
+,{"stream_name":"stderr","time":6569.398596769,"data":"/usr/local/lib/python3.13/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":6569.398639176,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":6569.90336592,"data":"/usr/local/lib/python3.13/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":6569.903421691,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":6571.473150587,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to notebook\n"}
+,{"stream_name":"stderr","time":6571.576191151,"data":"[NbConvertApp] Writing 31590 bytes to __notebook__.ipynb\n"}
+,{"stream_name":"stderr","time":6574.083098441,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to html\n"}
+,{"stream_name":"stderr","time":6575.166594522,"data":"[NbConvertApp] Writing 309697 bytes to __results__.html\n"}
+]

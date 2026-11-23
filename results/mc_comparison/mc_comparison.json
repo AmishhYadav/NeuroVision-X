@@ -1,0 +1,72 @@
+{
+  "tost_margin": 0.03,
+  "margin_source": "docs/research/execution_plan.md Phase 2, fixed before any external-cohort MC map existed",
+  "pre_registered": false,
+  "note": "Secondary analysis, outside the Gate 1 and Gate 2 families.",
+  "rows": [
+    {
+      "cohort": "ssa",
+      "arm": "disagreement",
+      "n": 60,
+      "mean_arm": 0.7094705610313745,
+      "mean_mc": 0.866065879533181,
+      "difference": -0.15659531850180655,
+      "ci_lo": -0.18006481940487787,
+      "ci_hi": -0.13248062347139822,
+      "contains_zero": false,
+      "tost_margin": 0.03,
+      "tost_ci_lo": -0.17711833364028637,
+      "tost_ci_hi": -0.13607230336332674,
+      "tost_p": 0.9999999999999959,
+      "equivalent_to_mc": false
+    },
+    {
+      "cohort": "ssa",
+      "arm": "entropy",
+      "n": 60,
+      "mean_arm": 0.8874429478427593,
+      "mean_mc": 0.866065879533181,
+      "difference": 0.021377068309578227,
+      "ci_lo": 0.01317290004288916,
+      "ci_hi": 0.029994245970039222,
+      "contains_zero": false,
+      "tost_margin": 0.03,
+      "tost_ci_lo": 0.014255060585104982,
+      "tost_ci_hi": 0.02849907603405147,
+      "tost_p": 0.023791842469522626,
+      "equivalent_to_mc": true
+    },
+    {
+      "cohort": "ped",
+      "arm": "disagreement",
+      "n": 99,
+      "mean_arm": 0.7878831552837512,
+      "mean_mc": 0.8436586554380651,
+      "difference": -0.05577550015431361,
+      "ci_lo": -0.07496403481843454,
+      "ci_hi": -0.036654040350696804,
+      "contains_zero": false,
+      "tost_margin": 0.03,
+      "tost_ci_lo": -0.07192421269439855,
+      "tost_ci_hi": -0.039626787614228665,
+      "tost_p": 0.9953132833198147,
+      "equivalent_to_mc": false
+    },
+    {
+      "cohort": "ped",
+      "arm": "entropy",
+      "n": 99,
+      "mean_arm": 0.8307256114545456,
+      "mean_mc": 0.8436586554380651,
+      "difference": -0.012933043983519332,
+      "ci_lo": -0.020775723455474904,
+      "ci_hi": -0.004752000800004256,
+      "contains_zero": false,
+      "tost_margin": 0.03,
+      "tost_ci_lo": -0.019782916658005134,
+      "tost_ci_hi": -0.006083171309033529,
+      "tost_p": 3.7155531541182156e-05,
+      "equivalent_to_mc": true
+    }
+  ]
+}

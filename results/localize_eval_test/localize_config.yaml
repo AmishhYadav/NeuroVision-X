@@ -1,0 +1,27 @@
+source: prediction
+eval_dir: outputs/eval_test
+preprocessed_dir: data/preprocessed/brats
+split: test
+regions:
+- ET
+- TC
+- WT
+eloquence_map: knowledge/eloquence_map.yaml
+lobe_map: knowledge/aal_lobes.yaml
+min_frac: 0.001
+out_name: anatomy.csv
+summary_name: anatomy_summary.csv
+involvement:
+  enabled: true
+  groups_map: knowledge/involvement_groups.yaml
+  min_overlap_mm3: 50.0
+  version: 1
+resolved_source_dir: /Users/amish/NeuroVision-X/outputs/eval_test/predictions
+atlas:
+  name: tzo116plus
+  version: '2.0'
+  source: NITRC group_id=214 (https://www.nitrc.org/projects/sri24)
+  licence: CC-BY-SA
+coverage_line: '23 of 122 structures classified eloquent, 99 unclassified; 4 source
+  terms have no structure in this parcellation: internal capsule, dentate nucleus,
+  hypothalamus, brainstem (midbrain, medulla)'

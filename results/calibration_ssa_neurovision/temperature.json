@@ -1,0 +1,16 @@
+{
+  "fit_dir": "outputs/neurovision/eval_val",
+  "apply_dir": "outputs/eval_ssa_neurovision",
+  "source": "logits",
+  "mask_mode": "predicted",
+  "converged": true,
+  "temperature": {
+    "ET": 2.0530834197998047,
+    "TC": 1.9864249229431152,
+    "WT": 1.6264734268188477
+  },
+  "nll_before": 0.24591503957770264,
+  "nll_after": 0.19030952703527082,
+  "n_voxels_fit": 8935910,
+  "n_cases_fit": 187
+}

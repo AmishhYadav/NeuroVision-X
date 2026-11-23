@@ -1,0 +1,40 @@
+{
+  "model_folder": "/kaggle/input/notebooks/amishyadav123/neurovision-gatea-s7/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres",
+  "checkpoint_epoch": 1000,
+  "nnunetv2_version": "2.8.1",
+  "command": [
+    "nnUNetv2_predict_from_modelfolder",
+    "-i",
+    "/tmp/nnunet_work/input",
+    "-o",
+    "/tmp/nnunet_work/raw_out",
+    "-m",
+    "/kaggle/input/notebooks/amishyadav123/neurovision-gatea-s7/nnUNet_results/Dataset901_NeuroVisionXBraTS21/nnUNetTrainer__nnUNetPlans__3d_fullres",
+    "-f",
+    "all",
+    "-chk",
+    "checkpoint_final.pth",
+    "-device",
+    "cuda",
+    "--save_probabilities"
+  ],
+  "split": "test",
+  "disable_tta": false,
+  "device": "cuda",
+  "wall_s": 797.3883491159995,
+  "s_per_case": 8.05442776884848,
+  "chunk_size": 25,
+  "chunk_wall_s": [
+    200.2179585089998,
+    185.48545007199937,
+    202.38157214400053,
+    209.30336839099982
+  ],
+  "n_cases": 99,
+  "label_check_max_mismatch": {
+    "ET": 5.713795960346256e-07,
+    "TC": 0.0,
+    "WT": 6.439531511203497e-07
+  },
+  "label_check_tol": 1e-05
+}

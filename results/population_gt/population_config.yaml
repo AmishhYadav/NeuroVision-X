@@ -1,0 +1,26 @@
+localize_dirs:
+- outputs/localize_gt
+- outputs/localize_gt_train
+- outputs/localize_gt_val
+region: WT
+min_frac_of_structure: 0.05
+top_n_structures: 20
+figures: true
+resolved_localize_dirs:
+- /Users/amish/NeuroVision-X/outputs/localize_gt
+- /Users/amish/NeuroVision-X/outputs/localize_gt_train
+- /Users/amish/NeuroVision-X/outputs/localize_gt_val
+source: label
+splits:
+- test
+- train
+- val
+n_cases: 1251
+atlas:
+  name: tzo116plus
+  version: '2.0'
+  source: NITRC group_id=214 (https://www.nitrc.org/projects/sri24)
+  licence: CC-BY-SA
+coverage_line: '23 of 122 structures classified eloquent, 99 unclassified; 4 source
+  terms have no structure in this parcellation: internal capsule, dentate nucleus,
+  hypothalamus, brainstem (midbrain, medulla)'

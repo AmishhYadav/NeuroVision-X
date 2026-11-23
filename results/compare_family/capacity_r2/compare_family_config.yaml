@@ -1,0 +1,30 @@
+out_dir: outputs/compare_family/capacity_r2
+name: capacity_r2
+name_a: A
+name_b: B
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+exclude_case_ids: []
+comparisons:
+- cohort: test_nv_minus_r2
+  a: outputs/replay_lesionwise/eval_test/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_test_capacity_control_r2/per_case_default.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+  - lwdice_ET
+  - lwdice_TC
+  - lwdice_WT
+- cohort: test_r2_minus_baseline
+  a: outputs/replay_lesionwise/eval_test_capacity_control_r2/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_test_baseline_unet3d/per_case_default.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+  - lwdice_ET
+  - lwdice_TC
+  - lwdice_WT

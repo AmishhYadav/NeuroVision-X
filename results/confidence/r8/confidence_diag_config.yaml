@@ -1,0 +1,17 @@
+confidence_diag:
+  out_dir: outputs/confidence/r8
+  per_case_csv: outputs/confidence/neurovision_test/per_case_confidence.csv
+  cases:
+  - BraTS2021_01092
+  - BraTS2021_00098
+  - BraTS2021_00194
+confidence:
+  checkpoint: null
+  split: test
+  out_dir: outputs/neurovision/confidence
+  max_voxels_per_case: 20000
+  dilation_mm: 5.0
+  regions:
+  - ET
+  - TC
+  - WT

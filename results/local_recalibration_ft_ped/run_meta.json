@@ -1,0 +1,38 @@
+{
+  "git_sha": "593430b1be8ae811ee4004ffa4a412a42801f568",
+  "seed": 42,
+  "n_splits": 1000,
+  "config": {
+    "out_dir": "outputs/local_recalibration_ft_ped",
+    "regions": [
+      "WT",
+      "TC"
+    ],
+    "alphas": [
+      0.05,
+      0.1,
+      0.2
+    ],
+    "ks": [
+      5,
+      10,
+      15,
+      20,
+      30,
+      "half"
+    ],
+    "n_splits": 1000,
+    "seed": 42,
+    "models": {
+      "neurovision_ft_ped": {
+        "conformal_dir": "outputs/conformal/neurovision_ft_ped",
+        "cohorts": {
+          "ped": "eval_ft_ped_pooled"
+        }
+      }
+    }
+  },
+  "timestamp_utc": "2026-10-04T09:33:52.710473+00:00",
+  "status_label": "COUNTERFACTUAL -- what a new site would need to restore the bound; never external validation",
+  "control_failed": false
+}

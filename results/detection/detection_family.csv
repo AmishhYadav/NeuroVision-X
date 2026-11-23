@@ -1,0 +1,7 @@
+cohort,endpoint,statistic,p_raw,p_holm,reject
+brats_test,case,rho_partial,0.0001,0.0006000000000000001,True
+ped,case,rho_partial,0.9676,0.9676,False
+ssa,case,rho_partial,0.2066,0.4132,False
+brats_test,voxel_any,auroc_residual,0.0005,0.0025,True
+ped,voxel_any,auroc_residual,0.0005,0.0025,True
+ssa,voxel_any,auroc_residual,0.0005,0.0025,True

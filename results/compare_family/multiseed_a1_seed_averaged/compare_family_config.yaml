@@ -1,0 +1,14 @@
+out_dir: outputs/compare_family/multiseed_a1_seed_averaged
+name: multiseed_a1_seed_averaged
+name_a: neurovision_seedavg
+name_b: baseline_seedavg
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+comparisons:
+- cohort: test
+  a: outputs/compare_family/multiseed_a1_seed_avg_inputs/neurovision_seedavg_test.csv
+  b: outputs/compare_family/multiseed_a1_seed_avg_inputs/baseline_seedavg_test.csv
+  metrics:
+  - dice_ET

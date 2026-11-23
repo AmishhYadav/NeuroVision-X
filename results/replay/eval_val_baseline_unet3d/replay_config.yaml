@@ -1,0 +1,484 @@
+data:
+  name: brats
+  root_dir: ???
+  modalities:
+  - t1
+  - t1ce
+  - t2
+  - flair
+  in_channels: 4
+  regions:
+  - ET
+  - TC
+  - WT
+  num_classes: 3
+  spacing:
+  - 1.0
+  - 1.0
+  - 1.0
+  normalize: nonzero_z_score
+  crop_foreground: true
+  patch_size:
+  - 96
+  - 96
+  - 96
+  pos_neg_ratio:
+  - 1
+  - 1
+  samples_per_volume: 4
+  augment:
+    flip_prob: 0.5
+    rot90_prob: 0.5
+    scale_intensity_factor: 0.1
+    shift_intensity_offset: 0.1
+    noise_prob: 0.15
+    noise_std: 0.01
+  splits:
+    path: configs/data/splits.yaml
+    fractions:
+    - 0.7
+    - 0.15
+    - 0.15
+    seed: 42
+    overwrite: false
+  overfit_n: null
+  num_workers: 4
+  dataset_type: dataset
+  cache_dir: outputs/cache
+  cache_rate: 0.0
+  preprocessing:
+    out_dir: data/preprocessed/brats
+    num_workers: 8
+    overwrite: false
+    require_seg: true
+    limit: null
+    metadata_csv: metadata.csv
+    label_convention: brats2021
+    target_axcodes:
+    - L
+    - P
+    - S
+model:
+  name: unet3d
+  in_channels: 4
+  out_channels: 3
+  channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  - 320
+  strides:
+  - 2
+  - 2
+  - 2
+  - 2
+  num_res_units: 2
+  norm: instance
+  activation: leakyrelu
+  dropout: 0.1
+  deep_supervision: false
+training:
+  epochs: 300
+  batch_size: 1
+  grad_accum_steps: 1
+  amp: true
+  optimizer:
+    name: adamw
+    lr: 0.0001
+    weight_decay: 1.0e-05
+    betas:
+    - 0.9
+    - 0.999
+  scheduler:
+    name: cosine
+    warmup_epochs: 10
+    min_lr: 1.0e-06
+  loss:
+    name: dice_ce
+    dice_weight: 1.0
+    ce_weight: 1.0
+    sigmoid: true
+    softmax: false
+    include_background: true
+    squared_pred: false
+    smooth_nr: 1.0e-05
+    smooth_dr: 1.0e-05
+    deep_supervision:
+      enabled: false
+      weights: null
+    multitask:
+      seg_weight: 1.0
+      boundary:
+        enabled: true
+        weight: 0.3
+        kernel_size: 3
+        squared_pred: false
+      confidence:
+        enabled: true
+        weight: 0.05
+        threshold: 0.5
+      branch:
+        enabled: false
+        weight: 0.1
+      surface:
+        enabled: false
+        weight: 0.1
+        alpha: 2.0
+        log: false
+  grad_clip_norm: 1.0
+  val_interval: 1
+  log_interval: 20
+  sliding_window:
+    roi_size:
+    - 96
+    - 96
+    - 96
+    sw_batch_size: 4
+    overlap: 0.5
+  checkpoint:
+    dir: outputs/baseline_unet3d/checkpoints
+    save_every_n_epochs: 1
+    keep_last_n: 2
+    monitor: val/dice_mean
+    mode: max
+    resume: null
+  max_hours: 11.0
+inference:
+  sliding_window:
+    roi_size:
+    - 96
+    - 96
+    - 96
+    sw_batch_size: 4
+    overlap: 0.5
+    mode: gaussian
+    sigma_scale: 0.125
+    output_device: null
+    padding_mode: constant
+  mc_dropout:
+    enabled: false
+    num_samples: 10
+    seed: null
+    require_dropout: true
+    predictions_from: deterministic
+    save_fields:
+    - mutual_information
+  postprocess:
+    threshold: 0.5
+    enforce_nesting: true
+    min_component_size: 50
+    connectivity: 1
+    keep_largest_only: false
+    et_min_volume: 0
+  evaluation:
+    split: test
+    checkpoint: null
+    out_dir: outputs/baseline_unet3d/eval_test
+    save_predictions: true
+    save_probabilities: false
+    save_logits: false
+    strict_arch_check: true
+    boundary_bands:
+    - - 0.0
+      - 2.0
+    - - 2.0
+      - 5.0
+    - - 5.0
+      - 10.0
+    - - 10.0
+      - .inf
+calibration:
+  fit_dir: null
+  apply_dir: null
+  out_dir: outputs/baseline_unet3d/calibration
+  fit_prep_dir: null
+  source: auto
+  n_bins: 15
+  threshold: 0.5
+  mask_mode: predicted
+  per_channel: true
+  fit_voxels_per_case: 20000
+  seed: 42
+  temperature: null
+  risk_coverage:
+    enabled: true
+    uncertainty_column: mi_mean_fg_WT
+    score_column: dice_mean
+    score_higher_is_better: true
+    coverage_points:
+    - 1.0
+    - 0.9
+    - 0.8
+    - 0.7
+    - 0.6
+    - 0.5
+explainability:
+  gates:
+    split: test
+    checkpoint: null
+    out_dir: outputs/baseline_unet3d/gates_test
+    num_cases: 32
+    case_ids: null
+    patch_size:
+    - 96
+    - 96
+    - 96
+    center_on: label
+    save_image: true
+  attribution:
+    split: test
+    checkpoint: null
+    out_dir: outputs/baseline_unet3d/attribution_test
+    num_cases: 4
+    case_ids: null
+    patch_size:
+    - 96
+    - 96
+    - 96
+    regions:
+    - 0
+    - 2
+    save_image: true
+    integrated_gradients:
+      enabled: true
+      n_steps: 32
+      internal_batch_size: 1
+      delta_tolerance: 0.05
+      noise_scale: 1.0
+    grad_cam:
+      enabled: true
+      target_layer: null
+      relu: true
+    attention:
+      enabled: false
+      stage: layers3
+      residual_weight: 0.5
+      max_tokens: 4096
+    faithfulness:
+      enabled: true
+      n_points: 11
+      fill: zero
+    seed: 42
+  ambiguity:
+    split: test
+    checkpoint: null
+    out_dir: outputs/baseline_unet3d/ambiguity_test
+    num_cases: null
+    case_ids: null
+    level: 0
+    save_maps: true
+    save_image: false
+    logits_dir: null
+    include_auxiliary: true
+    include_gates: true
+anatomy:
+  dir: data/atlas
+  version: '2.0'
+  source: NITRC group_id=214 (https://www.nitrc.org/projects/sri24)
+  licence: CC-BY-SA
+  archives:
+    labels:
+      url: https://www.nitrc.org/frs/download.php/4508/sri24_labels_nifti.zip
+      sha256: ed47fde305baefb687a38e0daa8527896480e4e0159a0a0f56c8cbe09fc97e1f
+      bytes: 399821
+    tissue:
+      url: https://www.nitrc.org/frs/download.php/4511/sri24_tissue_nifti.zip
+      sha256: 1375bf8f44a2f6a0704056d87c51ab8dd8d499132d9b06bf9f7e1b6b857673a2
+      bytes: 15686657
+    anatomy:
+      url: https://www.nitrc.org/frs/download.php/4499/sri24_anatomy_nifti.zip
+      sha256: c2a66abd5bb37ba443b935ef4732a3e3a2f34ca57bedcdac6cf5902b50f013b6
+      bytes: 6522201
+  subdir: sri24
+  parcellation:
+    name: tzo116plus
+    image: tzo116plus.nii
+    lut: SRI24-tzo116plus.txt
+    lut_whitespace_split: true
+    merge_patterns:
+    - (_[xyz][0-9]+)$
+    - (_AP_[0-9]+)$
+    unmapped_name: unclassified
+  tissue:
+    source: tissues
+    image: tissues.nii
+    codes:
+      CSF: 1
+      GM: 2
+      WM: 3
+    pbmap:
+      GM: pbmap_GM.nii
+      WM: pbmap_WM.nii
+      CSF: pbmap_CSF.nii
+  anatomy:
+    t1: spgr.nii
+    t2_late: late.nii
+    t2_early: erly.nii
+  target:
+    shape:
+    - 240
+    - 240
+    - 155
+    spacing:
+    - 1.0
+    - 1.0
+    - 1.0
+    affine:
+    - - -1.0
+      - 0.0
+      - 0.0
+      - 0.0
+    - - 0.0
+      - -1.0
+      - 0.0
+      - 239.0
+    - - 0.0
+      - 0.0
+      - 1.0
+      - 0.0
+    - - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+    left_is_high_index: true
+  validation:
+    n_cases: 400
+    seed: 0
+    lobe_map: knowledge/aal_lobes.yaml
+    lobe_check_is_advisory: true
+    brain_mask_source: tissue
+    min_brain_dice: 0.85
+    min_laterality_pairs_correct: 1.0
+    midline_index: 119.5
+    max_midline_deviation: 1.5
+    qc_cases: 10
+analysis:
+  burden:
+    source: prediction
+    eval_dir: null
+    preprocessed_dir: data/preprocessed/brats
+    split: test
+    min_volume_mm3: 50.0
+    connectivity: 3
+    midline_index: null
+    out_name: burden.csv
+  localize:
+    source: prediction
+    eval_dir: null
+    preprocessed_dir: data/preprocessed/brats
+    split: test
+    regions:
+    - ET
+    - TC
+    - WT
+    eloquence_map: knowledge/eloquence_map.yaml
+    lobe_map: knowledge/aal_lobes.yaml
+    min_frac: 0.001
+    out_name: anatomy.csv
+    summary_name: anatomy_summary.csv
+    involvement:
+      enabled: true
+      groups_map: knowledge/involvement_groups.yaml
+      min_overlap_mm3: 50.0
+  report:
+    burden_dir: null
+    localize_dir: null
+    eloquence_map: knowledge/eloquence_map.yaml
+    lobe_map: knowledge/aal_lobes.yaml
+    cases: null
+    top_n: 10
+    markdown: true
+    out_subdir: reports
+  report_agreement:
+    gt_dir: null
+    pred_dirs: {}
+    comparisons: []
+    cases: null
+    n_boot: 10000
+    alpha: 0.05
+  population:
+    localize_dirs: []
+    region: WT
+    min_frac_of_structure: 0.05
+    top_n_structures: 20
+    figures: true
+  detection:
+    cohorts:
+    - name: brats_test
+      ambiguity_dirs:
+      - outputs/ambiguity_test_s0
+      - outputs/ambiguity_test_s1
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+    - name: ssa
+      ambiguity_dirs:
+      - outputs/ambiguity_ssa_s0
+      - outputs/ambiguity_ssa_s1
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+    - name: ped
+      ambiguity_dirs:
+      - outputs/ambiguity_ped_s0
+      - outputs/ambiguity_ped_s1
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+    out_dir: outputs/baseline_unet3d/detection
+    case:
+      score_column: amb_dis_mean_fg_mean
+      control_column: ent_mean_fg_mean
+      metric_column: dice_mean
+    voxel:
+      enabled: true
+      mask: predicted_dilated
+      dilation_mm: 10.0
+      max_voxels_per_case: 20000
+      max_cases: null
+    bootstrap:
+      n_boot: 10000
+      ci: 0.95
+    alpha: 0.05
+    seed: 42
+  replay:
+    eval_dir: outputs/eval_val_baseline_unet3d
+    prep_dir: data/preprocessed/brats
+    out_dir: outputs/replay
+    case_ids: null
+    threshold_sweep:
+      enabled: true
+      thresholds:
+      - 0.3
+      - 0.4
+      - 0.45
+      - 0.5
+      - 0.55
+      - 0.6
+      - 0.7
+    postprocess_ablation:
+      enabled: true
+      variants:
+        default: {}
+        no_small_component_removal:
+          min_component_size: 0
+        no_nesting:
+          enforce_nesting: false
+        keep_largest_only:
+          keep_largest_only: true
+        raw:
+          min_component_size: 0
+          enforce_nesting: false
+          keep_largest_only: false
+    baseline_comparison:
+      enabled: false
+      eval_dir: null
+experiment_name: baseline_unet3d
+seed: 42
+device: auto
+output_dir: outputs/baseline_unet3d
+wandb:
+  project: neurovision-x
+  entity: null
+  mode: online
+  tags: []
+  group: null
+  run_id: null

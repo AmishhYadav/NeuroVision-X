@@ -1,0 +1,184 @@
+11:38:44 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+11:38:44 | INFO     | __main__ | replay_logits: eval_dir=outputs/eval_test_baseline_unet3d_seed43 prep_dir=data/preprocessed/brats out_dir=outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43 case_ids=every case with saved logits
+11:38:44 | INFO     | __main__ | replay_logits: running threshold sweep over 7 threshold(s).
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+11:39:09 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 25/189 case(s)
+11:39:34 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 50/189 case(s)
+11:40:00 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 75/189 case(s)
+11:40:27 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 100/189 case(s)
+11:40:51 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 125/189 case(s)
+11:41:17 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+11:41:41 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.3, processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+11:42:19 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 25/189 case(s)
+11:42:44 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 50/189 case(s)
+11:43:09 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 75/189 case(s)
+11:43:35 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 100/189 case(s)
+11:43:58 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 125/189 case(s)
+11:44:23 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+11:44:48 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.4, processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+11:45:26 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 25/189 case(s)
+11:45:50 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 50/189 case(s)
+11:46:16 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 75/189 case(s)
+11:46:41 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 100/189 case(s)
+11:47:05 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 125/189 case(s)
+11:47:30 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+11:47:56 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.45, processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+11:48:34 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 25/189 case(s)
+11:48:59 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 50/189 case(s)
+11:49:24 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 75/189 case(s)
+11:49:50 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 100/189 case(s)
+11:50:13 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 125/189 case(s)
+11:50:39 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+11:51:04 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.5, processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+11:51:42 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 25/189 case(s)
+11:52:06 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 50/189 case(s)
+11:52:32 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 75/189 case(s)
+11:52:57 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 100/189 case(s)
+11:53:21 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 125/189 case(s)
+11:53:45 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+11:54:10 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.55, processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+11:54:48 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 25/189 case(s)
+11:55:12 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 50/189 case(s)
+11:55:38 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 75/189 case(s)
+11:56:03 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 100/189 case(s)
+11:56:27 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 125/189 case(s)
+11:56:52 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+11:57:17 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.6, processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+11:57:55 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 25/189 case(s)
+11:58:19 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 50/189 case(s)
+11:58:44 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 75/189 case(s)
+11:59:09 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 100/189 case(s)
+11:59:32 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 125/189 case(s)
+11:59:57 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+12:00:22 | INFO     | neurovision.analysis.replay | threshold_sweep: threshold=0.7, processed 175/189 case(s)
+12:00:34 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43/threshold_sweep.csv
+12:00:34 | INFO     | __main__ | replay_logits: running post-processing ablation over 5 variant(s): ['default', 'no_small_component_removal', 'no_nesting', 'keep_largest_only', 'raw'].
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+12:01:00 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 25/189 case(s)
+12:01:24 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 50/189 case(s)
+12:01:50 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 75/189 case(s)
+12:02:15 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 100/189 case(s)
+12:02:38 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 125/189 case(s)
+12:03:03 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+12:03:28 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='default', processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+12:03:43 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 25/189 case(s)
+12:03:46 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 50/189 case(s)
+12:03:49 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 75/189 case(s)
+12:03:53 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 100/189 case(s)
+12:03:56 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 125/189 case(s)
+12:04:00 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+12:04:03 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_small_component_removal', processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+12:04:30 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 25/189 case(s)
+12:04:54 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 50/189 case(s)
+12:05:20 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 75/189 case(s)
+12:05:45 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 100/189 case(s)
+12:06:08 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 125/189 case(s)
+12:06:33 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+12:06:58 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='no_nesting', processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+12:07:37 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 25/189 case(s)
+12:08:02 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 50/189 case(s)
+12:08:30 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 75/189 case(s)
+12:08:56 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 100/189 case(s)
+12:09:21 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 125/189 case(s)
+12:09:48 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+12:10:14 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='keep_largest_only', processed 175/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+12:10:30 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 25/189 case(s)
+12:10:33 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 50/189 case(s)
+12:10:36 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 75/189 case(s)
+12:10:40 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 100/189 case(s)
+12:10:43 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 125/189 case(s)
+12:10:46 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+12:10:50 | INFO     | neurovision.analysis.replay | postprocess_ablation: variant='raw', processed 175/189 case(s)
+12:10:52 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43/postprocess_ablation.csv
+12:10:52 | INFO     | __main__ | replay_logits: replaying every selected case at project default settings.
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+12:11:37 | INFO     | neurovision.analysis.replay | per_case_replay: processed 25/189 case(s)
+12:12:23 | INFO     | neurovision.analysis.replay | per_case_replay: processed 50/189 case(s)
+12:13:11 | INFO     | neurovision.analysis.replay | per_case_replay: processed 75/189 case(s)
+12:13:59 | INFO     | neurovision.analysis.replay | per_case_replay: processed 100/189 case(s)
+12:14:46 | INFO     | neurovision.analysis.replay | per_case_replay: processed 125/189 case(s)
+12:15:33 | INFO     | neurovision.analysis.replay | per_case_replay: processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+12:16:19 | INFO     | neurovision.analysis.replay | per_case_replay: processed 175/189 case(s)
+12:16:44 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43/per_case_default.csv
+12:16:44 | INFO     | __main__ | replay_logits: self-consistency mean absolute deltas vs outputs/eval_test_baseline_unet3d_seed43/per_case_metrics.csv (n=189 shared case(s)): {'dice_ET': 2.5809748224586145e-17, 'dice_TC': 4.5231308410654523e-17, 'dice_WT': 4.5231308410654523e-17}
+12:16:44 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43/best_threshold.json
+12:16:44 | INFO     | __main__ | replay_logits: wrote outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43/replay_config.yaml
+======================================================================
+Logit replay summary -- eval_dir=outputs/eval_test_baseline_unet3d_seed43
+======================================================================
+  out_dir: outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43
+  threshold_sweep.csv: 7 row(s)
+  postprocess_ablation.csv: 5 row(s)
+  per_case_default.csv: 189 row(s)
+  comparison_default.csv: skipped (disabled in config)

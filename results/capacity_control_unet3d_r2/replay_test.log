@@ -1,0 +1,28 @@
+17:04:20 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+17:04:20 | INFO     | __main__ | replay_logits: eval_dir=outputs/eval_test_capacity_control_r2 prep_dir=data/preprocessed/brats out_dir=outputs/capacity_control_unet3d_r2/replay/eval_test_capacity_control_r2 case_ids=every case with saved logits
+17:04:20 | INFO     | __main__ | replay_logits: replaying every selected case at project default settings.
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+17:05:07 | INFO     | neurovision.analysis.replay | per_case_replay: processed 25/189 case(s)
+17:05:53 | INFO     | neurovision.analysis.replay | per_case_replay: processed 50/189 case(s)
+17:06:42 | INFO     | neurovision.analysis.replay | per_case_replay: processed 75/189 case(s)
+17:07:31 | INFO     | neurovision.analysis.replay | per_case_replay: processed 100/189 case(s)
+17:08:15 | INFO     | neurovision.analysis.replay | per_case_replay: processed 125/189 case(s)
+17:09:02 | INFO     | neurovision.analysis.replay | per_case_replay: processed 150/189 case(s)
+/Users/amish/NeuroVision-X/.venv-analysis/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+17:09:46 | INFO     | neurovision.analysis.replay | per_case_replay: processed 175/189 case(s)
+17:10:09 | INFO     | __main__ | replay_logits: wrote outputs/capacity_control_unet3d_r2/replay/eval_test_capacity_control_r2/per_case_default.csv
+17:10:09 | INFO     | __main__ | replay_logits: self-consistency mean absolute deltas vs outputs/eval_test_capacity_control_r2/per_case_metrics.csv (n=189 shared case(s)): {'dice_ET': 2.9811544179749577e-17, 'dice_TC': 4.0238241897790066e-17, 'dice_WT': 3.935711251316692e-17}
+17:10:09 | INFO     | __main__ | replay_logits: threshold_sweep is disabled, so best_threshold.json is not written.
+17:10:09 | INFO     | __main__ | replay_logits: wrote outputs/capacity_control_unet3d_r2/replay/eval_test_capacity_control_r2/replay_config.yaml
+======================================================================
+Logit replay summary -- eval_dir=outputs/eval_test_capacity_control_r2
+======================================================================
+  out_dir: outputs/capacity_control_unet3d_r2/replay/eval_test_capacity_control_r2
+  threshold_sweep.csv: skipped (disabled in config)
+  postprocess_ablation.csv: skipped (disabled in config)
+  per_case_default.csv: 189 row(s)
+  comparison_default.csv: skipped (disabled in config)

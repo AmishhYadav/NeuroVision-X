@@ -1,0 +1,9 @@
+out_dir: outputs/real_dicom_validation/r3
+work_dir: outputs/real_dicom_validation
+gt_root: data/preprocessed/brats
+atlas_brain: .venv-clinical/lib/python3.11/site-packages/brainles_preprocessing/registration/atlases/15236131_v2.0.0/brats_sri24_skullstripped.nii
+test_cases_from: outputs/neurovision/eval_test/per_case_metrics.csv
+max_shift_vox: 20
+expected_n_cases: 22
+usable_threshold: 0.7
+dice_match_atol: 0.0001

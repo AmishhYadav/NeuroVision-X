@@ -1,0 +1,7 @@
+apply_dir,region,alpha,mean_inflation,median_inflation,n,n_skipped
+outputs/eval_ft_ped_pooled,WT,0.05,1.1179500329391454,1.1018011742461937,97.0,2.0
+outputs/eval_ft_ped_pooled,WT,0.1,0.9527095742678501,0.9601485221457128,97.0,2.0
+outputs/eval_ft_ped_pooled,WT,0.2,0.8506106008388185,0.8731714598467509,97.0,2.0
+outputs/eval_ft_ped_pooled,TC,0.05,1.341234291550079,1.2440989476761182,97.0,2.0
+outputs/eval_ft_ped_pooled,TC,0.1,0.9702685471042489,0.9766980288774753,97.0,2.0
+outputs/eval_ft_ped_pooled,TC,0.2,0.7665922212578737,0.791491256476684,97.0,2.0

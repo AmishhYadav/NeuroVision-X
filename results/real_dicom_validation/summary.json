@@ -1,0 +1,77 @@
+{
+  "note": "test-split BraTS 2021 patients via RSNA DICOM -- front-end isolation, NOT external validation.",
+  "n": 40,
+  "usable_threshold": 0.7,
+  "n_boot": 10000,
+  "seed": 42,
+  "n_scoring_failed": 0,
+  "completion": {
+    "by_status": {
+      "done": 22,
+      "refused": 18
+    },
+    "by_status_and_stage": [
+      {
+        "status": "refused",
+        "refusing_stage": "gatekeeper",
+        "n": 2
+      },
+      {
+        "status": "refused",
+        "refusing_stage": "input_qc (pre-preprocessing)",
+        "n": 16
+      }
+    ]
+  },
+  "usable_rate": {
+    "n": 40,
+    "n_accepted": 22,
+    "p_accepted_and_usable": 0.2,
+    "p_accepted_and_usable_lo": 0.075,
+    "p_accepted_and_usable_hi": 0.325,
+    "p_usable_given_accepted": 0.36363636363636365,
+    "p_usable_given_accepted_lo": 0.18181818181818182,
+    "p_usable_given_accepted_hi": 0.5454545454545454,
+    "p_silent_failure": 0.35,
+    "p_silent_failure_lo": 0.2,
+    "p_silent_failure_hi": 0.5
+  },
+  "front_end_cost": [
+    {
+      "region": "ET",
+      "n": 22,
+      "mean_diff": -0.4837926333262162,
+      "mean_diff_lo": -0.5689305517272176,
+      "mean_diff_hi": -0.4026813533157111,
+      "median_diff": -0.45605598390102386,
+      "median_diff_lo": -0.5628371685743332,
+      "median_diff_hi": -0.3497390151023865,
+      "wilcoxon_statistic": 0.0,
+      "wilcoxon_pvalue": 4.76837158203125e-07
+    },
+    {
+      "region": "TC",
+      "n": 22,
+      "mean_diff": -0.3938665000552481,
+      "mean_diff_lo": -0.4961918891915543,
+      "mean_diff_hi": -0.2979098602621393,
+      "median_diff": -0.36662349104881287,
+      "median_diff_lo": -0.499751716852188,
+      "median_diff_hi": -0.2223532795906067,
+      "wilcoxon_statistic": 0.0,
+      "wilcoxon_pvalue": 4.76837158203125e-07
+    },
+    {
+      "region": "WT",
+      "n": 22,
+      "mean_diff": -0.2974882572889328,
+      "mean_diff_lo": -0.37172597155652265,
+      "mean_diff_hi": -0.22669632041996177,
+      "median_diff": -0.23208868503570562,
+      "median_diff_lo": -0.37893369793891907,
+      "median_diff_hi": -0.18219506740570068,
+      "wilcoxon_statistic": 0.0,
+      "wilcoxon_pvalue": 4.76837158203125e-07
+    }
+  ]
+}

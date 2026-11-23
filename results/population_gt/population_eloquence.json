@@ -1,0 +1,12 @@
+{
+  "n_cases": 1251,
+  "frac_any_eloquent": 0.9848121502797762,
+  "frac_near_eloquent": 1.0,
+  "median_distance_to_eloquent_mm": 0.0,
+  "frac_distance_zero": 0.988009592326139,
+  "median_n_structures_involved": 24.0,
+  "median_frac_unlabelled": 0.3411741719547729,
+  "degenerate_fields": [
+    "frac_near_eloquent"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "git_sha": "7d1e4f80b62960f55617a9551569d051622f46b5",
+  "timestamp_utc": "2026-09-27T14:48:53.312289+00:00",
+  "config": {
+    "out_dir": "outputs/ood",
+    "fit_split": "train",
+    "threshold_split": "val",
+    "shrinkage": 0.1,
+    "caution_quantile": 0.1,
+    "refuse_quantile": 0.02,
+    "score_cohorts": [
+      {
+        "name": "test",
+        "prep_dir": "data/preprocessed/brats",
+        "split": "test",
+        "eval_dir": "outputs/neurovision/eval_test"
+      },
+      {
+        "name": "ssa",
+        "prep_dir": "data/preprocessed/brats_ssa",
+        "split": null,
+        "eval_dir": "outputs/eval_ssa_neurovision"
+      },
+      {
+        "name": "ped",
+        "prep_dir": "data/preprocessed/brats_ped",
+        "split": null,
+        "eval_dir": "outputs/eval_ped_neurovision"
+      }
+    ],
+    "brats_prep_dir": "data/preprocessed/brats",
+    "usable_bar": 0.7,
+    "usable_regions": [
+      "WT",
+      "TC"
+    ],
+    "n_boot": 10000,
+    "ci": 0.95,
+    "seed": 42
+  },
+  "n_by_cohort": {
+    "train": 875,
+    "val": 187,
+    "test": 189,
+    "ssa": 60,
+    "ped": 99
+  },
+  "n_skipped_total": 0,
+  "n_skipped_by_cohort": {},
+  "status_label": "PRE-REGISTERED P1.4 run: fitted on train, cuts on val, frozen before test/SSA/PED were scored"
+}

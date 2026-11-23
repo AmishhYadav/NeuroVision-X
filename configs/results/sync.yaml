@@ -1,0 +1,28 @@
+# Mirror of small result files from outputs/ into the tracked results/ tree.
+# Used by scripts/sync_results.py (MasterPlan W0.1). Paths are relative to the
+# repo root (the script resolves them against hydra's original cwd).
+source_dir: outputs
+dest_dir: results
+max_file_mb: 5.0          # any file larger than this is skipped and listed
+allowed_extensions: [.csv, .tsv, .json, .yaml, .yml, .txt, .md, .npz, .log]
+# Directory NAMES: a file is skipped if ANY component of its path relative to
+# source_dir equals one of these (exact component match, never substring --
+# "eval_test" must not match "test", and "logits" must not match "logits_summary.csv").
+exclude_dir_names: [logits, predictions, probabilities, uncertainty, checkpoints, hydra, .hydra,
+                    kaggle_kernels, clinical_jobs, demo_jobs, demo_cache, wandb, wandb_offline,
+                    cache, _extract, __pycache__, node_modules]
+# Glob patterns (fnmatch, matched against the POSIX relative path from source_dir).
+exclude_globs: ["real_dicom_validation/cases/*", "real_dicom_validation/jobs/*",
+                "report_*/reports/*", "ambiguity_*/*"]
+manifest_name: MANIFEST.sha256
+dry_run: false
+
+# Keep Hydra from creating outputs/<date>/ run dirs or a log file for this
+# small utility: stay in the repo root and log to stdout only.
+defaults:
+  - _self_
+  - override hydra/job_logging: stdout
+hydra:
+  output_subdir: null
+  run:
+    dir: .

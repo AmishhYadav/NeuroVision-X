@@ -1,0 +1,45 @@
+out_dir: outputs/compare_family/d0_heavy_aug
+name: d0_heavy_aug
+name_a: neurovision_heavy_aug
+name_b: neurovision
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+comparisons:
+- cohort: test
+  a: outputs/eval_test_neurovision_heavy_aug/per_case_metrics.csv
+  b: outputs/neurovision/eval_test/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: pooled_ssa_ped
+  a:
+  - outputs/eval_ssa_neurovision_heavy_aug/per_case_metrics.csv
+  - outputs/eval_ped_neurovision_heavy_aug/per_case_metrics.csv
+  b:
+  - outputs/eval_ssa_neurovision/per_case_metrics.csv
+  - outputs/eval_ped_neurovision/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: test_lesionwise
+  a: outputs/replay_lesionwise/eval_test_neurovision_heavy_aug/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_test/per_case_default.csv
+  metrics:
+  - lwdice_ET
+  - lwdice_TC
+  - lwdice_WT
+- cohort: pooled_ssa_ped_lesionwise
+  a:
+  - outputs/replay_lesionwise/eval_ssa_neurovision_heavy_aug/per_case_default.csv
+  - outputs/replay_lesionwise/eval_ped_neurovision_heavy_aug/per_case_default.csv
+  b:
+  - outputs/replay_lesionwise/eval_ssa_neurovision/per_case_default.csv
+  - outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
+  metrics:
+  - lwdice_ET
+  - lwdice_TC
+  - lwdice_WT

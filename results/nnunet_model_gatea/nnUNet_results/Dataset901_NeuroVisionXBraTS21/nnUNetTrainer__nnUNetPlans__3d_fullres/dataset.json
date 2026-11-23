@@ -1,0 +1,31 @@
+{
+    "channel_names": {
+        "0": "T1",
+        "1": "T1ce",
+        "2": "T2",
+        "3": "Flair"
+    },
+    "labels": {
+        "background": 0,
+        "whole tumor": [
+            1,
+            2,
+            3
+        ],
+        "tumor core": [
+            2,
+            3
+        ],
+        "enhancing tumor": [
+            3
+        ]
+    },
+    "numTraining": 875,
+    "file_ending": ".nii",
+    "regions_class_order": [
+        1,
+        2,
+        3
+    ],
+    "name": "Dataset901_NeuroVisionXBraTS21"
+}

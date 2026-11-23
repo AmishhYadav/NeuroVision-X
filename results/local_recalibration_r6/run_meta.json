@@ -1,0 +1,44 @@
+{
+  "git_sha": "d08324c12c28ab19dd99b2c3ce46eff151277ae5",
+  "seed": 42,
+  "n_splits": 1000,
+  "config": {
+    "out_dir": "outputs/local_recalibration_r6",
+    "models": {
+      "neurovision": {
+        "conformal_dir": "outputs/conformal/neurovision",
+        "cohorts": {
+          "test": "eval_test",
+          "ssa": "eval_ssa_neurovision",
+          "ped": "eval_ped_neurovision"
+        }
+      },
+      "baseline_unet3d": {
+        "conformal_dir": "outputs/conformal/baseline_unet3d",
+        "cohorts": {
+          "test": "eval_test_baseline_unet3d",
+          "ssa": "eval_ssa_baseline_unet3d",
+          "ped": "eval_ped_baseline_unet3d"
+        }
+      }
+    },
+    "regions": [
+      "WT",
+      "TC"
+    ],
+    "alphas": [
+      0.05,
+      0.1,
+      0.2
+    ],
+    "ks": [
+      39,
+      45
+    ],
+    "n_splits": 1000,
+    "seed": 42
+  },
+  "timestamp_utc": "2026-10-03T19:15:12.191847+00:00",
+  "status_label": "COUNTERFACTUAL -- what a new site would need to restore the bound; never external validation",
+  "control_failed": false
+}

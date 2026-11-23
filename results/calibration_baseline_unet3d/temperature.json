@@ -1,0 +1,16 @@
+{
+  "fit_dir": "outputs/eval_val_baseline_unet3d",
+  "apply_dir": "outputs/eval_test_baseline_unet3d",
+  "source": "logits",
+  "mask_mode": "predicted",
+  "converged": true,
+  "temperature": {
+    "ET": 1.9154969453811646,
+    "TC": 2.024963617324829,
+    "WT": 1.927159070968628
+  },
+  "nll_before": 0.24883822791362975,
+  "nll_after": 0.1983171178959417,
+  "n_voxels_fit": 8959428,
+  "n_cases_fit": 187
+}

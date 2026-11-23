@@ -1,0 +1,10 @@
+out_dir: outputs/error_budget/silent_failure_by_region
+per_case_dir: outputs/error_budget
+cohorts:
+- test
+- ssa
+- ped
+usable_regions:
+- WT
+- TC
+usable_bar: 0.7

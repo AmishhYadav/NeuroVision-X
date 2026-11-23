@@ -1,0 +1,13 @@
+{
+  "spearman": -0.391857302831547,
+  "spearman_p": 2.4607524096469653e-08,
+  "pearson": -0.41242576021885424,
+  "pearson_p": 3.704019975301066e-09,
+  "n": 189,
+  "aurc_model": 0.07212706672083685,
+  "aurc_oracle": 0.038413835101497214,
+  "aurc_random": 0.09317720213027439,
+  "uncertainty_column": "mi_mean_fg_WT",
+  "score_column": "dice_mean",
+  "n_cases": 189
+}

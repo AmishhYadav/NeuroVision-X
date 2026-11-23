@@ -1,0 +1,124 @@
+cohorts:
+- name: brats_test
+  ambiguity_dirs:
+  - outputs/ambiguity_test_*
+  eval_dir: outputs/neurovision/eval_test
+  prep_dir: data/preprocessed/brats
+- name: ssa
+  ambiguity_dirs:
+  - outputs/ambiguity_ssa_*
+  eval_dir: outputs/eval_ssa_neurovision
+  prep_dir: data/preprocessed/brats_ssa
+- name: ped
+  ambiguity_dirs:
+  - outputs/ambiguity_ped_*
+  eval_dir: outputs/eval_ped_neurovision
+  prep_dir: data/preprocessed/brats_ped
+out_dir: outputs/baseline_unet3d/detection
+case:
+  score_column: amb_dis_mean_fg_mean
+  control_column: ent_mean_fg_mean
+  metric_column: dice_mean
+voxel:
+  enabled: true
+  mask: predicted_dilated
+  dilation_mm: 10.0
+  max_voxels_per_case: 20000
+  max_cases: null
+bootstrap:
+  n_boot: 10000
+  ci: 0.95
+alpha: 0.05
+seed: 42
+cohort_provenance:
+  brats_test:
+    ambiguity_dirs:
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p00
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p01
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p02
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p03
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p04
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p05
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p06
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p07
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p08
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p09
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p10
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p11
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p12
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p13
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p14
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p15
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_p16
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_s0
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_s1
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_w0
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_test_w1
+    eval_dir: /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+    prep_dir: /Users/amish/NeuroVision-X/data/preprocessed/brats
+    n_cases_joined: 189
+    voxel:
+      enabled: true
+      mask: predicted_dilated
+      dilation_mm: 10.0
+      max_voxels_per_case: 20000
+      n_boot_voxel: 2000
+      n_cases_available: 189
+      n_cases_used: 189
+      n_cases_skipped: 0
+  ssa:
+    ambiguity_dirs:
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p00
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p01
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p02
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p03
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p04
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p05
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p06
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p07
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p08
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p09
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ssa_p10
+    eval_dir: /Users/amish/NeuroVision-X/outputs/eval_ssa_neurovision
+    prep_dir: /Users/amish/NeuroVision-X/data/preprocessed/brats_ssa
+    n_cases_joined: 60
+    voxel:
+      enabled: true
+      mask: predicted_dilated
+      dilation_mm: 10.0
+      max_voxels_per_case: 20000
+      n_boot_voxel: 2000
+      n_cases_available: 60
+      n_cases_used: 60
+      n_cases_skipped: 0
+  ped:
+    ambiguity_dirs:
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p00
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p01
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p02
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p03
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p04
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p05
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p06
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p07
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p08
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p09
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p10
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p11
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p12
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p13
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p14
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p15
+    - /Users/amish/NeuroVision-X/outputs/ambiguity_ped_p16
+    eval_dir: /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision
+    prep_dir: /Users/amish/NeuroVision-X/data/preprocessed/brats_ped
+    n_cases_joined: 99
+    voxel:
+      enabled: true
+      mask: predicted_dilated
+      dilation_mm: 10.0
+      max_voxels_per_case: 20000
+      n_boot_voxel: 2000
+      n_cases_available: 99
+      n_cases_used: 99
+      n_cases_skipped: 0

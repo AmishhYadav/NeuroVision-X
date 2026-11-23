@@ -1,0 +1,70 @@
+14:57:35 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+14:57:35 | INFO     | __main__ | conformal: verifying saved logits reproduce their own published metrics before trusting them (guard 3).
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+14:58:00 | INFO     | neurovision.analysis.replay | per_case_replay: processed 25/187 case(s)
+14:58:25 | INFO     | neurovision.analysis.replay | per_case_replay: processed 50/187 case(s)
+14:58:50 | INFO     | neurovision.analysis.replay | per_case_replay: processed 75/187 case(s)
+14:59:15 | INFO     | neurovision.analysis.replay | per_case_replay: processed 100/187 case(s)
+14:59:40 | INFO     | neurovision.analysis.replay | per_case_replay: processed 125/187 case(s)
+15:00:04 | INFO     | neurovision.analysis.replay | per_case_replay: processed 150/187 case(s)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+15:00:28 | INFO     | neurovision.analysis.replay | per_case_replay: processed 175/187 case(s)
+15:00:39 | INFO     | __main__ | conformal: replay self-consistency mean absolute deltas for outputs/neurovision/eval_val vs outputs/neurovision/eval_val/per_case_metrics.csv (n=187 shared case(s)): {'dice_ET': 3.3757533310586103e-17, 'dice_TC': 3.200425664235286e-17, 'dice_WT': 4.8386725404786237e-17}
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:342: UserWarning: the ground truth of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 0 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+15:01:03 | INFO     | neurovision.analysis.replay | per_case_replay: processed 25/99 case(s)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 1 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/metrics/utils.py:347: UserWarning: the prediction of class 2 is all 0, this may result in nan/inf distance.
+  warnings.warn(
+15:01:21 | INFO     | neurovision.analysis.replay | per_case_replay: processed 50/99 case(s)
+15:01:44 | INFO     | neurovision.analysis.replay | per_case_replay: processed 75/99 case(s)
+15:02:07 | INFO     | __main__ | conformal: replay self-consistency mean absolute deltas for outputs/eval_ft_ped_pooled vs outputs/eval_ft_ped_pooled/per_case_metrics.csv (n=99 shared case(s)): {'dice_ET': 1.1547300713825413e-17, 'dice_TC': 2.2709107321878203e-17, 'dice_WT': 3.364312195833808e-17}
+15:02:07 | INFO     | __main__ | conformal: extracting/loading loss curves for calib_dir=outputs/neurovision/eval_val.
+15:02:14 | INFO     | __main__ | extract: processed 25/187 case(s) from outputs/neurovision/eval_val
+15:02:21 | INFO     | __main__ | extract: processed 50/187 case(s) from outputs/neurovision/eval_val
+15:02:28 | INFO     | __main__ | extract: processed 75/187 case(s) from outputs/neurovision/eval_val
+15:02:35 | INFO     | __main__ | extract: processed 100/187 case(s) from outputs/neurovision/eval_val
+15:02:42 | INFO     | __main__ | extract: processed 125/187 case(s) from outputs/neurovision/eval_val
+15:02:50 | INFO     | __main__ | extract: processed 150/187 case(s) from outputs/neurovision/eval_val
+15:02:56 | INFO     | __main__ | extract: processed 175/187 case(s) from outputs/neurovision/eval_val
+15:03:00 | INFO     | __main__ | extract: built loss curves for 187/187 case(s) x 2 region(s) from outputs/neurovision/eval_val.
+15:03:00 | INFO     | __main__ | extract: wrote outputs/conformal/neurovision_ft_ped/eval_val/curves.npz and outputs/conformal/neurovision_ft_ped/eval_val/curves_manifest.json.
+15:03:00 | INFO     | __main__ | conformal: extracting/loading loss curves for apply_dir=outputs/eval_ft_ped_pooled.
+15:03:06 | INFO     | __main__ | extract: processed 25/99 case(s) from outputs/eval_ft_ped_pooled
+15:03:13 | INFO     | __main__ | extract: processed 50/99 case(s) from outputs/eval_ft_ped_pooled
+15:03:20 | INFO     | __main__ | extract: processed 75/99 case(s) from outputs/eval_ft_ped_pooled
+15:03:26 | INFO     | __main__ | extract: built loss curves for 99/99 case(s) x 2 region(s) from outputs/eval_ft_ped_pooled.
+15:03:26 | INFO     | __main__ | extract: wrote outputs/conformal/neurovision_ft_ped/eval_ft_ped_pooled/curves.npz and outputs/conformal/neurovision_ft_ped/eval_ft_ped_pooled/curves_manifest.json.
+15:03:26 | INFO     | __main__ | conformal: self-check OK -- alpha=1.0 selects threshold=0.95 (the largest grid value) for region WT, as the degenerate-endpoint falsifier requires.
+15:03:26 | INFO     | __main__ | conformal: self-check OK -- alpha=1.0 selects threshold=0.95 (the largest grid value) for region TC, as the degenerate-endpoint falsifier requires.
+15:03:26 | INFO     | __main__ | fit: region=WT alpha=0.0500 -> threshold=0.1, calibrated_risk=0.0446299 (n_calibration=187, n_excluded_empty=0).
+15:03:26 | INFO     | __main__ | fit: region=WT alpha=0.1000 -> threshold=0.725, calibrated_risk=0.0928897 (n_calibration=187, n_excluded_empty=0).
+15:03:26 | INFO     | __main__ | fit: region=WT alpha=0.2000 -> threshold=0.95, calibrated_risk=0.151159 (n_calibration=187, n_excluded_empty=0).
+15:03:26 | INFO     | __main__ | fit: region=TC alpha=0.0500 -> threshold=0.0158489, calibrated_risk=0.0432705 (n_calibration=187, n_excluded_empty=0).
+15:03:26 | INFO     | __main__ | fit: region=TC alpha=0.1000 -> threshold=0.6, calibrated_risk=0.0940927 (n_calibration=187, n_excluded_empty=0).
+15:03:26 | INFO     | __main__ | fit: region=TC alpha=0.2000 -> threshold=0.95, calibrated_risk=0.146535 (n_calibration=187, n_excluded_empty=0).
+15:03:26 | INFO     | __main__ | conformal: wrote outputs/conformal/neurovision_ft_ped/fit.json
+15:03:26 | INFO     | __main__ | conformal: wrote outputs/conformal/neurovision_ft_ped/realised_risk.csv and outputs/conformal/neurovision_ft_ped/inflation.csv
+15:03:26 | INFO     | __main__ | conformal: wrote outputs/conformal/neurovision_ft_ped/conformal_config.yaml
+======================================================================
+Conformal risk control summary -- out_dir=outputs/conformal/neurovision_ft_ped
+======================================================================
+  outputs/eval_ft_ped_pooled |  WT | alpha=0.05 | tau=0.1 | mean_miss_rate=0.1033 CI=[0.0703, 0.1428] (n=99, excluded=0)
+  outputs/eval_ft_ped_pooled |  WT | alpha=0.10 | tau=0.725 | mean_miss_rate=0.1567 CI=[0.1219, 0.1974] (n=99, excluded=0)
+  outputs/eval_ft_ped_pooled |  WT | alpha=0.20 | tau=0.95 | mean_miss_rate=0.2130 CI=[0.1776, 0.2531] (n=99, excluded=0)
+  outputs/eval_ft_ped_pooled |  TC | alpha=0.05 | tau=0.01585 | mean_miss_rate=0.0921 CI=[0.0591, 0.1315] (n=99, excluded=0)
+  outputs/eval_ft_ped_pooled |  TC | alpha=0.10 | tau=0.6 | mean_miss_rate=0.1849 CI=[0.1470, 0.2287] (n=99, excluded=0)
+  outputs/eval_ft_ped_pooled |  TC | alpha=0.20 | tau=0.95 | mean_miss_rate=0.2967 CI=[0.2568, 0.3395] (n=99, excluded=0)

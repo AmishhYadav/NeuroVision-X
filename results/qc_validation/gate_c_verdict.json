@@ -1,0 +1,16 @@
+{
+  "verdict": "POSITIVE",
+  "alpha": 0.05,
+  "family_size": 5,
+  "firing_cells": [
+    {
+      "cohort": "ped",
+      "region": "TC",
+      "delta_auroc": 0.1686182669789228,
+      "delta_ci_lo": 0.06862650829562593,
+      "delta_ci_hi": 0.27467209240774354,
+      "p_holm": 0.005999999999999999
+    }
+  ],
+  "n_family_cells_with_positive_delta": 3
+}

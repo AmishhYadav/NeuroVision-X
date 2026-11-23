@@ -1,0 +1,36 @@
+out_dir: outputs/compare_family/gatea
+name: gatea
+name_a: A
+name_b: B
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+exclude_case_ids: []
+comparisons:
+- cohort: test_nv_minus_nnunet
+  a: outputs/replay_lesionwise/eval_test/per_case_default.csv
+  b: outputs/score_nnunet/gatea_tta_on/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - lwdice_ET
+  - dice_TC
+  - dice_WT
+  - lwdice_TC
+  - lwdice_WT
+  - hd95_ET
+  - hd95_TC
+  - hd95_WT
+- cohort: test_nnunet_minus_baseline
+  a: outputs/score_nnunet/gatea_tta_on/per_case_metrics.csv
+  b: outputs/replay_lesionwise/eval_test_baseline_unet3d/per_case_default.csv
+  metrics:
+  - dice_ET
+  - lwdice_ET
+  - dice_TC
+  - dice_WT
+  - lwdice_TC
+  - lwdice_WT
+  - hd95_ET
+  - hd95_TC
+  - hd95_WT

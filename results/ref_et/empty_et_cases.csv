@@ -1,0 +1,6 @@
+case_id,neurovision,baseline_unet3d,capacity_control,ablation_content_only_gate,neurovision_seed43,baseline_unet3d_seed43
+BraTS2021_01502,1.0,0.0,0.0,0.0,1.0,0.0
+BraTS2021_01666,0.0,0.0,0.0,0.0,0.0,0.0
+BraTS2021_01515,0.0,0.0,0.0,0.0,0.0,0.0
+BraTS2021_01499,0.0,0.0,0.0,0.0,0.0,0.0
+BraTS2021_01509,1.0,0.0,0.0,1.0,1.0,0.0

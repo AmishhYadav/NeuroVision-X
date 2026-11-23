@@ -1,0 +1,45 @@
+out_dir: outputs/compare_family/d1_seed_noise_floor
+name: d1_seed_noise_floor
+name_a: neurovision_seed43
+name_b: neurovision
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+comparisons:
+- cohort: test
+  a: outputs/eval_test_neurovision_seed43/per_case_metrics.csv
+  b: outputs/neurovision/eval_test/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: test_lesionwise
+  a: outputs/replay_lesionwise/eval_test_neurovision_seed43/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_test/per_case_default.csv
+  metrics:
+  - lwdice_ET
+- cohort: ssa
+  a: outputs/eval_ssa_neurovision_seed43/per_case_metrics.csv
+  b: outputs/eval_ssa_neurovision/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: ssa_lesionwise
+  a: outputs/replay_lesionwise/eval_ssa_neurovision_seed43/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_ssa_neurovision/per_case_default.csv
+  metrics:
+  - lwdice_ET
+- cohort: ped
+  a: outputs/eval_ped_neurovision_seed43/per_case_metrics.csv
+  b: outputs/eval_ped_neurovision/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: ped_lesionwise
+  a: outputs/replay_lesionwise/eval_ped_neurovision_seed43/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
+  metrics:
+  - lwdice_ET

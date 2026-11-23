@@ -1,0 +1,90 @@
+19:04:25 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+19:04:28 | INFO     | app.backend.clinical_jobs | Queued clinical job 67b67b1d6dbc4f988369c4766078ca7c (640 DICOM file(s))
+19:04:28 | INFO     | __main__ | run_clinical_study: created job 67b67b1d6dbc4f988369c4766078ca7c for study_dir=/Users/amish/NeuroVision-X/data/fixtures/dicom/UPENN-GBM-00001
+19:04:28 | INFO     | __main__ | run_clinical_study: stage=queued t=0.0s
+19:04:29 | INFO     | __main__ | run_clinical_study: stage=ingest t=1.0s
+19:04:30 | INFO     | __main__ | run_clinical_study: stage=input_qc (pre-preprocessing) t=2.0s
+19:04:30 | INFO     | neurovision.utils.device | Resolved device: cpu
+/Users/amish/NeuroVision-X/.venv-clinical/lib/python3.11/site-packages/brainles_preprocessing/registration/__init__.py:16: UserWarning: itk-elastix package not found. If you want to use it, please install it using 'pip install brainles_preprocessing[itk-elastix]'
+  warnings.warn(
+/Users/amish/NeuroVision-X/.venv-clinical/lib/python3.11/site-packages/brainles_preprocessing/registration/__init__.py:23: UserWarning: picsl_greedy  package not found. If you want to use it, please install it using 'pip install brainles_preprocessing[picsl_greedy]'
+  warnings.warn(
+19:04:30 | INFO     | neurovision.data.clinical_preprocess | HD-BET will run with mode='fast', do_tta=False
+────────────────── Thank you for using brainles-preprocessing ──────────────────
+                    Please support our development by citing                    
+      https://github.com/BrainLesion/preprocessing#citation -- Thank you!       
+────────────────────────────────────────────────────────────────────────────────
+
+19:04:31 | INFO     | __main__ | run_clinical_study: stage=clinical_preprocessing t=3.0s
+2026-09-27 19:04:32.072 | INFO     | brainles_preprocessing.utils.zenodo:_fetch_uncached:116 - Found local atlases: 15236131_v2.0.0
+2026-09-27 19:04:32.072 | INFO     | brainles_preprocessing.utils.zenodo:_fetch_uncached:127 - Latest atlases (2.0.0) already present.
+2026-09-27 19:04:32.079 | INFO     | brainles_preprocessing.preprocessor.preprocessor:_add_log_file_handler:61 - Logging console logs and further debug information to: /Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/clinical_prep/preprocess.log
+2026-09-27 19:04:32.079 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:104 - ============================ Starting preprocessing ============================
+2026-09-27 19:04:32.079 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:108 - Received center modality: t1ce and moving modalities: t1, t2, flair
+2026-09-27 19:04:32.079 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:114 - --------------------------- Starting Coregistration ----------------------------
+2026-09-27 19:04:32.079 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_coregistration:202 - Coregistering 3 moving modalities to center modality...
+2026-09-27 19:04:32.079 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_coregistration:207 - Registering modality t1 (file=co__t1ce__t1) to center modality...
+2026-09-27 19:04:36.370 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_coregistration:207 - Registering modality t2 (file=co__t1ce__t2) to center modality...
+2026-09-27 19:04:41.031 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_coregistration:207 - Registering modality flair (file=co__t1ce__flair) to center modality...
+2026-09-27 19:04:44.565 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:118 - Coregistration complete. Output saved to /Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/clinical_prep/intermediate/coregistration
+2026-09-27 19:04:44.565 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:123 - ------------------------- Starting atlas registration --------------------------
+2026-09-27 19:04:44.565 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_registration:210 - Registering center modality to atlas...
+2026-09-27 19:04:48.496 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_registration:219 - Atlas registration complete. Output saved to /Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/clinical_prep/_brainles_tmp/atlas-space
+2026-09-27 19:04:48.496 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_registration:222 - Transforming 3 moving modalities to atlas space...
+2026-09-27 19:04:48.496 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_registration:227 - Transforming modality t1 (file=atlas__t1) to atlas space...
+2026-09-27 19:04:48.983 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_registration:227 - Transforming modality t2 (file=atlas__t2) to atlas space...
+2026-09-27 19:04:49.447 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_registration:227 - Transforming modality flair (file=atlas__flair) to atlas space...
+2026-09-27 19:04:49.896 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:127 - Transformations complete. Output saved to /Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/clinical_prep/intermediate/atlas_registration
+2026-09-27 19:04:49.896 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:132 - ---------------------- Checking optional atlas correction ----------------------
+2026-09-27 19:04:49.896 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_correction:257 - Applying optional atlas correction for modality t1
+2026-09-27 19:04:53.833 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_correction:257 - Applying optional atlas correction for modality t2
+2026-09-27 19:04:57.448 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_atlas_correction:257 - Applying optional atlas correction for modality flair
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:138 - --------------------- Checking optional N4 bias correction ---------------------
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_n4_bias_correction:268 - Skipping optional N4 bias correction for Modality t1ce.
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_n4_bias_correction:268 - Skipping optional N4 bias correction for Modality t1.
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_n4_bias_correction:268 - Skipping optional N4 bias correction for Modality t2.
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_n4_bias_correction:268 - Skipping optional N4 bias correction for Modality flair.
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:144 - Saving non skull-stripped images...
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:158 - ---------------------- Checking optional brain extraction ----------------------
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_brain_extraction:300 - Starting brain extraction...
+2026-09-27 19:05:01.383 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_brain_extraction:308 - Extracting brain region for center modality...
+2026-09-27 19:08:55.071 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_brain_extraction:324 - Applying brain mask to t1...
+2026-09-27 19:08:55.295 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_brain_extraction:324 - Applying brain mask to t2...
+2026-09-27 19:08:55.494 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_brain_extraction:324 - Applying brain mask to flair...
+2026-09-27 19:08:55.724 | INFO     | brainles_preprocessing.preprocessor.preprocessor:run_brain_extraction:337 - Saving brain extracted (bet), i.e. skull-stripped images...
+2026-09-27 19:08:56.482 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:164 - -------------------------- Checking optional defacing --------------------------
+2026-09-27 19:08:56.483 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run_defacing:304 - Skipping optional defacing.
+2026-09-27 19:08:56.484 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:174 - Saving transformation matrices to /Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/clinical_prep/intermediate/transformations
+2026-09-27 19:08:56.493 | INFO     | brainles_preprocessing.preprocessor.atlas_centric_preprocessor:run:194 - ============================ Preprocessing complete ============================
+File: /Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/clinical_prep/_brainles_tmp/atlas-space/atlas__t1ce.nii.gz
+preprocessing...
+image shape after preprocessing:  (103, 160, 160)
+prediction (CNN id)...
+0
+exporting segmentation...
+19:08:56 | INFO     | __main__ | run_clinical_study: stage=input_qc (post-preprocessing) t=268.9s
+19:08:57 | INFO     | __main__ | run_clinical_study: stage=research_preprocessing t=269.9s
+19:08:59 | INFO     | neurovision.utils.device | Resolved device: cpu
+19:08:59 | INFO     | neurovision.models.registry | Building model 'neurovision'
+19:08:59 | INFO     | neurovision.models.encoders.cnn | Built CNNEncoder: 5 levels, channels=[32, 64, 128, 256, 320], strides=[1, 2, 4, 8, 16]
+19:08:59 | INFO     | neurovision.models.encoders.swin | Built SwinEncoder: 4 levels, channels=[48, 96, 192, 384], strides=[2, 4, 8, 16]
+19:08:59 | INFO     | neurovision.models.fusion.registry | Building fusion 'adaptive_gated' for level 0 (cnn=64 ch, swin=48 ch)
+19:08:59 | INFO     | neurovision.models.fusion.registry | Building fusion 'adaptive_gated' for level 1 (cnn=128 ch, swin=96 ch)
+19:08:59 | INFO     | neurovision.models.fusion.registry | Building fusion 'adaptive_gated' for level 2 (cnn=256 ch, swin=192 ch)
+19:08:59 | INFO     | neurovision.models.fusion.registry | Building fusion 'adaptive_gated' for level 3 (cnn=320 ch, swin=384 ch)
+19:08:59 | INFO     | neurovision.models.neurovision | Built NeuroVisionX: 34911341 parameters, fusion='adaptive_gated', deep_supervision_levels=3, confidence_head=True, boundary_head=True
+19:08:59 | INFO     | app.backend.inference | Loaded checkpoint /Users/amish/NeuroVision-X/outputs/neurovision/checkpoints/best.pt for live inference: epoch=69
+19:08:59 | INFO     | __main__ | run_clinical_study: stage=segmenting: running inference t=271.9s
+19:10:05 | INFO     | __main__ | run_clinical_study: stage=segmenting: post-processing t=337.2s
+/Users/amish/NeuroVision-X/.venv-clinical/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+19:10:05 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+19:10:06 | INFO     | app.backend.inference | Wrote live-inference prediction for 67b67b1d6dbc4f988369c4766078ca7c to /Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/cache/neurovision/67b67b1d6dbc4f988369c4766078ca7c.npy
+19:10:06 | INFO     | app.backend.inference | Wrote live-inference logits for 67b67b1d6dbc4f988369c4766078ca7c to /Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/cache/neurovision/logits/67b67b1d6dbc4f988369c4766078ca7c.npy
+19:10:06 | INFO     | neurovision.utils.device | Resolved device: cpu
+19:10:06 | INFO     | neurovision.models.qc | Building segqc: in_channels=3, widths=(16, 32, 64, 128), num_groups=8, dropout=0.100
+19:10:06 | INFO     | app.backend.clinical_jobs | _load_qc_model_and_cfg: loaded SegQC checkpoint /Users/amish/NeuroVision-X/outputs/neurovision/qc/best.pt
+19:10:06 | INFO     | __main__ | run_clinical_study: stage=gatekeeper t=338.2s
+19:10:07 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+19:10:07 | WARNING  | neurovision.inference.gatekeeper | run_gatekeeper: REFUSE -- predicted_dice: predicted_dice: worst region decision is refuse (WT)
+19:10:07 | INFO     | __main__ | run_clinical_study: job 67b67b1d6dbc4f988369c4766078ca7c finished state=refused gatekeeper_decision=refuse summary=/Users/amish/NeuroVision-X/outputs/clinical_jobs/67b67b1d6dbc4f988369c4766078ca7c/summary.json

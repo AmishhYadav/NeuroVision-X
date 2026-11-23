@@ -1,0 +1,9 @@
+source: prediction
+eval_dir: outputs/roi_sweep/neurovision_roi96
+preprocessed_dir: data/preprocessed/brats
+split: test
+min_volume_mm3: 50.0
+connectivity: 3
+midline_index: null
+out_name: burden.csv
+resolved_source_dir: /Users/amish/NeuroVision-X/outputs/roi_sweep/neurovision_roi96/predictions

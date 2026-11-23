@@ -1,0 +1,8 @@
+{
+  "caution_cut": 7.5567961649889925,
+  "refuse_cut": 9.934954073175184,
+  "caution_quantile": 0.1,
+  "refuse_quantile": 0.02,
+  "threshold_split": "val",
+  "n_val": 187
+}

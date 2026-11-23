@@ -1,0 +1,24 @@
+out_dir: outputs/compare_family/nnunet_conformal_shift_dice
+name: nnunet_conformal_shift_dice
+name_a: nnunet_gatea
+name_b: neurovision
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+exclude_case_ids: []
+comparisons:
+- cohort: ssa
+  a: outputs/conformal/nnunet_gatea/evals/eval_ssa/per_case_metrics.csv
+  b: outputs/eval_ssa_neurovision/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: ped
+  a: outputs/conformal/nnunet_gatea/evals/eval_ped/per_case_metrics.csv
+  b: outputs/eval_ped_neurovision/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT

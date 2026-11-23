@@ -1,0 +1,49 @@
+out_dir: outputs/error_budget_intended_use
+cohorts:
+- name: test
+  eval_dir: outputs/neurovision/eval_test
+  prep_dir: data/preprocessed/brats
+  conformal_curves: outputs/conformal/neurovision/eval_test/curves.npz
+  stand_in_age_years: 40
+- name: ssa
+  eval_dir: outputs/eval_ssa_neurovision
+  prep_dir: data/preprocessed/brats_ssa
+  conformal_curves: outputs/conformal/neurovision/eval_ssa_neurovision/curves.npz
+  stand_in_age_years: 40
+- name: ped
+  eval_dir: outputs/eval_ped_neurovision
+  prep_dir: data/preprocessed/brats_ped
+  conformal_curves: outputs/conformal/neurovision/eval_ped_neurovision/curves.npz
+  stand_in_age_years: 10
+usable_regions:
+- WT
+- TC
+usable_bar: 0.7
+bar_sweep:
+- 0.5
+- 0.6
+- 0.7
+- 0.8
+- 0.9
+calibration_table: outputs/gatekeeper/calibration_table.csv
+refuse_quantiles:
+- 0.01
+- 0.02
+- 0.05
+- 0.1
+- 0.15
+- 0.2
+- 0.3
+- 0.5
+n_boot: 10000
+ci: 0.95
+seed: 42
+max_cases: null
+gatekeeper:
+  regions:
+  - WT
+  - TC
+  conformal_dir: outputs/conformal/neurovision
+  conformal_alpha: 0.1
+  caution_quantile: 0.1
+  thresholds_path: outputs/gatekeeper/thresholds.json

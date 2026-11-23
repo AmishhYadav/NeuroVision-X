@@ -1,0 +1,53 @@
+Comparison: neurovision vs baseline_unet3d (25 metric(s))
+
+abserr_cortical_frac_of_tumour improvement=+0.0002176 CI=[-0.0006787, +0.001137] p_holm=1 (lower is better) -> INCONCLUSIVE
+abserr_distance_mm   improvement=-0.002913 CI=[-0.008738, -0] p_holm=1 (lower is better) -> INCONCLUSIVE
+abserr_epicentre_distance_mm improvement=+0.01201 CI=[-0.04546, +0.07869] p_holm=1 (lower is better) -> INCONCLUSIVE
+abserr_frac_enhancing_of_wt improvement=+0.0009301 CI=[-0.00281, +0.004627] p_holm=1 (lower is better) -> INCONCLUSIVE
+abserr_n_components_WT improvement=-0.005291 CI=[-0.127, +0.1217] p_holm=1 (lower is better) -> INCONCLUSIVE
+abserr_n_structures  improvement=+0.03704 CI=[-0.1746, +0.2487] p_holm=1 (lower is better) -> INCONCLUSIVE
+abserr_ventricle_frac_of_group improvement=+0.0004278 CI=[-0.0009732, +0.001786] p_holm=1 (lower is better) -> INCONCLUSIVE
+abserr_ventricle_frac_of_tumour improvement=+0.0004097 CI=[+7.799e-05, +0.0008495] p_holm=1 (lower is better) -> INCONCLUSIVE
+abserr_white_matter_frac_of_tumour improvement=-0.0006036 CI=[-0.002014, +0.0006961] p_holm=1 (lower is better) -> INCONCLUSIVE
+agree_deep_wm_contact improvement=+0.005291 CI=[-0.02116, +0.03175] p_holm=1 (higher is better) -> INCONCLUSIVE
+agree_dominant_side_WT improvement=+0.005291 CI=[+0, +0.01587] p_holm=1 (higher is better) -> INCONCLUSIVE
+agree_eloquent_any   improvement=+0 CI=[+0, +0] p_holm=1 (higher is better) -> INCONCLUSIVE
+agree_epicentre_side improvement=+0 CI=[+0, +0] p_holm=1 (higher is better) -> INCONCLUSIVE
+agree_multifocal_WT  improvement=+0.02646 CI=[-0.03704, +0.08995] p_holm=1 (higher is better) -> INCONCLUSIVE
+agree_near_eloquent  improvement=+0 CI=[+0, +0] p_holm=1 (higher is better) -> INCONCLUSIVE
+agree_ventricle_contact improvement=+0.005291 CI=[-0.01058, +0.02646] p_holm=1 (higher is better) -> INCONCLUSIVE
+jaccard_eloquent_structures improvement=+0.002038 CI=[-0.009156, +0.01278] p_holm=1 (higher is better) -> INCONCLUSIVE
+jaccard_structures   improvement=-0.003449 CI=[-0.01801, +0.01027] p_holm=1 (higher is better) -> INCONCLUSIVE
+match_epicentre_structure improvement=-0.02116 CI=[-0.0582, +0.01587] p_holm=1 (higher is better) -> INCONCLUSIVE
+match_top_structure  improvement=-0.02116 CI=[-0.0582, +0.01587] p_holm=1 (higher is better) -> INCONCLUSIVE
+precision_structures improvement=-0.002929 CI=[-0.01469, +0.007746] p_holm=1 (higher is better) -> INCONCLUSIVE
+recall_structures    improvement=+0.001058 CI=[-0.006878, +0.008995] p_holm=1 (higher is better) -> INCONCLUSIVE
+relerr_vol_ET        improvement=+0.2591 CI=[+0.01253, +0.7318] p_holm=0.09318 (lower is better) -> INCONCLUSIVE
+relerr_vol_TC        improvement=+0.3843 CI=[+0.00611, +1.12] p_holm=0.02152 (lower is better) -> BETTER
+relerr_vol_WT        improvement=-0.001051 CI=[-0.01084, +0.008474] p_holm=1 (lower is better) -> INCONCLUSIVE
+
+WARNING: the following differences are within noise or practically negligible and must NOT be claimed as real improvements in the paper:
+  - abserr_cortical_frac_of_tumour: inconclusive (mean diff -0.0002176, raw CI [-0.001137, +0.0006787], p_holm=1)
+  - abserr_distance_mm: inconclusive (mean diff +0.002913, raw CI [+0, +0.008738], p_holm=1)
+  - abserr_epicentre_distance_mm: inconclusive (mean diff -0.01201, raw CI [-0.07869, +0.04546], p_holm=1)
+  - abserr_frac_enhancing_of_wt: inconclusive (mean diff -0.0009301, raw CI [-0.004627, +0.00281], p_holm=1)
+  - abserr_n_components_WT: inconclusive (mean diff +0.005291, raw CI [-0.1217, +0.127], p_holm=1)
+  - abserr_n_structures: inconclusive (mean diff -0.03704, raw CI [-0.2487, +0.1746], p_holm=1)
+  - abserr_ventricle_frac_of_group: inconclusive (mean diff -0.0004278, raw CI [-0.001786, +0.0009732], p_holm=1)
+  - abserr_ventricle_frac_of_tumour: inconclusive (mean diff -0.0004097, raw CI [-0.0008495, -7.799e-05], p_holm=1)
+  - abserr_white_matter_frac_of_tumour: inconclusive (mean diff +0.0006036, raw CI [-0.0006961, +0.002014], p_holm=1)
+  - agree_deep_wm_contact: inconclusive (mean diff +0.005291, raw CI [-0.02116, +0.03175], p_holm=1)
+  - agree_dominant_side_WT: inconclusive (mean diff +0.005291, raw CI [+0, +0.01587], p_holm=1)
+  - agree_eloquent_any: inconclusive (mean diff +0, raw CI [+0, +0], p_holm=1)
+  - agree_epicentre_side: inconclusive (mean diff +0, raw CI [+0, +0], p_holm=1)
+  - agree_multifocal_WT: inconclusive (mean diff +0.02646, raw CI [-0.03704, +0.08995], p_holm=1)
+  - agree_near_eloquent: inconclusive (mean diff +0, raw CI [+0, +0], p_holm=1)
+  - agree_ventricle_contact: inconclusive (mean diff +0.005291, raw CI [-0.01058, +0.02646], p_holm=1)
+  - jaccard_eloquent_structures: inconclusive (mean diff +0.002038, raw CI [-0.009156, +0.01278], p_holm=1)
+  - jaccard_structures: inconclusive (mean diff -0.003449, raw CI [-0.01801, +0.01027], p_holm=1)
+  - match_epicentre_structure: inconclusive (mean diff -0.02116, raw CI [-0.0582, +0.01587], p_holm=1)
+  - match_top_structure: inconclusive (mean diff -0.02116, raw CI [-0.0582, +0.01587], p_holm=1)
+  - precision_structures: inconclusive (mean diff -0.002929, raw CI [-0.01469, +0.007746], p_holm=1)
+  - recall_structures: inconclusive (mean diff +0.001058, raw CI [-0.006878, +0.008995], p_holm=1)
+  - relerr_vol_ET: inconclusive (mean diff -0.2591, raw CI [-0.7318, -0.01253], p_holm=0.09318)
+  - relerr_vol_WT: inconclusive (mean diff +0.001051, raw CI [-0.008474, +0.01084], p_holm=1)

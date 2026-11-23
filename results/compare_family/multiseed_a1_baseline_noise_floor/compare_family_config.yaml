@@ -1,0 +1,45 @@
+out_dir: outputs/compare_family/multiseed_a1_baseline_noise_floor
+name: multiseed_a1_baseline_noise_floor
+name_a: baseline_unet3d_seed43
+name_b: baseline_unet3d
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+comparisons:
+- cohort: test
+  a: outputs/eval_test_baseline_unet3d_seed43/per_case_metrics.csv
+  b: outputs/eval_test_baseline_unet3d/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: test_lesionwise
+  a: outputs/replay_lesionwise/eval_test_baseline_unet3d_seed43/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_test_baseline_unet3d/per_case_default.csv
+  metrics:
+  - lwdice_ET
+- cohort: ssa
+  a: outputs/eval_ssa_baseline_unet3d_seed43/per_case_metrics.csv
+  b: outputs/eval_ssa_baseline_unet3d/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: ssa_lesionwise
+  a: outputs/replay_lesionwise/eval_ssa_baseline_unet3d_seed43/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_ssa_baseline_unet3d/per_case_default.csv
+  metrics:
+  - lwdice_ET
+- cohort: ped
+  a: outputs/eval_ped_baseline_unet3d_seed43/per_case_metrics.csv
+  b: outputs/eval_ped_baseline_unet3d/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: ped_lesionwise
+  a: outputs/replay_lesionwise/eval_ped_baseline_unet3d_seed43/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_ped_baseline_unet3d/per_case_default.csv
+  metrics:
+  - lwdice_ET

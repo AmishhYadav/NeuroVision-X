@@ -1,0 +1,62 @@
+{
+  "WT__alpha_0.05": {
+    "region": "WT",
+    "alpha": 0.05,
+    "threshold": 0.015848931925,
+    "feasible": true,
+    "calibrated_risk": 0.043640588760538404,
+    "min_achievable_risk": 0.013429917193825063,
+    "n_calibration": 187,
+    "n_excluded_empty": 0
+  },
+  "WT__alpha_0.1": {
+    "region": "WT",
+    "alpha": 0.1,
+    "threshold": 0.875,
+    "feasible": true,
+    "calibrated_risk": 0.09241522453633906,
+    "min_achievable_risk": 0.013429917193825063,
+    "n_calibration": 187,
+    "n_excluded_empty": 0
+  },
+  "WT__alpha_0.2": {
+    "region": "WT",
+    "alpha": 0.2,
+    "threshold": 0.95,
+    "feasible": true,
+    "calibrated_risk": 0.10533479440558427,
+    "min_achievable_risk": 0.013429917193825063,
+    "n_calibration": 187,
+    "n_excluded_empty": 0
+  },
+  "TC__alpha_0.05": {
+    "region": "TC",
+    "alpha": 0.05,
+    "threshold": 0.00316227766,
+    "feasible": true,
+    "calibrated_risk": 0.04430785443767095,
+    "min_achievable_risk": 0.0280359936486175,
+    "n_calibration": 187,
+    "n_excluded_empty": 0
+  },
+  "TC__alpha_0.1": {
+    "region": "TC",
+    "alpha": 0.1,
+    "threshold": 0.9,
+    "feasible": true,
+    "calibrated_risk": 0.0936823104956264,
+    "min_achievable_risk": 0.0280359936486175,
+    "n_calibration": 187,
+    "n_excluded_empty": 0
+  },
+  "TC__alpha_0.2": {
+    "region": "TC",
+    "alpha": 0.2,
+    "threshold": 0.95,
+    "feasible": true,
+    "calibrated_risk": 0.1003021536430339,
+    "min_achievable_risk": 0.0280359936486175,
+    "n_calibration": 187,
+    "n_excluded_empty": 0
+  }
+}

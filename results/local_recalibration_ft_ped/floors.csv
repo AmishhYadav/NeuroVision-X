@@ -1,0 +1,7 @@
+model,cohort,region,alpha,n_cases,min_feasible_k,structural_floor
+neurovision_ft_ped,ped,WT,0.05,99,62,19
+neurovision_ft_ped,ped,WT,0.1,99,14,9
+neurovision_ft_ped,ped,WT,0.2,99,5,4
+neurovision_ft_ped,ped,TC,0.05,99,never,19
+neurovision_ft_ped,ped,TC,0.1,99,18,9
+neurovision_ft_ped,ped,TC,0.2,99,6,4

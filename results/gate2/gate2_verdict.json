@@ -1,0 +1,60 @@
+{
+  "verdict": "partial",
+  "thresholds": {
+    "delta_auroc": 0.01,
+    "delta_recall": 0.02
+  },
+  "external_cohorts": [
+    "ssa",
+    "ped"
+  ],
+  "passed_cohorts": [],
+  "partial_cohorts": [
+    "ped",
+    "ssa"
+  ],
+  "per_cohort": {
+    "brats_test": {
+      "external": false,
+      "delta_auroc": -0.001289363902715436,
+      "auroc_ci_excludes_zero": true,
+      "delta_recall": -0.0393539946049695,
+      "recall_ci_excludes_zero": true,
+      "meets_threshold": false
+    },
+    "ped": {
+      "external": true,
+      "delta_auroc": 0.012062817231856808,
+      "auroc_ci_excludes_zero": true,
+      "delta_recall": -0.0013868509151925888,
+      "recall_ci_excludes_zero": false,
+      "meets_threshold": false
+    },
+    "ssa": {
+      "external": true,
+      "delta_auroc": 0.0013428886792641352,
+      "auroc_ci_excludes_zero": false,
+      "delta_recall": -0.012761270198342351,
+      "recall_ci_excludes_zero": true,
+      "meets_threshold": false
+    }
+  },
+  "preregistration": "docs/research/preregistration_gate2.md",
+  "combiner": {
+    "entropy_only_coefficients": [
+      -8.44555838798543,
+      7.786368527669212
+    ],
+    "entropy_only_converged": true,
+    "both_coefficients": [
+      -8.700166783375995,
+      7.351101506066945,
+      0.9523669210629069
+    ],
+    "both_converged": true,
+    "fit_cohort": "val",
+    "n_fit_cases": 187,
+    "n_fit_voxels": 3740000,
+    "budget": 0.05
+  }
+}
