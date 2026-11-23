@@ -1,0 +1,43 @@
+# D2 pooled-training family (docs/research_docs/preregistrations/preregistration_pooled.md).
+#
+# Selected with `analysis=d2_pooled`; everything else is inherited from
+# analysis/default.yaml unchanged, so the D3 family that default.yaml carries
+# (and the reproducibility recipe that relies on it) is not touched.
+#
+# The registered family of 11, one Holm correction:
+#   {dice_ET, dice_TC, dice_WT, lwdice_ET} x {SSA held-out n=30, PED held-out n=49} = 8
+#   {dice_ET, dice_TC, dice_WT} on BraTS test n=189                                  = 3
+# `a` is the pooled model's single 268-case table; `b` is the frozen deployed
+# neurovision's existing table for each cohort. compare_models compares on the
+# case_id INTERSECTION, which is exactly the D2 held-out cases (30 / 49 / 189 --
+# checked 2026-11-24). CROSS-FITTED ON ONE FOLD, NOT EXTERNAL VALIDATION.
+defaults:
+  - default
+  - _self_
+
+compare_family:
+  name: d2_pooled
+  name_a: neurovision_pooled
+  name_b: neurovision
+  exclude_case_ids: []
+  comparisons:
+    - cohort: ssa
+      a: outputs/eval_pooled_test_neurovision_pooled/per_case_metrics.csv
+      b: outputs/eval_ssa_neurovision/per_case_metrics.csv
+      metrics: [dice_ET, dice_TC, dice_WT]
+    - cohort: ssa_lesionwise
+      a: outputs/replay_lesionwise/eval_pooled_test_neurovision_pooled/per_case_default.csv
+      b: outputs/replay_lesionwise/eval_ssa_neurovision/per_case_default.csv
+      metrics: [lwdice_ET]
+    - cohort: ped
+      a: outputs/eval_pooled_test_neurovision_pooled/per_case_metrics.csv
+      b: outputs/eval_ped_neurovision/per_case_metrics.csv
+      metrics: [dice_ET, dice_TC, dice_WT]
+    - cohort: ped_lesionwise
+      a: outputs/replay_lesionwise/eval_pooled_test_neurovision_pooled/per_case_default.csv
+      b: outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
+      metrics: [lwdice_ET]
+    - cohort: test
+      a: outputs/eval_pooled_test_neurovision_pooled/per_case_metrics.csv
+      b: outputs/neurovision/eval_test/per_case_metrics.csv
+      metrics: [dice_ET, dice_TC, dice_WT]
