@@ -30,5 +30,4 @@ Companion to `number_registry.yaml` (MasterPlan W1.2). Each row is a result numb
 | 1.6 | about 2,670 tests; fourteen pre-registration documents | other: repository counts | none |
 | 6.6 | MC-dropout equivalence margin 0.03 AUROC; 10 samples | design constant (registered rule), not a result | C8 |
 | 6.1, 6.2, Table 8 | "+0.0022 seed shift vs +0.0055 width term" comparisons in prose | derived/prose | C2 |
-| 6.8, Table 8, Table 10, 10.2 | pooled multi-cohort (D2) training results, "evaluation pending" | pending D2 (note 63, C31); nothing numeric printed yet except GPU-h (~25, ledger) | C31 |
 | Table 8 | Front end "costs <= 0.05 WT Dice"; "~80% architecture"; "Per voxel yes, per case no" | design bar / prose | C25 / C2 / C4 |

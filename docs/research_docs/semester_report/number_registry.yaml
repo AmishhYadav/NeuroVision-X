@@ -11,7 +11,6 @@
 # the first number inside `text` is compared). `occurrences` is the number of times the
 # string appeared when this file was generated, so a later edit that deletes one is caught.
 # Numbers that could not be registered are listed in number_registry_untraceable.md.
-# Pending D2 (note 63) numbers are deliberately NOT registered.
 numbers:
   # ---- Abstract, 6.1, Table 6: headline gain, replication, noise floors (C1)
   - {"id": "c1_et_gain", "text": "+0.0267", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "all"}, "column": "mean_diff", "decimals": 4, "sign": true, "occurrences": 6}
@@ -152,3 +151,7 @@ numbers:
 
   # ---- 6.11, Table 8: report agreement (C6)
   - {"id": "c6_conclusive_report_metrics", "text": "1 of 25 report metrics", "claim": "C6", "file": "results/report_agreement/comparison_neurovision_vs_baseline_unet3d.csv", "where": {"verdict": "better"}, "column": "n", "agg": "count", "decimals": 0, "occurrences": 1}
+  # ---- 6.8: D2 pooled training (C31, note 63)
+  - {"id": "d2_ped_tc", "text": "by **+0.223**", "claim": "C31", "file": "results/compare_family/d2_pooled/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "improvement", "decimals": 3, "sign": true, "occurrences": 1}
+  - {"id": "d2_ped_tc_lo", "text": "CI 0.147 to", "claim": "C31", "file": "results/compare_family/d2_pooled/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "improvement_lo", "decimals": 3, "occurrences": 1}
+  - {"id": "d2_ped_tc_hi", "text": "to 0.304, n = 49", "claim": "C31", "file": "results/compare_family/d2_pooled/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "improvement_hi", "decimals": 3, "occurrences": 1}

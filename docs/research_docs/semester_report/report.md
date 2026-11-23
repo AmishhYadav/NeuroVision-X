@@ -459,6 +459,8 @@ In the counterfactual recalibration analysis, about **10 to 40 local labelled ca
 
 Changing the model does what recalibration cannot. Cross-fitted fine-tuning on half of each cohort recovers tumour-core Dice on both: BraTS-Africa +0.0433 (0.785 → 0.828) and paediatric +0.3676 (0.439 → 0.807). After fine-tuning, paediatric tumour core becomes restorable by local recalibration at α = 0.10 and 0.20. Most of the paediatric gain is the model learning the paediatric label convention (its predicted core-to-whole-tumour ratio moved from 0.27 to 0.95), not better imaging generalisation. These results are cross-fitted, not external validation; the deployed model is unchanged.
 
+The developer-side alternative was also measured. A model trained from scratch on BraTS plus half of each external cohort (pooled training, pre-registered before training) recovers paediatric tumour core on the held-out half by **+0.223** (95% CI 0.147 to 0.304, n = 49) but shows no measurable recovery on BraTS-Africa tumour core (−0.005, CI −0.036 to 0.021, n = 30), with no measurable cost on the BraTS test set (every difference within ±0.0042 and its interval spanning zero). It recovers less than the dedicated fine-tune on the same cases, and its paediatric core-to-whole-tumour ratio moves only halfway (0.31 to 0.64). At the BraTS-calibrated thresholds the pooled model still misses 25–51% of paediatric tumour core, so pooling narrows the label-definition failure without removing the need for a site-side check. These results are cross-fitted on one fold.
+
 ## 6.9 The end-to-end pipeline and its refusal gate
 
 Measured through every stage with the deployed, frozen gate (Figure 14), the pipeline returns a usable mask for **85.2%** of in-distribution studies, **78.3%** of BraTS-Africa studies and **24.2%** of paediatric studies, with silent-failure rates of **4.2%, 18.3% and 49.5%**. Almost all silent failures fail on tumour core alone (8 of 8 in distribution, 9 of 11 on BraTS-Africa, 44 of 49 on paediatric data); judged on whole tumour alone the silent-failure rates would be 0%, 3.3% and 5.1%, so the paediatric figure is largely the changed tumour-core label. The gate has decent precision and poor recall, and it is blind to cohort-level shift: on BraTS-Africa it refuses 2 of 60 studies while passing 11 of 12 unusable masks; on paediatric data 23 of 26 refusals are correct but it catches only 32% of unusable masks. Gate acceptance does not repair the bound where it is broken (paediatric tumour-core risk 0.573 on accepted cases at a nominal 0.10). The QC model behind the gate beats entropy in one of five pre-registered cells, loses significantly in one, loses in a third by a margin just outside the registered bar (Holm-adjusted p = 0.0504), and becomes more optimistic under shift in all six external cells. An adults-only intended-use rule removes every paediatric study by construction, which is scoping, not detection.
@@ -557,7 +559,6 @@ NeuroVision-X delivers a complete, tested brain tumour segmentation system, from
 
 ## 10.2 Future work
 
-- Evaluate the pooled multi-cohort training run (BraTS + BraTS-Africa + paediatric, completed in October 2026) under its pre-registration.
 - Run at least three seeds per model so that equivalence, not just difference, can be tested.
 - Replace the uncertified refusal gate with a certified selective risk-control approach, and test site-conditional recalibration on a real multi-site cohort.
 - Decide in January 2027 whether to add IDH molecular subtyping on UCSF-PDGM for the capstone, then write and submit the MELBA journal paper around April 2027.
@@ -630,7 +631,7 @@ All training ran on Kaggle Tesla T4 GPUs, each run pinned to a git commit. GPU-h
 | nnU-Net v2, 1000 epochs, 7 sessions | ~59 | Test ET 0.8879; architecture claim withdrawn |
 | Cross-fitted fine-tunes (4 folds) | ~5 | Tumour core recovered on SSA and PED |
 | Flip TTA measurement | ~3 | ET +0.0007, inconclusive |
-| Pooled multi-cohort training | ~25 | Completed; evaluation pending |
+| Pooled multi-cohort training | ~25 | PED tumour core recovered (+0.223); SSA not; no in-distribution cost |
 
 The repository records every result in docs/research_docs/experiments.md (numbered notes), every allowed claim in docs/research_docs/claims_and_evidence.md, the pre-registrations in docs/research_docs/preregistrations/, and the exact rebuild commands in docs/research_docs/reproducibility.md. Saved float16 logits for every evaluated split allow all metrics, conformal analyses and recalibrations to be recomputed without new inference.
 
