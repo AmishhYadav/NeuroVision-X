@@ -151,6 +151,13 @@ numbers:
 
   # ---- 6.11, Table 8: report agreement (C6)
   - {"id": "c6_conclusive_report_metrics", "text": "1 of 25 report metrics", "claim": "C6", "file": "results/report_agreement/comparison_neurovision_vs_baseline_unet3d.csv", "where": {"verdict": "better"}, "column": "n", "agg": "count", "decimals": 0, "occurrences": 1}
+  # ---- 6.9: W2.5 volume-based usable definition (C32, note 65)
+  - {"id": "w25_usable_test", "text": "**72.0%**", "claim": "C32", "file": "results/volume_endpoint/end_to_end_gate.csv", "where": {"cohort": "test"}, "column": "accepted_usable_volume", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "w25_usable_ssa", "text": "**51.7%**", "claim": "C32", "file": "results/volume_endpoint/end_to_end_gate.csv", "where": {"cohort": "ssa"}, "column": "accepted_usable_volume", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "w25_usable_ped", "text": "**35.4%**", "claim": "C32", "file": "results/volume_endpoint/end_to_end_gate.csv", "where": {"cohort": "ped"}, "column": "accepted_usable_volume", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "w25_silent_test", "text": "**17.5%**", "claim": "C32", "file": "results/volume_endpoint/end_to_end_gate.csv", "where": {"cohort": "test"}, "column": "silent_volume", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "w25_silent_ssa", "text": "**45.0%**", "claim": "C32", "file": "results/volume_endpoint/end_to_end_gate.csv", "where": {"cohort": "ssa"}, "column": "silent_volume", "scale": 100, "decimals": 1, "occurrences": 1}
+  - {"id": "w25_silent_ped", "text": "**38.4%**", "claim": "C32", "file": "results/volume_endpoint/end_to_end_gate.csv", "where": {"cohort": "ped"}, "column": "silent_volume", "scale": 100, "decimals": 1, "occurrences": 1}
   # ---- 6.8: D2 pooled training (C31, note 63)
   - {"id": "d2_ped_tc", "text": "by **+0.223**", "claim": "C31", "file": "results/compare_family/d2_pooled/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "improvement", "decimals": 3, "sign": true, "occurrences": 1}
   - {"id": "d2_ped_tc_lo", "text": "CI 0.147 to", "claim": "C31", "file": "results/compare_family/d2_pooled/family.csv", "where": {"cohort": "ped", "metric": "dice_TC"}, "column": "improvement_lo", "decimals": 3, "occurrences": 1}

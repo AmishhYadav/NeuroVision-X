@@ -3070,6 +3070,15 @@ evidence about the setup, and forgetting it means repeating it.
     The 0.7 Dice bar's inter-rater anchor from the BraTS literature is still to
     be quoted with its source.
 
+    **End to end, same frozen gate decisions** (`results/volume_endpoint/end_to_end_gate.csv`,
+    joined inline from the two tracked per-case tables, case bootstrap seed 42, 10,000 draws; the
+    Dice columns reproduce C20 exactly): usable **72.0% [65.6, 78.3]** / **51.7% [38.3, 63.3]** /
+    **35.4% [26.3, 44.4]** on test / SSA / PED (Dice rule 85.2 / 78.3 / 24.2); silent failure
+    **17.5% [12.2, 23.3]** / **45.0% [31.7, 58.3]** / **38.4% [29.3, 48.5]** (Dice rule 4.2 / 18.3 /
+    49.5). Under the volume rule the gate's in-distribution silent-failure rate is four times
+    higher — the gate's signals (predicted WT/TC Dice, conformal bands) do not look at ET volume.
+    Added to report §6.9 (registry `w25_*`, audit 127 / 0 mismatches).
+
 66. **W2.7 LEAKAGE CHECK -- BraTS AND SSA CLEAN; ONE NEW PROBABLE
     SAME-PATIENT PAIR IN PED, NO VERDICT MOVES (2026-11-24, MasterPlan
     W2.7).** `scripts/leakage_check.py` (`c266da5`): SHA-256 of every
