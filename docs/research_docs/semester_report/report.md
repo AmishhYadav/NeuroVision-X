@@ -22,6 +22,42 @@ November 2026
 
 <!-- pagebreak -->
 
+<!-- FRONT MATTER (review row R12, MasterPlan W1.3). Order and wording must follow the college template,
+which the author supplies. Every [AUTHOR: …] marker is filled by the author, never by an assistant. -->
+
+# Certificate
+
+This is to certify that the project report entitled **"NeuroVision-X: Three-Dimensional Brain Tumour Segmentation with a Distribution-Free Error Bound and a Refusal Gate"** is a record of work carried out by **Amish Yadav** [AUTHOR: roll number] in partial fulfilment of the requirements of [AUTHOR: course name and code], [AUTHOR: department, institution], during the semester [AUTHOR: semester and year], under my supervision.
+
+[AUTHOR: supervisor name, designation, signature, date] · [AUTHOR: head of department, signature, date]
+
+<!-- pagebreak -->
+
+# Declaration of Originality
+
+I declare that this report is my own work, that it has not been submitted for any other degree or course, and that all sources are acknowledged in the text and in the References. Code and text drafted with AI assistance are described in the Statement on the Use of AI Assistance below; I have checked every number in this report against the project's results record.
+
+[AUTHOR: signature, date]
+
+<!-- pagebreak -->
+
+# Acknowledgement
+
+[AUTHOR: written by the author — supervisor, department, anyone who helped. Suggested facts to include: Kaggle for GPU time; the BraTS, BraTS-Africa, BraTS-PEDs and RSNA-MICCAI organisers and the patients whose de-identified scans made this work possible.]
+
+<!-- pagebreak -->
+
+# Statement on the Use of AI Assistance
+
+This project made extensive use of AI assistance, and this statement says where.
+
+- **Code.** Most of the source code, tests and analysis scripts were written by an AI coding assistant (Anthropic's Claude, used through Claude Code) from specifications. The author decided the research questions, the experiments, the pre-registered decision rules and what each module must do; the assistant implemented, tested and reviewed modules one at a time.
+- **Text.** Drafts of this report, the pre-registration documents and the results notes were written with the assistant. Sections 1 (Introduction) and 4.8 (Conformal risk control) were rewritten by the author in their own words. [AUTHOR: confirm, or list the sections you rewrote.]
+- **Verification.** Every number in this report is traced to a committed result file by an automated audit script (zero mismatches required before submission), and every reference was checked against its source. [AUTHOR: state what you verified yourself, e.g. which sections you can explain without notes.]
+- **Responsibility.** The author takes responsibility for the content, including any error the assistant introduced and the author did not catch.
+
+<!-- pagebreak -->
+
 # Abstract
 
 Deep-learning models for brain tumour segmentation are usually validated on clean, curated data and reported as a single accuracy number. In use they meet scans from other hospitals, scanners and patient populations, where they can fail without any warning. This project, NeuroVision-X, builds a complete three-dimensional brain tumour segmentation system on multi-modal MRI (T1, T1CE, T2 and FLAIR) and then measures, under pre-registered rules, how far its reliability machinery can be trusted when the data changes.
