@@ -1,0 +1,3 @@
+hash_kind,sha256,case_ids,splits,cross_split
+image,ba11e6bdd4045d7fdaab6f8e03e4225b30016d8e169550c37da6df031a69c75c,BraTS-PED-00121-000;BraTS-PED-00137-000,test;train,True
+label,325354a8e902fc814d24c298218d8a672ee604ec7ed2d3b66e034b6ad248c5a4,BraTS-PED-00121-000;BraTS-PED-00137-000,test;train,True

@@ -3069,3 +3069,41 @@ evidence about the setup, and forgetting it means repeating it.
     the paper must call 25% a strict, RANO-motivated choice, not a RANO rule.
     The 0.7 Dice bar's inter-rater anchor from the BraTS literature is still to
     be quoted with its source.
+
+66. **W2.7 LEAKAGE CHECK -- BraTS AND SSA CLEAN; ONE NEW PROBABLE
+    SAME-PATIENT PAIR IN PED, NO VERDICT MOVES (2026-11-24, MasterPlan
+    W2.7).** `scripts/leakage_check.py` (`c266da5`): SHA-256 of every
+    preprocessed image and label, plus a coarse atlas-frame correlation of
+    every cross-split pair (image and tumour footprint), flag at image r ≥ 0.99
+    or tumour r ≥ 0.9 with image r high. CPU, seconds per cohort. Results:
+    `results/leakage/{brats,ssa,ped}/`.
+
+    **Positive control first (PED, `splits_ped_cf0.yaml`).** The known
+    byte-identical pair BraTS-PED-00121-000 / -00137-000 (note 58) is found as
+    an exact image and label duplicate, crossing train/test. The detector works.
+
+    | cohort | cases | cross-split pairs | exact dup groups | flagged | max cross-split image r |
+    |---|---|---|---|---|---|
+    | BraTS 2021 (`splits.yaml`) | 1,251 | 364,343 | 0 | 0 | 0.775 |
+    | SSA (`splits_ssa_cf0.yaml`) | 60 | — | 0 | 0 | 0.684 |
+    | PED (`splits_ped_cf0.yaml`) | 99 | 2,675 | 1 (the known pair) | 2 | 0.99999 |
+
+    **The new PED pair: BraTS-PED-00057-000 (train in cf0) / -00143-000 (test
+    in cf0; the halves swap in cf1).** Coarse image r 0.991, tumour r 0.993. At
+    full resolution in the atlas frame: not identical — whole-tumour Dice 0.92,
+    sub-label Dice 0.75 / 0.66 / 0.56, per-channel intensity r 0.88–0.94, crop
+    boxes offset by 1–2 voxels. That is the pattern of the same child scanned
+    twice (or re-annotated), not of two patients; BraTS 2021 pairs never exceed
+    0.775. **Author eyeball pending** (`fig`-free: open the two FLAIRs side by
+    side). Treated as a leak until ruled out.
+
+    **Sensitivity (both PED pairs out of every table they touch).** D2 family
+    (`analysis=d2_pooled`, 00121 and 00143 out of the held-out half): PED TC
+    +0.2231 → **+0.2274**, n 49 → 47; no verdict changes in 11. D3 family (all
+    four ids out, both folds exposed): PED TC +0.3676 → **+0.3706**, n 99 → 95;
+    no verdict changes in 8. Files `results/compare_family/d2_pooled_sens_leak/`,
+    `results/compare_family/d3_sens_leak/`. Frozen-model PED results are not
+    affected (the frozen model never saw PED). BraTS 2021 has no name-mapping file
+    on disk (raw data deleted 2026-08-19; the FeTS mapping is login-gated, W2.2),
+    so for BraTS the image scan is the whole evidence: zero cases cross splits at
+    anything near duplicate similarity.

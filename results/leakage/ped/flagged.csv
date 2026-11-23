@@ -1,0 +1,3 @@
+kind,case_a,split_a,case_b,split_b,image_score,tumour_score
+cross,BraTS-PED-00137-000,train,BraTS-PED-00121-000,test,0.9999973773956299,1.00005042552948
+cross,BraTS-PED-00057-000,train,BraTS-PED-00143-000,test,0.9905703663825989,0.992813229560852

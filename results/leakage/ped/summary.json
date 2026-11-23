@@ -1,0 +1,34 @@
+{
+  "n_cases": 99,
+  "n_cases_per_split": {
+    "test": 49,
+    "train": 45,
+    "val": 5
+  },
+  "n_pairs_cross": 2675,
+  "n_pairs_within": 2176,
+  "n_exact_duplicate_groups": 2,
+  "n_exact_duplicate_groups_cross_split": 2,
+  "n_flagged": 2,
+  "cross_split_image_score_quantiles": {
+    "0.5": 0.22382289171218872,
+    "0.9": 0.45009472966194153,
+    "0.99": 0.5955779552459717,
+    "0.999": 0.7190086841583252,
+    "1.0": 0.9999973773956299
+  },
+  "empty_label_cases": [],
+  "split_overlap": {},
+  "config": {
+    "prep_dir": "/Users/amish/NeuroVision-X/data/preprocessed/brats_ped",
+    "splits_path": "/Users/amish/NeuroVision-X/configs/data/splits_ped_cf0.yaml",
+    "grid": [
+      24,
+      24,
+      16
+    ],
+    "top_k": 50,
+    "flag_threshold": 0.99,
+    "flag_tumour_threshold": 0.9
+  }
+}

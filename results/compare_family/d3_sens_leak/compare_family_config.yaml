@@ -1,0 +1,46 @@
+out_dir: outputs/compare_family/d3_sens_leak
+name: d3_sens_leak
+name_a: neurovision_ft_crossfit
+name_b: neurovision
+n_boot: 10000
+ci: 0.95
+alpha: 0.05
+practical_threshold: null
+exclude_case_ids:
+- BraTS-PED-00121-000
+- BraTS-PED-00137-000
+- BraTS-PED-00057-000
+- BraTS-PED-00143-000
+comparisons:
+- cohort: ssa
+  a:
+  - outputs/eval_ft_ssa_cf0/per_case_metrics.csv
+  - outputs/eval_ft_ssa_cf1/per_case_metrics.csv
+  b: outputs/eval_ssa_neurovision/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: ssa_lesionwise
+  a:
+  - outputs/replay_lesionwise/eval_ft_ssa_cf0/per_case_default.csv
+  - outputs/replay_lesionwise/eval_ft_ssa_cf1/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_ssa_neurovision/per_case_default.csv
+  metrics:
+  - lwdice_ET
+- cohort: ped
+  a:
+  - outputs/eval_ft_ped_cf0/per_case_metrics.csv
+  - outputs/eval_ft_ped_cf1/per_case_metrics.csv
+  b: outputs/eval_ped_neurovision/per_case_metrics.csv
+  metrics:
+  - dice_ET
+  - dice_TC
+  - dice_WT
+- cohort: ped_lesionwise
+  a:
+  - outputs/replay_lesionwise/eval_ft_ped_cf0/per_case_default.csv
+  - outputs/replay_lesionwise/eval_ft_ped_cf1/per_case_default.csv
+  b: outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
+  metrics:
+  - lwdice_ET
