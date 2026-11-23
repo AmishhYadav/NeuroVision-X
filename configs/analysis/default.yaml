@@ -1224,3 +1224,33 @@ conformal_v2:
       # No logits (discarded on Kaggle): saved v1 curves only (WT, TC; v1 grid; raw mask).
       curves: {val: outputs/conformal/nnunet_gatea/conformal_nnunet/eval_val/curves.npz, test: outputs/conformal/nnunet_gatea/conformal_nnunet/eval_test/curves.npz, ssa: outputs/conformal/nnunet_gatea/conformal_nnunet/eval_ssa/curves.npz, ped: outputs/conformal/nnunet_gatea/conformal_nnunet/eval_ped/curves.npz}
   postprocess: true
+
+volume_endpoint:
+  # MasterPlan W2.5. A second "usable" label based on tumour VOLUME error, computed from SAVED
+  # fp16 logits (zero model inference) with the deployed post-processing
+  # (inference.postprocess), next to the Dice-based label (WT and TC Dice >= dice_bar).
+  # Consumed by scripts/volume_endpoint.py; library: analysis/volume_endpoint.py.
+  # eval_dirs: name -> {eval_dir: where logits/ and per_case_metrics.csv live,
+  #                     data_dir: where the preprocessed <case>/label.npy + meta.json live}.
+  # NOTE neurovision's val/test eval dirs are nested one level deeper than the others.
+  out_dir: outputs/volume_endpoint
+  eval_dirs:
+    neurovision_val: {eval_dir: outputs/neurovision/eval_val, data_dir: data/preprocessed/brats}
+    neurovision_test: {eval_dir: outputs/neurovision/eval_test, data_dir: data/preprocessed/brats}
+    neurovision_ssa: {eval_dir: outputs/eval_ssa_neurovision, data_dir: data/preprocessed/brats_ssa}
+    neurovision_ped: {eval_dir: outputs/eval_ped_neurovision, data_dir: data/preprocessed/brats_ped}
+    baseline_unet3d_val: {eval_dir: outputs/eval_val_baseline_unet3d, data_dir: data/preprocessed/brats}
+    baseline_unet3d_test: {eval_dir: outputs/eval_test_baseline_unet3d, data_dir: data/preprocessed/brats}
+    baseline_unet3d_ssa: {eval_dir: outputs/eval_ssa_baseline_unet3d, data_dir: data/preprocessed/brats_ssa}
+    baseline_unet3d_ped: {eval_dir: outputs/eval_ped_baseline_unet3d, data_dir: data/preprocessed/brats_ped}
+  tol: 0.25 # a volume error up to 25% is "usable"
+  regions: [WT, ET] # regions the volume label applies to
+  empty_pred_max_ml: 0.0 # empty reference: any predicted voxel is a failure
+  dice_bar: 0.7 # Dice label: dice_WT and dice_TC both >= this
+  case_limit: null # int -> first N cases per eval dir (smoke runs)
+  overwrite: false # false -> skip an eval dir whose per_case_volumes.csv exists (resume)
+  dice_check_tol: 1.0e-3 # replayed-mask Dice must match per_case_metrics.csv within this
+  fail_on_dice_mismatch: true
+  n_boot: 10000
+  ci: 0.95
+  boot_seed: 42
