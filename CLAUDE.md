@@ -15,6 +15,8 @@ Project instructions for Claude Code. Read this before doing anything in this re
 | `docs/archive/project_state.md` | The Milestone 1–3 build record, archived |
 | `docs/gpu_session_checklist.md` | Rules for a GPU session, each written against a loss already suffered |
 | `docs/research_docs/reproducibility.md` | Which artifacts are caches, and the exact command to rebuild each |
+| `docs/research_docs/gpu_ledger.md` | Every GPU session, in time order. Never in the board |
+| `results/` | Tracked mirror of the small result files under `outputs/` (`scripts/sync_results.py`). Notes cite these paths |
 | `docs/research_docs/project_history.md` | The whole journey in time order — every build, GPU run, result, dead claim and major decision. Add a line when a gate fires |
 
 ---
@@ -204,25 +206,21 @@ package's `__init__.py` for the decorator to run.
 
 ---
 
-## Current status — 2026-11-15
+## Current status — 2026-11-23
 
 **The live plan is `docs/research/MasterPlan.md`; its board is §B5.** Why it replaced the Milestone 5
-plan: `docs/research_docs/project_review_2026-11-15.md`. `status_2026-09-27.md` is history.
+plan: `docs/research_docs/project_review_2026-11-15.md`. Short status: `status_2026-11-15.md`.
+GPU sessions are logged in `docs/research_docs/gpu_ledger.md`, never in the board.
 
-**Open right now (MasterPlan W0, in this order):** (1) no result file is in git — back up `outputs/`
-small files and the checkpoints (W0.1) before anything else; (2) two finished runs are unread:
-nnU-Net conformal (`outputs/conformal/nnunet_gatea/`, needs note 62 / C30) and D2 pooled
-(`outputs/neurovision_pooled/checkpoints/best.pt`, never evaluated, needs note 63 / C31); (3) the
-ledger, status doc, `related_work.md` and the semester report still say "in proportion to the
-shift" (W0.3); (4) the semester report has 15 listed errors (review §A4) and is due ~2026-11-24.
-**Binding new rules:** `MasterPlan.md` §B3 — results backed up the day they exist, no new run while
-one is unread, lockbox for new cohorts, tool feature freeze, no further `neurovision` training.
+**Results are tracked.** `results/` mirrors the small files of `outputs/` (`scripts/sync_results.py`,
+run it the day a result exists — MasterPlan §B3 rule 1). Cite `results/…` in notes, never a path that
+exists only under `outputs/`. Checkpoint hashes: `docs/data_manifests/checkpoints.sha256`; the
+checkpoints themselves are in the private Kaggle dataset `amishyadav123/neurovision-checkpoints`.
 
-**Since 2026-09-26:** C1 replicated at a second seed pair (note 54); real-DICOM front-end run done
-(note 55, C25: 40% thick-slice refusals, WT −0.23, mostly registration disagreement); `intended_use`
-(adults only) live in the gate (note 53); nnU-Net importer/scorer built; Gate A done (RETIRED, note 61);
-D2 pooled training on Kaggle from 2026-10-12; P1.4 OOD score run (note 56, C26): sees the SSA shift (60% flagged vs 9.5% test)
-but not which masks fail — misses its switch-on rule, stays display-only.
+**Open right now:** D2 pooled evaluation (W0.2b → note 63 / C31), then the semester report correction
+pass (W1). **Binding rules:** `MasterPlan.md` §B3 — results backed up the day they exist, no new run
+while one is unread, lockbox for new cohorts, tool feature freeze (`app/` changes only to fix a
+measured defect or to label something honestly), no further `neurovision` training.
 
 **Where the science stands** (authority: `docs/research_docs/claims_and_evidence.md`, read it before writing
 anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 1.4e-21, n=189; **+0.0165** on the 184 ET-present cases — quote both),
@@ -230,7 +228,8 @@ anything). One clean positive: ET Dice **+0.0267** over a matched U-Net (p_holm 
 +0.0021) — but **nnU-Net beats it**
 (Gate A RETIRED 2026-10-12, note 61, C29: ET 0.8879 vs 0.8709, lesion-wise −0.0309), so the
 architecture claim is withdrawn and C1 is quoted only against the matched-recipe U-Net. Conformal risk control holds in
-distribution and is violated under shift in 7 of 12 cells, worst where the label definition differs (C13/C14). The pipeline returns a
+distribution and is violated under shift in 7 of 12 cells, worst where the label definition differs (C13/C14);
+it replicates on nnU-Net (note 62, C30: 5 of 12 violated, PED tumour core at every α, floor 0.486). The pipeline returns a
 usable mask for 85% / 78% / 24% of test / SSA / PED studies, with silent failure 4.2% / 18.3% /
 49.5% (note 47). Gate C is MIXED (one cell of five). D0 heavy augmentation and D1 seed 43 are both
 12/12 inconclusive. The founding hypothesis is a pre-registered null.
