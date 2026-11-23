@@ -224,7 +224,7 @@ condition (trap 9), results pulled and synced to `results/` the same day.
 | 2026-11-20 | W1.3–W1.9 `[ ]` · W8.2 `[ ]` · **D-A due 11-24** |
 | 2026-11-25 | W2.7 `[~]` (script `c266da5`, not run) · W2.1 `[~]` (module `739fbe0` + driver `3a6c9ac`; run blocked on external registration) · W2.5 `[~]` (library `c4f43c5`; driver open) · W3.2 `[~]` (protocol + corruption module `c1db922`; driver/probe open; GPU blocked on external registration) · W5.9 `[~]` (checked 2026-11-23: MELBA takes submissions via melba.scholasticahq.com/for-authors, cover letter + LaTeX template from github.com/melba-journal — re-read the full author page on 12-01; MIDL 2027 dates not announced (MIDL 2026 full papers were due 2025-12-05, so 2027's may be ~Dec 2026); UNSURE 2027 not announced (past deadlines late June)) · W7.3 set up `[ ]` · W8.1 unit 1 |
 | 2026-12-02 | W2.3 `[ ]` · W2.5 `[ ]` · W5.1 `[ ]` · W3.1 cohort checks and downloads `[ ]` |
-| 2026-12-09 | W2.4 `[ ]` · W2.2 `[ ]` · W3.2 transform module + probe `[ ]` · W5.2 `[ ]` |
+| 2026-12-09 | W2.4 `[ ]` · W2.2 `[ ]` (2026-11-24 check: FeTS 2022 `partitioning_1.csv` (23 institutions, `Partition_ID`/`Subject_ID`, ids `FeTS2022_###`) is released only through a registered Synapse data request; no public FeTS→BraTS2021 id crosswalk found, so one-to-one cannot be verified from public sources. **Author action:** file the FeTS 2022 data request, or drop W2.2 per §B9 and cite Shahid (arXiv 2606.20115, which uses FeTS ids directly)) · W3.2 transform module + probe `[ ]` · W5.2 `[ ]` |
 | 2026-12-16 | W2.6 `[ ]` · W3.2 GPU `[ ]` · W5.3 `[ ]` |
 | 2027-01-06 | W3.3 `[ ]` · W3.4 `[ ]` · W3.1 registration `[ ]` |
 | 2027-01-13 | W3.1 single pass `[ ]` · W3.5 `[ ]` · W5.4 methods + results |
