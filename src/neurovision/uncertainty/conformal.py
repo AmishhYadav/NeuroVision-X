@@ -137,6 +137,13 @@ __all__ = [
     "fit_threshold",
     "realised_risk",
     "band_inflation",
+    "EXTENDED_THRESHOLDS",
+    "RCPSFit",
+    "fit_threshold_crc",
+    "realised_risk_with",
+    "wsr_upper_bound",
+    "fit_threshold_rcps",
+    "mask_quality",
 ]
 
 logger = logging.getLogger(__name__)
@@ -160,6 +167,21 @@ def _build_default_thresholds() -> tuple[float, ...]:
 
 
 DEFAULT_THRESHOLDS: tuple[float, ...] = _build_default_thresholds()
+
+
+def _build_extended_thresholds() -> tuple[float, ...]:
+    """Builds the v2 grid: `DEFAULT_THRESHOLDS` plus eight points close to 1.
+
+    Returns:
+        A sorted, strictly increasing tuple, rounded to 12 decimals and de-duplicated the same
+        way as `_build_default_thresholds`.
+    """
+    high = (0.96, 0.97, 0.98, 0.99, 0.995, 0.999, 0.9995, 0.9999)  # a mask can need tau near 1
+    grid = np.unique(np.round(np.concatenate([DEFAULT_THRESHOLDS, high]), 12))
+    return tuple(float(t) for t in grid)
+
+
+EXTENDED_THRESHOLDS: tuple[float, ...] = _build_extended_thresholds()
 
 
 def _to_numpy(x: Tensor | np.ndarray) -> np.ndarray:
@@ -201,6 +223,12 @@ def _threshold_index(thresholds: np.ndarray, value: float, tol: float = 1e-9) ->
             f"{thresholds[idx]!r}."
         )
     return idx
+
+
+def _check_empty_option(empty: str) -> None:
+    """Raises ValueError unless `empty` is `"exclude"` or `"zero"`."""
+    if empty not in ("exclude", "zero"):
+        raise ValueError(f"empty must be 'exclude' or 'zero', got {empty!r}.")
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +287,25 @@ class CaseLossCurve:
             return np.full(len(self.thresholds), np.nan, dtype=np.float64)
         fn = np.asarray(self.fn_voxels, dtype=np.float64)
         return fn / self.gt_voxels
+
+    def miss_rate_with(self, empty: str) -> np.ndarray:
+        """The miss rate under an explicit empty-reference convention.
+
+        Args:
+            empty: `"exclude"` returns exactly `miss_rate()` (all-NaN for empty GT).
+                `"zero"` returns all zeros when `empty_gt` (nothing to miss), else
+                `miss_rate()`.
+
+        Returns:
+            A float64 array of shape `(T,)`.
+
+        Raises:
+            ValueError: `empty` is neither `"exclude"` nor `"zero"`.
+        """
+        _check_empty_option(empty)
+        if empty == "zero" and self.empty_gt:
+            return np.zeros(len(self.thresholds), dtype=np.float64)
+        return self.miss_rate()
 
     def mask_inflation(self, reference_threshold: float = 0.5) -> np.ndarray:
         """The mask-size ratio `mask_voxels(tau) / mask_voxels(reference_threshold)`.
@@ -699,4 +746,426 @@ def band_inflation(
         "median_inflation": median_inflation,
         "n": float(n),
         "n_skipped": float(n_skipped),
+    }
+
+
+# ===========================================================================
+# v2 additions (MasterPlan W2.1): explicit empty-GT convention, RCPS with the
+# Waudby-Smith--Ramdas bound, and mask cost. Everything above is unchanged.
+# ===========================================================================
+
+
+def _prepare_calibration(
+    curves: Sequence[CaseLossCurve],
+    alpha: float,
+    empty: str,
+    monotonicity_tol: float,
+    caller: str,
+) -> tuple[tuple[float, ...], str, list[CaseLossCurve], int, np.ndarray, np.ndarray]:
+    """Validates curves, applies the empty-GT convention, and runs the monotonicity falsifier.
+
+    Same validation as `fit_threshold`.
+
+    Args:
+        curves: Calibration curves, one region, one shared grid.
+        alpha: Target level in `(0, 1]`.
+        empty: `"exclude"` or `"zero"` (see `CaseLossCurve.miss_rate_with`).
+        monotonicity_tol: Tolerance of the monotonicity falsifier.
+        caller: Name used in the log/error context.
+
+    Returns:
+        `(thresholds, region, used, n_excluded_empty, losses, risk_curve)` where `losses` has
+        shape `(n_used, T)` and `risk_curve` shape `(T,)`.
+
+    Raises:
+        ValueError: Same conditions as `fit_threshold`, plus a bad `empty` value.
+    """
+    _check_empty_option(empty)
+    if len(curves) == 0:
+        raise ValueError("curves must not be empty.")
+    if not (0.0 < alpha <= 1.0):
+        raise ValueError(f"alpha must be in (0, 1], got {alpha}.")
+    thresholds = curves[0].thresholds
+    region = curves[0].region
+    for c in curves:
+        if c.thresholds != thresholds:
+            raise ValueError(
+                "all curves must share an identical thresholds tuple; got a mismatch involving "
+                f"case_id={c.case_id!r}."
+            )
+        if c.region != region:
+            raise ValueError(
+                f"all curves must share the same region; expected {region!r}, got {c.region!r} "
+                f"for case_id={c.case_id!r}."
+            )
+    used = list(curves) if empty == "zero" else [c for c in curves if not c.empty_gt]
+    n_excluded_empty = len(curves) - len(used)
+    if len(used) == 0:
+        raise ValueError(
+            f"all {len(curves)} curves have empty ground truth for region {region!r}; there is "
+            "nothing to calibrate a threshold on."
+        )
+    losses = np.stack([c.miss_rate_with(empty) for c in used], axis=0)  # (n_used, T)
+    risk_curve = losses.mean(axis=0)
+    bad = np.where(np.diff(risk_curve) < -monotonicity_tol)[0]
+    if bad.size > 0:
+        i = int(bad[0])
+        raise ValueError(
+            f"{caller}: risk_curve is not non-decreasing in threshold -- the monotonicity "
+            f"falsifier failed at index {i}: risk_curve[{i}]={risk_curve[i]!r} > "
+            f"risk_curve[{i + 1}]={risk_curve[i + 1]!r}. The loss or threshold direction is "
+            "wired backwards."
+        )
+    return thresholds, region, used, n_excluded_empty, losses, risk_curve
+
+
+def fit_threshold_crc(
+    curves: Sequence[CaseLossCurve],
+    alpha: float,
+    *,
+    empty: str = "exclude",
+    bound: float = 1.0,
+    monotonicity_tol: float = 1e-9,
+) -> ConformalFit:
+    """CRC threshold with an explicit empty-reference convention.
+
+    Same rule as `fit_threshold`: the largest grid tau with
+    `(n * R_hat(tau) + bound) / (n + 1) <= alpha`. With `empty="exclude"` the result equals
+    `fit_threshold(curves, alpha, bound=bound)`. With `empty="zero"` empty-GT cases are kept with
+    loss 0, so `n_excluded_empty == 0` and `n_calibration == len(curves)`.
+
+    Args:
+        curves: One `CaseLossCurve` per calibration case (one region, one shared grid).
+        alpha: Target risk level in `(0, 1]`.
+        empty: `"exclude"` or `"zero"`.
+        bound: Upper bound of the loss (1.0 for a miss rate).
+        monotonicity_tol: Tolerance of the monotonicity falsifier.
+
+    Returns:
+        A `ConformalFit`.
+
+    Raises:
+        ValueError: Same conditions as `fit_threshold`, plus an invalid `empty`.
+    """
+    thresholds, region, used, n_excl, _, risk_curve = _prepare_calibration(
+        curves, alpha, empty, monotonicity_tol, "fit_threshold_crc"
+    )
+    n = len(used)
+    adjusted = (n * risk_curve + bound) / (n + 1)
+    min_achievable_risk = float(adjusted[0])
+    feasible_mask = adjusted <= alpha
+    if np.any(feasible_mask):
+        idx = int(np.max(np.where(feasible_mask)[0]))  # largest feasible tau
+        threshold: float | None = float(thresholds[idx])
+        calibrated_risk: float | None = float(risk_curve[idx])
+        feasible = True
+    else:
+        threshold = None
+        calibrated_risk = None
+        feasible = False
+        logger.warning(
+            "fit_threshold_crc: infeasible at alpha=%.4f for region %s (n=%d); smallest-grid "
+            "adjusted risk %.4f.",
+            alpha,
+            region,
+            n,
+            min_achievable_risk,
+        )
+    return ConformalFit(
+        alpha=alpha,
+        region=region,
+        n_calibration=n,
+        n_excluded_empty=n_excl,
+        feasible=feasible,
+        threshold=threshold,
+        calibrated_risk=calibrated_risk,
+        min_achievable_risk=min_achievable_risk,
+        thresholds=thresholds,
+        risk_curve=tuple(float(x) for x in risk_curve),
+    )
+
+
+def realised_risk_with(
+    curves: Sequence[CaseLossCurve],
+    threshold: float,
+    *,
+    empty: str = "exclude",
+) -> dict[str, float]:
+    """Mean miss rate at a grid `threshold` under an explicit empty-reference convention.
+
+    Args:
+        curves: Evaluation curves sharing one threshold grid containing `threshold`.
+        threshold: Grid threshold to evaluate at.
+        empty: `"exclude"` (same as `realised_risk`) or `"zero"` (empty-GT cases count as
+            loss 0 and are included).
+
+    Returns:
+        `{"mean_miss_rate", "n", "n_excluded_empty"}`, as `realised_risk`. `mean_miss_rate` is
+        NaN if no case is used.
+
+    Raises:
+        ValueError: Empty `curves`, mismatched grids, `threshold` not in grid, bad `empty`.
+    """
+    _check_empty_option(empty)
+    if len(curves) == 0:
+        raise ValueError("curves must not be empty.")
+    thresholds = curves[0].thresholds
+    for c in curves:
+        if c.thresholds != thresholds:
+            raise ValueError(
+                "all curves must share an identical thresholds tuple; got a mismatch involving "
+                f"case_id={c.case_id!r}."
+            )
+    idx = _threshold_index(np.asarray(thresholds, dtype=np.float64), threshold)
+    values = [
+        float(c.miss_rate_with(empty)[idx]) for c in curves if empty == "zero" or not c.empty_gt
+    ]
+    n = len(values)
+    return {
+        "mean_miss_rate": float(np.mean(values)) if n > 0 else float("nan"),
+        "n": float(n),
+        "n_excluded_empty": float(len(curves) - n),
+    }
+
+
+# ---------------------------------------------------------------------------
+# RCPS with the Waudby-Smith--Ramdas betting upper confidence bound
+# ---------------------------------------------------------------------------
+
+
+def wsr_upper_bound(losses: np.ndarray, delta: float, *, grid_tol: float = 1e-6) -> float:
+    """Waudby-Smith--Ramdas (betting) upper confidence bound on the mean of `[0, 1]` losses.
+
+    Follows Bates, Angelopoulos, Lei, Malik, Jordan, "Distribution-free, risk-controlling
+    prediction sets" (JACM 2021, Section 3) and Waudby-Smith & Ramdas (2020). With
+    `n = len(losses)` and losses taken IN THE GIVEN ORDER, for `i = 1..n`:
+
+        mu_i      = (1/2 + sum_{j<=i} L_j) / (1 + i)
+        sigma2_i  = (1/4 + sum_{j<=i} (L_j - mu_j)^2) / (1 + i),   sigma2_0 = 1/4
+        nu_i      = min(1, sqrt(2 log(1/delta) / (n * sigma2_{i-1})))
+        K_i(R)    = prod_{j<=i} (1 - nu_j * (L_j - R))
+
+    The bound is `R_plus = inf{R in [0, 1] : max_i K_i(R) > 1/delta}`, or 1.0 if no such R
+    exists. Note `mu_i` uses `L_j` up to and including `j = i`. `K_i(R)` is non-decreasing in
+    `R`, so the infimum is found by bisection to `grid_tol`. With probability at least
+    `1 - delta` the true mean is `<= R_plus`. The bound is conservative (it is a valid
+    anytime-style bound, not a tight one) and ORDER-DEPENDENT: the caller fixes the order.
+
+    Args:
+        losses: 1-D array of losses in `[0, 1]`, in the order to be used.
+        delta: Miscoverage level in `(0, 1)`.
+        grid_tol: Bisection tolerance on `R`.
+
+    Returns:
+        The upper bound, a float in `[0, 1]`.
+
+    Raises:
+        ValueError: `losses` is empty, not 1-D, non-finite, outside `[0, 1]` (tolerance 1e-12),
+            or `delta` is not in `(0, 1)`.
+    """
+    arr = np.asarray(losses, dtype=np.float64)
+    if arr.ndim != 1 or arr.size == 0:
+        raise ValueError("losses must be a non-empty 1-D array.")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError("losses must be finite.")
+    if arr.min() < -1e-12 or arr.max() > 1.0 + 1e-12:
+        raise ValueError("losses must lie in [0, 1].")
+    if not (0.0 < delta < 1.0):
+        raise ValueError(f"delta must be in (0, 1), got {delta}.")
+    arr = np.clip(arr, 0.0, 1.0)
+
+    n = arr.size
+    steps = np.arange(1, n + 1, dtype=np.float64)
+    mu = (0.5 + np.cumsum(arr)) / (1.0 + steps)
+    sigma2 = (0.25 + np.cumsum((arr - mu) ** 2)) / (1.0 + steps)
+    sigma2_prev = np.concatenate([[0.25], sigma2[:-1]])  # sigma2_{i-1}
+    log_inv_delta = float(np.log(1.0 / delta))
+    nu = np.minimum(1.0, np.sqrt(2.0 * log_inv_delta / (n * sigma2_prev)))
+
+    def qualifies(r: float) -> bool:
+        # log K_i(R) as a running sum of log-factors; a zero factor gives -inf (K = 0), not NaN.
+        factors = np.maximum(1.0 - nu * (arr - r), 0.0)
+        with np.errstate(divide="ignore"):
+            log_k = np.cumsum(np.log(factors))
+        return bool(np.max(log_k) > log_inv_delta)
+
+    if not qualifies(1.0):
+        return 1.0
+    if qualifies(0.0):
+        return 0.0
+    lo, hi = 0.0, 1.0  # invariant: lo does not qualify, hi does
+    while hi - lo > grid_tol:
+        mid = 0.5 * (lo + hi)
+        if qualifies(mid):
+            hi = mid
+        else:
+            lo = mid
+    return float(hi)
+
+
+@dataclass(frozen=True)
+class RCPSFit:
+    """The result of one `fit_threshold_rcps` call.
+
+    Attributes:
+        region: Region the curves cover.
+        alpha: Target risk level.
+        delta: Confidence level; the guarantee is `P(risk > alpha) <= delta`.
+        threshold: Largest grid tau with UCB < alpha at every grid tau' <= tau, or None.
+        feasible: Whether such a tau exists (the lowest grid tau already passes).
+        ucb_at_threshold: WSR UCB at `threshold`, or None if infeasible.
+        calibrated_risk: Mean calibration loss at `threshold`, or None if infeasible.
+        min_ucb: UCB at the lowest grid tau (reported unconditionally).
+        n_calibration: Number of curves used.
+        n_excluded_empty: Number of curves dropped for empty GT.
+        order_seed: Seed of the one case permutation fed to the bound.
+    """
+
+    region: str
+    alpha: float
+    delta: float
+    threshold: float | None
+    feasible: bool
+    ucb_at_threshold: float | None
+    calibrated_risk: float | None
+    min_ucb: float
+    n_calibration: int
+    n_excluded_empty: int
+    order_seed: int
+
+
+def fit_threshold_rcps(
+    curves: Sequence[CaseLossCurve],
+    alpha: float,
+    delta: float,
+    *,
+    order_seed: int,
+    empty: str = "exclude",
+    monotonicity_tol: float = 1e-9,
+) -> RCPSFit:
+    """RCPS threshold using the WSR upper confidence bound on the mean miss rate.
+
+    Cases are sorted by `case_id`, then permuted ONCE with `np.random.default_rng(order_seed)`;
+    the same permutation is used for every threshold. The UCB is computed for each grid tau
+    scanning upward from the lowest; the result is the grid point just before the first tau
+    whose UCB is `>= alpha` (all lower taus therefore passed).
+
+    Args:
+        curves: One `CaseLossCurve` per calibration case (one region, one shared grid).
+        alpha: Target risk level in `(0, 1]`.
+        delta: Confidence level in `(0, 1)`.
+        order_seed: Seed of the case permutation (makes the result independent of input order).
+        empty: `"exclude"` or `"zero"`.
+        monotonicity_tol: Tolerance of the monotonicity falsifier on the mean risk curve.
+
+    Returns:
+        An `RCPSFit`.
+
+    Raises:
+        ValueError: Same conditions as `fit_threshold`, plus invalid `delta` or `empty`.
+    """
+    if not (0.0 < delta < 1.0):
+        raise ValueError(f"delta must be in (0, 1), got {delta}.")
+    thresholds, region, used, n_excl, losses, risk_curve = _prepare_calibration(
+        curves, alpha, empty, monotonicity_tol, "fit_threshold_rcps"
+    )
+    n = len(used)
+    # Sort by case_id first so the permutation does not depend on the caller's input order.
+    by_id = np.argsort(np.asarray([c.case_id for c in used]), kind="stable")
+    perm = np.random.default_rng(order_seed).permutation(n)
+    ordered = losses[by_id][perm]  # (n, T), one shared case order for every threshold
+    # Re-take the mean in sorted order so float round-off does not depend on input order.
+    risk_curve = losses[by_id].mean(axis=0)
+
+    min_ucb = wsr_upper_bound(ordered[:, 0], delta)
+    best_idx: int | None = None
+    best_ucb: float | None = None
+    for t in range(len(thresholds)):
+        ucb = min_ucb if t == 0 else wsr_upper_bound(ordered[:, t], delta)
+        if ucb >= alpha:
+            break  # first failure: everything above is out
+        best_idx, best_ucb = t, ucb
+    if best_idx is None:
+        logger.warning(
+            "fit_threshold_rcps: infeasible at alpha=%.4f delta=%.3f for region %s (n=%d); "
+            "UCB at the lowest grid tau is %.4f.",
+            alpha,
+            delta,
+            region,
+            n,
+            min_ucb,
+        )
+    return RCPSFit(
+        region=region,
+        alpha=alpha,
+        delta=delta,
+        threshold=None if best_idx is None else float(thresholds[best_idx]),
+        feasible=best_idx is not None,
+        ucb_at_threshold=best_ucb,
+        calibrated_risk=None if best_idx is None else float(risk_curve[best_idx]),
+        min_ucb=float(min_ucb),
+        n_calibration=n,
+        n_excluded_empty=n_excl,
+        order_seed=order_seed,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mask cost from the stored counts
+# ---------------------------------------------------------------------------
+
+
+def mask_quality(curves: Sequence[CaseLossCurve], threshold: float) -> dict[str, np.ndarray]:
+    """Per-case precision, Dice and volume ratio of the mask at a grid `threshold`.
+
+    With `G = gt_voxels`, `M = mask_voxels[threshold]`, `TP = G - FN`:
+    precision = TP / M, dice = 2 TP / (M + G), volume_ratio = M / G.
+
+    Conventions for the degenerate cases:
+        - G = 0 and M = 0: precision 1, dice 1 (nothing to find, nothing claimed).
+        - G = 0 and M > 0: precision 0, dice 0.
+        - G > 0 and M = 0: precision NaN (0/0, no claim made), dice 0, volume_ratio 0.
+        - volume_ratio is NaN whenever G = 0.
+
+    Args:
+        curves: One `CaseLossCurve` per case, sharing one grid containing `threshold`.
+        threshold: Grid threshold (must be in the grid).
+
+    Returns:
+        Dict of arrays aligned to the input order: `case_id` (str), `precision`, `dice`,
+        `volume_ratio` (float64) and `empty_gt` (bool).
+
+    Raises:
+        ValueError: Empty `curves`, mismatched grids, or `threshold` not in the grid.
+    """
+    if len(curves) == 0:
+        raise ValueError("curves must not be empty.")
+    thresholds = curves[0].thresholds
+    for c in curves:
+        if c.thresholds != thresholds:
+            raise ValueError(
+                "all curves must share an identical thresholds tuple; got a mismatch involving "
+                f"case_id={c.case_id!r}."
+            )
+    idx = _threshold_index(np.asarray(thresholds, dtype=np.float64), threshold)
+
+    precision, dice, volume = [], [], []
+    for c in curves:
+        g = c.gt_voxels
+        m = c.mask_voxels[idx]
+        tp = g - c.fn_voxels[idx]
+        if g == 0:
+            precision.append(1.0 if m == 0 else 0.0)
+            dice.append(1.0 if m == 0 else 0.0)
+            volume.append(float("nan"))
+        else:
+            precision.append(tp / m if m > 0 else float("nan"))
+            dice.append(2.0 * tp / (m + g))
+            volume.append(m / g)
+    return {
+        "case_id": np.asarray([c.case_id for c in curves]),
+        "precision": np.asarray(precision, dtype=np.float64),
+        "dice": np.asarray(dice, dtype=np.float64),
+        "volume_ratio": np.asarray(volume, dtype=np.float64),
+        "empty_gt": np.asarray([c.empty_gt for c in curves], dtype=bool),
     }
