@@ -1254,3 +1254,71 @@ volume_endpoint:
   n_boot: 10000
   ci: 0.95
   boot_seed: 42
+
+severity_ladder:
+  # MasterPlan W3.2, docs/research_docs/preregistrations/preregistration_severity_ladder.md --
+  # scripts/severity_ladder.py. Kinds, levels, seed, bridge tolerance and the saved quantities are
+  # FIXED by that protocol; do not change them after the probe has produced a corrupted number.
+  # A change that does not alter seeds (skip_levels, skip_model_kinds) is the only sanctioned cut,
+  # and only as a dated amendment in the pre-registration.
+  out_dir: outputs/severity_ladder       # <out_dir>/<model>/<kind>/level<k>/ ; probe -> <out_dir>/probe
+  split: test
+  prep_dir: ${data.preprocessing.out_dir}
+  splits_path: ${data.splits.path}
+  base_seed: 42                          # case_seed(base_seed, case_id, kind, level_index)
+  case_limit: null                       # null = every case of the split (never set for the main run)
+  probe: false                           # true = first probe_cases cases, ALL conditions, all models
+  probe_cases: 5
+  models_to_run: [neurovision, baseline_unet3d, nnunet_gatea]
+  bridge_tol: 0.003                      # mean |Dice - saved clean Dice| per region, level 0
+  max_hours: null                        # stop cleanly (nothing partial) before this wall-clock budget
+  # Severity per level, level_index 1..4 = list position. Severity meaning per kind:
+  # thick_slice = slab mm, rician = sigma/SD, bias = Legendre coefficient bound, gamma = |log gamma|,
+  # motion = shift mm.
+  kinds:
+    thick_slice: [2, 3, 5, 7]
+    rician: [0.05, 0.1, 0.2, 0.3]
+    bias: [0.1, 0.2, 0.3, 0.5]
+    gamma: [0.1, 0.2, 0.4, 0.7]
+    motion: [1, 2, 4, 8]
+  # Protocol's cost-cut order (only via a dated amendment): drop level 1 of every kind
+  # (skip_levels: [1]), then drop baseline_unet3d from bias and gamma
+  # (skip_model_kinds: {baseline_unet3d: [bias, gamma]}). Seeds do not move when a level is skipped.
+  skip_levels: []
+  skip_model_kinds: {}
+  gate:                                  # the deployed gate's regions and conformal operating point
+    regions: ${clinical.gatekeeper.regions}
+    conformal_alpha: ${clinical.gatekeeper.conformal_alpha}
+  qc:                                    # QC model for predicted_dice (the deployed one)
+    enabled: true
+    checkpoint: outputs/neurovision/qc/best.pt
+    model_config: configs/model/segqc.yaml
+  nnunet:
+    model_search_root: null              # e.g. /kaggle/input ; required for the nnunet backend
+    work_dir: null                       # scratch for transient inputs/outputs, e.g. /kaggle/working/nnunet_work
+    checkpoint_name: ${analysis.nnunet_probs.checkpoint_name}
+    expect_epoch: ${analysis.nnunet_probs.expect_epoch}
+    label_check_tol: ${analysis.nnunet_probs.label_check_tol}
+    chunk_size: 25                       # cases per nnU-Net call (bounds transient disk, ~50 MB/case/copy)
+  models:
+    # reference_metrics = the saved clean test per-case metrics the bridge compares with.
+    # conformal_fit = that model's v1 fit.json (frozen thresholds; nothing is fitted on corrupted data).
+    neurovision:
+      backend: inhouse
+      model_config: configs/model/neurovision.yaml
+      # What configs/experiment/neurovision.yaml sets under training.loss: build_model checks the
+      # model's deep_supervision_levels against it, so the model cannot be built without it.
+      cfg_overrides: {training: {loss: {name: multitask, deep_supervision: {enabled: true, weights: null}, multitask: {branch: {enabled: true}}}}}
+      checkpoint: outputs/neurovision/checkpoints/best.pt
+      reference_metrics: results/neurovision/eval_test/per_case_metrics.csv
+      conformal_fit: results/conformal/neurovision/fit.json
+    baseline_unet3d:
+      backend: inhouse
+      model_config: configs/model/unet3d.yaml
+      checkpoint: outputs/checkpoints/baseline_unet3d/best.pt
+      reference_metrics: results/eval_test_baseline_unet3d/per_case_metrics.csv
+      conformal_fit: results/conformal/baseline_unet3d/fit.json
+    nnunet_gatea:
+      backend: nnunet
+      reference_metrics: results/conformal/nnunet_gatea/evals/eval_test/per_case_metrics.csv
+      conformal_fit: results/conformal/nnunet_gatea/conformal_nnunet/fit.json
