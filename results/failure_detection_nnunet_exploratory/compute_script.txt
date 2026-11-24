@@ -1,0 +1,35 @@
+import numpy as np, pandas as pd
+from scipy.stats import rankdata
+def roc_auc_score(y,s):
+    r=rankdata(s); n1=y.sum(); n0=len(y)-n1
+    return (r[y==1].sum()-n1*(n1+1)/2)/(n1*n0)
+rng=np.random.default_rng(42)
+def table(eb, sig):
+    a=pd.read_csv(eb); b=pd.read_csv(sig)[["case_id","ENT"]]
+    d=a.merge(b,on="case_id",validate="1:1")
+    assert len(d)==len(a)==len(b)
+    d["ENT"]=d["ENT"].fillna(np.inf)
+    d["QC"]=-np.minimum(d.predicted_dice_WT,d.predicted_dice_TC)
+    d["y"]=(~d.usable.astype(bool)).astype(int)
+    # check usable == T-Dice definition
+    assert (d.y==((d.dice_WT<0.7)|(d.dice_TC<0.7)).astype(int)).all()
+    return d
+def auc(y,s):
+    s=np.where(np.isinf(s),1e9,s); return roc_auc_score(y,s)
+rows=[]
+for model,ebdir,sigfmt in [("neurovision","results/error_budget","results/failure_detection/signals_{}.csv"),
+                           ("nnunet_gatea","results/error_budget_nnunet","results/risk_gate/signals_nn_{}.csv")]:
+    for c in ["test","ssa","ped"]:
+        d=table(f"{ebdir}/per_case_{c}.csv",sigfmt.format(c))
+        y=d.y.values; e=d.ENT.values; q=d.QC.values
+        ae,aq=auc(y,e),auc(y,q)
+        diffs=[]
+        n=len(d)
+        for _ in range(10000):
+            i=rng.integers(0,n,n)
+            if y[i].min()==y[i].max(): continue
+            diffs.append(auc(y[i],q[i])-auc(y[i],e[i]))
+        lo,hi=np.percentile(diffs,[2.5,97.5])
+        rows.append(dict(model=model,cohort=c,n=n,n_unusable=int(y.sum()),auroc_ENT=round(ae,4),auroc_QC=round(aq,4),
+                         QC_minus_ENT=round(aq-ae,4),ci_lo=round(lo,4),ci_hi=round(hi,4),n_inf_ENT=int(np.isinf(e).sum())))
+df=pd.DataFrame(rows); print(df.to_string(index=False)); import sys; df.to_csv(sys.argv[1],index=False)

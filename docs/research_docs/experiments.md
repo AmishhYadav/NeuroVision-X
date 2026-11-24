@@ -3574,3 +3574,39 @@ evidence about the setup, and forgetting it means repeating it.
     calibration score sample (validity note in the protocol); selective risk
     uses T-Dice only; the deployed gate's numbers are descriptive and include
     input QC and the conformal band, which the LTT gates do not use.
+
+73. **W2.6 nnU-NET FAILURE-DETECTION ROW (EXPLORATORY, NOT REGISTERED) --
+    SAME PATTERN AS `neurovision`: ENTROPY WINS ON SSA, TRANSFERRED SegQC
+    WINS ON PED, TEST UNRESOLVED (2026-11-25, MasterPlan W2.6).** W2.3
+    (note 70) registered `neurovision` only and said nnU-Net enters through
+    W2.6 with entropy and SegQC *transferred, stated as such*. This row is
+    computed after note 70's results were known, so it is exploratory: no
+    Holm, no verdicts.
+
+    **Method.** T-Dice target (unusable ⇔ `dice_WT` or `dice_TC` < 0.7;
+    asserted equal to the error-budget `usable` column). ENT = nnU-Net mean
+    foreground entropy (`results/risk_gate/signals_nn_*.csv`, NaN → +∞ as in
+    W2.3). QC = −min(`predicted_dice_WT`, `predicted_dice_TC`) of the
+    `neurovision`-trained SegQC applied to nnU-Net masks
+    (`results/error_budget_nnunet/per_case_*.csv`). Rank AUROC (ties ½);
+    paired case bootstrap of AUROC(QC) − AUROC(ENT), 10 000 draws, seed 42.
+    Ad-hoc computation, script and table in
+    `results/failure_detection_nnunet_exploratory/` (`compute_script.txt`,
+    `auroc.csv`). **Bridge:** the same code on `neurovision` reproduces
+    note 70's six T-Dice AUROCs to 4 decimals (test 0.9058 / 0.9171, SSA
+    0.9219 / 0.7222, PED 0.5885 / 0.8328).
+
+    | cohort | n (unusable) | AUROC ENT | AUROC QC (transferred) | QC − ENT [95% CI] |
+    |---|---|---|---|---|
+    | test | 189 (7) | 0.866 | 0.768 | −0.098 [−0.372, 0.177] |
+    | SSA | 60 (8) | 0.894 | 0.514 | −0.380 [−0.669, −0.099] |
+    | PED | 99 (67) | 0.522 | 0.789 | +0.267 [+0.103, +0.424] |
+
+    **Reading.** The ordering found for `neurovision` reproduces on nnU-Net:
+    entropy ranks bad masks well on SSA and at chance on PED, where the bad
+    masks come from a label-definition change the model is confident about;
+    SegQC, which learnt what a bad mask looks like, does the reverse. The
+    transferred SegQC is at chance on nnU-Net's SSA masks (0.51), worse than
+    on `neurovision`'s (0.72), as expected of a model trained on another
+    model's errors. Test is unresolved with 7 unusable cases. Exploratory,
+    one model, transferred QC; not a registered result.
