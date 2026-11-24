@@ -4,8 +4,7 @@
 value of ENT or ENS-PD has been computed or looked at (the seed-43 and heavy-aug validation logits
 that ENS-PD needs were still being generated when this was written). MasterPlan W2.4; analysis-budget
 family 4 of 6 (§B3 rule 4). Signals chosen by the author on 2026-11-24 from W2.3 (note 70), which
-found no single best detector: **both ENT and ENS-PD, side by side.** **External registration:**
-*(to be filled: a new Zenodo version of the repository, deposited before the run)*.
+found no single best detector: **both ENT and ENS-PD, side by side.** **External registration:** Zenodo DOI [10.5281/zenodo.24498229](https://doi.org/10.5281/zenodo.24498229), deposited 2026-11-24: snapshot of release `w2.4-prereg` (commit `af35bf8`). The protocol as registered is the copy in that snapshot; only this line was added afterwards.
 
 **What is already known, stated so it cannot be re-discovered as a result:** the deployed gate
 refuses by quantiles of the validation signal distribution (2% refuse, 10% caution) and makes no
