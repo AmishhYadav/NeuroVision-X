@@ -102,7 +102,11 @@ the deployed error budget (`results/error_budget/per_case_*.csv`, checked 2026-1
 QC − ENT differences were of order 0.05–0.10, so most test and SSA cells are expected to be
 INCONCLUSIVE; PED is the best-powered cohort. This is stated now so an all-INCONCLUSIVE table is read
 as "not resolved at these n", never as "the signals are equivalent". T-Vol counts are unknown until
-W2.5 runs; the estimability rule applies to them unchanged. The run launches because the plausible
+W2.5 runs; the estimability rule applies to them unchanged. *(Filled in 2026-11-24, after W2.5 and
+before any detection number, from `results/volume_endpoint/neurovision_*/per_case_volumes.csv`
+— class counts only, no signal was scored: T-Vol unusable **37 of 189** on test, **28 of 60** on SSA,
+**58 of 99** on PED; minority class 37, 28, 41. Every T-Vol cell is estimable and better powered than
+its T-Dice twin on test and SSA (resolvable |ΔAUROC| ≈ 0.10 rather than 0.15).)* The run launches because the plausible
 ensemble-vs-entropy gap on shape failures (the PED and SSA TC failures are large) can exceed 0.10–0.15,
 and because the AURC table is needed by W2.4 regardless of the Holm verdicts.
 
