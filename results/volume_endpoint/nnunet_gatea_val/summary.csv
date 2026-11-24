@@ -1,0 +1,2 @@
+name,n,p_usable_dice,p_usable_dice_lo,p_usable_dice_hi,p_usable_volume,p_usable_volume_lo,p_usable_volume_hi,p_usable_both,p_usable_both_lo,p_usable_both_hi,agreement_rate,n_ref_empty_ET,median_vol_rel_err_WT,median_vol_rel_err_ET
+nnunet_gatea_val,187,0.9144385026737968,0.8716577540106952,0.9518716577540107,0.8074866310160428,0.7486631016042781,0.8609625668449198,0.7807486631016043,0.7219251336898396,0.839572192513369,0.839572192513369,2,0.03368072874281367,0.05817445185891331

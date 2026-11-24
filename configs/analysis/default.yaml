@@ -1243,6 +1243,12 @@ volume_endpoint:
     baseline_unet3d_test: {eval_dir: outputs/eval_test_baseline_unet3d, data_dir: data/preprocessed/brats}
     baseline_unet3d_ssa: {eval_dir: outputs/eval_ssa_baseline_unet3d, data_dir: data/preprocessed/brats_ssa}
     baseline_unet3d_ped: {eval_dir: outputs/eval_ped_baseline_unet3d, data_dir: data/preprocessed/brats_ped}
+    # W2.6 (note 68): nnU-Net Gate A logits from the probability export. Appended LAST so the
+    # rows above (and their bootstrap draws) are unchanged.
+    nnunet_gatea_val: {eval_dir: outputs/nnunet_gatea_probs/eval_val, data_dir: data/preprocessed/brats}
+    nnunet_gatea_test: {eval_dir: outputs/nnunet_gatea_probs/eval_test, data_dir: data/preprocessed/brats}
+    nnunet_gatea_ssa: {eval_dir: outputs/nnunet_gatea_probs/eval_ssa, data_dir: data/preprocessed/brats_ssa}
+    nnunet_gatea_ped: {eval_dir: outputs/nnunet_gatea_probs/eval_ped, data_dir: data/preprocessed/brats_ped}
   tol: 0.25 # a volume error up to 25% is "usable"
   regions: [WT, ET] # regions the volume label applies to
   empty_pred_max_ml: 0.0 # empty reference: any predicted voxel is a failure

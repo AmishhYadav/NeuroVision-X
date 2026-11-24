@@ -3215,3 +3215,14 @@ evidence about the setup, and forgetting it means repeating it.
     transferred, not retrained on nnU-Net masks, so the gate is weaker for
     nnU-Net than it could be (over-refusal 14 on test); descriptive,
     exploratory, one seed of each model.
+
+    **Volume endpoint row (W2.5 on nnU-Net).** `scripts/volume_endpoint.py`
+    with the four nnU-Net eval dirs appended to
+    `analysis.volume_endpoint.eval_dirs` (existing rows reproduce; replayed
+    Dice matched `per_case_metrics.csv` within 1e-3 on every case).
+    Volume-usable (WT and ET within 25%) test / SSA / PED: nnU-Net **0.815 /
+    0.550 / 0.455** vs `neurovision` 0.804 / 0.533 / 0.414 vs baseline 0.783 /
+    0.583 / 0.465; both-usable 0.804 / 0.500 / 0.162. Under the volume
+    definition the three models are nearly indistinguishable: the volume
+    endpoint is ET-driven and limited by the task, not by the model.
+    `results/volume_endpoint/nnunet_gatea_*`.
