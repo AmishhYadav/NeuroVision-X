@@ -607,6 +607,7 @@ const consoleErrorsBeforeClinicalViewer = consoleErrors.length;
 
 let clinicalViewerJobId = CLINICAL_JOB;
 let clinicalViewerDecision = null;
+let clinicalViewerOverlap = null;
 if (clinicalViewerJobId) {
   // A job id was pinned via the env var - still need its decision for the
   // badge/caution-strip checks below, so look it up rather than guessing.
@@ -614,6 +615,7 @@ if (clinicalViewerJobId) {
     await fetch(`http://localhost:8000/api/clinical/jobs/${clinicalViewerJobId}`)
   ).json();
   clinicalViewerDecision = pinnedJob.gatekeeper_decision?.decision ?? null;
+  clinicalViewerOverlap = pinnedJob.training_overlap ?? null;
 } else {
   // list_clinical_jobs() (app/backend/clinical_jobs.py) already returns
   // newest-first, so the first "done" entry IS the newest done job.
@@ -622,6 +624,7 @@ if (clinicalViewerJobId) {
   if (newestDone) {
     clinicalViewerJobId = newestDone.job_id;
     clinicalViewerDecision = newestDone.gatekeeper_decision?.decision ?? null;
+    clinicalViewerOverlap = newestDone.training_overlap ?? null;
   }
 }
 
@@ -675,6 +678,24 @@ if (!clinicalViewerJobId) {
 
   await send("Page.navigate", { url: `${CLINICAL_URL}?job=${clinicalViewerJobId}` });
   await sleep(2000);
+
+  // --- 0. W6.2 honest label: a training-set patient says so, above the fold --
+  // Only asserted when the live job carries the field; a job that is not a
+  // known training patient must show no banner.
+  const overlapBanner = await js(
+    `(function(){const b=document.querySelector('[data-testid="training-overlap-banner"]');if(!b)return null;const r=b.getBoundingClientRect();return {text:b.textContent,top:r.top,bottom:r.bottom,visible:r.height>0&&r.bottom<=window.innerHeight};})()`,
+  );
+  if (clinicalViewerOverlap) {
+    check(
+      "training-set patient banner is visible without scrolling, with its headline",
+      !!overlapBanner &&
+        overlapBanner.visible &&
+        /Training-set patient — illustration only/.test(overlapBanner.text),
+      JSON.stringify(overlapBanner),
+    );
+  } else {
+    check("no training-set banner on a job without training_overlap", overlapBanner === null);
+  }
 
   // --- 1. Twin button enables once all four volumes + mask have loaded ----
   let twinEnabled = false;

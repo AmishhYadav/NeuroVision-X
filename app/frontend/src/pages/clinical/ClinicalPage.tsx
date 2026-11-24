@@ -10,6 +10,7 @@ import { PipelineStepper } from "./PipelineStepper";
 import { PreviousStudies } from "./PreviousStudies";
 import { RefusalBanner } from "./RefusalBanner";
 import { SeriesMatrix } from "./SeriesMatrix";
+import { TrainingOverlapBanner } from "./TrainingOverlapBanner";
 
 /**
  * Reads `?job=<id>` off the current URL, once, for the initial `jobId`
@@ -133,6 +134,11 @@ export function ClinicalPage() {
     return (
       <AppShell fullHeight toolbar={toolbar}>
         <div className="flex h-full min-h-0 flex-col overflow-y-auto lg:overflow-hidden">
+          {/* Honest label first: above the slim status row (and so above the
+              PROCEED chip), never inside the collapsible details overlay. */}
+          <div className="shrink-0 px-2 pt-2 empty:hidden">
+            <TrainingOverlapBanner job={job} />
+          </div>
           {/* One slim status row instead of the old tall status/stepper/QC
               stack, so the viewer gets nearly the whole height. The pipeline
               and QC detail is still one click away, in an overlay panel. */}
@@ -207,6 +213,7 @@ export function ClinicalPage() {
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
             <div className="flex min-w-0 flex-col gap-6">
+              {job && <TrainingOverlapBanner job={job} />}
               {job ? <ClinicalJobStatus job={job} /> : <ClinicalUploadPanel onJobCreated={setJobId} />}
               {verdictCards}
               {!job && error && <p className="text-xs text-text-secondary">{error}</p>}

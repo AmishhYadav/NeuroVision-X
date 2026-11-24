@@ -60,6 +60,7 @@ debugging on stage.
   (279 s) → segmentation (65 s) → gate → report, DICOM-SEG export.
 - Show the 3D twin (patient-left on screen-right), the report (WT 176.0 mL, right-sided), the
   gatekeeper panel: predicted Dice WT 0.901 / TC 0.895 → **PROCEED**.
+- The amber **"Training-set patient — illustration only"** banner at the top (W6.2, `knowledge/known_training_overlap.yaml`) says it on screen; the REFUSE job (00001) carries it too, as "probably".
 - **Say it:** this study is **a BraTS 2021 training patient** (note 50: UPENN-GBM-00002 =
   `BraTS2021_01202`, train split). It demonstrates the plumbing, not accuracy.
 

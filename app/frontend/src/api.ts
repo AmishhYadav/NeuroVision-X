@@ -716,8 +716,29 @@ export interface ClinicalJob {
   input_qc_post: InputQCReportJson | null;
   preprocess_warnings: string[] | null;
   gatekeeper_decision: GatekeeperDecisionJson | null;
+  /**
+   * `null` when the study is not a known training patient. Optional so an
+   * older backend that does not send the field reads the same as `null`.
+   */
+  training_overlap?: TrainingOverlap | null;
   created_at: number;
   updated_at: number;
+}
+
+/**
+ * Set when the uploaded DICOM study is a patient the deployed model was
+ * TRAINED ON (`knowledge/known_training_overlap.yaml`, matched by the
+ * backend). A PROCEED on such a study shows the pipeline runs on scanner
+ * DICOM, not that it is accurate on unseen data.
+ */
+export interface TrainingOverlap {
+  source_id: string;
+  brats_id: string;
+  split: string;
+  /** `confirmed`: matched by series UID; `probable`: matched by other evidence. */
+  status: "confirmed" | "probable";
+  evidence: string;
+  matched_series: string[];
 }
 
 /**

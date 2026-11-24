@@ -41,7 +41,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import clinical_jobs, inference, jobs
+from . import clinical_jobs, inference, jobs, training_overlap
 from .config import REPO_ROOT, Settings, get_settings
 from .volumes import (
     MODALITIES,
@@ -585,8 +585,18 @@ def _clinical_job_to_json(job: clinical_jobs.ClinicalJob) -> dict[str, Any]:
     `input_qc_post`, `gatekeeper_decision`, ...) is already a plain,
     JSON-serialisable dict or `None`, so no further translation is needed
     here.
+
+    Adds `training_overlap` (W6.2): the registry match for this job's assigned
+    DICOM series (a dict naming the BraTS training case) or `None`. It is
+    computed here, at read time, so a job rehydrated from disk after a
+    restart is flagged without being re-run.
     """
-    return dataclasses.asdict(job)
+    payload = dataclasses.asdict(job)
+    registry = training_overlap.get_overlap_registry(get_settings().training_overlap_registry)
+    payload["training_overlap"] = training_overlap.match_training_overlap(
+        job.ingest_result, registry
+    )
+    return payload
 
 
 @router.post("/clinical/upload", status_code=202)
@@ -625,7 +635,8 @@ def get_clinical_job_detail(job_id: str) -> dict[str, Any]:
     `gatekeeper_decision`, `state` and `error` exactly as
     `clinical_jobs.ClinicalJob` stores them -- everything a refusal-banner UI
     needs to explain a `"refused"` outcome, or a caution/success UI needs for
-    a `"done"` one. A `"refused"` job is served the same way as any other
+    a `"done"` one, plus `training_overlap` (non-null when the study is a
+    known BraTS training patient). A `"refused"` job is served the same way as any other
     (200, full payload): see `clinical_jobs.py`'s module docstring for why
     refusal is a distinct, successful terminal state, never an error.
     """

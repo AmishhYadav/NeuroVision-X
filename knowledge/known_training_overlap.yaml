@@ -1,0 +1,36 @@
+# Studies known to be patients the deployed model TRAINED ON (MasterPlan W6.2).
+#
+# Why this file exists: the two real-DICOM demo studies (TCIA UPENN-GBM) are BraTS 2021
+# training patients (experiments.md note 50, found by whole-brain image correlation; the
+# official BraTS 2021 ID mapping does not cover UPENN-GBM). A PROCEED on such a study shows
+# that the pipeline RUNS on scanner DICOM; it is no evidence of accuracy on unseen data.
+# The clinical UI must say so on screen whenever one of these studies is shown.
+#
+# Matching: a clinical job matches an entry if ANY SeriesInstanceUID the ingest step
+# assigned to a modality role is listed here. Series UIDs are globally unique DICOM
+# identifiers, so a match is exact, never a guess.
+#
+# status: "confirmed" (unambiguous image match) or "probable" (best match on both tests,
+# weaker separation). Never add an entry without evidence in experiments.md.
+
+entries:
+  - source_id: UPENN-GBM-00002
+    brats_id: BraTS2021_01202
+    split: train
+    status: confirmed
+    evidence: "experiments.md note 50 (image r 0.700 vs runner-up 0.421)"
+    series_instance_uids:
+      - 1.3.6.1.4.1.14519.5.2.1.74959210626421264963078150067043317963
+      - 1.3.6.1.4.1.14519.5.2.1.308898184688192356793390586849973896265
+      - 1.3.6.1.4.1.14519.5.2.1.53683958021129698279466472406479062139
+      - 1.3.6.1.4.1.14519.5.2.1.227112993445338100219795148128649722123
+  - source_id: UPENN-GBM-00001
+    brats_id: BraTS2021_01034
+    split: train
+    status: probable
+    evidence: "experiments.md note 50 (image r 0.471 vs runner-up 0.317; 3 mm FLAIR)"
+    series_instance_uids:
+      - 1.3.6.1.4.1.14519.5.2.1.72111832425535404540752357374191117693
+      - 1.3.6.1.4.1.14519.5.2.1.337491152254065288399657726162931889194
+      - 1.3.6.1.4.1.14519.5.2.1.339743325012852358051228621010996392201
+      - 1.3.6.1.4.1.14519.5.2.1.179890292978753819584197741746287159209

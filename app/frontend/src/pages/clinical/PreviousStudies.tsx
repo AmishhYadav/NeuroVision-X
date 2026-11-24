@@ -95,7 +95,17 @@ export function PreviousStudies({ onOpen }: PreviousStudiesProps) {
                 <span className={`font-heading text-xs font-semibold ${STATE_TAG_CLASS[job.state]}`}>
                   {STATE_LABEL[job.state]}
                 </span>
-                <span className="truncate text-text-secondary">{job.stage}</span>
+                <span className="flex min-w-0 items-center gap-2 text-text-secondary">
+                  <span className="truncate">{job.stage}</span>
+                  {job.training_overlap && (
+                    <span
+                      data-testid="training-overlap-tag"
+                      className="chip shrink-0 border-gate-caution/50 font-sans text-gate-caution"
+                    >
+                      training patient
+                    </span>
+                  )}
+                </span>
                 <span
                   className={`hidden truncate sm:block ${
                     job.gatekeeper_decision

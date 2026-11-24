@@ -10,7 +10,7 @@ precomputed cases even on a machine with no checkpoint present.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -57,6 +57,10 @@ class Settings:
             `prep_dir`, for a ground-truth report) -- see the "Three eval
             directories differ only by suffix" note in CLAUDE.md, which this
             guard exists to prevent from happening to reports too.
+        training_overlap_registry: YAML listing DICOM series UIDs of studies
+            that are known BraTS training patients (`training_overlap.py`).
+            Defaults via `field` so existing direct `Settings(...)` calls in
+            tests keep working.
     """
 
     prep_dir: Path
@@ -67,6 +71,11 @@ class Settings:
     max_cases: int
     demo_overlap: float
     report_dir: Path
+    training_overlap_registry: Path = field(
+        default_factory=lambda: _path_env(
+            "NEUROVISION_TRAINING_OVERLAP", "knowledge/known_training_overlap.yaml"
+        )
+    )
 
     @property
     def predictions_dir(self) -> Path:
@@ -97,6 +106,9 @@ def get_settings() -> Settings:
         max_cases=int(os.environ.get("NVX_MAX_CASES", "200")),
         demo_overlap=float(os.environ.get("NVX_DEMO_OVERLAP", "0.25")),
         report_dir=_path_env("NVX_REPORT_DIR", "outputs/report_baseline/reports"),
+        training_overlap_registry=_path_env(
+            "NEUROVISION_TRAINING_OVERLAP", "knowledge/known_training_overlap.yaml"
+        ),
     )
     settings.cache_dir.mkdir(parents=True, exist_ok=True)
     # Unlike cache_dir, report_dir is NOT created here: a demo with no reports
