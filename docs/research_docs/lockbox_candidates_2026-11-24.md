@@ -100,3 +100,33 @@ UCSF-PDGM non-BraTS cases are the best true adult-glioma lockbox if the crosswal
   conformal violations; the protocol must state that before registration (MasterPlan §B3 rule 6).
 - **Lockbox rule:** nothing in this file is a result; no case has been downloaded or looked at.
   The choice between candidates is made on these access/label/overlap facts only.
+
+## Label definition check (2026-11-25, text only — no image or label opened)
+
+**BraTS-Africa, 2023 vs 2024.** Source: Adewole et al., arXiv 2305.19369 (the BraTS-Africa 2023 challenge
+paper; PDF text read directly). It states the task is "to automatically segment intracranial gliomas into
+three distinct classes using a 3-label system": ET (enhancing tumour), NETC (non-enhancing tumour core,
+"includes necrosis, cystic change, calcification"), and the surrounding non-enhancing FLAIR hyperintensity
+(SNFH), generated with "the BraTS tumor annotation protocol" from nnU-Net pre-segmentations trained on BraTS
+2021, then reviewed by neuroradiologists. No resection-cavity label (pre-operative cohort). That is the
+definition our 60 SSA cases already use (TC = ET + NETC, WT = TC + SNFH).
+
+The "2024 BraTS challenge" wording in Musah et al. (arXiv 2508.10905) names only the evaluated regions
+(TC, ET, WT) and gives no new definition. It is a modelling paper on the same data, not a re-annotation.
+TCIA ships all 146 cases in one package labelled "BraTS 2023 Challenge", so the 35 extra gliomas come
+in the same release and format as our 60. **Verdict: same label definition. The SSA 2023-vs-2024 question
+is closed on the text.** Still to check per case after download: the label values are exactly {0, 1, 2, 3},
+and every case among the 35 has a non-empty mask (20 of the 95 were the withheld 2023 test set, and TCIA
+says labels exist for all 146).
+
+**UCSF-PDGM.** TCIA says the segmentations were made for BraTS 2021 by the same pipeline (ensemble
+pre-segmentation, manual correction, two neuroradiologists). These are BraTS 2021 conventions: labels 1
+(NCR/NET), 2 (ED), 4 (ET), the same raw format as our BraTS 2021 data before remapping, so the existing
+preprocessing applies. Still to check per case after download: label values {0, 1, 2, 4} (not 3), and
+that the 199 never-BraTS patients carry segmentations at all. The TCIA text implies they do but does not
+list them per case.
+
+**Open, needs the author:** the download decision (BraTS-Africa 1.6 GB fits; UCSF-PDGM's 235 clean
+patients ≈ 66 GB at ~0.28 GB each, against the current free disk). The per-case checks above are the first
+thing run on the downloaded labels, before any image is read. They are label-format checks, not results.
+The lockbox rule still holds: no model output on these cases before W3.1 registration.
