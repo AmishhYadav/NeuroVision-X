@@ -1398,3 +1398,39 @@ severity_ladder:
       backend: nnunet
       reference_metrics: results/conformal/nnunet_gatea/evals/eval_test/per_case_metrics.csv
       conformal_fit: results/conformal/nnunet_gatea/conformal_nnunet/fit.json
+
+severity_ladder_analysis:
+  # MasterPlan W3.2 analysis: scripts/severity_ladder_analysis.py over the main-run shard outputs.
+  # Endpoints FIXED by docs/research_docs/preregistrations/preregistration_severity_ladder.md
+  # (Amendments 1-3). CPU only; nothing is fitted -- every threshold, gate cut and OOD cut below is
+  # read frozen from disk.
+  out_dir: outputs/severity_ladder_analysis
+  # Shard roots (<root>/<model>/<kind>/level<k>/). The tracked mirror has no DONE markers
+  # (sync_results copies no extensionless files), so require_done is false here.
+  shard_roots:
+    - results/kaggle_kernels/w32-main/out-inhouse/severity_ladder
+    - results/kaggle_kernels/w32-main/out-nnunet-s1/severity_ladder
+  require_done: false
+  expected_cases: 189              # every shard must hold exactly this many cases
+  primary_alpha: 0.10
+  regions: [WT, TC]                # primary + secondary families
+  alphas: [0.05, 0.10, 0.20]       # descriptive realised risk, v1 CRC
+  n_boot: 10000
+  seed: 42
+  # Frozen v1 CRC fits (primary) and v2 fits (descriptive, beside v1).
+  v1_fits:
+    neurovision: ${analysis.severity_ladder.models.neurovision.conformal_fit}
+    baseline_unet3d: ${analysis.severity_ladder.models.baseline_unet3d.conformal_fit}
+    nnunet_gatea: ${analysis.severity_ladder.models.nnunet_gatea.conformal_fit}
+  v2_fits:
+    # model -> (fits.csv, value of its `model` column)
+    neurovision: {csv: results/conformal_v2/fits.csv, model_key: neurovision}
+    baseline_unet3d: {csv: results/conformal_v2/fits.csv, model_key: baseline_unet3d}
+    nnunet_gatea: {csv: results/conformal_v2_nnunet/fits.csv, model_key: nnunet_gatea}
+  v2_grid: extended
+  v2_empty_by_region: {ET: zero, TC: exclude, WT: exclude}
+  # Gate: deployed frozen thresholds via gatekeeper.load_thresholds(cfg); curated input-QC stand-in.
+  gate_regions: ${clinical.gatekeeper.regions}
+  stand_in_age_years: 40           # same as analysis.error_budget's test cohort
+  # OOD: frozen model and cuts from the P1.4 run (fitted on clean train/val only).
+  ood_dir: outputs/ood
