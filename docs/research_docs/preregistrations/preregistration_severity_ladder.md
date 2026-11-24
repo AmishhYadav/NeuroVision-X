@@ -171,6 +171,37 @@ looked at for effects and are not reused.
 timings were measured at the wrong ROI and are re-measured by a second, in-house-only probe (5 cases, all
 conditions) before the main run. Projection stays below 20 GPU-h unless that probe says otherwise; no cut yet.
 
+## Amendment 3 — 2026-11-24, after both probes, before the main run and before any corrupted number is read
+
+**Engineering change, no design change.** The driver now overlaps CPU work (corrupting and writing the next
+chunk, scoring the last one) with GPU inference (`pipeline_cpu: true`, commit `5962a32`). Outputs are
+bit-identical to the serial path (tested); only wall time moves. `s_per_case` is now shard wall time / n.
+
+**In-house timing, probe v3** (`neurovision-w32-probe-v3`, 0.09 GPU-h, `5962a32`; 5 cases × {none, gamma L2,
+motion L2}; bridges PASS ≤ 0.00003): `neurovision` 7.4–8.8 s/case, `baseline_unet3d` 3.0–4.4 s/case (serial
+probe v2: 11.4–14.1 and 5.2–8.4). Full design, 189 × 21 conditions: in-house ≈ 12.2 GPU-h.
+
+**nnU-Net timing, confirmed on the same route** (W2.6 export, `neurovision-w26-nnunet-probs`, `ca6c9db`, TTA
+on, `--save_probabilities`, 25-case chunks — the ladder's own call): the prediction call runs at 9.1 s/case on
+test and 8.9 on PED; the whole evaluation including input writing, probability I/O and scoring runs at 14.3
+s/case. The ladder's nnU-Net path does the same input writing and probability reading, so its rate lies in
+9.1–14.3 s/case → 10.0–15.8 GPU-h for 189 × 21.
+
+**Projection and the registered cut.** Full design 22–28 GPU-h > 20, so the cut order applies:
+
+1. **Cut 1 — drop level 1 of every kind** (21 → 16 conditions: level 0 plus levels 2–4 of five kinds).
+   Projection 16.9–21.3 GPU-h. The upper end still exceeds 20, so:
+2. **Cut 2 — drop `baseline_unet3d` from `bias` and `gamma`** (−6 baseline conditions, ≈ 1.1 GPU-h).
+   Projection **15.8–20.2 GPU-h**; at the central rate (≈ 12 s/case for nnU-Net) ≈ 18.
+
+The cut is decided on the conservative bound, before launch, from cost alone; no corrupted effect from any
+probe was looked at. Consequences, stated now: every trend test runs on four points (levels 0, 2, 3, 4)
+instead of five; the `baseline_unet3d` rows for `bias` and `gamma` are absent rather than empty, and the
+model-ordering contrasts that involve the baseline are reported on `thick_slice`, `rician` and `motion` only.
+Kinds, remaining levels, seeds, thresholds, α, bars and the trend test are otherwise unchanged. If the first
+nnU-Net shard of the main run measures a rate that would push the total above 28 GPU-h (the weekly cap), the
+run pauses between shards and is resumed the following week; no further condition is dropped.
+
 ---
 
 ## Result
