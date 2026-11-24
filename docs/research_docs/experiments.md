@@ -3116,3 +3116,49 @@ evidence about the setup, and forgetting it means repeating it.
     on disk (raw data deleted 2026-08-19; the FeTS mapping is login-gated, W2.2),
     so for BraTS the image scan is the whole evidence: zero cases cross splits at
     anything near duplicate similarity.
+
+67. **W2.6 LOCAL RECALIBRATION, THREE MODELS SIDE BY SIDE -- PED TUMOUR
+    CORE IS UNRESTORABLE FOR ALL THREE; nnU-Net NEEDS LARGER LOCAL SETS AT
+    α 0.05 (2026-11-24, MasterPlan W2.6).** COUNTERFACTUAL, never external
+    validation. The nnU-Net sweep was first run with note 62
+    (`results/local_recalibration_nnunet/`, 2026-11-23) but only its floor
+    was quoted. Re-run today with note 62's command at `b1f5873`:
+    `summary.csv`, `floors.csv` and `splits.csv.gz` reproduce byte-identically
+    (only `run_meta.json`'s SHA and timestamp move). Protocol unchanged
+    (`preregistration_conformal.md` Amendment 1: WT/TC, α {0.05, 0.10,
+    0.20}, k {5, 10, 15, 20, 30, half}, 1,000 splits, seed 42). This note
+    adds the cross-model comparison against the in-house sweep
+    (`results/local_recalibration/`). It is a replication on a third model,
+    not a new registered test. Split sequences pair across models (fresh
+    generator per (model, cohort), same seed).
+
+    **Smallest local calibration set that can work (`min_feasible_k`):**
+
+    | cohort · region · α | baseline_unet3d | neurovision | nnU-Net |
+    |---|---|---|---|
+    | test · TC · 0.05 | 23 | 27 | 38 |
+    | SSA · WT · 0.05 | 20 | 22 | 30 |
+    | SSA · TC · 0.05 | 28 | 39 | never |
+    | SSA · TC · 0.10 | 11 | 13 | 19 |
+    | PED · TC · every α | never | never | never |
+
+    (all other cells: within one case across models.)
+
+    **Verdicts at k = half the cohort:** nnU-Net is RESTORED in 14 of 18
+    cells, NOT_RESTORED in 2 (SSA WT α 0.05: P(violation) 0.54; SSA TC α 0.05:
+    feasible in 10% of splits, P(violation) 1.00) and INFEASIBLE in 3 (PED TC,
+    every α). `neurovision`: 14 RESTORED, 1 NOT_RESTORED (SSA TC α 0.05), 3
+    INFEASIBLE. Baseline: 16 RESTORED, 1 NOT_RESTORED, 2 INFEASIBLE (it alone
+    is feasible at PED TC α 0.20, not restored).
+
+    **Reading.** (i) The PED tumour-core failure is a property of the label
+    definition, not the model: three different architectures, none has a
+    threshold that brings its own PED TC risk under even α 0.20 (nnU-Net
+    floor R̂(τ_min) 0.486, note 62). This turns C30's floor argument into a
+    measured result. (ii) The stronger model is *harder* to recalibrate
+    locally at α 0.05 (more local cases needed in 4 cells, never fewer). Why
+    is not measured here; the feasibility floor depends on the cohort's
+    smallest achievable risk and on how many cases sit at it, not on mean
+    Dice.
+    A stronger model shrinks the shifted damage (C30) but does not make local
+    repair cheaper. Exploratory reading of a descriptive table; no test.

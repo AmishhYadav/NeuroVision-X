@@ -1,5 +1,5 @@
 {
-  "git_sha": "d44c006ec298b81f5de40658fb6b6f3ae4335090",
+  "git_sha": "b1f5873d52ee1f461f361b48a2005a6a3f1be807",
   "seed": 42,
   "n_splits": 1000,
   "config": {
@@ -34,7 +34,7 @@
       }
     }
   },
-  "timestamp_utc": "2026-11-23T15:22:53.629151+00:00",
+  "timestamp_utc": "2026-11-24T01:44:47.872298+00:00",
   "status_label": "COUNTERFACTUAL -- what a new site would need to restore the bound; never external validation",
   "control_failed": false
 }
