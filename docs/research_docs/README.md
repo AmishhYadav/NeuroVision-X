@@ -5,16 +5,15 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
 
 ## Read in this order
 
-0. **`status_2026-09-27.md`** — start here when picking the project up cold: what is done,
-   what is left (with the exact command to restart each open thread), and why the project exists.
+0. **`status_2026-11-15.md`** — start here when picking the project up cold; the live plan is
+   `docs/research/MasterPlan.md`.
 1. **`claims_and_evidence.md`** — the gate. Every claim the paper may make, with the artifact
    behind it. A number not in this table does not go in the paper.
 2. **`experiments.md`** — every run and every measured result (numbered notes). The source of truth
    for any number `claims_and_evidence.md` cites.
 2b. **`project_history.md`** — the same project told in time order, with every GPU run and every
    decision; read it to get the whole journey back.
-3. **`project_review_2026-09-24.md`** — outside-view review; why the thesis was rewritten for
-   Milestone 5.
+3. **`project_review_2026-11-15.md`** — the owner's review; why the plan and thesis changed.
 4. **`related_work.md`** — where the conformal and refusal claims sit, and what novelty the paper
    must *not* claim.
 
@@ -22,13 +21,13 @@ from. Planning and operations docs stayed in `docs/` and `docs/research/` (liste
 
 | File | What it is | Paper section it feeds |
 |---|---|---|
-| `status_2026-09-27.md` | Handoff: done / left / how to restart / why / end result | — (orientation) |
+| `status_2026-11-15.md` | Short status at the 2026-11-15 replan | — (orientation) |
 | `project_history.md` | The whole project in time order: every build, GPU run, result, dead claim and major decision since 2026-07-31 | Introduction, Discussion (the story arc), Methods (why the schedule is what it is) |
 | `claims_and_evidence.md` | Claim table (C1…C25), each tied to an artifact | All — the gate |
 | `experiments.md` | Run log + numbered result notes | Results |
 | `contribution.md` | The original pre-registered claim, with a status update on what survived | Introduction, Discussion |
 | `related_work.md` | Nearest prior work to C14 and the refusal gate | Related work |
-| `project_review_2026-09-24.md` | Outside-view critique of the whole project | Discussion, Limitations |
+| `project_review_2026-11-15.md` | The owner's review of science, process, paper and report | Discussion, Limitations |
 | `model_card.md` | Model card for the deployed `neurovision` seed 42 | Methods, appendix |
 | `reproducibility.md` | Seeds, versions, hardware, runtimes, data provenance, rebuild commands | Methods, reproducibility statement |
 | `phase0_atlas_findings.md` | Measured SRI24 atlas properties (incl. the mirrored-atlas trap) | Methods (anatomy/atlas) |
@@ -60,7 +59,6 @@ Some pre-registrations cite these, so they are listed here too:
 - `docs/research/MasterPlan.md` — the active plan and board (not paper content); it was written from
   `project_review_2026-11-15.md` in this folder
 - `docs/research/gpu_request.md` — the college GPU request draft
-- `docs/archive/execution_plan.md`, `docs/archive/interpretable_pipeline_plan.md` — earlier plans
-- `docs/archive/project_state.md` — Milestone 1–3 build record (useful for the Methods section)
+- Earlier plans and the Milestone 1–3 build record (`docs/archive/`) were removed 2026-11-24; read any of them with `git show c1f0ffd:docs/archive/<file>`
 - `docs/data_manifests/` — SHA-256 manifests for the SSA/PED raw data
 - Result CSVs and figures live under `outputs/` (gitignored): `outputs/paper/`, `outputs/figures/`

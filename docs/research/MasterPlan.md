@@ -3,8 +3,8 @@
 **Written:** 2026-11-15 · **Status:** ACTIVE — the only live plan · **Horizon:** paper submission
 2027-04-15, capstone June 2027
 
-**Supersedes** `docs/archive/master_plan_m4_m5.md` (the Milestone 4–5 plan, kept unchanged as the
-historical record). **Why it exists:** `docs/research_docs/project_review_2026-11-15.md` — read its
+**Supersedes** the Milestone 4–5 plan (`docs/archive/master_plan_m4_m5.md`, removed from the tree
+2026-11-24; `git show c1f0ffd:docs/archive/master_plan_m4_m5.md`). **Why it exists:** `docs/research_docs/project_review_2026-11-15.md` — read its
 §A0 first. Authority on results stays with `docs/research_docs/experiments.md`; the gate on what may
 be written stays with `docs/research_docs/claims_and_evidence.md`.
 

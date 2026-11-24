@@ -10,7 +10,7 @@
 # places, the string carries a few words of context so the match is unambiguous (only
 # the first number inside `text` is compared). `occurrences` is the number of times the
 # string appeared when this file was generated, so a later edit that deletes one is caught.
-# Numbers that could not be registered are listed in number_registry_untraceable.md.
+# Numbers that could not be registered were listed in number_registry_untraceable.md (removed 2026-11-24; git show c1f0ffd:docs/research_docs/semester_report/number_registry_untraceable.md).
 numbers:
   # ---- Abstract, 6.1, Table 6: headline gain, replication, noise floors (C1)
   - {"id": "c1_et_gain", "text": "+0.0267", "claim": "C1", "file": "results/ref_et/ref_et_comparisons.csv", "where": {"a": "neurovision", "b": "baseline_unet3d", "subset": "all"}, "column": "mean_diff", "decimals": 4, "sign": true, "occurrences": 6}
