@@ -1,0 +1,6 @@
+kind,models_measured,graded_regions,verdict
+bias,2,"TC,WT",GRADED_ON_MEASURED_MODELS_ONLY
+gamma,2,"TC,WT",GRADED_ON_MEASURED_MODELS_ONLY
+motion,3,WT,GRADED
+rician,3,WT,GRADED
+thick_slice,3,,NOT GRADED
