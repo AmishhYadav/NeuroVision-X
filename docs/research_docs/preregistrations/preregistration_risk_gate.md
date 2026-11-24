@@ -69,6 +69,17 @@ interval, silent failure (accepted and unusable / n), over-refusal (refused and 
 accepted set (`results/error_budget/per_case_*.csv`, column `accepted`) scored the same way:
 coverage and selective risk on test, SSA, PED, beside NV-ENT and NV-ENSPD.
 
+**Validity note (added 2026-11-24, before any λ̂ or validation signal value exists).** LTT's
+theorem assumes a candidate grid fixed before the calibration data. Here λ_c are quantiles of the
+calibration **scores** (label-free). Conditional on those scores, the unusable indicators of the
+accepted cases are independent Bernoulli draws, and the binomial p-value is valid (conservatively,
+by Hoeffding's 1956 Poisson-binomial bound in the lower tail where rejections happen) for the null
+"mean conditional risk of the accepted calibration score values > β". The guarantee is therefore
+about the calibration score sample, and transfers to the population selective risk at λ̂ only up to
+the sampling error of the score quantiles (O(1/√n)). This is stated as a limitation, not fixed: a
+label-independent fixed grid would need a second split and halves the power (β = 0.05 becomes
+infeasible at n ≈ 94). Frozen application (E2) measures the realised risk directly either way.
+
 ## Endpoints and decision rules
 
 **E1 — calibration feasibility** per (pipeline, β): feasible / infeasible, λ̂, target coverage, and
