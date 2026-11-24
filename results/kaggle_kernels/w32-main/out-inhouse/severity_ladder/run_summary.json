@@ -1,0 +1,30 @@
+{
+  "s_per_case": {
+    "neurovision/none/level0": 6.62784525515873,
+    "baseline_unet3d/none/level0": 2.6777338564656086,
+    "neurovision/thick_slice/level2": 6.5820033237619056,
+    "baseline_unet3d/thick_slice/level2": 2.905592412544975,
+    "neurovision/thick_slice/level3": 6.594932480666666,
+    "baseline_unet3d/thick_slice/level3": 2.801724438068781,
+    "neurovision/thick_slice/level4": 6.583858120264546,
+    "baseline_unet3d/thick_slice/level4": 2.835917921396825,
+    "neurovision/rician/level2": 6.6074735866084655,
+    "baseline_unet3d/rician/level2": 3.0333721867089904,
+    "neurovision/rician/level3": 6.58632830673545,
+    "baseline_unet3d/rician/level3": 3.035513469010583,
+    "neurovision/rician/level4": 6.615342635523803,
+    "baseline_unet3d/rician/level4": 3.101091826703706,
+    "neurovision/bias/level2": 6.585340041793657,
+    "neurovision/bias/level3": 6.600221507529096,
+    "neurovision/bias/level4": 6.641896855656096,
+    "neurovision/gamma/level2": 6.592295715608449,
+    "neurovision/gamma/level3": 6.5772596846719455,
+    "neurovision/gamma/level4": 6.580706694412709,
+    "neurovision/motion/level2": 6.677259887846564,
+    "baseline_unet3d/motion/level2": 3.8487138257989413,
+    "neurovision/motion/level3": 6.740316542359791,
+    "baseline_unet3d/motion/level3": 3.9980140733862335,
+    "neurovision/motion/level4": 6.742812120021164,
+    "baseline_unet3d/motion/level4": 4.142296183814805
+  }
+}
