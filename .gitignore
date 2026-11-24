@@ -52,3 +52,5 @@ brag-output/
 # screenshots; both are regenerated, never source.
 /brag-output-*/
 app/frontend/e2e/out/
+# Office lock files
+~$*

@@ -2,9 +2,6 @@
 
 | Need | File |
 |---|---|
-| Understand the whole project for a demo or viva | `demo_day_guide.md` |
-| What one code file / function does | `backend_code_guide.md` |
-| Run the demo | `demo_runbook.md` |
 | Train on Kaggle / any GPU | `kaggle_workflow.md`, `gpu_session_checklist.md` |
 | The active plan and queue | `research/MasterPlan.md` (§B5; the old plan is `archive/master_plan_m4_m5.md`) · GPU request draft: `research/gpu_request.md` |
 | Results, claims, pre-registrations, reproducibility — everything the paper is written from | `research_docs/` (index: `research_docs/README.md`) |

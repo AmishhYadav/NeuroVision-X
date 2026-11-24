@@ -60,7 +60,6 @@ Some pre-registrations cite these, so they are listed here too:
 - `docs/research/MasterPlan.md` — the active plan and board (not paper content); it was written from
   `project_review_2026-11-15.md` in this folder
 - `docs/research/gpu_request.md` — the college GPU request draft
-- `docs/demo_runbook.md` — the semester demo script and day-before checks
 - `docs/archive/execution_plan.md`, `docs/archive/interpretable_pipeline_plan.md` — earlier plans
 - `docs/archive/project_state.md` — Milestone 1–3 build record (useful for the Methods section)
 - `docs/data_manifests/` — SHA-256 manifests for the SSA/PED raw data
