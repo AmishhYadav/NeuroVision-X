@@ -228,7 +228,7 @@ condition (trap 9), results pulled and synced to `results/` the same day.
 | 2026-12-16 | W6.2 `[~]` 2026-11-24 (training-patient banner + list tag, from a series-UID registry; both demo jobs flagged; guarantee copy checked vs W0.3, no change needed; E2E assertion added, run with the live backend at the W1.8 rehearsal) · W2.6 `[~]` 2026-11-24 (probability export done, bridge identical on 4 splits; local recalibration note 67; error budget note 68, C33; W2.1 / W2.3 / W2.4 nnU-Net rows wait on registration) · W3.2 GPU `[ ]` · W5.3 `[ ]` |
 | 2027-01-06 | W3.3 `[ ]` · W3.4 `[ ]` · W3.1 registration `[ ]` |
 | 2027-01-13 | W3.1 single pass `[ ]` · W3.5 `[ ]` · W5.4 methods + results |
-| 2027-02-01 | W4 stretch decision · W5.4 · W5.5 · W6.3 if triggered · W6.4 |
+| 2027-02-01 | W4 stretch decision · W5.4 · W5.5 · W6.3 if triggered · W6.4 `[~]` (2026-11-24 survey, nothing deleted: `outputs/` 80 GB is almost all live logits; the 87 `ambiguity_*` dirs total 1.9 MB (already reclaimed); `kaggle_kernels/d3-*` 5.8 GB hold the only copies of the four D3 `last.pt` — keep; `brag-output-2026-10-09-082121` 84 MB in repo root is the one safe removal (author OK needed). ≥ 100 GiB free is not reachable from regenerable caches; the lockbox fits anyway if only the ~108 non-BraTS UCSF-PDGM subjects (~30 GB) are fetched) |
 | 2027-02-15 | **Full draft** · W5.6 round 1 · W7.1–W7.2 |
 | 2027-03 | W5.6 round 2 · W5.7 · W7.4–W7.6 |
 | 2027-04-15 | **W5.8 submit; D-B, D-C** |
