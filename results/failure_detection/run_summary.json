@@ -1,0 +1,32 @@
+{
+  "cohorts": {
+    "test": {
+      "n_cases": 189,
+      "n_replaced_inf_ENT": 0,
+      "n_replaced_inf_ENS_ENT": 0,
+      "n_unusable": {
+        "T-Dice": 12,
+        "T-Vol": 37
+      }
+    },
+    "ssa": {
+      "n_cases": 60,
+      "n_replaced_inf_ENT": 1,
+      "n_replaced_inf_ENS_ENT": 1,
+      "n_unusable": {
+        "T-Dice": 12,
+        "T-Vol": 28
+      }
+    },
+    "ped": {
+      "n_cases": 99,
+      "n_replaced_inf_ENT": 1,
+      "n_replaced_inf_ENS_ENT": 1,
+      "n_unusable": {
+        "T-Dice": 72,
+        "T-Vol": 58
+      }
+    }
+  },
+  "n_cells_not_estimable": 0
+}

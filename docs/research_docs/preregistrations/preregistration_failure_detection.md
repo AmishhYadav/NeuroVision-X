@@ -129,3 +129,9 @@ per-case tables.
 
 *(To be completed after the run. Nothing above this line may be edited once the first ENS-PD,
 ENS-ENT or T-Vol detection number exists.)*
+
+**Run 2026-11-24** at `0ff76eb` (`results/failure_detection/`; full record `experiments.md` note 70).
+All 6 cells estimable. Family of 24 vs ENT, Holm: **BETTER 3** (PED T-Dice: QC +0.244, ENS-PD
++0.199, ENS-ENT +0.090), **WORSE 3** (OOD: test T-Dice −0.341, SSA T-Dice −0.333, PED T-Vol
+−0.235), **INCONCLUSIVE 18**. Predictions: 1 met in direction, not resolved (+0.051); 2 met; 3 not
+met (OOD 0.600 on PED vs 0.565 on test).

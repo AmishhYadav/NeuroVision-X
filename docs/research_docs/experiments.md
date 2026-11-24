@@ -3341,3 +3341,64 @@ evidence about the setup, and forgetting it means repeating it.
     is tight against a fixed-pool re-split. Under shift, the stronger model
     does **not** violate fewer cells; earlier wording that it did rests on
     the v1 ceiling. C14 and C30 are amended.
+
+70. **W2.3 CASE-LEVEL FAILURE DETECTION -- NO SIGNAL WINS EVERYWHERE: THE
+    BEST DETECTOR CHANGES WITH THE COHORT. ON PED, SegQC AND ENSEMBLE
+    DISAGREEMENT BEAT ENTROPY (HOLM-SIGNIFICANT); THE OOD SCORE IS WORSE
+    THAN ENTROPY IN THREE CELLS; EVERYTHING ELSE IS UNRESOLVED (2026-11-24,
+    MasterPlan W2.3).** Registered: `preregistrations/preregistration_failure_detection.md`
+    (Zenodo DOI 10.5281/zenodo.24491280), analysis family 3 of 6.
+
+    **Run.** `scripts/failure_detection.py device=cpu` at `0ff76eb`, exit 0,
+    16 min (replays of the three `neurovision` members on 348 cases).
+    `results/failure_detection/`. All 6 (cohort, target) cells estimable.
+    Empty-foreground cases ranked +∞ for ENT / ENS-ENT: 0 test, 1 SSA, 1 PED.
+    Hand check: test AUROCs (ENT 0.9058, ENS-PD 0.9567, ENS-ENT 0.9350) and
+    PED ENS-PD (0.7876) recomputed from `signals_*.csv` and
+    `results/error_budget/per_case_*.csv` with scipy, identical.
+
+    **AUROC per signal** (higher = better detector of the unusable mask):
+
+    | cohort (n, unusable T-Dice / T-Vol) | target | ENT | QC | ENS-PD | ENS-ENT | OOD |
+    |---|---|---|---|---|---|---|
+    | test (189, 12 / 37) | T-Dice | 0.906 | 0.917 | **0.957** | 0.935 | 0.565 |
+    | | T-Vol | 0.748 | 0.735 | **0.798** | 0.782 | 0.659 |
+    | SSA (60, 12 / 28) | T-Dice | **0.922** | 0.722 | 0.721 | 0.880 | 0.589 |
+    | | T-Vol | **0.762** | 0.578 | 0.642 | 0.758 | 0.553 |
+    | PED (99, 72 / 58) | T-Dice | 0.589 | **0.833** | 0.788 | 0.678 | 0.600 |
+    | | T-Vol | 0.801 | 0.703 | 0.797 | **0.831** | 0.566 |
+
+    AURC beside oracle and random: `results/failure_detection/metrics.csv`.
+
+    **Family (24 contrasts vs ENT, one Holm, α 0.05):** **BETTER 3** -- PED
+    T-Dice: QC +0.244 [0.125, 0.371], ENS-PD +0.199 [0.099, 0.306], ENS-ENT
+    +0.090 [0.035, 0.149] (p_holm 0.034). **WORSE 3** -- OOD on test T-Dice
+    −0.341, SSA T-Dice −0.333, PED T-Vol −0.235. **INCONCLUSIVE 18.** Two
+    of these are large and unresolved, not "equal": SSA T-Dice QC −0.200
+    (p_holm 0.12) and ENS-PD −0.201 (p_holm 0.11).
+
+    **Does the ensemble add information?** ENS-ENT re-expresses entropy
+    (Spearman with ENT 0.96 / 0.94 / 0.85 on test / SSA / PED). ENS-PD is a
+    different signal (0.63 / 0.51 / 0.66).
+
+    **Predictions (registered, directional):**
+    1. Test T-Dice, ENS-PD ≥ ENT -- **met in direction** (+0.051), **not
+       resolved** (CI −0.004 to 0.108).
+    2. OOD worst in distribution, not better than ENT on SSA -- **met**
+       (lowest AUROC on both test targets; WORSE on SSA T-Dice).
+    3. Every signal lower on PED than on test (T-Dice) -- **not met**: 4 of
+       5; OOD is 0.600 on PED vs 0.565 on test (both near chance).
+
+    **Reading.** The ranking does not survive the shift: best on test is
+    ensemble disagreement, on SSA plain entropy, on PED the trained QC model.
+    Where the label definition changes (PED), entropy is near chance (0.59)
+    -- the model is confidently wrong -- and the signals that look at the
+    mask's shape (QC's predicted Dice, member disagreement) see it. On SSA
+    the opposite tendency (QC and ENS-PD −0.20 vs entropy) is not resolved at
+    n = 60. The OOD score is a cohort detector, not a mask detector (as
+    note 56 said; now Holm-significant in three cells). For the gate (W2.4):
+    no single signal can be recommended for every cohort; Gate C (note 52)
+    is not re-tested here, its per-region result stands beside this.
+    Caveats: one model (`neurovision`); the three members share a recipe, so
+    ENS-PD is a narrow ensemble; SegQC was trained on val masks of this same
+    model; descriptive AURC is outside the family.
