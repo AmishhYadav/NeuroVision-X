@@ -3105,6 +3105,10 @@ evidence about the setup, and forgetting it means repeating it.
     twice (or re-annotated), not of two patients; BraTS 2021 pairs never exceed
     0.775. **Author eyeball pending** (open the two FLAIRs side by
     side). Treated as a leak until ruled out.
+    **2026-11-24, author eyeball done:** FLAIR and T1ce in three planes at identical
+    slice coordinates, beside an unrelated PED control — "very similar with very minor
+    differences". Recorded as the same patient: a confirmed train/test leak in both PED folds.
+    The sensitivity rows above (both pairs out) are the ones to quote; no verdict moves.
 
     **Sensitivity (both PED pairs out of every table they touch).** D2 family
     (`analysis=d2_pooled`, 00121 and 00143 out of the held-out half): PED TC
