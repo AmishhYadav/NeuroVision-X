@@ -1320,8 +1320,11 @@ severity_ladder:
   # Protocol's cost-cut order (only via a dated amendment): drop level 1 of every kind
   # (skip_levels: [1]), then drop baseline_unet3d from bias and gamma
   # (skip_model_kinds: {baseline_unet3d: [bias, gamma]}). Seeds do not move when a level is skipped.
-  skip_levels: []
-  skip_model_kinds: {}
+  # Both cuts APPLIED by Amendment 3 (2026-11-24, before the main run): projection 22-28 GPU-h
+  # full -> 15.8-20.2 after cuts 1 and 2.
+  skip_levels: [1]
+  skip_model_kinds:
+    baseline_unet3d: [bias, gamma]
   gate:                                  # the deployed gate's regions and conformal operating point
     regions: ${clinical.gatekeeper.regions}
     conformal_alpha: ${clinical.gatekeeper.conformal_alpha}
