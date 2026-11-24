@@ -1296,6 +1296,34 @@ failure_detection:
   case_limit: null # int -> first N cases per cohort (smoke runs only)
   overwrite: false # false -> skip a cohort whose signals_<cohort>.csv exists (resume)
 
+risk_gate:
+  # MasterPlan W2.4, docs/research_docs/preregistrations/preregistration_risk_gate.md --
+  # scripts/risk_gate.py. Signals, beta, delta, the coverage grid and the target are FIXED by that
+  # protocol; do not change them after any validation ENT / ENS-PD value or threshold exists.
+  out_dir: outputs/risk_gate
+  betas: [0.05, 0.10]
+  delta: 0.1
+  dice_bar: 0.7 # unusable <=> dice_WT < bar or dice_TC < bar (T-Dice of W2.3)
+  conf: 0.95 # Clopper-Pearson level for the frozen application
+  # neurovision: members DEPLOYED FIRST (ENT = first member's entropy; ENS-PD over all three).
+  # Shifted/test cohorts reuse W2.3's signals (same code, same definitions); val is computed here.
+  neurovision:
+    val_members: [outputs/neurovision/eval_val, outputs/eval_val_neurovision_seed43, outputs/eval_val_neurovision_heavy_aug]
+    eval_dirs: {val: outputs/neurovision/eval_val, test: outputs/neurovision/eval_test, ssa: outputs/eval_ssa_neurovision, ped: outputs/eval_ped_neurovision}
+    signals_tables: {test: results/failure_detection/signals_test.csv, ssa: results/failure_detection/signals_ssa.csv, ped: results/failure_detection/signals_ped.csv}
+    deployed_tables: {test: results/error_budget/per_case_test.csv, ssa: results/error_budget/per_case_ssa.csv, ped: results/error_budget/per_case_ped.csv}
+  nnunet_gatea:
+    # ENT only (no nnU-Net ensemble). W2.6 fp16 region logits.
+    eval_dirs: {val: outputs/nnunet_gatea_probs/eval_val, test: outputs/nnunet_gatea_probs/eval_test, ssa: outputs/nnunet_gatea_probs/eval_ssa, ped: outputs/nnunet_gatea_probs/eval_ped}
+    deployed_tables: {test: results/error_budget_nnunet/per_case_test.csv, ssa: results/error_budget_nnunet/per_case_ssa.csv, ped: results/error_budget_nnunet/per_case_ped.csv}
+  pipelines: # id -> (model, signal)
+    NV-ENT: {model: neurovision, signal: ENT}
+    NV-ENSPD: {model: neurovision, signal: ENS_PD}
+    NN-ENT: {model: nnunet_gatea, signal: ENT}
+  deployment_rule_betas: [0.10] # E3 compares NV-ENT / NV-ENSPD at this beta with the deployed gate
+  case_limit: null # int -> first N cases per split (smoke runs only)
+  overwrite: false # false -> reuse cached signals_*.csv
+
 severity_ladder:
   # MasterPlan W3.2, docs/research_docs/preregistrations/preregistration_severity_ladder.md --
   # scripts/severity_ladder.py. Kinds, levels, seed, bridge tolerance and the saved quantities are
