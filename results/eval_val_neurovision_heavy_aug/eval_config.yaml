@@ -1,0 +1,866 @@
+data:
+  name: brats
+  root_dir: ???
+  modalities:
+  - t1
+  - t1ce
+  - t2
+  - flair
+  in_channels: 4
+  regions:
+  - ET
+  - TC
+  - WT
+  num_classes: 3
+  spacing:
+  - 1.0
+  - 1.0
+  - 1.0
+  normalize: nonzero_z_score
+  crop_foreground: true
+  patch_size:
+  - 64
+  - 64
+  - 64
+  pos_neg_ratio:
+  - 1
+  - 1
+  samples_per_volume: 4
+  augment:
+    flip_prob: 0.5
+    rot90_prob: 0.5
+    scale_intensity_factor: 0.1
+    shift_intensity_offset: 0.1
+    noise_prob: 0.15
+    noise_std: 0.01
+    rotate_prob: 0.3
+    rotate_range_deg: 15.0
+    gamma_prob: 0.3
+    gamma_range:
+    - 0.7
+    - 1.5
+    bias_field_prob: 0.3
+    bias_field_coeff_range:
+    - 0.0
+    - 0.3
+    elastic_prob: 0.2
+    elastic_sigma_range:
+    - 5.0
+    - 8.0
+    elastic_magnitude_range:
+    - 50.0
+    - 150.0
+  splits:
+    path: configs/data/splits.yaml
+    fractions:
+    - 0.7
+    - 0.15
+    - 0.15
+    seed: 42
+    overwrite: false
+  overfit_n: null
+  num_workers: 0
+  dataset_type: dataset
+  cache_dir: outputs/cache
+  cache_rate: 0.0
+  preprocessing:
+    out_dir: data/preprocessed/brats
+    num_workers: 8
+    overwrite: false
+    require_seg: true
+    limit: null
+    metadata_csv: metadata.csv
+    label_convention: brats2021
+    target_axcodes:
+    - L
+    - P
+    - S
+model:
+  name: neurovision
+  in_channels: 4
+  out_channels: 3
+  encoder:
+    cnn:
+      channels:
+      - 32
+      - 64
+      - 128
+      - 256
+      - 320
+      blocks_per_stage:
+      - 2
+      - 2
+      - 2
+      - 2
+      - 2
+      num_groups: 8
+      dropout: 0.1
+      use_checkpoint: false
+      zero_init_residual: true
+    swin:
+      enabled: true
+      feature_size: 48
+      depths:
+      - 2
+      - 2
+      - 2
+      - 2
+      num_heads:
+      - 3
+      - 6
+      - 12
+      - 24
+      window_size: 7
+      patch_size: 2
+      num_levels: 4
+      drop_rate: 0.0
+      attn_drop_rate: 0.0
+      dropout_path_rate: 0.0
+      use_checkpoint: true
+      normalize: true
+  fusion:
+    name: adaptive_gated
+    num_heads: 4
+    window_size: 4
+    full_attention_max_tokens: 512
+    gate_channels: scalar
+    gate_reduction: 4
+    num_groups: 8
+    attn_dropout: 0.0
+    proj_dropout: 0.0
+    layer_scale_init: 0.0001
+    use_checkpoint: false
+    use_ambiguity: true
+  decoder:
+    channels: null
+    blocks_per_stage: 2
+    num_groups: 8
+    dropout: 0.0
+    upsample: deconv
+    use_attention_gates: false
+    use_checkpoint: false
+  head:
+    dropout: 0.1
+    confidence:
+      enabled: true
+      hidden_channels: null
+      num_groups: 8
+      dropout: 0.0
+    boundary:
+      enabled: true
+      hidden_channels: null
+      num_groups: 8
+      dropout: 0.0
+  deep_supervision_levels: 3
+training:
+  epochs: 80
+  batch_size: 1
+  grad_accum_steps: 1
+  amp: true
+  optimizer:
+    name: adamw
+    lr: 0.0001
+    weight_decay: 1.0e-05
+    betas:
+    - 0.9
+    - 0.999
+  scheduler:
+    name: cosine
+    warmup_epochs: 5
+    min_lr: 1.0e-06
+  loss:
+    name: multitask
+    dice_weight: 1.0
+    ce_weight: 1.0
+    sigmoid: true
+    softmax: false
+    include_background: true
+    squared_pred: false
+    smooth_nr: 1.0e-05
+    smooth_dr: 1.0e-05
+    deep_supervision:
+      enabled: true
+      weights: null
+    multitask:
+      seg_weight: 1.0
+      boundary:
+        enabled: true
+        weight: 0.3
+        kernel_size: 3
+        squared_pred: false
+      confidence:
+        enabled: true
+        weight: 0.05
+        threshold: 0.5
+      branch:
+        enabled: true
+        weight: 0.1
+      surface:
+        enabled: false
+        weight: 0.1
+        alpha: 2.0
+        log: false
+  grad_clip_norm: 5.0
+  val_interval: 10
+  log_interval: 20
+  sliding_window:
+    roi_size:
+    - 64
+    - 64
+    - 64
+    sw_batch_size: 4
+    overlap: 0.25
+  checkpoint:
+    dir: outputs/neurovision_heavy_aug/checkpoints
+    save_every_n_epochs: 1
+    keep_last_n: 2
+    monitor: val/dice_mean
+    mode: max
+    resume: null
+  max_hours: 10.5
+inference:
+  sliding_window:
+    roi_size:
+    - 64
+    - 64
+    - 64
+    sw_batch_size: 1
+    overlap: 0.5
+    mode: gaussian
+    sigma_scale: 0.125
+    output_device: null
+    padding_mode: constant
+  mc_dropout:
+    enabled: false
+    num_samples: 10
+    seed: null
+    require_dropout: true
+    predictions_from: deterministic
+    save_fields:
+    - mutual_information
+  tta:
+    enabled: false
+    axes:
+    - 0
+    - 1
+    - 2
+  postprocess:
+    threshold: 0.5
+    enforce_nesting: true
+    min_component_size: 50
+    connectivity: 1
+    keep_largest_only: false
+    et_min_volume: 0
+  evaluation:
+    split: val
+    checkpoint: outputs/neurovision_heavy_aug/checkpoints/best.pt
+    out_dir: outputs/eval_val_neurovision_heavy_aug
+    save_predictions: false
+    save_probabilities: false
+    save_logits: true
+    strict_arch_check: true
+    boundary_bands:
+    - - 0.0
+      - 2.0
+    - - 2.0
+      - 5.0
+    - - 5.0
+      - 10.0
+    - - 10.0
+      - .inf
+    lesionwise:
+      enabled: false
+      min_lesion_voxels: 50
+      matching_threshold: 0.5
+      nsd_tolerance_mm: 1.0
+      connectivity: 26
+calibration:
+  fit_dir: null
+  apply_dir: null
+  out_dir: outputs/neurovision_heavy_aug/calibration
+  fit_prep_dir: null
+  source: auto
+  n_bins: 15
+  threshold: 0.5
+  mask_mode: predicted
+  per_channel: true
+  fit_voxels_per_case: 20000
+  seed: 42
+  temperature: null
+  risk_coverage:
+    enabled: true
+    uncertainty_column: mi_mean_fg_WT
+    score_column: dice_mean
+    score_higher_is_better: true
+    coverage_points:
+    - 1.0
+    - 0.9
+    - 0.8
+    - 0.7
+    - 0.6
+    - 0.5
+  conformal:
+    calib_dir: null
+    calib_prep_dir: data/preprocessed/brats
+    apply_dirs: []
+    apply_prep_dirs: []
+    out_dir: outputs/neurovision_heavy_aug/conformal
+    alphas:
+    - 0.05
+    - 0.1
+    - 0.2
+    regions:
+    - WT
+    - TC
+    check_consistency: true
+    consistency_tol: 1.0e-06
+explainability:
+  gates:
+    split: test
+    checkpoint: null
+    out_dir: outputs/neurovision_heavy_aug/gates_test
+    num_cases: 32
+    case_ids: null
+    patch_size:
+    - 64
+    - 64
+    - 64
+    center_on: label
+    save_image: true
+  attribution:
+    split: test
+    checkpoint: null
+    out_dir: outputs/neurovision_heavy_aug/attribution_test
+    num_cases: 4
+    case_ids: null
+    patch_size:
+    - 64
+    - 64
+    - 64
+    regions:
+    - 0
+    - 2
+    save_image: true
+    integrated_gradients:
+      enabled: true
+      n_steps: 32
+      internal_batch_size: 1
+      delta_tolerance: 0.05
+      noise_scale: 1.0
+    grad_cam:
+      enabled: true
+      target_layer: null
+      relu: true
+    attention:
+      enabled: false
+      stage: layers3
+      residual_weight: 0.5
+      max_tokens: 4096
+    faithfulness:
+      enabled: true
+      n_points: 11
+      fill: zero
+    seed: 42
+  ambiguity:
+    split: test
+    checkpoint: null
+    out_dir: outputs/neurovision_heavy_aug/ambiguity_test
+    num_cases: null
+    case_ids: null
+    level: 0
+    save_maps: true
+    save_image: false
+    logits_dir: null
+    include_auxiliary: true
+    include_gates: true
+anatomy:
+  dir: data/atlas
+  version: '2.0'
+  source: NITRC group_id=214 (https://www.nitrc.org/projects/sri24)
+  licence: CC-BY-SA
+  archives:
+    labels:
+      url: https://www.nitrc.org/frs/download.php/4508/sri24_labels_nifti.zip
+      sha256: ed47fde305baefb687a38e0daa8527896480e4e0159a0a0f56c8cbe09fc97e1f
+      bytes: 399821
+    tissue:
+      url: https://www.nitrc.org/frs/download.php/4511/sri24_tissue_nifti.zip
+      sha256: 1375bf8f44a2f6a0704056d87c51ab8dd8d499132d9b06bf9f7e1b6b857673a2
+      bytes: 15686657
+    anatomy:
+      url: https://www.nitrc.org/frs/download.php/4499/sri24_anatomy_nifti.zip
+      sha256: c2a66abd5bb37ba443b935ef4732a3e3a2f34ca57bedcdac6cf5902b50f013b6
+      bytes: 6522201
+  subdir: sri24
+  parcellation:
+    name: tzo116plus
+    image: tzo116plus.nii
+    lut: SRI24-tzo116plus.txt
+    lut_whitespace_split: true
+    merge_patterns:
+    - (_[xyz][0-9]+)$
+    - (_AP_[0-9]+)$
+    unmapped_name: unclassified
+  tissue:
+    source: tissues
+    image: tissues.nii
+    codes:
+      CSF: 1
+      GM: 2
+      WM: 3
+    pbmap:
+      GM: pbmap_GM.nii
+      WM: pbmap_WM.nii
+      CSF: pbmap_CSF.nii
+  anatomy:
+    t1: spgr.nii
+    t2_late: late.nii
+    t2_early: erly.nii
+  target:
+    shape:
+    - 240
+    - 240
+    - 155
+    spacing:
+    - 1.0
+    - 1.0
+    - 1.0
+    affine:
+    - - -1.0
+      - 0.0
+      - 0.0
+      - 0.0
+    - - 0.0
+      - -1.0
+      - 0.0
+      - 239.0
+    - - 0.0
+      - 0.0
+      - 1.0
+      - 0.0
+    - - 0.0
+      - 0.0
+      - 0.0
+      - 1.0
+    left_is_high_index: true
+  validation:
+    n_cases: 400
+    seed: 0
+    lobe_map: knowledge/aal_lobes.yaml
+    lobe_check_is_advisory: true
+    brain_mask_source: tissue
+    min_brain_dice: 0.85
+    min_laterality_pairs_correct: 1.0
+    midline_index: 119.5
+    max_midline_deviation: 1.5
+    qc_cases: 10
+analysis:
+  burden:
+    out_dir: null
+    source: prediction
+    eval_dir: null
+    preprocessed_dir: data/preprocessed/brats
+    split: test
+    min_volume_mm3: 50.0
+    connectivity: 3
+    midline_index: null
+    out_name: burden.csv
+  localize:
+    source: prediction
+    eval_dir: null
+    preprocessed_dir: data/preprocessed/brats
+    split: test
+    regions:
+    - ET
+    - TC
+    - WT
+    eloquence_map: knowledge/eloquence_map.yaml
+    lobe_map: knowledge/aal_lobes.yaml
+    min_frac: 0.001
+    out_name: anatomy.csv
+    summary_name: anatomy_summary.csv
+    involvement:
+      enabled: true
+      groups_map: knowledge/involvement_groups.yaml
+      min_overlap_mm3: 50.0
+  report:
+    burden_dir: null
+    localize_dir: null
+    eloquence_map: knowledge/eloquence_map.yaml
+    lobe_map: knowledge/aal_lobes.yaml
+    molecular_markers: knowledge/molecular_markers.yaml
+    cases: null
+    top_n: 10
+    markdown: true
+    out_subdir: reports
+    geometry: false
+    preprocessed_dir: data/preprocessed/brats
+  report_agreement:
+    gt_dir: null
+    pred_dirs: {}
+    comparisons: []
+    cases: null
+    n_boot: 10000
+    alpha: 0.05
+  population:
+    localize_dirs: []
+    region: WT
+    min_frac_of_structure: 0.05
+    top_n_structures: 20
+    figures: true
+  detection:
+    cohorts:
+    - name: brats_test
+      ambiguity_dirs:
+      - outputs/ambiguity_test_*
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+    - name: ssa
+      ambiguity_dirs:
+      - outputs/ambiguity_ssa_*
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+    - name: ped
+      ambiguity_dirs:
+      - outputs/ambiguity_ped_*
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+    out_dir: outputs/detection
+    case:
+      score_column: amb_dis_mean_fg_mean
+      control_column: ent_mean_fg_mean
+      metric_column: dice_mean
+    voxel:
+      enabled: true
+      mask: predicted_dilated
+      dilation_mm: 10.0
+      max_voxels_per_case: 20000
+      max_cases: null
+    bootstrap:
+      n_boot: 10000
+      ci: 0.95
+    alpha: 0.05
+    seed: 42
+  gate2:
+    fit_cohort:
+      name: val
+      ambiguity_dirs:
+      - outputs/ambiguity_val_*
+      eval_dir: outputs/neurovision/eval_val
+      prep_dir: data/preprocessed/brats
+    cohorts:
+    - name: brats_test
+      external: false
+      ambiguity_dirs:
+      - outputs/ambiguity_test_*
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+    - name: ssa
+      external: true
+      ambiguity_dirs:
+      - outputs/ambiguity_ssa_*
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+    - name: ped
+      external: true
+      ambiguity_dirs:
+      - outputs/ambiguity_ped_*
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+    out_dir: outputs/gate2
+    voxel:
+      mask: predicted_dilated
+      dilation_mm: 10.0
+      max_voxels_per_case: 20000
+      seed: 42
+    budget: 0.05
+    bootstrap:
+      n_boot: 10000
+      ci: 0.95
+      seed: 42
+    alpha: 0.05
+    thresholds:
+      delta_auroc: 0.01
+      delta_recall: 0.02
+  mc_comparison:
+    cohorts:
+    - name: ssa
+      ambiguity_dirs:
+      - outputs/ambiguity_ssa_*
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+      mc_dir: outputs/mc_ssa/uncertainty
+    - name: ped
+      ambiguity_dirs:
+      - outputs/ambiguity_ped_*
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+      mc_dir: outputs/mc_ped/uncertainty
+    out_dir: outputs/mc_comparison
+    voxel:
+      mask: predicted_dilated
+      dilation_mm: 10.0
+      max_voxels_per_case: 20000
+      seed: 42
+    tost_margin: 0.03
+    bootstrap:
+      n_boot: 10000
+      ci: 0.95
+      seed: 42
+  replay:
+    eval_dir: null
+    prep_dir: data/preprocessed/brats
+    out_dir: outputs/neurovision_heavy_aug/replay
+    case_ids: null
+    threshold_sweep:
+      enabled: true
+      thresholds:
+      - 0.3
+      - 0.4
+      - 0.45
+      - 0.5
+      - 0.55
+      - 0.6
+      - 0.7
+    postprocess_ablation:
+      enabled: true
+      variants:
+        default: {}
+        no_small_component_removal:
+          min_component_size: 0
+        no_nesting:
+          enforce_nesting: false
+        keep_largest_only:
+          keep_largest_only: true
+        raw:
+          min_component_size: 0
+          enforce_nesting: false
+          keep_largest_only: false
+    baseline_comparison:
+      enabled: false
+      eval_dir: null
+    lesionwise:
+      enabled: false
+      min_lesion_voxels: 50
+      matching_threshold: 0.5
+      nsd_tolerance_mm: 1.0
+      connectivity: 26
+  confidence:
+    checkpoint: null
+    split: test
+    out_dir: outputs/neurovision_heavy_aug/confidence
+    max_voxels_per_case: 20000
+    dilation_mm: 5.0
+    regions:
+    - ET
+    - TC
+    - WT
+  qc:
+    train_eval_dir: outputs/neurovision/eval_val
+    train_prep_dir: data/preprocessed/brats
+    heldout_eval_dir: null
+    heldout_prep_dir: data/preprocessed/brats
+    val_frac: 0.2
+    out_dir: outputs/neurovision_heavy_aug/qc
+    modality_index: 1
+    target_shape:
+    - 64
+    - 64
+    - 64
+    regions:
+    - ET
+    - TC
+    - WT
+    epochs: 10
+    batch_size: 2
+    lr: 0.0001
+    num_workers: 0
+    max_cases: null
+  qc_validate:
+    checkpoint: outputs/neurovision/qc/best.pt
+    out_dir: outputs/qc_validation
+    in_distribution_cohort: test
+    cohorts:
+    - name: test
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+      entropy_cache: outputs/detection/entropy_cache_brats_test.csv
+    - name: ssa
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+      entropy_cache: outputs/detection/entropy_cache_ssa.csv
+    - name: ped
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+      entropy_cache: outputs/detection/entropy_cache_ped.csv
+    bad_dice_threshold: 0.7
+    min_positives: 5
+    n_boot: 10000
+    ci: 0.95
+    alpha: 0.05
+    falsification_tol: 0.01
+    max_cases: null
+  error_budget:
+    out_dir: outputs/error_budget
+    cohorts:
+    - name: test
+      eval_dir: outputs/neurovision/eval_test
+      prep_dir: data/preprocessed/brats
+      conformal_curves: outputs/conformal/neurovision/eval_test/curves.npz
+    - name: ssa
+      eval_dir: outputs/eval_ssa_neurovision
+      prep_dir: data/preprocessed/brats_ssa
+      conformal_curves: outputs/conformal/neurovision/eval_ssa_neurovision/curves.npz
+    - name: ped
+      eval_dir: outputs/eval_ped_neurovision
+      prep_dir: data/preprocessed/brats_ped
+      conformal_curves: outputs/conformal/neurovision/eval_ped_neurovision/curves.npz
+    usable_regions:
+    - WT
+    - TC
+    usable_bar: 0.7
+    bar_sweep:
+    - 0.5
+    - 0.6
+    - 0.7
+    - 0.8
+    - 0.9
+    calibration_table: outputs/gatekeeper/calibration_table.csv
+    refuse_quantiles:
+    - 0.01
+    - 0.02
+    - 0.05
+    - 0.1
+    - 0.15
+    - 0.2
+    - 0.3
+    - 0.5
+    n_boot: 10000
+    ci: 0.95
+    seed: 42
+    max_cases: null
+  compare_family:
+    out_dir: outputs/compare_family/d0_heavy_aug
+    name: d0_heavy_aug
+    name_a: neurovision_heavy_aug
+    name_b: neurovision
+    n_boot: 10000
+    ci: 0.95
+    alpha: 0.05
+    practical_threshold: null
+    comparisons:
+    - cohort: test
+      a: outputs/eval_test_neurovision_heavy_aug/per_case_metrics.csv
+      b: outputs/neurovision/eval_test/per_case_metrics.csv
+      metrics:
+      - dice_ET
+      - dice_TC
+      - dice_WT
+    - cohort: pooled_ssa_ped
+      a:
+      - outputs/eval_ssa_neurovision_heavy_aug/per_case_metrics.csv
+      - outputs/eval_ped_neurovision_heavy_aug/per_case_metrics.csv
+      b:
+      - outputs/eval_ssa_neurovision/per_case_metrics.csv
+      - outputs/eval_ped_neurovision/per_case_metrics.csv
+      metrics:
+      - dice_ET
+      - dice_TC
+      - dice_WT
+    - cohort: test_lesionwise
+      a: outputs/replay_lesionwise/eval_test_neurovision_heavy_aug/per_case_default.csv
+      b: outputs/replay_lesionwise/eval_test/per_case_default.csv
+      metrics:
+      - lwdice_ET
+      - lwdice_TC
+      - lwdice_WT
+    - cohort: pooled_ssa_ped_lesionwise
+      a:
+      - outputs/replay_lesionwise/eval_ssa_neurovision_heavy_aug/per_case_default.csv
+      - outputs/replay_lesionwise/eval_ped_neurovision_heavy_aug/per_case_default.csv
+      b:
+      - outputs/replay_lesionwise/eval_ssa_neurovision/per_case_default.csv
+      - outputs/replay_lesionwise/eval_ped_neurovision/per_case_default.csv
+      metrics:
+      - lwdice_ET
+      - lwdice_TC
+      - lwdice_WT
+clinical:
+  ingest:
+    dcm2niix_path: null
+    min_instances: 8
+    role_overrides: {}
+    out_dir: outputs/clinical_ingest
+  preprocess:
+    center_modality: t1ce
+    atlas: BRATS_SRI24
+    n4_bias_correction: false
+    brain_extraction: true
+    hd_bet_mode: fast
+    hd_bet_tta: false
+    defacing: false
+    use_gpu: null
+    keep_intermediate: true
+    out_dir: outputs/clinical_preprocess
+  input_qc:
+    required_roles:
+    - t1
+    - t1ce
+    - t2
+    - flair
+    affine_atol: 0.0001
+    spacing_min_mm: 0.3
+    spacing_max_mm: 3.0
+    anisotropy_warn_ratio: 2.0
+    anisotropy_refuse_ratio: 6.0
+    expected_shape:
+    - 240
+    - 240
+    - 155
+    brain_volume_min_ml: 600.0
+    brain_volume_max_ml: 2600.0
+    min_nonzero_fraction_in_brain: 0.5
+    skull_present_warn_fraction: 0.45
+    min_dynamic_range: 1.0e-06
+  dicom_seg:
+    series_description: NeuroVision-X segmentation - RESEARCH ONLY, not diagnostic
+    disclaimer: Produced by NeuroVision-X, a research segmentation pipeline. FOR RESEARCH,
+      EDUCATION AND DECISION SUPPORT ONLY. This object is not a diagnostic device,
+      has not been clinically validated, and must not be used as the basis of a clinical
+      decision. Segment boundaries are model output and carry no guarantee of accuracy
+      on any individual study.
+    series_number: 9001
+    manufacturer: NeuroVision-X
+    manufacturer_model_name: NeuroVision-X dual-encoder segmentation
+    software_versions: milestone-4
+    device_serial_number: neurovision-x-research
+    segmentation_type: BINARY
+    out_dir: outputs/clinical_dicom_seg
+  gatekeeper:
+    enabled_signals:
+    - input_qc
+    - predicted_dice
+    - conformal_band
+    conformal_dir: outputs/conformal/neurovision
+    conformal_alpha: 0.1
+    regions:
+    - WT
+    - TC
+    caution_quantile: 0.1
+    refuse_quantile: 0.02
+    thresholds: outputs/gatekeeper/thresholds.json
+    out_dir: outputs/gatekeeper
+experiment_name: neurovision_heavy_aug
+seed: 42
+device: cpu
+output_dir: outputs/neurovision_heavy_aug
+wandb:
+  project: neurovision-x
+  entity: null
+  mode: disabled
+  tags:
+  - phase-d
+  - d0
+  - augmentation-ablation
+  group: phase_d_generalisation
+  run_id: null
