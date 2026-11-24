@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -685,3 +686,95 @@ def test_nnunet_backend_passes_disable_tta_to_command_builder(
 def test_default_config_leaves_tta_on() -> None:
     cfg = OmegaConf.load(Path(__file__).parents[1] / "configs" / "analysis" / "default.yaml")
     assert cfg.severity_ladder.nnunet.disable_tta is False
+
+
+# ---------------------------------------------------------------------------
+# CPU pipelining (pipeline_cpu): a pure scheduling change, outputs must not move
+# ---------------------------------------------------------------------------
+
+
+class _FakeBackend:
+    """Predicts the true regions as logits; optionally raises from the Nth predict call on."""
+
+    def __init__(self, prep: Path, chunk_size: int, fail_on_call: int | None = None) -> None:
+        self.chunk_size = chunk_size
+        self.prep = prep
+        self.fail_on_call = fail_on_call
+        self.calls = 0
+
+    def predict(self, images: Any) -> dict[str, np.ndarray]:
+        self.calls += 1
+        if self.fail_on_call is not None and self.calls >= self.fail_on_call:
+            raise RuntimeError("backend boom")
+        out = {}
+        for case_id in images:
+            label = np.load(self.prep / case_id / "label.npy")
+            regions = ladder.classes_to_regions(torch.from_numpy(label))[0].numpy()
+            out[case_id] = (regions.astype(np.float32) * 6.0 - 3.0) + 0.01 * images[case_id][:3]
+        return out
+
+
+def _shard_run(world: Path, out: Path, pipelined: bool, backend: Any) -> Any:
+    cfg = _make_cfg(world, pipeline_cpu=pipelined)
+    gate = ladder.build_gate_signals(
+        cfg.analysis.severity_ladder, cfg, {"conformal_fit": None}, world, torch.device("cpu")
+    )
+    return ladder.run_shard(
+        ladder.Shard("fake", "motion", 1, 2.0),
+        out_dir=out,
+        case_ids=CASES,
+        prep_dir=world / "prep",
+        cfg=cfg,
+        backend=backend,
+        gate=gate,
+        base_seed=42,
+        deadline=None,
+    )
+
+
+def test_pipelined_shard_matches_serial(world: Path, tmp_path: Path) -> None:
+    for name, flag in (("serial", False), ("pipe", True)):
+        _shard_run(world, tmp_path / name, flag, _FakeBackend(world / "prep", chunk_size=2))
+    rel = Path("fake") / "motion" / "level1"
+    a, b = tmp_path / "serial" / rel, tmp_path / "pipe" / rel
+    da = pd.read_csv(a / "per_case.csv")
+    db = pd.read_csv(b / "per_case.csv")
+    assert list(da["case_id"]) == CASES  # three chunks, original order
+    pd.testing.assert_frame_equal(da.drop(columns="seconds"), db.drop(columns="seconds"))
+    pd.testing.assert_frame_equal(
+        pd.read_csv(a / "ood_features.csv"), pd.read_csv(b / "ood_features.csv")
+    )
+    za, zb = np.load(a / "curves.npz"), np.load(b / "curves.npz")
+    assert za.files == zb.files
+    for key in za.files:
+        np.testing.assert_array_equal(za[key], zb[key])
+
+
+def test_backend_error_mid_shard_leaves_no_partial_and_no_threads(
+    world: Path, tmp_path: Path
+) -> None:
+    baseline = threading.active_count()
+    backend = _FakeBackend(world / "prep", chunk_size=2, fail_on_call=2)
+    with pytest.raises(RuntimeError, match="boom"):
+        _shard_run(world, tmp_path / "out", True, backend)
+    assert not list((tmp_path / "out").rglob("*.partial"))
+    assert not list((tmp_path / "out").rglob("DONE"))
+    assert threading.active_count() == baseline
+
+
+def test_deadline_mid_shard_pipelined(
+    world: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = {"n": 0}
+
+    def flaky(deadline: float | None) -> None:
+        calls["n"] += 1
+        if calls["n"] >= 3:  # shard-start check + chunk 0 pass; die before chunk 1's predict
+            raise ladder.BudgetExhausted()
+
+    monkeypatch.setattr(ladder, "_check_deadline", flaky)
+    baseline = threading.active_count()
+    with pytest.raises(ladder.BudgetExhausted):
+        _shard_run(world, tmp_path / "out", True, _FakeBackend(world / "prep", chunk_size=2))
+    assert not list((tmp_path / "out").rglob("*.partial"))
+    assert threading.active_count() == baseline

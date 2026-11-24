@@ -1307,6 +1307,7 @@ severity_ladder:
   models_to_run: [neurovision, baseline_unet3d, nnunet_gatea]
   bridge_tol: 0.003                      # mean |Dice - saved clean Dice| per region, level 0
   max_hours: null                        # stop cleanly (nothing partial) before this wall-clock budget
+  pipeline_cpu: true                     # hide scoring/corruption CPU work behind the GPU forward pass; false = serial. Outputs identical.
   # Severity per level, level_index 1..4 = list position. Severity meaning per kind:
   # thick_slice = slab mm, rician = sigma/SD, bias = Legendre coefficient bound, gamma = |log gamma|,
   # motion = shift mm.

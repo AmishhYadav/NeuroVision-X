@@ -51,6 +51,7 @@ import shutil
 import sys
 import time
 from collections.abc import Mapping, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -662,6 +663,61 @@ def _check_deadline(deadline: float | None) -> None:
         raise BudgetExhausted()
 
 
+def _prepare_chunk(
+    chunk: Sequence[str], prep_dir: Path, shard: Shard, base_seed: int
+) -> tuple[dict[str, np.ndarray], dict[str, int]]:
+    """Loads one chunk's clean images and corrupts them (CPU only, no model involved).
+
+    Returns:
+        `(images, seeds)`: `{case_id: (4, D, H, W) float32}` and `{case_id: seed}`.
+    """
+    images: dict[str, np.ndarray] = {}
+    seeds: dict[str, int] = {}
+    for case_id in chunk:
+        clean = np.load(prep_dir / case_id / "image.npy").astype(np.float32)
+        # Level 0 is "none": corrupt_image returns the image unchanged.
+        seeds[case_id] = case_seed(base_seed, case_id, shard.kind, shard.level_index)
+        images[case_id] = corrupt_image(clean, shard.kind, shard.severity, seeds[case_id])
+    return images, seeds
+
+
+def _score_chunk(
+    chunk: Sequence[str],
+    logits_by_case: Mapping[str, np.ndarray],
+    images: Mapping[str, np.ndarray],
+    seeds: Mapping[str, int],
+    *,
+    shard: Shard,
+    prep_dir: Path,
+    cfg: DictConfig,
+    gate: GateSignalComputer,
+) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]:
+    """Scores one chunk's predictions (CPU only), in chunk order.
+
+    Returns:
+        One `(row, ood_row, curves)` per case. `row` has no `seconds` yet.
+    """
+    out: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+    for case_id in chunk:
+        label = np.load(prep_dir / case_id / "label.npy")
+        spacing = read_json(prep_dir / case_id / "meta.json")["spacing"]
+        row, curves = score_case(
+            case_id, logits_by_case[case_id], images[case_id], label, spacing, cfg, gate
+        )
+        row = {
+            "case_id": case_id,
+            "model": shard.model,
+            "kind": shard.kind,
+            "level_index": shard.level_index,
+            "severity": shard.severity,
+            "seed": seeds[case_id],
+            **row,
+        }
+        ood = {"case_id": case_id, **extract_features(images[case_id])}
+        out.append((row, ood, curves))
+    return out
+
+
 def run_shard(
     shard: Shard,
     *,
@@ -688,7 +744,15 @@ def run_shard(
         deadline: `time.monotonic()` value after which to stop, or `None`.
 
     Returns:
-        Mean seconds per case, or `None` if the shard was already DONE (skipped).
+        Wall-clock seconds per case for the whole shard (total shard time / n_cases), or `None`
+        if the shard was already DONE (skipped).
+
+    The CPU work (loading + corrupting the next chunk, scoring the previous chunk) is hidden
+    behind the backend's forward pass when `analysis.severity_ladder.pipeline_cpu` is true
+    (default); false runs the strictly serial path. Outputs are identical either way. The
+    per-row `seconds` column is the wall time of the chunk's pipeline stage divided by chunk
+    size: serial = prepare + predict + score; pipelined = one loop iteration, in which stages
+    of neighbouring chunks overlap. It is a timing column, not a result.
 
     Raises:
         BudgetExhausted: Deadline passed mid-shard; the partial shard has been discarded.
@@ -717,49 +781,78 @@ def run_shard(
     curves_by_region: dict[str, list[Any]] = {name: [] for name in REGION_NAMES}
     chunk_size = max(1, int(backend.chunk_size))
     chunks = [list(case_ids[i : i + chunk_size]) for i in range(0, len(case_ids), chunk_size)]
+    pipelined = bool(cfg.analysis.severity_ladder.get("pipeline_cpu", True))
+    shard_start = time.monotonic()
 
+    def collect(scored: list[Any], per_case_s: float) -> None:
+        # Always called in chunk order, so rows / curves keep the original case order.
+        for row, ood, curves in scored:
+            row["seconds"] = per_case_s
+            rows.append(row)
+            ood_rows.append(ood)
+            for name in REGION_NAMES:
+                curves_by_region[name].append(curves[name])
+        logger.info("severity_ladder: %s %d/%d cases", shard.rel_dir, len(rows), len(case_ids))
+
+    def score(chunk: list[str], logits: Any, images: Any, seeds: Any) -> list[Any]:
+        return _score_chunk(
+            chunk, logits, images, seeds, shard=shard, prep_dir=prep_dir, cfg=cfg, gate=gate
+        )
+
+    pool: ThreadPoolExecutor | None = None
     try:
-        for chunk in chunks:
-            _check_deadline(deadline)
-            start = time.monotonic()
-            images: dict[str, np.ndarray] = {}
-            seeds: dict[str, int] = {}
-            for case_id in chunk:
-                clean = np.load(prep_dir / case_id / "image.npy").astype(np.float32)
-                # Level 0 is "none": corrupt_image returns the image unchanged.
-                seeds[case_id] = case_seed(base_seed, case_id, shard.kind, shard.level_index)
-                images[case_id] = corrupt_image(clean, shard.kind, shard.severity, seeds[case_id])
-            logits_by_case = backend.predict(images)
-
-            scored: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
-            for case_id in chunk:
-                label = np.load(prep_dir / case_id / "label.npy")
-                spacing = read_json(prep_dir / case_id / "meta.json")["spacing"]
-                row, curves = score_case(
-                    case_id, logits_by_case[case_id], images[case_id], label, spacing, cfg, gate
+        if not pipelined:
+            for chunk in chunks:
+                _check_deadline(deadline)
+                start = time.monotonic()
+                images, seeds = _prepare_chunk(chunk, prep_dir, shard, base_seed)
+                logits_by_case = backend.predict(images)
+                scored = score(chunk, logits_by_case, images, seeds)
+                collect(scored, (time.monotonic() - start) / len(chunk))
+        else:
+            # Depth-1 pipeline. While the main thread runs the backend on chunk k, worker
+            # threads (a) load + corrupt chunk k+1 and (b) score chunk k-1. numpy, scipy and
+            # torch-CPU release the GIL in their heavy loops, so this overlaps for real. Futures
+            # are consumed strictly in chunk order, which is what keeps the output order (and
+            # every random draw: seeds come from case_seed, not from thread timing) unchanged.
+            pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sl_cpu")
+            prep_next: Future[Any] | None = pool.submit(
+                _prepare_chunk, chunks[0], prep_dir, shard, base_seed
+            )
+            pending: tuple[Future[Any], float] | None = None  # (score future, stage seconds)
+            stage_start = time.monotonic()
+            for k, chunk in enumerate(chunks):
+                _check_deadline(deadline)
+                assert prep_next is not None
+                images, seeds = prep_next.result()
+                prep_next = (
+                    pool.submit(_prepare_chunk, chunks[k + 1], prep_dir, shard, base_seed)
+                    if k + 1 < len(chunks)
+                    else None
                 )
-                row = {
-                    "case_id": case_id,
-                    "model": shard.model,
-                    "kind": shard.kind,
-                    "level_index": shard.level_index,
-                    "severity": shard.severity,
-                    "seed": seeds[case_id],
-                    **row,
-                }
-                ood = {"case_id": case_id, **extract_features(images[case_id])}
-                scored.append((case_id, row, ood))
-                for name in REGION_NAMES:
-                    curves_by_region[name].append(curves[name])
-            per_case_s = (time.monotonic() - start) / len(chunk)
-            for _, row, ood in scored:
-                row["seconds"] = per_case_s
-                rows.append(row)
-                ood_rows.append(ood)
-            logger.info("severity_ladder: %s %d/%d cases", shard.rel_dir, len(rows), len(case_ids))
+                logits_by_case = backend.predict(images)  # the only GPU work; main thread
+                score_fut = pool.submit(score, chunk, logits_by_case, images, seeds)
+                if pending is not None:  # chunk k-1 was being scored during this predict
+                    collect(pending[0].result(), pending[1])
+                now = time.monotonic()
+                pending = (score_fut, (now - stage_start) / len(chunk))
+                stage_start = now
+            if (
+                pending is not None
+            ):  # drain the last chunk's scoring (nothing left to hide it behind)
+                last_fut, stage_s = pending
+                scored_last = last_fut.result()
+                drain_s = (time.monotonic() - stage_start) / len(chunks[-1])
+                collect(scored_last, stage_s + drain_s)
     except BaseException:
+        if pool is not None:
+            # Drop queued work and wait for running workers: no thread outlives the shard.
+            pool.shutdown(wait=True, cancel_futures=True)
+            pool = None
         shutil.rmtree(partial_dir, ignore_errors=True)  # never leave a half-written shard
         raise
+    if pool is not None:
+        pool.shutdown(wait=True)
 
     per_case = pd.DataFrame(rows)
     per_case.to_csv(partial_dir / "per_case.csv", index=False)
@@ -776,7 +869,8 @@ def run_shard(
         },
     }
     write_json(manifest, partial_dir / "curves_manifest.json")
-    s_per_case = float(per_case["seconds"].mean())
+    # True wall time per case for the whole shard (the per-row column is only a stage time).
+    s_per_case = (time.monotonic() - shard_start) / len(case_ids)
     shard_meta: dict[str, Any] = {
         "model": shard.model,
         "kind": shard.kind,
