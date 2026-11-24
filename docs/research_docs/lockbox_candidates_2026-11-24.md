@@ -42,6 +42,25 @@ Web reading only. Nothing downloaded, registered or requested. "UNKNOWN" means t
 - BraTS-METS 2023: 1,303 studies annotated, 402 released on Synapse (public train + val split not read). https://arxiv.org/abs/2306.00838v3 Everything else UNKNOWN.
 - Both are not gliomas, so they test a different failure (tumour type shift), not "adult glioma external". Whole tumour only is the fair comparison.
 
+## UCSF-PDGM crosswalk result (2026-11-24, metadata only — no image or label opened)
+
+Fetched directly from TCIA (`https://www.cancerimagingarchive.net/wp-content/uploads/<file>`, no login or
+agreement step): `UCSF-PDGM-metadata_v5.csv` (SHA-256 `afc1c23a…6fd78`) and `UCSF-PDGM-metadata_v2.csv`
+(`c83b2783…1ba1df6`). Local copies in `data/external/ucsf_pdgm/` (gitignored; re-fetch with the URL above).
+
+- v5 carries the `BraTS21 ID`, `BraTS21 Segmentation Cohort` and `BraTS21 MGMT Cohort` columns. 501 scans,
+  495 patients; 298 scans have a BraTS 2021 ID (262 segmentation Training, 36 Validation), 203 have none.
+- All 262 Training IDs are among our 1,251 preprocessed BraTS cases; none of the 36 Validation IDs is.
+- v5 renamed six scans as follow-ups (`UCSF-PDGM-0NNN_FUxxxd`). Five of them are the scan BraTS used, so the
+  same patient's baseline (396, 409, 431, and 391's follow-up) would leak if the crosswalk were done per scan.
+  **Exclusion must be per patient** (strip `_FU…` and leading zeros from the ID).
+- **Patient-level clean pool: 235 patients** (199 never in BraTS 2021 + 36 BraTS 2021 Validation, never
+  in our training data). Never-BraTS grades: 100 grade 4, 43 grade 3, 56 grade 2 — far more lower-grade
+  glioma than BraTS 2021, which is itself a population shift to declare in the protocol.
+- The earlier "~108" was derived from 387 reviewed cases and is superseded.
+- Side finding: patients 429 and 433 each appear twice inside BraTS 2021 (00557/00639, 00758/00626). Both
+  pairs sit in our `train` split, so no train/test leak; recorded for W2.7.
+
 ## Author actions needed
 
 1. Confirm on the TCIA BraTS-Africa page, or from the Radiol AI paper's data-availability section, that the 35 non-2023 adult glioma cases are in the open package with labels. Then match IDs against our 60.
