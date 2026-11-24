@@ -1,0 +1,14 @@
+05:01:39 | INFO     | __main__ | leakage: described 100 / 1251 cases
+05:01:45 | INFO     | __main__ | leakage: described 200 / 1251 cases
+05:01:50 | INFO     | __main__ | leakage: described 300 / 1251 cases
+05:01:56 | INFO     | __main__ | leakage: described 400 / 1251 cases
+05:02:02 | INFO     | __main__ | leakage: described 500 / 1251 cases
+05:02:08 | INFO     | __main__ | leakage: described 600 / 1251 cases
+05:02:13 | INFO     | __main__ | leakage: described 700 / 1251 cases
+05:02:19 | INFO     | __main__ | leakage: described 800 / 1251 cases
+05:02:25 | INFO     | __main__ | leakage: described 900 / 1251 cases
+05:02:31 | INFO     | __main__ | leakage: described 1000 / 1251 cases
+05:02:36 | INFO     | __main__ | leakage: described 1100 / 1251 cases
+05:02:42 | INFO     | __main__ | leakage: described 1200 / 1251 cases
+05:02:45 | INFO     | __main__ | leakage: described 1251 / 1251 cases
+05:02:45 | INFO     | __main__ | leakage: 0 exact groups, 0 flagged pairs, 0 split-overlap cases

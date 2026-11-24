@@ -1,0 +1,127 @@
+04:42:52 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:43:01 | INFO     | __main__ | neurovision_val: 10/187 cases
+04:43:10 | INFO     | __main__ | neurovision_val: 20/187 cases
+04:43:19 | INFO     | __main__ | neurovision_val: 30/187 cases
+04:43:28 | INFO     | __main__ | neurovision_val: 40/187 cases
+04:43:36 | INFO     | __main__ | neurovision_val: 50/187 cases
+04:43:45 | INFO     | __main__ | neurovision_val: 60/187 cases
+04:43:54 | INFO     | __main__ | neurovision_val: 70/187 cases
+04:44:02 | INFO     | __main__ | neurovision_val: 80/187 cases
+04:44:12 | INFO     | __main__ | neurovision_val: 90/187 cases
+04:44:21 | INFO     | __main__ | neurovision_val: 100/187 cases
+04:44:30 | INFO     | __main__ | neurovision_val: 110/187 cases
+04:44:38 | INFO     | __main__ | neurovision_val: 120/187 cases
+04:44:47 | INFO     | __main__ | neurovision_val: 130/187 cases
+04:44:55 | INFO     | __main__ | neurovision_val: 140/187 cases
+04:45:04 | INFO     | __main__ | neurovision_val: 150/187 cases
+04:45:12 | INFO     | __main__ | neurovision_val: 160/187 cases
+04:45:21 | INFO     | __main__ | neurovision_val: 170/187 cases
+04:45:30 | INFO     | __main__ | neurovision_val: 180/187 cases
+04:45:36 | INFO     | __main__ | neurovision_val: n=187 usable dice 0.904 volume 0.813 both 0.786 agreement 0.856
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:45:45 | INFO     | __main__ | neurovision_test: 10/189 cases
+04:45:53 | INFO     | __main__ | neurovision_test: 20/189 cases
+04:46:02 | INFO     | __main__ | neurovision_test: 30/189 cases
+04:46:11 | INFO     | __main__ | neurovision_test: 40/189 cases
+04:46:20 | INFO     | __main__ | neurovision_test: 50/189 cases
+04:46:29 | INFO     | __main__ | neurovision_test: 60/189 cases
+04:46:39 | INFO     | __main__ | neurovision_test: 70/189 cases
+04:46:48 | INFO     | __main__ | neurovision_test: 80/189 cases
+04:46:58 | INFO     | __main__ | neurovision_test: 90/189 cases
+04:47:06 | INFO     | __main__ | neurovision_test: 100/189 cases
+04:47:15 | INFO     | __main__ | neurovision_test: 110/189 cases
+04:47:23 | INFO     | __main__ | neurovision_test: 120/189 cases
+04:47:33 | INFO     | __main__ | neurovision_test: 130/189 cases
+04:47:41 | INFO     | __main__ | neurovision_test: 140/189 cases
+04:47:51 | INFO     | __main__ | neurovision_test: 150/189 cases
+04:48:00 | INFO     | __main__ | neurovision_test: 160/189 cases
+04:48:09 | INFO     | __main__ | neurovision_test: 170/189 cases
+04:48:18 | INFO     | __main__ | neurovision_test: 180/189 cases
+04:48:25 | INFO     | __main__ | neurovision_test: n=189 usable dice 0.937 volume 0.804 both 0.788 agreement 0.836
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:48:34 | INFO     | __main__ | neurovision_ssa: 10/60 cases
+04:48:42 | INFO     | __main__ | neurovision_ssa: 20/60 cases
+04:48:50 | INFO     | __main__ | neurovision_ssa: 30/60 cases
+04:48:58 | INFO     | __main__ | neurovision_ssa: 40/60 cases
+04:49:07 | INFO     | __main__ | neurovision_ssa: 50/60 cases
+04:49:15 | INFO     | __main__ | neurovision_ssa: 60/60 cases
+04:49:15 | INFO     | __main__ | neurovision_ssa: n=60 usable dice 0.800 volume 0.533 both 0.467 agreement 0.600
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:49:24 | INFO     | __main__ | neurovision_ped: 10/99 cases
+04:49:33 | INFO     | __main__ | neurovision_ped: 20/99 cases
+04:49:40 | INFO     | __main__ | neurovision_ped: 30/99 cases
+04:49:48 | INFO     | __main__ | neurovision_ped: 40/99 cases
+04:49:56 | INFO     | __main__ | neurovision_ped: 50/99 cases
+04:50:04 | INFO     | __main__ | neurovision_ped: 60/99 cases
+04:50:13 | INFO     | __main__ | neurovision_ped: 70/99 cases
+04:50:22 | INFO     | __main__ | neurovision_ped: 80/99 cases
+04:50:31 | INFO     | __main__ | neurovision_ped: 90/99 cases
+04:50:40 | INFO     | __main__ | neurovision_ped: n=99 usable dice 0.273 volume 0.414 both 0.162 agreement 0.636
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:50:50 | INFO     | __main__ | baseline_unet3d_val: 10/187 cases
+04:50:59 | INFO     | __main__ | baseline_unet3d_val: 20/187 cases
+04:51:08 | INFO     | __main__ | baseline_unet3d_val: 30/187 cases
+04:51:17 | INFO     | __main__ | baseline_unet3d_val: 40/187 cases
+04:51:26 | INFO     | __main__ | baseline_unet3d_val: 50/187 cases
+04:51:35 | INFO     | __main__ | baseline_unet3d_val: 60/187 cases
+04:51:43 | INFO     | __main__ | baseline_unet3d_val: 70/187 cases
+04:51:52 | INFO     | __main__ | baseline_unet3d_val: 80/187 cases
+04:52:02 | INFO     | __main__ | baseline_unet3d_val: 90/187 cases
+04:52:11 | INFO     | __main__ | baseline_unet3d_val: 100/187 cases
+04:52:20 | INFO     | __main__ | baseline_unet3d_val: 110/187 cases
+04:52:28 | INFO     | __main__ | baseline_unet3d_val: 120/187 cases
+04:52:37 | INFO     | __main__ | baseline_unet3d_val: 130/187 cases
+04:52:46 | INFO     | __main__ | baseline_unet3d_val: 140/187 cases
+04:52:55 | INFO     | __main__ | baseline_unet3d_val: 150/187 cases
+04:53:03 | INFO     | __main__ | baseline_unet3d_val: 160/187 cases
+04:53:11 | INFO     | __main__ | baseline_unet3d_val: 170/187 cases
+04:53:20 | INFO     | __main__ | baseline_unet3d_val: 180/187 cases
+04:53:26 | INFO     | __main__ | baseline_unet3d_val: n=187 usable dice 0.909 volume 0.797 both 0.770 agreement 0.834
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:53:35 | INFO     | __main__ | baseline_unet3d_test: 10/189 cases
+04:53:44 | INFO     | __main__ | baseline_unet3d_test: 20/189 cases
+04:53:53 | INFO     | __main__ | baseline_unet3d_test: 30/189 cases
+04:54:02 | INFO     | __main__ | baseline_unet3d_test: 40/189 cases
+04:54:11 | INFO     | __main__ | baseline_unet3d_test: 50/189 cases
+04:54:20 | INFO     | __main__ | baseline_unet3d_test: 60/189 cases
+04:54:29 | INFO     | __main__ | baseline_unet3d_test: 70/189 cases
+04:54:38 | INFO     | __main__ | baseline_unet3d_test: 80/189 cases
+04:54:47 | INFO     | __main__ | baseline_unet3d_test: 90/189 cases
+04:54:56 | INFO     | __main__ | baseline_unet3d_test: 100/189 cases
+04:55:03 | INFO     | __main__ | baseline_unet3d_test: 110/189 cases
+04:55:11 | INFO     | __main__ | baseline_unet3d_test: 120/189 cases
+04:55:20 | INFO     | __main__ | baseline_unet3d_test: 130/189 cases
+04:55:28 | INFO     | __main__ | baseline_unet3d_test: 140/189 cases
+04:55:38 | INFO     | __main__ | baseline_unet3d_test: 150/189 cases
+04:55:46 | INFO     | __main__ | baseline_unet3d_test: 160/189 cases
+04:55:55 | INFO     | __main__ | baseline_unet3d_test: 170/189 cases
+04:56:04 | INFO     | __main__ | baseline_unet3d_test: 180/189 cases
+04:56:10 | INFO     | __main__ | baseline_unet3d_test: n=189 usable dice 0.926 volume 0.783 both 0.767 agreement 0.825
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:56:19 | INFO     | __main__ | baseline_unet3d_ssa: 10/60 cases
+04:56:27 | INFO     | __main__ | baseline_unet3d_ssa: 20/60 cases
+04:56:35 | INFO     | __main__ | baseline_unet3d_ssa: 30/60 cases
+04:56:43 | INFO     | __main__ | baseline_unet3d_ssa: 40/60 cases
+04:56:51 | INFO     | __main__ | baseline_unet3d_ssa: 50/60 cases
+04:57:00 | INFO     | __main__ | baseline_unet3d_ssa: 60/60 cases
+04:57:00 | INFO     | __main__ | baseline_unet3d_ssa: n=60 usable dice 0.800 volume 0.583 both 0.500 agreement 0.617
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:57:08 | INFO     | __main__ | baseline_unet3d_ped: 10/99 cases
+04:57:17 | INFO     | __main__ | baseline_unet3d_ped: 20/99 cases
+04:57:25 | INFO     | __main__ | baseline_unet3d_ped: 30/99 cases
+04:57:33 | INFO     | __main__ | baseline_unet3d_ped: 40/99 cases
+04:57:40 | INFO     | __main__ | baseline_unet3d_ped: 50/99 cases
+04:57:48 | INFO     | __main__ | baseline_unet3d_ped: 60/99 cases
+04:57:56 | INFO     | __main__ | baseline_unet3d_ped: 70/99 cases
+04:58:05 | INFO     | __main__ | baseline_unet3d_ped: 80/99 cases
+04:58:13 | INFO     | __main__ | baseline_unet3d_ped: 90/99 cases
+04:58:21 | INFO     | __main__ | baseline_unet3d_ped: n=99 usable dice 0.293 volume 0.465 both 0.162 agreement 0.566

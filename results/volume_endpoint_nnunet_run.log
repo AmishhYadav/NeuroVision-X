@@ -1,0 +1,72 @@
+09:02:53 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+09:02:53 | INFO     | __main__ | neurovision_val: /Users/amish/NeuroVision-X/outputs/volume_endpoint/neurovision_val/per_case_volumes.csv exists, skipping (overwrite=false).
+09:02:53 | INFO     | __main__ | neurovision_test: /Users/amish/NeuroVision-X/outputs/volume_endpoint/neurovision_test/per_case_volumes.csv exists, skipping (overwrite=false).
+09:02:53 | INFO     | __main__ | neurovision_ssa: /Users/amish/NeuroVision-X/outputs/volume_endpoint/neurovision_ssa/per_case_volumes.csv exists, skipping (overwrite=false).
+09:02:53 | INFO     | __main__ | neurovision_ped: /Users/amish/NeuroVision-X/outputs/volume_endpoint/neurovision_ped/per_case_volumes.csv exists, skipping (overwrite=false).
+09:02:53 | INFO     | __main__ | baseline_unet3d_val: /Users/amish/NeuroVision-X/outputs/volume_endpoint/baseline_unet3d_val/per_case_volumes.csv exists, skipping (overwrite=false).
+09:02:53 | INFO     | __main__ | baseline_unet3d_test: /Users/amish/NeuroVision-X/outputs/volume_endpoint/baseline_unet3d_test/per_case_volumes.csv exists, skipping (overwrite=false).
+09:02:53 | INFO     | __main__ | baseline_unet3d_ssa: /Users/amish/NeuroVision-X/outputs/volume_endpoint/baseline_unet3d_ssa/per_case_volumes.csv exists, skipping (overwrite=false).
+09:02:53 | INFO     | __main__ | baseline_unet3d_ped: /Users/amish/NeuroVision-X/outputs/volume_endpoint/baseline_unet3d_ped/per_case_volumes.csv exists, skipping (overwrite=false).
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+09:03:02 | INFO     | __main__ | nnunet_gatea_val: 10/187 cases
+09:03:11 | INFO     | __main__ | nnunet_gatea_val: 20/187 cases
+09:03:20 | INFO     | __main__ | nnunet_gatea_val: 30/187 cases
+09:03:29 | INFO     | __main__ | nnunet_gatea_val: 40/187 cases
+09:03:38 | INFO     | __main__ | nnunet_gatea_val: 50/187 cases
+09:03:47 | INFO     | __main__ | nnunet_gatea_val: 60/187 cases
+09:03:55 | INFO     | __main__ | nnunet_gatea_val: 70/187 cases
+09:04:04 | INFO     | __main__ | nnunet_gatea_val: 80/187 cases
+09:04:14 | INFO     | __main__ | nnunet_gatea_val: 90/187 cases
+09:04:23 | INFO     | __main__ | nnunet_gatea_val: 100/187 cases
+09:04:32 | INFO     | __main__ | nnunet_gatea_val: 110/187 cases
+09:04:40 | INFO     | __main__ | nnunet_gatea_val: 120/187 cases
+09:04:49 | INFO     | __main__ | nnunet_gatea_val: 130/187 cases
+09:04:58 | INFO     | __main__ | nnunet_gatea_val: 140/187 cases
+09:05:06 | INFO     | __main__ | nnunet_gatea_val: 150/187 cases
+09:05:15 | INFO     | __main__ | nnunet_gatea_val: 160/187 cases
+09:05:23 | INFO     | __main__ | nnunet_gatea_val: 170/187 cases
+09:05:32 | INFO     | __main__ | nnunet_gatea_val: 180/187 cases
+09:05:38 | INFO     | __main__ | nnunet_gatea_val: n=187 usable dice 0.914 volume 0.807 both 0.781 agreement 0.840
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+09:05:47 | INFO     | __main__ | nnunet_gatea_test: 10/189 cases
+09:05:56 | INFO     | __main__ | nnunet_gatea_test: 20/189 cases
+09:06:04 | INFO     | __main__ | nnunet_gatea_test: 30/189 cases
+09:06:13 | INFO     | __main__ | nnunet_gatea_test: 40/189 cases
+09:06:22 | INFO     | __main__ | nnunet_gatea_test: 50/189 cases
+09:06:31 | INFO     | __main__ | nnunet_gatea_test: 60/189 cases
+09:06:40 | INFO     | __main__ | nnunet_gatea_test: 70/189 cases
+09:06:49 | INFO     | __main__ | nnunet_gatea_test: 80/189 cases
+09:06:59 | INFO     | __main__ | nnunet_gatea_test: 90/189 cases
+09:07:07 | INFO     | __main__ | nnunet_gatea_test: 100/189 cases
+09:07:16 | INFO     | __main__ | nnunet_gatea_test: 110/189 cases
+09:07:24 | INFO     | __main__ | nnunet_gatea_test: 120/189 cases
+09:07:32 | INFO     | __main__ | nnunet_gatea_test: 130/189 cases
+09:07:41 | INFO     | __main__ | nnunet_gatea_test: 140/189 cases
+09:07:50 | INFO     | __main__ | nnunet_gatea_test: 150/189 cases
+09:07:59 | INFO     | __main__ | nnunet_gatea_test: 160/189 cases
+09:08:08 | INFO     | __main__ | nnunet_gatea_test: 170/189 cases
+09:08:16 | INFO     | __main__ | nnunet_gatea_test: 180/189 cases
+09:08:23 | INFO     | __main__ | nnunet_gatea_test: n=189 usable dice 0.963 volume 0.815 both 0.804 agreement 0.831
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+09:08:31 | INFO     | __main__ | nnunet_gatea_ssa: 10/60 cases
+09:08:40 | INFO     | __main__ | nnunet_gatea_ssa: 20/60 cases
+09:08:48 | INFO     | __main__ | nnunet_gatea_ssa: 30/60 cases
+09:08:56 | INFO     | __main__ | nnunet_gatea_ssa: 40/60 cases
+09:09:05 | INFO     | __main__ | nnunet_gatea_ssa: 50/60 cases
+09:09:12 | INFO     | __main__ | nnunet_gatea_ssa: 60/60 cases
+09:09:12 | INFO     | __main__ | nnunet_gatea_ssa: n=60 usable dice 0.867 volume 0.550 both 0.500 agreement 0.583
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+09:09:21 | INFO     | __main__ | nnunet_gatea_ped: 10/99 cases
+09:09:30 | INFO     | __main__ | nnunet_gatea_ped: 20/99 cases
+09:09:38 | INFO     | __main__ | nnunet_gatea_ped: 30/99 cases
+09:09:46 | INFO     | __main__ | nnunet_gatea_ped: 40/99 cases
+09:09:54 | INFO     | __main__ | nnunet_gatea_ped: 50/99 cases
+09:10:02 | INFO     | __main__ | nnunet_gatea_ped: 60/99 cases
+09:10:11 | INFO     | __main__ | nnunet_gatea_ped: 70/99 cases
+09:10:20 | INFO     | __main__ | nnunet_gatea_ped: 80/99 cases
+09:10:29 | INFO     | __main__ | nnunet_gatea_ped: 90/99 cases
+09:10:36 | INFO     | __main__ | nnunet_gatea_ped: n=99 usable dice 0.323 volume 0.455 both 0.162 agreement 0.545

@@ -1,0 +1,49 @@
+04:20:55 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+04:20:55 | INFO     | neurovision.utils.device | Resolved device: cpu
+04:20:55 | INFO     | __main__ | severity_ladder: 2 shard(s), 5 case(s), device=cpu, probe=True
+04:20:56 | INFO     | neurovision.models.registry | Building model 'neurovision'
+04:20:56 | INFO     | neurovision.models.encoders.cnn | Built CNNEncoder: 5 levels, channels=[32, 64, 128, 256, 320], strides=[1, 2, 4, 8, 16]
+04:20:56 | INFO     | neurovision.models.encoders.swin | Built SwinEncoder: 4 levels, channels=[48, 96, 192, 384], strides=[2, 4, 8, 16]
+04:20:56 | INFO     | neurovision.models.fusion.registry | Building fusion 'adaptive_gated' for level 0 (cnn=64 ch, swin=48 ch)
+04:20:56 | INFO     | neurovision.models.fusion.registry | Building fusion 'adaptive_gated' for level 1 (cnn=128 ch, swin=96 ch)
+04:20:56 | INFO     | neurovision.models.fusion.registry | Building fusion 'adaptive_gated' for level 2 (cnn=256 ch, swin=192 ch)
+04:20:56 | INFO     | neurovision.models.fusion.registry | Building fusion 'adaptive_gated' for level 3 (cnn=320 ch, swin=384 ch)
+04:20:56 | INFO     | neurovision.models.neurovision | Built NeuroVisionX: 34911341 parameters, fusion='adaptive_gated', deep_supervision_levels=3, confidence_head=True, boundary_head=True
+04:20:56 | INFO     | evaluate_script | Loaded checkpoint /Users/amish/NeuroVision-X/outputs/neurovision/checkpoints/best.pt for evaluation: epoch=69, best_metric_name=val/dice_mean, best_metric=0.8938028233892777
+04:20:56 | INFO     | neurovision.models.qc | Building segqc: in_channels=3, widths=(16, 32, 64, 128), num_groups=8, dropout=0.100
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:22:11 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+04:22:12 | INFO     | __main__ | severity_ladder: neurovision/none/level0 1/5 cases
+04:23:36 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+04:23:37 | INFO     | __main__ | severity_ladder: neurovision/none/level0 2/5 cases
+04:24:53 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+04:24:54 | INFO     | __main__ | severity_ladder: neurovision/none/level0 3/5 cases
+04:26:54 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+04:26:55 | INFO     | __main__ | severity_ladder: neurovision/none/level0 4/5 cases
+04:28:19 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+04:28:20 | INFO     | __main__ | severity_ladder: neurovision/none/level0 5/5 cases
+04:28:20 | INFO     | __main__ | NVX_SHARD_DONE neurovision none 0 5 88.866
+04:28:20 | ERROR    | __main__ | NVX_BRIDGE: FAIL model=neurovision tol=0.003 ET=0.00107 TC=0.00070 WT=0.00331 -- no corrupted shard will run for this model.
+04:28:20 | INFO     | neurovision.models.registry | Building model 'unet3d'
+04:28:21 | INFO     | evaluate_script | Loaded checkpoint /Users/amish/NeuroVision-X/outputs/checkpoints/baseline_unet3d/best.pt for evaluation: epoch=79, best_metric_name=val/dice_mean, best_metric=0.885416855467832
+04:28:21 | INFO     | neurovision.models.qc | Building segqc: in_channels=3, widths=(16, 32, 64, 128), num_groups=8, dropout=0.100
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+04:28:23 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/utils/deprecate_utils.py:220: FutureWarning: monai.metrics.utils get_mask_edges:always_return_as_numpy: Argument `always_return_as_numpy` has been deprecated since version 1.5.0. It will be removed in version 1.7.0. The option is removed and the return type will always be equal to the input type.
+  warn_deprecated(argname, msg, warning_category)
+04:28:24 | INFO     | __main__ | severity_ladder: baseline_unet3d/none/level0 1/5 cases
+04:28:27 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+04:28:28 | INFO     | __main__ | severity_ladder: baseline_unet3d/none/level0 2/5 cases
+04:28:30 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+04:28:31 | INFO     | __main__ | severity_ladder: baseline_unet3d/none/level0 3/5 cases
+04:28:34 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+04:28:35 | INFO     | __main__ | severity_ladder: baseline_unet3d/none/level0 4/5 cases
+04:28:38 | INFO     | neurovision.inference.postprocess | postprocess_logits: steps applied -> ['binarize(threshold=0.5)', 'remove_small_components(min_size=50, connectivity=1)', 'enforce_nesting']
+04:28:39 | INFO     | __main__ | severity_ladder: baseline_unet3d/none/level0 5/5 cases
+04:28:39 | INFO     | __main__ | NVX_SHARD_DONE baseline_unet3d none 0 5 3.667
+04:28:39 | ERROR    | __main__ | NVX_BRIDGE: FAIL model=baseline_unet3d tol=0.003 ET=0.01783 TC=0.00741 WT=0.00609 -- no corrupted shard will run for this model.
+04:28:39 | INFO     | __main__ | NVX_RUN_COMPLETE completed=2 skipped=0
