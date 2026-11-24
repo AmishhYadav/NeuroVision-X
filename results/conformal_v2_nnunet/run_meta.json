@@ -1,0 +1,67 @@
+{
+  "config": {
+    "out_dir": "outputs/conformal_v2_nnunet",
+    "alphas": [
+      0.05,
+      0.1,
+      0.2
+    ],
+    "delta": 0.1,
+    "regions": [
+      "ET",
+      "TC",
+      "WT"
+    ],
+    "empty": {
+      "ET": "zero",
+      "TC": "exclude",
+      "WT": "exclude"
+    },
+    "rcps_order_seed": 42,
+    "n_boot": 10000,
+    "boot_seed": 42,
+    "n_resplits": 1000,
+    "resplit_seed": 42,
+    "prep_dirs": {
+      "val": "data/preprocessed/brats",
+      "test": "data/preprocessed/brats",
+      "ssa": "data/preprocessed/brats_ssa",
+      "ped": "data/preprocessed/brats_ped"
+    },
+    "postprocess": true,
+    "models": {
+      "nnunet_gatea": {
+        "eval_dirs": {
+          "val": "outputs/nnunet_gatea_probs/eval_val",
+          "test": "outputs/nnunet_gatea_probs/eval_test",
+          "ssa": "outputs/nnunet_gatea_probs/eval_ssa",
+          "ped": "outputs/nnunet_gatea_probs/eval_ped"
+        }
+      }
+    }
+  },
+  "grid_sizes": {
+    "v1": 65,
+    "extended": 73
+  },
+  "model_grids": {
+    "nnunet_gatea": "extended"
+  },
+  "n_cases": {
+    "nnunet_gatea": {
+      "val": 187,
+      "test": 189,
+      "ssa": 60,
+      "ped": 99
+    }
+  },
+  "wall_time_s": {
+    "curves": 242.23,
+    "additivity": 0.0,
+    "fits": 0.042,
+    "realised": 0.159,
+    "resplits": 21.543,
+    "postprocessed": 3719.693
+  },
+  "not_measured": []
+}

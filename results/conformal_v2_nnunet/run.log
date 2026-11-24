@@ -1,0 +1,59 @@
+GIT HEAD b375d61fcd9bd77998dd333f3753fd77ea42c55f start Tue Nov 24 09:42:08 UTC 2026
+15:12:10 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+15:12:10 | INFO     | __main__ | curves: nnunet_gatea / val (extended grid) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val
+15:12:21 | INFO     | conformal_script | extract: processed 25/187 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val
+15:12:33 | INFO     | conformal_script | extract: processed 50/187 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val
+15:12:44 | INFO     | conformal_script | extract: processed 75/187 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val
+15:12:56 | INFO     | conformal_script | extract: processed 100/187 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val
+15:13:07 | INFO     | conformal_script | extract: processed 125/187 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val
+15:13:19 | INFO     | conformal_script | extract: processed 150/187 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val
+15:13:30 | INFO     | conformal_script | extract: processed 175/187 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val
+15:13:35 | INFO     | conformal_script | extract: built loss curves for 187/187 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val.
+15:13:35 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2_nnunet/curves/nnunet_gatea/eval_val/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2_nnunet/curves/nnunet_gatea/eval_val/curves_manifest.json.
+15:13:35 | INFO     | __main__ | curves: nnunet_gatea / test (extended grid) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:13:47 | INFO     | conformal_script | extract: processed 25/189 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:13:59 | INFO     | conformal_script | extract: processed 50/189 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:14:10 | INFO     | conformal_script | extract: processed 75/189 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:14:22 | INFO     | conformal_script | extract: processed 100/189 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:14:33 | INFO     | conformal_script | extract: processed 125/189 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:14:44 | INFO     | conformal_script | extract: processed 150/189 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:14:56 | INFO     | conformal_script | extract: processed 175/189 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:15:02 | INFO     | conformal_script | extract: built loss curves for 189/189 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test.
+15:15:02 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2_nnunet/curves/nnunet_gatea/eval_test/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2_nnunet/curves/nnunet_gatea/eval_test/curves_manifest.json.
+15:15:02 | INFO     | __main__ | curves: nnunet_gatea / ssa (extended grid) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa
+15:15:13 | INFO     | conformal_script | extract: processed 25/60 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa
+15:15:24 | INFO     | conformal_script | extract: processed 50/60 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa
+15:15:29 | INFO     | conformal_script | extract: built loss curves for 60/60 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa.
+15:15:29 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2_nnunet/curves/nnunet_gatea/eval_ssa/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2_nnunet/curves/nnunet_gatea/eval_ssa/curves_manifest.json.
+15:15:29 | INFO     | __main__ | curves: nnunet_gatea / ped (extended grid) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped
+15:15:40 | INFO     | conformal_script | extract: processed 25/99 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped
+15:15:50 | INFO     | conformal_script | extract: processed 50/99 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped
+15:16:01 | INFO     | conformal_script | extract: processed 75/99 case(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped
+15:16:12 | INFO     | conformal_script | extract: built loss curves for 99/99 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped.
+15:16:12 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2_nnunet/curves/nnunet_gatea/eval_ped/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2_nnunet/curves/nnunet_gatea/eval_ped/curves_manifest.json.
+15:16:12 | INFO     | __main__ | conformal_v2: step 'curves' took 242.2 s
+15:16:12 | INFO     | __main__ | conformal_v2: step 'additivity' took 0.0 s
+15:16:12 | WARNING  | neurovision.uncertainty.conformal | fit_threshold_crc: infeasible at alpha=0.0500 for region ET (n=187); smallest-grid adjusted risk 0.0511.
+15:16:12 | WARNING  | neurovision.uncertainty.conformal | fit_threshold_rcps: infeasible at alpha=0.0500 delta=0.100 for region ET (n=187); UCB at the lowest grid tau is 0.0759.
+15:16:12 | INFO     | __main__ | conformal_v2: step 'fits' took 0.0 s
+15:16:12 | INFO     | __main__ | conformal_v2: step 'realised' took 0.2 s
+15:16:12 | INFO     | __main__ | resplits: nnunet_gatea / ET (pool 376, 1000 splits)
+15:16:19 | INFO     | __main__ | resplits: nnunet_gatea / TC (pool 376, 1000 splits)
+15:16:26 | INFO     | __main__ | resplits: nnunet_gatea / WT (pool 376, 1000 splits)
+15:16:34 | INFO     | __main__ | conformal_v2: step 'resplits' took 21.5 s
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+15:21:18 | INFO     | __main__ | postprocess: 25/189 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:25:49 | INFO     | __main__ | postprocess: 50/189 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:30:34 | INFO     | __main__ | postprocess: 75/189 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:35:08 | INFO     | __main__ | postprocess: 100/189 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:39:28 | INFO     | __main__ | postprocess: 125/189 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:44:02 | INFO     | __main__ | postprocess: 150/189 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:48:40 | INFO     | __main__ | postprocess: 175/189 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test
+15:55:11 | INFO     | __main__ | postprocess: 25/60 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa
+15:59:35 | INFO     | __main__ | postprocess: 50/60 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa
+16:05:43 | INFO     | __main__ | postprocess: 25/99 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped
+16:09:47 | INFO     | __main__ | postprocess: 50/99 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped
+16:14:14 | INFO     | __main__ | postprocess: 75/99 cases from /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped
+16:18:33 | INFO     | __main__ | conformal_v2: step 'postprocessed' took 3719.7 s
+EXIT 0 end Tue Nov 24 10:48:34 UTC 2026

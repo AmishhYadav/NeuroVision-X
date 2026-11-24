@@ -125,3 +125,18 @@ arithmetic over stored curves. Estimate ~4 CPU-h, one job at a time.
 
 *(To be completed after the run. Nothing above this line may be edited once the first number
 exists.)*
+
+**Run 2026-11-24** at `1e73428` (`results/conformal_v2/`; nnU-Net rows from the W2.6 logits,
+`results/conformal_v2_nnunet/`, the "reported when it exists" step of Data). Full record:
+`experiments.md` note 69. Additivity check: 48/48 exact.
+
+- **V1 (re-splits): 50 of 54 cells hold, 4 FAIL.** `neurovision` ET α 0.05 (CRC and RCPS), nnU-Net
+  ET α 0.05 (RCPS): α at or below the model's ET miss floor (0.058 / 0.051 on val at τ = 1e-4), so
+  most halvings are infeasible and the feasible ones are selected for an easy calibration half.
+  `baseline_unet3d` TC α 0.10 RCPS: P(exceed) 0.124 against 0.121. Investigated (note 69): no
+  implementation fault found; the verdicts stand as registered.
+- **V2 (frozen, shifted cells VIOLATED):** CRC on WT+TC: 7 of 12 for each of the three models; RCPS:
+  5 / 4 / 5 (neurovision / baseline / nnU-Net). All regions, CRC 11/16, 13/18, 11/16; RCPS 8/16,
+  9/18, 9/16.
+- **Predictions:** 1 not met (4 FAILS); 2 met (25/25 fits); 3 met; 4 met; 5 not met in 1 of 50
+  test cells (−0.011); 6 met.

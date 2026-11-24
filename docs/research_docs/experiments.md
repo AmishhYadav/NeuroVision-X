@@ -3230,3 +3230,114 @@ evidence about the setup, and forgetting it means repeating it.
     definition the three models are nearly indistinguishable: the volume
     endpoint is ET-driven and limited by the task, not by the model.
     `results/volume_endpoint/nnunet_gatea_*`.
+
+69. **W2.1 CONFORMAL v2 -- CRC AND RCPS, THREE MODELS, THREE REGIONS, WITH
+    THE MASK COST. THE BOUND HOLDS IN DISTRIBUTION EXCEPT WHERE THE MODEL'S
+    MISS FLOOR SITS ABOVE α; UNDER SHIFT ALL THREE MODELS VIOLATE THE SAME
+    7 OF 12 WT/TC CELLS ONCE α 0.20 BINDS -- nnU-Net's "5 OF 12" (NOTE 62)
+    WAS A GRID-CEILING ARTEFACT (2026-11-24, MasterPlan W2.1).** Registered:
+    `preregistrations/preregistration_conformal_v2.md` (Zenodo DOI
+    10.5281/zenodo.24491280), analysis family 1 of 6.
+
+    **Runs.** (1) `scripts/conformal_v2.py device=cpu` at `1e73428`, exit 0,
+    2.8 CPU-h: `neurovision`, `baseline_unet3d` from saved logits (extended
+    grid, 73 points), nnU-Net from note 62's saved curves (v1 grid, WT/TC,
+    raw mask). `results/conformal_v2/`. (2) The protocol's "reported when
+    W2.6 exists" step: same script, nnU-Net only, from the W2.6 fp16 region
+    logits (note 68), 1.2 CPU-h, CLI overrides
+    `~analysis.conformal_v2.models '+analysis.conformal_v2.models={nnunet_gatea:{eval_dirs:{val:outputs/nnunet_gatea_probs/eval_val,...}}}' analysis.conformal_v2.out_dir=outputs/conformal_v2_nnunet`.
+    `results/conformal_v2_nnunet/`. **The nnU-Net rows below come from run
+    (2); run (1)'s nnU-Net rows are superseded.**
+
+    **Checks.** Additivity (registered): v2 curves restricted to the v1 grid
+    reproduce v1's fits and realised risks, 48/48 comparisons exact
+    (`additivity.json`). nnU-Net bridge (not registered, added): W2.6 curves
+    restricted to the v1 grid vs note 62's curves, all four splits, WT and TC:
+    mean-curve max |Δ| ≤ 1.8e-5 (per-case max 2.2e-3, fp16 rounding); every
+    v1-grid τ̂ and every WT/TC α 0.05/0.10 re-split summary is identical
+    between runs (1) and (2).
+
+    **V1 -- in distribution, 1,000 re-splits of the pooled 376 cases (54
+    cells).** 50 hold, **4 FAIL**:
+
+    | model | cell | rule | value | limit | feasible draws |
+    |---|---|---|---|---|---|
+    | neurovision | ET α 0.05 CRC | mean realised | 0.0538 | 0.0508 | 616 |
+    | neurovision | ET α 0.05 RCPS | P(realised > α) | 0.679 | 0.179 | 140 |
+    | nnU-Net | ET α 0.05 RCPS | P(realised > α) | 0.301 | 0.153 | 302 |
+    | baseline_unet3d | TC α 0.10 RCPS | P(realised > α) | 0.124 | 0.121 | 1000 |
+
+    Investigation (exploratory, after the run; script in the session
+    scratchpad, numbers reproducible from `results/conformal_v2/curves/`):
+    - *ET α 0.05 (3 FAILS).* The ET miss rate at the lowest grid τ (1e-4)
+      is 0.058 on val for `neurovision` (0.051 nnU-Net): enhancing-tumour
+      voxels the model gives p < 1e-4. α 0.05 is at or below the floor, so
+      many halvings are infeasible, and the feasible ones are selected for an
+      easy calibration half (floor 0.038 vs 0.050 in infeasible draws), which
+      in a fixed pool leaves a hard evaluation half (0.047 vs 0.036).
+      Counting every draw, with infeasible draws falling back to the lowest
+      τ, mean realised risk is 0.047 (CRC) / 0.043 (RCPS) ≤ 0.05. The CRC
+      theorem assumes the most conservative setting has loss ≤ α; here it
+      does not. Read: an assumption alarm at the floor, not an
+      implementation fault. `baseline_unet3d`, whose ET floor is 0.029, holds
+      all six ET cells.
+    - *baseline TC α 0.10 RCPS (0.124 vs 0.121).* The re-split endpoint is the
+      empirical risk of the other half of a fixed pool, which is negatively
+      tied to the calibration half and noisier than the population risk the
+      RCPS theorem bounds. Same thresholds, evaluation half replaced by an
+      independent bootstrap draw from the pool: P(exceed) 0.097; pooled
+      (population) risk at the fitted τ̂ > α: 0.055. RCPS's α 0.10 cells sit
+      at 0.107–0.124 on all three models, so this is the endpoint's
+      tightness, not one bad cell. The registered verdict stays FAILS.
+
+    **V2 -- frozen val τ̂ on test (189), SSA (60), PED (99).** Test: realised
+    risk 0.59–1.00× α (CRC) and 0.32–0.87× α (RCPS), 25 feasible cells each;
+    one CRC point estimate above α (`baseline_unet3d` TC α 0.20: 0.2007, CI
+    0.174–0.229, inconclusive by the CI rule). Shifted cells VIOLATED
+    (CI lower bound > α):
+
+    | | CRC WT+TC (of 12) | CRC all regions | RCPS WT+TC | RCPS all regions |
+    |---|---|---|---|---|
+    | neurovision | 7 | 11 / 16 | 5 | 8 / 16 |
+    | baseline_unet3d | 7 | 13 / 18 | 4 | 9 / 18 |
+    | nnU-Net | **7** | 11 / 16 | 5 | 9 / 16 |
+
+    (ET α 0.05 infeasible for `neurovision` and nnU-Net, so 16 cells.)
+    Mean excess of realised risk over α in shifted WT/TC cells, CRC:
+    neurovision 0.162, nnU-Net 0.146, baseline 0.147.
+    **nnU-Net's v1 "5 of 12" (C30) was a grid artefact:** at α 0.20 v1's τ̂
+    sat on the 0.95 ceiling; on the extended grid it binds at 0.995 and SSA
+    TC (0.283) and SSA WT (0.238) α 0.20 become VIOLATED. Once α 0.20 binds,
+    all three models violate the same count. What still separates them is
+    magnitude, cell by cell (nnU-Net lower on PED WT and PED TC α 0.20,
+    higher on SSA WT), not the count.
+
+    **Predictions (registered, directional):**
+    1. V1 holds everywhere -- **not met** (4/54 FAIL, above).
+    2. τ̂_RCPS ≤ τ̂_CRC in every cell, larger mask cost -- **met**: 25/25
+       fits; where τ̂ differs (66 applied cells) the RCPS mask is larger and
+       less precise in 66/66; its Dice is lower in only 35/66 (the CRC mask at
+       α 0.20 under-segments, so the larger RCPS mask can score higher).
+    3. α 0.20 binds below the new ceiling for WT and TC, all models --
+       **met** (0.96–0.995; none at 0.9999).
+    4. PED TC VIOLATED at every α, every model, both guarantees; RCPS no
+       more shifted violations than CRC -- **met** (18/18; RCPS fewer on every
+       model).
+    5. Post-processing moves in-distribution risk by < 0.01 -- **not met in
+       1 of 50 test cells**: `neurovision` TC α 0.20 CRC −0.011 (RCPS
+       −0.009); every other |Δ| ≤ 0.005. Direction: post-processing *lowers*
+       the miss rate (nesting enforcement adds ET voxels to TC).
+    6. ET feasible in distribution at α ≥ 0.10, all models -- **met**.
+
+    **Mask cost (test, all models).** Median volume ratio |M|/|G|: CRC 1.08–1.38
+    at α 0.05, 0.97–1.09 at α 0.10, 0.88–0.92 at α 0.20; RCPS 1.16–1.50 /
+    1.00–1.30 / 0.88–0.93. Mean Dice of the guaranteed mask 0.70–0.94. C15's
+    reading stands and extends to RCPS at α 0.20; at α 0.10 RCPS costs
+    volume (up to 1.30×).
+
+    **Reading.** The guarantee is a theorem and behaves like one in
+    distribution, with two honest limits: it cannot promise a miss rate below
+    the model's own miss floor (ET α 0.05), and the high-probability version
+    is tight against a fixed-pool re-split. Under shift, the stronger model
+    does **not** violate fewer cells; earlier wording that it did rests on
+    the v1 ceiling. C14 and C30 are amended.
