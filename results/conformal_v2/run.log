@@ -1,0 +1,107 @@
+GIT HEAD 1e734284510cd6d1a8bc550c6e763c194cbdf67a start Tue Nov 24 06:49:47 UTC 2026
+12:19:49 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+12:19:49 | INFO     | __main__ | curves: neurovision / val (extended grid) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val
+12:20:01 | INFO     | conformal_script | extract: processed 25/187 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val
+12:20:12 | INFO     | conformal_script | extract: processed 50/187 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val
+12:20:24 | INFO     | conformal_script | extract: processed 75/187 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val
+12:20:35 | INFO     | conformal_script | extract: processed 100/187 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val
+12:20:46 | INFO     | conformal_script | extract: processed 125/187 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val
+12:20:58 | INFO     | conformal_script | extract: processed 150/187 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val
+12:21:09 | INFO     | conformal_script | extract: processed 175/187 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val
+12:21:14 | INFO     | conformal_script | extract: built loss curves for 187/187 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_val.
+12:21:14 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/neurovision/eval_val/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/neurovision/eval_val/curves_manifest.json.
+12:21:14 | INFO     | __main__ | curves: neurovision / test (extended grid) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:21:26 | INFO     | conformal_script | extract: processed 25/189 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:21:37 | INFO     | conformal_script | extract: processed 50/189 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:21:49 | INFO     | conformal_script | extract: processed 75/189 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:22:00 | INFO     | conformal_script | extract: processed 100/189 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:22:11 | INFO     | conformal_script | extract: processed 125/189 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:22:22 | INFO     | conformal_script | extract: processed 150/189 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:22:34 | INFO     | conformal_script | extract: processed 175/189 case(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:22:40 | INFO     | conformal_script | extract: built loss curves for 189/189 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test.
+12:22:40 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/neurovision/eval_test/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/neurovision/eval_test/curves_manifest.json.
+12:22:40 | INFO     | __main__ | curves: neurovision / ssa (extended grid) from /Users/amish/NeuroVision-X/outputs/eval_ssa_neurovision
+12:22:52 | INFO     | conformal_script | extract: processed 25/60 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ssa_neurovision
+12:23:04 | INFO     | conformal_script | extract: processed 50/60 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ssa_neurovision
+12:23:08 | INFO     | conformal_script | extract: built loss curves for 60/60 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/eval_ssa_neurovision.
+12:23:08 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/neurovision/eval_ssa_neurovision/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/neurovision/eval_ssa_neurovision/curves_manifest.json.
+12:23:08 | INFO     | __main__ | curves: neurovision / ped (extended grid) from /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision
+12:23:19 | INFO     | conformal_script | extract: processed 25/99 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision
+12:23:29 | INFO     | conformal_script | extract: processed 50/99 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision
+12:23:40 | INFO     | conformal_script | extract: processed 75/99 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision
+12:23:51 | INFO     | conformal_script | extract: built loss curves for 99/99 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision.
+12:23:51 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/neurovision/eval_ped_neurovision/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/neurovision/eval_ped_neurovision/curves_manifest.json.
+12:23:51 | INFO     | __main__ | curves: baseline_unet3d / val (extended grid) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d
+12:24:03 | INFO     | conformal_script | extract: processed 25/187 case(s) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d
+12:24:14 | INFO     | conformal_script | extract: processed 50/187 case(s) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d
+12:24:26 | INFO     | conformal_script | extract: processed 75/187 case(s) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d
+12:24:37 | INFO     | conformal_script | extract: processed 100/187 case(s) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d
+12:24:48 | INFO     | conformal_script | extract: processed 125/187 case(s) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d
+12:25:00 | INFO     | conformal_script | extract: processed 150/187 case(s) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d
+12:25:11 | INFO     | conformal_script | extract: processed 175/187 case(s) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d
+12:25:16 | INFO     | conformal_script | extract: built loss curves for 187/187 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/eval_val_baseline_unet3d.
+12:25:16 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/baseline_unet3d/eval_val_baseline_unet3d/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/baseline_unet3d/eval_val_baseline_unet3d/curves_manifest.json.
+12:25:16 | INFO     | __main__ | curves: baseline_unet3d / test (extended grid) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+12:25:28 | INFO     | conformal_script | extract: processed 25/189 case(s) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+12:25:39 | INFO     | conformal_script | extract: processed 50/189 case(s) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+12:25:51 | INFO     | conformal_script | extract: processed 75/189 case(s) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+12:26:02 | INFO     | conformal_script | extract: processed 100/189 case(s) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+12:26:13 | INFO     | conformal_script | extract: processed 125/189 case(s) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+12:26:24 | INFO     | conformal_script | extract: processed 150/189 case(s) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+12:26:36 | INFO     | conformal_script | extract: processed 175/189 case(s) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+12:26:42 | INFO     | conformal_script | extract: built loss curves for 189/189 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d.
+12:26:42 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/baseline_unet3d/eval_test_baseline_unet3d/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/baseline_unet3d/eval_test_baseline_unet3d/curves_manifest.json.
+12:26:42 | INFO     | __main__ | curves: baseline_unet3d / ssa (extended grid) from /Users/amish/NeuroVision-X/outputs/eval_ssa_baseline_unet3d
+12:26:53 | INFO     | conformal_script | extract: processed 25/60 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ssa_baseline_unet3d
+12:27:04 | INFO     | conformal_script | extract: processed 50/60 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ssa_baseline_unet3d
+12:27:09 | INFO     | conformal_script | extract: built loss curves for 60/60 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/eval_ssa_baseline_unet3d.
+12:27:09 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/baseline_unet3d/eval_ssa_baseline_unet3d/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/baseline_unet3d/eval_ssa_baseline_unet3d/curves_manifest.json.
+12:27:09 | INFO     | __main__ | curves: baseline_unet3d / ped (extended grid) from /Users/amish/NeuroVision-X/outputs/eval_ped_baseline_unet3d
+12:27:20 | INFO     | conformal_script | extract: processed 25/99 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ped_baseline_unet3d
+12:27:30 | INFO     | conformal_script | extract: processed 50/99 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ped_baseline_unet3d
+12:27:42 | INFO     | conformal_script | extract: processed 75/99 case(s) from /Users/amish/NeuroVision-X/outputs/eval_ped_baseline_unet3d
+12:27:53 | INFO     | conformal_script | extract: built loss curves for 99/99 case(s) x 3 region(s) from /Users/amish/NeuroVision-X/outputs/eval_ped_baseline_unet3d.
+12:27:53 | INFO     | conformal_script | extract: wrote /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/baseline_unet3d/eval_ped_baseline_unet3d/curves.npz and /Users/amish/NeuroVision-X/outputs/conformal_v2/curves/baseline_unet3d/eval_ped_baseline_unet3d/curves_manifest.json.
+12:27:53 | INFO     | __main__ | conformal_v2: step 'curves' took 484.0 s
+12:27:53 | INFO     | __main__ | conformal_v2: step 'additivity' took 0.0 s
+12:27:53 | WARNING  | neurovision.uncertainty.conformal | fit_threshold_crc: infeasible at alpha=0.0500 for region ET (n=187); smallest-grid adjusted risk 0.0581.
+12:27:53 | WARNING  | neurovision.uncertainty.conformal | fit_threshold_rcps: infeasible at alpha=0.0500 delta=0.100 for region ET (n=187); UCB at the lowest grid tau is 0.0889.
+12:27:53 | INFO     | __main__ | conformal_v2: step 'fits' took 0.1 s
+12:27:54 | INFO     | __main__ | conformal_v2: step 'realised' took 0.5 s
+12:27:54 | INFO     | __main__ | resplits: neurovision / ET (pool 376, 1000 splits)
+12:28:00 | INFO     | __main__ | resplits: neurovision / TC (pool 376, 1000 splits)
+12:28:07 | INFO     | __main__ | resplits: neurovision / WT (pool 376, 1000 splits)
+12:28:14 | INFO     | __main__ | resplits: baseline_unet3d / ET (pool 376, 1000 splits)
+12:28:20 | INFO     | __main__ | resplits: baseline_unet3d / TC (pool 376, 1000 splits)
+12:28:26 | INFO     | __main__ | resplits: baseline_unet3d / WT (pool 376, 1000 splits)
+12:28:33 | INFO     | __main__ | resplits: nnunet_gatea / TC (pool 376, 1000 splits)
+12:28:40 | INFO     | __main__ | resplits: nnunet_gatea / WT (pool 376, 1000 splits)
+12:28:47 | INFO     | __main__ | conformal_v2: step 'resplits' took 52.9 s
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+12:34:07 | INFO     | __main__ | postprocess: 25/189 cases from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:39:23 | INFO     | __main__ | postprocess: 50/189 cases from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:44:54 | INFO     | __main__ | postprocess: 75/189 cases from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:54:40 | INFO     | __main__ | postprocess: 100/189 cases from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+12:59:40 | INFO     | __main__ | postprocess: 125/189 cases from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+13:05:03 | INFO     | __main__ | postprocess: 150/189 cases from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+13:10:22 | INFO     | __main__ | postprocess: 175/189 cases from /Users/amish/NeuroVision-X/outputs/neurovision/eval_test
+13:17:47 | INFO     | __main__ | postprocess: 25/60 cases from /Users/amish/NeuroVision-X/outputs/eval_ssa_neurovision
+13:22:43 | INFO     | __main__ | postprocess: 50/60 cases from /Users/amish/NeuroVision-X/outputs/eval_ssa_neurovision
+13:29:42 | INFO     | __main__ | postprocess: 25/99 cases from /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision
+13:34:12 | INFO     | __main__ | postprocess: 50/99 cases from /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision
+13:39:20 | INFO     | __main__ | postprocess: 75/99 cases from /Users/amish/NeuroVision-X/outputs/eval_ped_neurovision
+13:51:01 | INFO     | __main__ | postprocess: 25/189 cases from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+13:57:21 | INFO     | __main__ | postprocess: 50/189 cases from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+14:03:55 | INFO     | __main__ | postprocess: 75/189 cases from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+14:10:20 | INFO     | __main__ | postprocess: 100/189 cases from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+14:16:13 | INFO     | __main__ | postprocess: 125/189 cases from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+14:22:34 | INFO     | __main__ | postprocess: 150/189 cases from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+14:28:58 | INFO     | __main__ | postprocess: 175/189 cases from /Users/amish/NeuroVision-X/outputs/eval_test_baseline_unet3d
+14:37:58 | INFO     | __main__ | postprocess: 25/60 cases from /Users/amish/NeuroVision-X/outputs/eval_ssa_baseline_unet3d
+14:43:51 | INFO     | __main__ | postprocess: 50/60 cases from /Users/amish/NeuroVision-X/outputs/eval_ssa_baseline_unet3d
+14:52:16 | INFO     | __main__ | postprocess: 25/99 cases from /Users/amish/NeuroVision-X/outputs/eval_ped_baseline_unet3d
+14:57:41 | INFO     | __main__ | postprocess: 50/99 cases from /Users/amish/NeuroVision-X/outputs/eval_ped_baseline_unet3d
+15:03:56 | INFO     | __main__ | postprocess: 75/99 cases from /Users/amish/NeuroVision-X/outputs/eval_ped_baseline_unet3d
+15:09:51 | INFO     | __main__ | conformal_v2: step 'postprocessed' took 9400.5 s
+EXIT 0 end Tue Nov 24 09:39:51 UTC 2026

@@ -1,0 +1,4 @@
+model,item,status
+nnunet_gatea,region:ET,not_measured_needs_W2.6
+nnunet_gatea,extended_grid,not_measured_needs_W2.6
+nnunet_gatea,postprocessed,not_measured_needs_W2.6
