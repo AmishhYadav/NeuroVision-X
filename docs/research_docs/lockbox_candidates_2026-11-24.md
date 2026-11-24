@@ -61,6 +61,25 @@ agreement step): `UCSF-PDGM-metadata_v5.csv` (SHA-256 `afc1c23a…6fd78`) and `U
 - Side finding: patients 429 and 433 each appear twice inside BraTS 2021 (00557/00639, 00758/00626). Both
   pairs sit in our `train` split, so no train/test leak; recorded for W2.7.
 
+## BraTS-Africa extra 35 — confirmed (2026-11-24, metadata only — no image or label opened)
+
+Source: TCIA "Scanner and Diagnosis Information" sheet,
+`https://www.cancerimagingarchive.net/wp-content/uploads/BraTS-Africa_TCIA_datainfo_v2.xlsx` (SHA-256 `74ac283b…`;
+local copy `data/external/brats_africa/`, gitignored). Read with the standard library (no openpyxl).
+
+- Sheet 1 lists **95 adult glioma** IDs, sheet 2 the **51 other CNS neoplasms** (with a "Neoplasm Category"
+  column: metastases, ventricular masses …). No ID is on both sheets.
+- All 60 of our `brats_ssa` cases are among the 95 glioma IDs. **35 glioma IDs are not ours:** 125, 126, 129,
+  130, 132, 134, 136–140, 143, 148, 154, 155, 157, 158, 163, 169, 171, 174, 175, 179, 180, 188, 192, 198, 206,
+  207, 210, 218, 225–228 (as `BraTS-SSA-00NNN-000`).
+- Labels: TCIA states "expert-annotated tumor sub-regions for each of the 146 cases"; the paper (Adewole et al.,
+  Radiol AI 2025, Data Availability) says the full 146 with "tumor subregion labels is freely available" under
+  CC BY 4.0, 20 of the 95 having been withheld as the 2023 challenge test set. The sheet gives a sub-region
+  count (1–3) for every glioma row.
+- Download: the 1.6 GB "BraTS 2023 Challenge" package (Aspera) holds all 146 — fits on disk, same format as
+  our SSA cases, so the existing preprocessing applies.
+- The 51 non-glioma cases are a label-definition change (other tumour types), not a glioma lockbox.
+
 ## Author actions needed
 
 1. Confirm on the TCIA BraTS-Africa page, or from the Radiol AI paper's data-availability section, that the 35 non-2023 adult glioma cases are in the open package with labels. Then match IDs against our 60.
