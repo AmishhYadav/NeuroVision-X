@@ -3402,3 +3402,90 @@ evidence about the setup, and forgetting it means repeating it.
     Caveats: one model (`neurovision`); the three members share a recipe, so
     ENS-PD is a narrow ensemble; SegQC was trained on val masks of this same
     model; descriptive AURC is outside the family.
+
+71. **W3.2 SEVERITY LADDER -- REALISED RISK RISES WITH SEVERITY FOR BIAS,
+    GAMMA, RICIAN AND MOTION (GRADED), NOT FOR THICK SLICES: THERE THE MODELS
+    OVER-SEGMENT AND THE MISS-RATE BOUND SEES NOTHING. BIAS DOES THE MOST
+    DAMAGE; THE GATE REFUSES LITTLE MORE WHILE SILENT FAILURE CLIMBS
+    (2026-11-24, MasterPlan W3.2).** Registered:
+    `preregistrations/preregistration_severity_ladder.md` (Zenodo DOI
+    10.5281/zenodo.24491280; Amendments 1–3 before any corrupted number),
+    analysis family 5 of 6.
+
+    **Run.** GPU: `neurovision-w32-main-inhouse` (7.31 GPU-h) +
+    `neurovision-w32-main-nnunet-s1` (9.26 GPU-h) at `1e73428`, 42/42 shards,
+    189 cases each, all three bridges PASS (gpu_ledger.md). Design after cuts
+    1+2: levels 0, 2, 3, 4; `baseline_unet3d` not run on `bias` / `gamma`.
+    Analysis: `scripts/severity_ladder_analysis.py` at `037e95e`, CPU, 13 s,
+    nothing fitted (v1 CRC τ̂ frozen from each model's `fit.json`; deployed
+    gate thresholds; P1.4 OOD model and cuts). Outputs
+    `results/severity_ladder_analysis/` (`primary.csv`, `kind_verdicts.csv`,
+    `secondary.csv`, `descriptive.csv`, `run_meta.json` with input hashes).
+    **Bridge (prediction 6): met.** Level-0 realised risk reproduces the
+    published clean test values for all three models, 6 cells each, to ≤ 3e-5
+    (e.g. `neurovision` WT α 0.10: 0.082886 vs 0.082887).
+
+    **Primary family (26 cells, one Holm, α 0.10 τ̂):** 18 GRADED, 8 NOT
+    GRADED. Mean per-case miss rate, level 0 → level 4, with the 95% CI of
+    the difference:
+
+    | kind | `neurovision` WT / TC | nnU-Net WT / TC | `baseline_unet3d` WT / TC | kind verdict |
+    |---|---|---|---|---|
+    | bias | +0.148 [0.117, 0.179] / +0.149 [0.115, 0.184] | +0.131 / +0.115 | not run | GRADED on 2 measured models |
+    | gamma | +0.028 [0.021, 0.035] / +0.021 [0.011, 0.031] | +0.018 / +0.015 | not run | GRADED on 2 measured models |
+    | rician | +0.057 / +0.019 | +0.009 / +0.003 (NOT GRADED) | +0.039 / +0.017 | GRADED (WT) |
+    | motion | +0.005 [0.001, 0.010] / +0.007 (NOT GRADED) | +0.017 / +0.019 | +0.005 / +0.009 | GRADED (WT) |
+    | thick_slice | −0.018 / −0.002 | −0.008 / +0.003 | −0.019 / −0.006 | NOT GRADED (falls) |
+
+    **Thick slices -- checked, not a bug.** WT Dice falls with slab thickness
+    (`neurovision` 0.932 → 0.870, nnU-Net 0.942 → 0.899, baseline 0.928 →
+    0.852) while the median predicted/true WT volume rises to 1.09–1.14 at
+    7 mm: the blurred input is over-segmented. The conformal loss counts only
+    missed tumour voxels, so a bloated mask lowers it. The bound is blind to
+    over-segmentation by construction.
+
+    **Secondary family (16 pairs, one Holm): FLATTER 3.** nnU-Net flatter
+    than `neurovision` on rician WT (−0.011 per level [−0.013, −0.009]) and
+    TC (−0.004), and gamma WT (−0.002). nnU-Net is significantly **steeper**
+    on motion (WT +0.003, TC +0.003) and thick-slice WT (+0.003, where
+    "steeper" means falling less). `neurovision` is never flatter than the
+    matched U-Net; on rician WT it is steeper (+0.004 [0.003, 0.005]).
+
+    **Descriptive (gate transferred, not refitted, for the two non-deployed
+    models).** At level 4 of `bias`: refusal 4.2% → 11.6% and silent failure
+    4.2% → **37.6%** (`neurovision`); nnU-Net refusal 8.5% → 19.0%, silent
+    2.6% → 29.6%. Elsewhere refusal moves ≤ 4 points while silent failure
+    rises to 6–11% (thick-slice, rician, motion). The OOD flag rate (input
+    statistics, identical across models) reaches 93% (bias) and 78% (gamma)
+    at level 4 but stays at or below its clean 9.5% for rician and motion
+    and reaches only 10% for thick slices.
+
+    **Predictions (registered, directional):**
+    1. Risk rises for thick_slice, rician, motion, every model -- **not
+       met**: rician and motion GRADED on WT for all three; thick-slice
+       falls.
+    2. Bias and gamma move risk least -- **not met, reversed**: bias moves
+       it most (+0.12 to +0.15).
+    3. nnU-Net flattest, baseline steepest -- **not met**: mixed (3 of 16
+       FLATTER, 3 significantly steeper); `neurovision` never flatter than
+       the baseline.
+    4. Refusal rises but silent failure rises too -- **met**, strongly under
+       bias.
+    5. OOD flag rate rises more for rician/thick-slice than bias/gamma --
+       **not met, reversed**.
+    6. Level 0 reproduces clean -- **met**.
+
+    **Reading.** "Graded" is earned per kind for bias, gamma, rician and
+    motion, with bias and gamma on two models only; it is not earned for
+    thick slices, where the failure is over-segmentation the miss-rate bound
+    cannot see. The z-score did not absorb a smooth bias field: it is the
+    most damaging corruption here, and the only one the OOD score sees well.
+    "A stronger model shrinks the damage" holds for rician noise and gamma
+    WT only; under motion nnU-Net degrades faster. The gate's pattern from
+    note 47 / C21 reproduces on a controlled axis: it sees some bad masks,
+    and lets most of the new ones through. Caveats: four levels (level 1 cut);
+    synthetic corruptions on preprocessed volumes, not real acquisitions;
+    thick-slice inputs are resampled back to 1 mm, so the real front end's
+    anisotropy check never fires here (curated input-QC stand-in); the gate
+    and SegQC are transferred, not refitted, for nnU-Net and the baseline;
+    the miss rate is a false-negative loss only.

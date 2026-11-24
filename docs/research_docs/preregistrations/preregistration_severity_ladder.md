@@ -206,3 +206,20 @@ run pauses between shards and is resumed the following week; no further conditio
 
 *(To be completed after the run. Nothing above this line may be edited once the first corrupted
 number exists, except a dated probe amendment as described above.)*
+
+**2026-11-24.** Main run 42/42 shards, 189 cases each, bridges PASS (16.57 GPU-h, inside the registered
+15.8–20.2). Analysis `scripts/severity_ladder_analysis.py` at `037e95e`, nothing fitted. Full record: note 71,
+claim C36, `results/severity_ladder_analysis/`.
+
+- **Primary (26 cells after the Amendment 3 cut):** 18 GRADED, 8 NOT GRADED. Per kind: `bias` and `gamma`
+  GRADED in both regions for both measured models (reported as *graded on the two measured models*; the
+  baseline was cut); `rician` and `motion` GRADED for all three models on WT; `thick_slice` NOT GRADED for
+  every model and region -- the miss rate falls, because the models over-segment thick-slice input and the
+  loss counts only missed voxels.
+- **Secondary (16 pairs):** FLATTER 3 (nnU-Net vs `neurovision`: rician WT and TC, gamma WT). nnU-Net is
+  significantly steeper on motion (WT, TC) and thick-slice WT. `neurovision` vs `baseline_unet3d`: never
+  FLATTER.
+- **Predictions:** 4 and 6 met; 1, 2, 3, 5 not met (2 and 5 reversed: bias is the most damaging kind and the
+  one the OOD score flags most).
+- **No deviation** from the registered analysis. The kind-level label for `bias` / `gamma` ("graded on the
+  measured models only") follows from Amendment 3's cut and is stated, not promoted to GRADED.
