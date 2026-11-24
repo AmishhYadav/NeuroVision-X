@@ -1,0 +1,20 @@
+{
+  "s_per_case": {
+    "nnunet_gatea/none/level0": 10.82951460110582,
+    "nnunet_gatea/thick_slice/level2": 10.869952341804229,
+    "nnunet_gatea/thick_slice/level3": 10.742722630597884,
+    "nnunet_gatea/thick_slice/level4": 10.728897507481475,
+    "nnunet_gatea/rician/level2": 10.893057191317455,
+    "nnunet_gatea/rician/level3": 10.914783987777785,
+    "nnunet_gatea/rician/level4": 10.873271324280424,
+    "nnunet_gatea/bias/level2": 10.97020895073544,
+    "nnunet_gatea/bias/level3": 11.027689700010578,
+    "nnunet_gatea/bias/level4": 10.988008416015882,
+    "nnunet_gatea/gamma/level2": 10.877775774285707,
+    "nnunet_gatea/gamma/level3": 10.803333082603189,
+    "nnunet_gatea/gamma/level4": 10.867622826153434,
+    "nnunet_gatea/motion/level2": 11.273043933925917,
+    "nnunet_gatea/motion/level3": 11.294903119074075,
+    "nnunet_gatea/motion/level4": 11.35236891834921
+  }
+}
