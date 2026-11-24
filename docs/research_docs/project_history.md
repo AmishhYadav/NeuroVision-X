@@ -833,3 +833,4 @@ Full detail and restart commands: `status_2026-09-27.md`. In short:
   grid-censored; the conformal bound is an average over studies, never per patient; recalibration
   results are counterfactual; real-DICOM results are not external validation.
 - 2026-11-24 — W2.5 volume endpoint measured (note 65, C32). W3.2 in-house bridge failure traced to a 96³-vs-64³ ROI bug in the driver, fixed (`c88b494`), CPU bridge PASS; probe v2 and the W2.6 nnU-Net probability export launched on Kaggle.
+- 2026-11-24 — D-A delivered (semester report submitted, demo given). Tag `semester-2026` on `894a607`; Zenodo snapshot DOI 10.5281/zenodo.24491280 registers every existing protocol externally (W7.3); W2.1, W2.3 and the W3.2 main run are unblocked.

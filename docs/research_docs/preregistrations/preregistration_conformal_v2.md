@@ -2,8 +2,7 @@
 
 **Written:** 2026-11-23, before any v2 number exists (no extended-grid curve, RCPS threshold,
 re-split or post-processed risk has been computed). MasterPlan W2.1; analysis-budget family 1 of 6
-(§B3 rule 4). **External registration:** *(OSF / Zenodo ID to be inserted here before the run —
-MasterPlan W7.3. The run does not start until this line holds an ID.)*
+(§B3 rule 4). **External registration:** Zenodo DOI [10.5281/zenodo.24491280](https://doi.org/10.5281/zenodo.24491280), deposited 2026-11-24: snapshot of tag `semester-2026` (commit `894a607`). The protocol as registered is the copy in that snapshot; only this line was added afterwards.
 
 ---
 

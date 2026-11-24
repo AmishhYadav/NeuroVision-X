@@ -1,9 +1,7 @@
 # Pre-registration — severity ladder: conformal risk and the gate under controlled acquisition change
 
 **Written:** 2026-11-23, before any corrupted volume has been generated or scored. MasterPlan W3.2;
-analysis-budget family 5 of 6 (§B3 rule 4). **External registration:** *(OSF / Zenodo ID to be
-inserted here before the GPU run — MasterPlan W7.3. The probe may run before; the main run does not
-start until this line holds an ID.)*
+analysis-budget family 5 of 6 (§B3 rule 4). **External registration:** Zenodo DOI [10.5281/zenodo.24491280](https://doi.org/10.5281/zenodo.24491280), deposited 2026-11-24: snapshot of tag `semester-2026` (commit `894a607`). The protocol as registered is the copy in that snapshot; only this line was added afterwards.
 
 ---
 

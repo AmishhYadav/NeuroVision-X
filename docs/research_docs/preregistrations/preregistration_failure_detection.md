@@ -2,8 +2,7 @@
 
 **Written:** 2026-11-24, before any ensemble-disagreement or ensemble-entropy number exists and before
 any signal has been scored against the W2.5 volume endpoint. MasterPlan W2.3; analysis-budget family
-3 of 6 (§B3 rule 4). **External registration:** *(OSF / Zenodo ID to be inserted here before the run —
-MasterPlan W7.3. The run does not start until this line holds an ID.)*
+3 of 6 (§B3 rule 4). **External registration:** Zenodo DOI [10.5281/zenodo.24491280](https://doi.org/10.5281/zenodo.24491280), deposited 2026-11-24: snapshot of tag `semester-2026` (commit `894a607`). The protocol as registered is the copy in that snapshot; only this line was added afterwards.
 
 **What is already known, stated so it cannot be re-discovered as a result:** Gate C (note 52,
 `preregistration_qc.md`) scored SegQC against foreground entropy on the Dice < 0.7 event, per region,
