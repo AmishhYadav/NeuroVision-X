@@ -18,7 +18,7 @@ import os
 import shutil
 from collections import Counter
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import hydra
 from omegaconf import DictConfig
@@ -61,12 +61,36 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _normalise_subtrees(include_subtrees: list[str] | None) -> list[tuple[str, ...]]:
+    """Turn include_subtrees into tuples of path components (never strings; see trap note).
+
+    Raises:
+        ValueError: If an entry is absolute, contains "..", or is empty.
+    """
+    parsed: list[tuple[str, ...]] = []
+    for raw in include_subtrees or []:
+        # PurePosixPath drops trailing slashes and "." parts, so "a/b/" == "a/b".
+        path = PurePosixPath(raw)
+        if path.is_absolute() or ".." in path.parts or not path.parts:
+            raise ValueError(
+                f"include_subtrees entry must be a relative path without '..': {raw!r}"
+            )
+        parsed.append(path.parts)
+    return parsed
+
+
+def _is_prefix(short: tuple[str, ...], long: tuple[str, ...]) -> bool:
+    """True if `short` is a prefix of `long`, compared component by component."""
+    return long[: len(short)] == short
+
+
 def select_files(
     source_dir: Path,
     allowed_extensions: list[str],
     max_bytes: int,
     exclude_dir_names: list[str],
     exclude_globs: list[str],
+    include_subtrees: list[str] | None = None,
 ) -> SelectionResult:
     """Pick the files under `source_dir` that are safe and small enough to mirror.
 
@@ -76,17 +100,47 @@ def select_files(
         max_bytes: Files strictly larger than this are skipped as oversize.
         exclude_dir_names: Directory names; a file is dropped if ANY path component equals one.
         exclude_globs: fnmatch patterns matched against the POSIX relative path.
+        include_subtrees: POSIX paths relative to `source_dir` that are re-admitted even
+            though they sit inside an excluded directory. Only the excluded names on the way
+            TO the subtree (its ancestors, or itself) are forgiven; an excluded name BELOW
+            the subtree root stays excluded. Deny list, globs, extensions and size limits
+            still apply. Matching is by path component, not string prefix.
 
     Returns:
         A SelectionResult with sorted relative paths.
+
+    Raises:
+        ValueError: If an include_subtrees entry is absolute or contains "..".
     """
     allowed = {ext.lower() for ext in allowed_extensions}
     excluded_names = set(exclude_dir_names)
+    includes = _normalise_subtrees(include_subtrees)
+    for inc in includes:
+        if not (source_dir / Path(*inc)).exists():
+            logger.warning("include_subtrees entry not found under source_dir: %s", "/".join(inc))
     result = SelectionResult()
 
+    def dir_is_allowed(dir_parts: tuple[str, ...], for_walking: bool) -> bool:
+        """Decide whether a directory (as component tuple) may be walked / hold files."""
+        for inc in includes:
+            if _is_prefix(inc, dir_parts):
+                # Inside the include subtree: only excluded names BELOW its root count.
+                return not any(part in excluded_names for part in dir_parts[len(inc) :])
+            if for_walking and _is_prefix(dir_parts, inc):
+                # An ancestor of the subtree (e.g. kaggle_kernels/): walk through it so we
+                # can reach the subtree. Its own files are rejected by the file check.
+                return True
+        return not any(part in excluded_names for part in dir_parts)
+
     for root, dirs, files in os.walk(source_dir, followlinks=False):
-        # Prune excluded directories in place so os.walk never descends into them.
-        dirs[:] = sorted(d for d in dirs if d not in excluded_names)
+        root_parts = Path(root).relative_to(source_dir).parts
+        # Prune excluded directories in place so os.walk never descends into them
+        # (unless they lead to an include subtree).
+        dirs[:] = sorted(d for d in dirs if dir_is_allowed((*root_parts, d), for_walking=True))
+        # Files here count only if this directory is allowed as a file location, which is
+        # stricter than "may be walked" for ancestors of an include subtree.
+        if not dir_is_allowed(root_parts, for_walking=False):
+            continue
         for name in files:
             full = Path(root) / name
             rel = full.relative_to(source_dir)
@@ -195,6 +249,7 @@ def main(cfg: DictConfig) -> None:
         int(cfg.max_file_mb * 1024 * 1024),
         list(cfg.exclude_dir_names),
         list(cfg.exclude_globs),
+        list(cfg.get("include_subtrees", [])),
     )
     report = sync(source_dir, dest_dir, selection, bool(cfg.dry_run))
 

@@ -14,6 +14,10 @@ exclude_dir_names: [logits, predictions, probabilities, uncertainty, checkpoints
 # Glob patterns (fnmatch, matched against the POSIX relative path from source_dir).
 exclude_globs: ["real_dicom_validation/cases/*", "real_dicom_validation/jobs/*",
                 "report_*/reports/*", "ambiguity_*/*"]
+# Subtrees (relative to source_dir) mirrored even though an ancestor directory is in
+# exclude_dir_names. Deny list, size cap, extensions and globs still apply inside them.
+# W3.2 severity-ladder main-run outputs live inside kaggle_kernels/ (pulled kernel output).
+include_subtrees: ["kaggle_kernels/w32-main/out-inhouse/severity_ladder"]
 manifest_name: MANIFEST.sha256
 dry_run: false
 
