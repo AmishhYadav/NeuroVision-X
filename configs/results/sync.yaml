@@ -4,7 +4,7 @@
 source_dir: outputs
 dest_dir: results
 max_file_mb: 5.0          # any file larger than this is skipped and listed
-allowed_extensions: [.csv, .tsv, .json, .yaml, .yml, .txt, .md, .npz, .log]
+allowed_extensions: [.csv, .tsv, .json, .yaml, .yml, .txt, .md, .npz, .log, .png, .pdf]  # figures added 2026-11-25 (~7 MB)
 # Directory NAMES: a file is skipped if ANY component of its path relative to
 # source_dir equals one of these (exact component match, never substring --
 # "eval_test" must not match "test", and "logits" must not match "logits_summary.csv").
@@ -12,8 +12,9 @@ exclude_dir_names: [logits, predictions, probabilities, uncertainty, checkpoints
                     kaggle_kernels, clinical_jobs, demo_jobs, demo_cache, wandb, wandb_offline,
                     cache, _extract, __pycache__, node_modules]
 # Glob patterns (fnmatch, matched against the POSIX relative path from source_dir).
+# qc/ and qc_ssa/ hold raw patient-slice snapshots (BraTS-SSA data agreement): never mirrored.
 exclude_globs: ["real_dicom_validation/cases/*", "real_dicom_validation/jobs/*",
-                "report_*/reports/*", "ambiguity_*/*"]
+                "report_*/reports/*", "ambiguity_*/*", "qc/*", "qc_ssa/*"]
 # Subtrees (relative to source_dir) mirrored even though an ancestor directory is in
 # exclude_dir_names. Deny list, size cap, extensions and globs still apply inside them.
 # W3.2 severity-ladder main-run outputs live inside kaggle_kernels/ (pulled kernel output).
