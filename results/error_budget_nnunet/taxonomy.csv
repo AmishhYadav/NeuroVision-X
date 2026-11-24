@@ -1,0 +1,13 @@
+cohort,cell,refusing_signals,n,frac_of_cohort
+test,correct_accept,,168,0.8888888888888888
+test,correct_refusal,predicted_dice,2,0.010582010582010581
+test,over_refusal,predicted_dice,14,0.07407407407407407
+test,silent_failure,,5,0.026455026455026454
+ssa,correct_accept,,52,0.8666666666666667
+ssa,correct_refusal,predicted_dice,1,0.016666666666666666
+ssa,silent_failure,,7,0.11666666666666667
+ssa,over_refusal,,0,0.0
+ped,correct_accept,,29,0.29292929292929293
+ped,correct_refusal,predicted_dice,27,0.2727272727272727
+ped,over_refusal,predicted_dice,3,0.030303030303030304
+ped,silent_failure,,40,0.40404040404040403

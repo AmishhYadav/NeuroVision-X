@@ -218,7 +218,7 @@ exists only under `outputs/`. Checkpoint hashes: `docs/data_manifests/checkpoint
 checkpoints themselves are in the private Kaggle dataset `amishyadav123/neurovision-checkpoints`.
 
 **Open right now:** external registration of three protocols (W7.3, author) — it blocks W2.1, W2.3,
-the W3.2 main GPU run; the W3.2 in-house probe v2 (v1 caught a 96³-vs-64³ ROI bug, fixed, Amendment 2); W2.5 run; semester report D2 paragraph (W1.1). D2 closed
+the W3.2 main GPU run; W3.2 probes done, cuts 1+2 applied (Amendment 3, 42 shards, 15.8–20.2 GPU-h) — main run waits on registration; W2.6 export + error budget done (note 68, C33); semester report D2 paragraph (W1.1). D2 closed
 2026-11-24 (note 63, C31). **Binding rules:** `MasterPlan.md` §B3 — results backed up the day they exist, no new run
 while one is unread, lockbox for new cohorts, tool feature freeze (`app/` changes only to fix a
 measured defect or to label something honestly), no further `neurovision` training.
@@ -272,6 +272,7 @@ that `neurovision`'s live directories are nested one level deeper than the other
 | `baseline_unet3d` | `outputs/eval_val_baseline_unet3d/logits` | `outputs/eval_test_baseline_unet3d/logits` | `outputs/eval_ssa_baseline_unet3d/logits` | `outputs/eval_ped_baseline_unet3d/logits` |
 | `neurovision_heavy_aug` | — | `outputs/eval_test_neurovision_heavy_aug/logits` | `outputs/eval_ssa_neurovision_heavy_aug/logits` | `outputs/eval_ped_neurovision_heavy_aug/logits` |
 | `neurovision_seed43` | — | `outputs/eval_test_neurovision_seed43/logits` | `outputs/eval_ssa_neurovision_seed43/logits` | `outputs/eval_ped_neurovision_seed43/logits` |
+| nnU-Net Gate A (TTA on; W2.6, note 68) | `outputs/nnunet_gatea_probs/eval_val/logits` | `outputs/nnunet_gatea_probs/eval_test/logits` | `outputs/nnunet_gatea_probs/eval_ssa/logits` | `outputs/nnunet_gatea_probs/eval_ped/logits` |
 | `ablation_content_only_gate` | — | — | — | — |
 | `capacity_control` | — | — | — | — |
 

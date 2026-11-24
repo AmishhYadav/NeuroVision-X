@@ -3162,3 +3162,56 @@ evidence about the setup, and forgetting it means repeating it.
     Dice.
     A stronger model shrinks the shifted damage (C30) but does not make local
     repair cheaper. Exploratory reading of a descriptive table; no test.
+
+68. **W2.6 nnU-Net PROBABILITY EXPORT AND END-TO-END ERROR BUDGET -- THE
+    nnU-Net PIPELINE DELIVERS MORE USABLE MASKS AND FAILS SILENTLY LESS, BUT
+    PED STAYS BROKEN (2026-11-24, MasterPlan W2.6).** Descriptive, not
+    registered.
+
+    **Export.** Kaggle `neurovision-w26-nnunet-probs` (`ca6c9db`, 2.06 T4-h,
+    gpu_ledger): Gate A nnU-Net, `checkpoint_final.pth`, mirroring TTA on,
+    `--save_probabilities`, converted to fp16 region logits in the standard
+    eval-dir format for val / test / SSA / PED (187 / 189 / 60 / 99 files,
+    9.7 GiB, now at `outputs/nnunet_gatea_probs/eval_{val,test,ssa,ped}/`
+    (moved from the kernel download dir after the error-budget run, whose
+    config records the old path; small files mirrored under
+    `results/nnunet_gatea_probs/`). Label check:
+    thresholding the stored logits reproduces nnU-Net's own labels (max
+    mismatch 7e-7). Bridge: per-case Dice identical to note 62's tables on all
+    four splits (mean |Δ| 0.00000 on ET, TC, WT). Prediction-call rate 9.1
+    s/case; whole evaluation 14.3 s/case (feeds severity-ladder Amendment 3).
+
+    **Error budget** (`scripts/error_budget.py`, protocol unchanged; command
+    and config in `results/error_budget_nnunet/error_budget_config.yaml`).
+    The nnU-Net pipeline is: nnU-Net mask (deployed post-processing, same as
+    note 62) → gate with **nnU-Net's own conformal fit** (note 62, α 0.10) and
+    **SegQC and its predicted-Dice thresholds transferred unchanged** from the
+    deployed `neurovision` pipeline (the QC model was trained on
+    `neurovision` val masks only; it has never seen an nnU-Net mask). Signals
+    `[input_qc, predicted_dice]`, as in note 47 (the `intended_use` variant
+    refuses every PED case by construction:
+    `results/error_budget_nnunet_intended_use/`). Usable = WT and TC Dice ≥ 0.7.
+
+    | cohort | model | accepted | usable | delivered usable [95% CI] | silent failure |
+    |---|---|---|---|---|---|
+    | test (189) | neurovision | 0.894 | 0.937 | 0.852 [0.799, 0.899] | 0.042 (8) |
+    | | nnU-Net | 0.915 | 0.963 | **0.889** [0.841, 0.931] | **0.026** (5) |
+    | SSA (60) | neurovision | 0.967 | 0.800 | 0.783 [0.667, 0.883] | 0.183 (11) |
+    | | nnU-Net | 0.983 | 0.867 | **0.867** [0.783, 0.950] | **0.117** (7) |
+    | PED (99) | neurovision | 0.737 | 0.273 | 0.242 [0.162, 0.333] | 0.495 (49) |
+    | | nnU-Net | 0.697 | 0.323 | **0.293** [0.202, 0.384] | **0.404** (40) |
+
+    Paired case bootstrap (10,000, seed 42), nnU-Net − neurovision, no
+    multiplicity correction: silent failure test −0.016 [−0.048, +0.016], SSA
+    **−0.067 [−0.133, −0.017]**, PED −0.091 [−0.202, +0.030]; correct accept
+    test +0.037 [−0.016, +0.090], SSA **+0.083 [+0.017, +0.167]**, PED +0.051
+    [−0.010, +0.121].
+
+    **Reading.** Same direction as C30: the stronger model shrinks the damage
+    where the label definition is shared (SSA is the one cohort where the
+    paired CI excludes 0). On PED four in ten studies still pass the gate with
+    an unusable mask under nnU-Net -- the gate (transferred SegQC) does not
+    rescue the label-definition failure for either model. Caveats: SegQC is
+    transferred, not retrained on nnU-Net masks, so the gate is weaker for
+    nnU-Net than it could be (over-refusal 14 on test); descriptive,
+    exploratory, one seed of each model.
