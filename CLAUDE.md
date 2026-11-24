@@ -232,7 +232,7 @@ architecture claim is withdrawn and C1 is quoted only against the matched-recipe
 distribution and is violated under shift in 7 of 12 cells, worst where the label definition differs (C13/C14);
 it replicates on nnU-Net (note 62, C30; PED tumour core at every α, floor 0.486). Conformal v2 (note 69, C34): with α 0.20 binding, all three models violate 7 of 12 WT/TC shifted cells (nnU-Net's earlier 5/12 was a grid-ceiling artefact); RCPS added; in distribution the bound fails only where α sits below the model's ET miss floor. The pipeline returns a
 usable mask for 85% / 78% / 24% of test / SSA / PED studies, with silent failure 4.2% / 18.3% /
-49.5% (note 47). Gate C is MIXED (one cell of five). D0 heavy augmentation and D1 seed 43 are both
+49.5% (note 47). Gate C is MIXED (one cell of five). Failure detection (note 70, C35): no signal wins everywhere — ensemble disagreement on test, entropy on SSA, SegQC on PED (beats entropy there, Holm); OOD score worse than entropy in 3 cells. D0 heavy augmentation and D1 seed 43 are both
 12/12 inconclusive. The founding hypothesis is a pre-registered null.
 
 **What is built.** Everything through Milestone 3 (`docs/archive/project_state.md`), plus lesion-wise
