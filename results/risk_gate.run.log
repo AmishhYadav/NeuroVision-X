@@ -1,0 +1,86 @@
+GIT 5635add4fcbc5b42ce5a7c0415a0d500b118e6ff start Tue Nov 24 20:10:51 UTC 2026
+01:40:54 | INFO     | neurovision.utils.seed | Seed set to 42 (cudnn.benchmark=True)
+/Users/amish/NeuroVision-X/.venv/lib/python3.11/site-packages/monai/transforms/utils.py:1486: FutureWarning: Parameter `min_size` is deprecated since version 0.26.0 and will be removed in 2.0.0 (or later). To avoid this warning, please use the parameter `max_size` instead. For more details, see the documentation of `remove_small_objects`. Note that the new threshold removes objects smaller than **or equal to** its value, while the previous parameter only removed smaller ones.
+  out_np = morphology.remove_small_objects(img_np, min_size, connectivity)
+01:41:23 | INFO     | failure_detection_script | val: 10/187 cases
+01:41:51 | INFO     | failure_detection_script | val: 20/187 cases
+01:42:20 | INFO     | failure_detection_script | val: 30/187 cases
+01:42:48 | INFO     | failure_detection_script | val: 40/187 cases
+01:43:14 | INFO     | failure_detection_script | val: 50/187 cases
+01:43:42 | INFO     | failure_detection_script | val: 60/187 cases
+01:44:09 | INFO     | failure_detection_script | val: 70/187 cases
+01:44:37 | INFO     | failure_detection_script | val: 80/187 cases
+01:45:07 | INFO     | failure_detection_script | val: 90/187 cases
+01:45:33 | INFO     | failure_detection_script | val: 100/187 cases
+01:46:01 | INFO     | failure_detection_script | val: 110/187 cases
+01:46:27 | INFO     | failure_detection_script | val: 120/187 cases
+01:46:54 | INFO     | failure_detection_script | val: 130/187 cases
+01:47:22 | INFO     | failure_detection_script | val: 140/187 cases
+01:47:48 | INFO     | failure_detection_script | val: 150/187 cases
+01:48:14 | INFO     | failure_detection_script | val: 160/187 cases
+01:48:41 | INFO     | failure_detection_script | val: 170/187 cases
+01:49:09 | INFO     | failure_detection_script | val: 180/187 cases
+01:49:28 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 10/187 cases
+01:49:29 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 20/187 cases
+01:49:31 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 30/187 cases
+01:49:32 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 40/187 cases
+01:49:33 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 50/187 cases
+01:49:35 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 60/187 cases
+01:49:36 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 70/187 cases
+01:49:37 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 80/187 cases
+01:49:39 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 90/187 cases
+01:49:40 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 100/187 cases
+01:49:41 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 110/187 cases
+01:49:42 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 120/187 cases
+01:49:44 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 130/187 cases
+01:49:45 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 140/187 cases
+01:49:46 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 150/187 cases
+01:49:47 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 160/187 cases
+01:49:49 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 170/187 cases
+01:49:50 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_val: 180/187 cases
+01:49:52 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 10/189 cases
+01:49:53 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 20/189 cases
+01:49:55 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 30/189 cases
+01:49:56 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 40/189 cases
+01:49:57 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 50/189 cases
+01:49:59 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 60/189 cases
+01:50:00 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 70/189 cases
+01:50:01 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 80/189 cases
+01:50:03 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 90/189 cases
+01:50:04 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 100/189 cases
+01:50:05 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 110/189 cases
+01:50:06 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 120/189 cases
+01:50:08 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 130/189 cases
+01:50:09 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 140/189 cases
+01:50:10 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 150/189 cases
+01:50:11 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 160/189 cases
+01:50:13 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 170/189 cases
+01:50:14 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_test: 180/189 cases
+01:50:16 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa: 10/60 cases
+01:50:18 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa: 20/60 cases
+01:50:19 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa: 30/60 cases
+01:50:20 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa: 40/60 cases
+01:50:21 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa: 50/60 cases
+01:50:23 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ssa: 60/60 cases
+01:50:24 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 10/99 cases
+01:50:25 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 20/99 cases
+01:50:26 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 30/99 cases
+01:50:28 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 40/99 cases
+01:50:29 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 50/99 cases
+01:50:30 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 60/99 cases
+01:50:31 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 70/99 cases
+01:50:33 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 80/99 cases
+01:50:34 | INFO     | __main__ | /Users/amish/NeuroVision-X/outputs/nnunet_gatea_probs/eval_ped: 90/99 cases
+01:50:35 | INFO     | __main__ | neurovision / val / ENT: 0 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | neurovision / val / ENS_PD: 0 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | neurovision / test / ENT: 0 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | neurovision / test / ENS_PD: 0 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | neurovision / ssa / ENT: 1 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | neurovision / ssa / ENS_PD: 0 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | neurovision / ped / ENT: 1 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | neurovision / ped / ENS_PD: 0 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | nnunet_gatea / val / ENT: 0 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | nnunet_gatea / test / ENT: 0 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | nnunet_gatea / ssa / ENT: 1 NaN scores -> +inf
+01:50:35 | INFO     | __main__ | nnunet_gatea / ped / ENT: 0 NaN scores -> +inf
+EXIT 0 end Tue Nov 24 20:20:35 UTC 2026

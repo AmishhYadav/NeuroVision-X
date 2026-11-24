@@ -1,0 +1,7 @@
+pipeline,model,signal,beta,delta,feasible,lam,target_coverage,n_calibration,n_accepted,k_unusable,calib_selective_risk
+NV-ENT,neurovision,ENT,0.05,0.1,True,0.1000703026851018,0.6,187,113,2,0.017699115044247787
+NV-ENT,neurovision,ENT,0.1,0.1,True,0.2476740628480911,0.95,187,178,12,0.06741573033707865
+NV-ENSPD,neurovision,ENS_PD,0.05,0.1,True,0.0857820579292321,0.85,187,159,3,0.018867924528301886
+NV-ENSPD,neurovision,ENS_PD,0.1,0.1,True,0.2430233165953548,0.95,187,178,10,0.056179775280898875
+NN-ENT,nnunet_gatea,ENT,0.05,0.1,False,,,187,0,0,
+NN-ENT,nnunet_gatea,ENT,0.1,0.1,True,0.0976426179210345,0.95,187,178,11,0.06179775280898876

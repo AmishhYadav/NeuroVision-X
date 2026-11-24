@@ -141,3 +141,20 @@ itself is arithmetic. One new module (`scripts/risk_gate.py` with its library).
 
 *(To be completed after the run. Nothing above this line may be edited once the first λ̂ exists,
 except the external-registration line in the header.)*
+
+**Run 2026-11-25** (`scripts/risk_gate.py` at `5635add`, CPU, EXIT 0; outputs `results/risk_gate/`;
+note 72, claim C37). Validation base rates as stated above (18 and 16 unusable). Three test-time ENT
+NaN scores (no predicted foreground) became +∞ as registered.
+
+**E1.** NV-ENT feasible at both β (target coverage 0.60 / 0.95; λ̂ 0.1001 / 0.2477). NV-ENSPD feasible
+at both (0.85 / 0.95; λ̂ 0.0858 / 0.2430). NN-ENT **infeasible at β 0.05** (H_0.50 not rejected:
+3 unusable among 94 accepted, p 0.30); feasible at β 0.10 (0.95; λ̂ 0.0976).
+
+**E2.** 15 cells (3 infeasible). BraTS test: **holds** in all 5. SSA: **inconclusive** in all 5.
+PED: **VIOLATED** in all 5 (selective risk 0.55–0.69). Full table: note 72, `results/risk_gate/cells.csv`.
+
+**E3.** The deployed gate stays. At β 0.10 on BraTS test both NV gates exceed its coverage (0.968,
+0.979 vs 0.894) but neither meets its selective risk (0.0546, 0.0486 vs 0.0473).
+
+**Predictions.** 1 met; 2 met; 3 not met (3 of 5 SSA cells above β); 4 partly met (β 0.05 yes,
+β 0.10 tied); 5 met.

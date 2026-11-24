@@ -3489,3 +3489,88 @@ evidence about the setup, and forgetting it means repeating it.
     anisotropy check never fires here (curated input-QC stand-in); the gate
     and SegQC are transferred, not refitted, for nnU-Net and the baseline;
     the miss rate is a false-negative loss only.
+
+72. **W2.4 RISK-TARGETED GATE (LEARN-THEN-TEST) -- HOLDS ON EVERY TEST CELL,
+    VIOLATED ON EVERY PED CELL, UNRESOLVED ON SSA; THE DEPLOYED GATE STAYS
+    (E3: NEITHER NEW GATE MATCHES ITS TEST SELECTIVE RISK) (2026-11-25,
+    MasterPlan W2.4).** Registered: `preregistrations/preregistration_risk_gate.md`
+    (Zenodo DOI 10.5281/zenodo.24498229, release `w2.4-prereg` at `af35bf8`,
+    written before any validation ENT / ENS-PD value existed), analysis
+    family 4 of 6.
+
+    **Run.** Inputs: validation logits for `neurovision` seed 43 and
+    heavy-aug generated for this run (`results/eval_val_neurovision_{seed43,heavy_aug}/`,
+    both EXIT 0, 187/187; heavy-aug val dice_mean 0.8945 vs its training
+    best 0.8938). `scripts/risk_gate.py` at `5635add`, CPU, 9 min 44 s,
+    EXIT 0. Outputs `results/risk_gate/` (`fits.csv`, `ltt_steps.csv`,
+    `cells.csv`, `deployed.csv`, `run_summary.json`, signal tables). Base
+    rates on validation match the protocol (18 / 187 unusable for
+    `neurovision`, 16 / 187 for nnU-Net). Three test-time ENT scores were
+    NaN (no predicted foreground: `neurovision` SSA 1, PED 1; nnU-Net SSA 1)
+    and became +∞ (always refused) as registered. Hand check: NV-ENT β 0.05
+    at c 0.60, n 113, k 2: P(Bin(113, 0.05) ≤ 2) = 0.0744, as logged.
+
+    **E1 -- calibration (fixed-sequence LTT, δ 0.1):**
+
+    | pipeline | β 0.05: target coverage, λ̂, calib risk | β 0.10 |
+    |---|---|---|
+    | NV-ENT | 0.60, 0.1001, 2/113 | 0.95, 0.2477, 12/178 |
+    | NV-ENSPD | 0.85, 0.0858, 3/159 | 0.95, 0.2430, 10/178 |
+    | NN-ENT | **infeasible** (3 unusable among the 94 lowest-entropy cases, p 0.30) | 0.95, 0.0976, 11/178 |
+
+    At β 0.10 every pipeline stops at c 0.95; c 1.00 (accept everything,
+    base rate 18/187 = 0.096) is not rejected (p 0.49).
+
+    **E2 -- frozen application (15 cells; 3 NN-ENT β 0.05 cells infeasible).**
+    Selective risk = unusable among accepted, 95% Clopper–Pearson:
+
+    | pipeline, β | test: cov, risk [CI] | SSA | PED |
+    |---|---|---|---|
+    | NV-ENT 0.05 | 0.58, 0/109 [0, 0.033] **holds** | 0.10, 0/6 [0, 0.46] inconclusive | 0.29, 18/29 = 0.62 [0.42, 0.79] **VIOLATED** |
+    | NV-ENT 0.10 | 0.97, 10/183 = 0.055 [0.027, 0.098] **holds** | 0.88, 6/53 = 0.113 [0.043, 0.230] inconclusive | 0.81, 55/80 = 0.69 **VIOLATED** |
+    | NV-ENSPD 0.05 | 0.85, 2/160 = 0.013 [0.002, 0.044] **holds** | 0.55, 3/33 = 0.091 [0.019, 0.243] inconclusive | 0.49, 27/49 = 0.55 **VIOLATED** |
+    | NV-ENSPD 0.10 | 0.98, 9/185 = 0.049 [0.022, 0.090] **holds** | 0.93, 9/56 = 0.161 [0.076, 0.283] inconclusive | 0.74, 46/73 = 0.63 **VIOLATED** |
+    | NN-ENT 0.10 | 0.95, 4/180 = 0.022 [0.006, 0.056] **holds** | 0.75, 2/45 = 0.044 [0.005, 0.151] inconclusive | 0.76, 51/75 = 0.68 **VIOLATED** |
+
+    5 hold (all test), 5 inconclusive (all SSA), 5 VIOLATED (all PED).
+
+    **Deployed gate, scored the same way (descriptive).** `neurovision`:
+    test coverage 0.894, risk 8/169 = 0.047 [0.021, 0.091]; SSA 0.967,
+    11/58 = 0.190 [0.099, 0.314]; PED 0.737, 49/73 = 0.67. nnU-Net (gate
+    transferred): test 0.915, 5/173 = 0.029; SSA 0.983, 7/59 = 0.119; PED
+    0.697, 40/69 = 0.58.
+
+    **E3 -- deployment rule (β 0.10, BraTS test): the deployed gate stays.**
+    Both new gates have higher coverage (NV-ENT 0.968, NV-ENSPD 0.979 vs
+    0.894), but neither has selective risk ≤ the deployed gate's 0.0473
+    (NV-ENT 0.0546, NV-ENSPD 0.0486, one more unusable mask among 16 more
+    accepted cases). The rule is registered as written and applied once; no
+    `app/` change.
+
+    **Predictions (registered, directional):**
+    1. No test cell VIOLATED -- **met** (5/5 hold).
+    2. Every feasible PED cell VIOLATED -- **met** (5/5).
+    3. SSA point estimate > β in every feasible cell -- **not met** (3 of 5;
+       NV-ENT β 0.05 accepts 6 cases, 0 unusable; NN-ENT β 0.10 is 0.044).
+    4. NV-ENSPD has higher calibration target coverage than NV-ENT at equal
+       β -- **partly met**: β 0.05 0.85 vs 0.60; β 0.10 tied at 0.95 (both
+       one grid step below accept-all).
+    5. β 0.10 feasible for all three; β 0.05 feasible for NV-ENSPD --
+       **met** (β 0.05 also feasible for NV-ENT, infeasible for NN-ENT).
+
+    **Reading.** The LTT bound behaves as the conformal bound did (C14,
+    C34): it holds in distribution and fails where the label definition
+    changes. PED risk sits at 0.55–0.69 whatever the threshold, because
+    paediatric masks are judged against a target the models were not trained
+    to; tightening β to 0.05 cuts how many PED masks are accepted (29–49 of
+    99) but not the fraction of them that are unusable. On SSA no cell
+    resolves (60 cases; violation is resolvable only above ≈ 0.2), though
+    the deployed gate's SSA risk at β 0.05 is VIOLATED (CI lower 0.099) and
+    every LTT gate's SSA point estimate is lower than the deployed 0.190.
+    In distribution the guarantee costs coverage: at β 0.05 NV-ENT refuses
+    42% of test cases (over-refusal 36%), NV-ENSPD 15%. nnU-Net's entropy
+    cannot certify β 0.05 because 3 of its 16 unusable validation masks are
+    among its most confident half. Caveats: the guarantee is over the
+    calibration score sample (validity note in the protocol); selective risk
+    uses T-Dice only; the deployed gate's numbers are descriptive and include
+    input QC and the conformal band, which the LTT gates do not use.
