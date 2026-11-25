@@ -78,3 +78,98 @@ front end adds error that the BraTS-preprocessed path never saw.
 ## Reporting
 
 One numbered note in `docs/research_docs/experiments.md`; the error-budget row; `master_plan.md` P1.2 ticked.
+
+---
+
+## Amendment 1 — Real-DICOM v2 (MasterPlan W3.4), written 2026-11-25
+
+**Written before any of the steps below has run.** Note 55 (C25) and the post-hoc R3 check (note 57)
+are known: in atlas space the front end cost a median 0.23 WT Dice, most of it the disagreement
+between our SRI24 rigid registration and BraTS's own; 16 of 40 studies were refused at input QC for
+thick slices. Nothing about the 50 unsampled eligible studies has been downloaded or looked at.
+Analysis-budget family W3.4 (confirmatory, §B3 rule 4). Registered externally before step (c).
+
+### What changes
+
+**(a) Carried reference.** For every study that reaches segmentation, the BraTS ground truth is
+carried into *our* atlas space instead of being compared in BraTS's: the BraTS-preprocessed T1CE of
+the same case (uncropped to the SRI24 grid exactly as the label is) is rigidly registered (ANTs
+`Rigid`, mutual information, fixed seed) to our pipeline's own atlas-space T1CE for that study; the
+same transform is applied to the BraTS label (nearest neighbour). Our mask is scored against the
+carried label on our grid. Both images are the same acquisition, so the transform removes the
+registration disagreement and leaves what the front end itself changes (skull stripping, intensity
+handling, resampling of the original DICOM). **Carry QC (fixed now):** Dice between the carried
+BraTS brain mask (T1CE > 0) and our skull-stripped brain mask; a study with carry-QC Dice < 0.90 is
+reported in its own row and excluded from the carried-reference column only, with the count stated.
+Brain-mask Dice is used only as a *registration-failure* screen here, never as the alignment check
+for lateralisation (trap 3); the protocol's mirrored-mask self-test still runs first.
+
+**(b) Overridden refusals.** Every study refused at input QC for voxel spacing or anisotropy is run a
+second time with only those two refusals disabled (`spacing_max_mm` and `anisotropy_refuse_ratio`
+raised so they cannot fire; every other setting deployed). Its mask is scored in both spaces. The
+deployed outcome (refused) stays the outcome in every end-to-end endpoint; the overridden run
+answers only "was refusing right?".
+
+**(c) Full eligible set.** The remaining **50** eligible test-split studies (90 eligible − 40
+sampled; list: `configs/data/rsna_validation_cases_v2.yaml`, committed with this amendment) are
+extracted from the RSNA-MICCAI competition data by the same CPU Kaggle kernel as before and run
+through (a) and (b). The 40 already-run studies are **re-run** with the atlas-space T1CE kept (it
+was deleted in P1.2 to save disk); their re-run masks must reproduce the stored P1.2 masks (WT
+Dice ≥ 0.99 per study, else the discrepancy is reported and the re-run mask is used). **n = 90.**
+The pilot stays excluded.
+
+**Deployed settings at run time:** `configs/clinical/default.yaml` as of the run commit (since note 55
+the live gate also has `intended_use`, note 53). The atlas-space column is therefore recomputed on
+all 90, not copied from note 55.
+
+### Endpoints
+
+- **E1 (primary) — front-end cost after removing registration disagreement.** Over studies with a
+  mask, carry QC passed, deployed outcome *not* refused at input QC: median paired WT Dice difference
+  *carried-reference − research path*, percentile bootstrap 95% CI (n_boot 10000, seed 42).
+  **Verdict:** `SMALL` if the CI lower bound > −0.05; `LARGE` if the CI upper bound < −0.05;
+  otherwise `INCONCLUSIVE`. TC and ET reported beside it, descriptive.
+- **E2 (primary) — was the thick-slice refusal right?** Over all studies refused at input QC for
+  spacing/anisotropy, on the overridden run: fraction usable (WT and TC Dice ≥ 0.7) against the
+  carried reference, Clopper–Pearson 95%. **Verdict:** `REFUSES USABLE STUDIES` if the lower bound
+  > 0.5; `REFUSAL JUSTIFIED` if the upper bound < 0.5; otherwise `INCONCLUSIVE`.
+- **E3 — Table XV v2,** three columns per endpoint of the original protocol (completion, P(accepted
+  AND usable), P(usable | accepted), silent failure, front-end cost per region): atlas space (as
+  P1.2), carried reference, and overridden refusals added in. Descriptive, bootstrap CIs.
+- **E4 — (d), registered rule:** only if E2 reads `REFUSES USABLE STUDIES`, a variant in which
+  thick-slice studies get CAUTION instead of REFUSE is reported, labelled **post-hoc variant**, with
+  its end-to-end numbers on the same 90. The deployed rule changes (an `app/`/config change under
+  §B3 rule 5) only in a separate commit after the note, and only on that verdict.
+
+No Holm: two primary endpoints with their own verdicts, read as per-endpoint decisions.
+
+### Predictions (directional, not gating)
+
+1. E1 reads `SMALL`: once registration disagreement is removed, the front end costs < 0.05 WT Dice.
+2. On the carried reference, P(usable | accepted) rises from note 55's 0.36 to ≥ 0.75.
+3. E2 reads `REFUSES USABLE STUDIES` (the severity ladder, note 71, measured only 0.04–0.08 WT Dice
+   lost at 7 mm slabs).
+4. Roughly 40% of the 90 are thick-slice refusals again (P1.2's rate is a random-sample estimate).
+
+### Power line (§B3 rule 6)
+
+E1: ~54 studies (90 × 0.6). If the paired WT differences have SD ≈ 0.05 (the severity ladder's and
+R3's spreads), the bootstrap CI half-width of the median is ≈ 1.25 × 1.96 × 0.05 / √54 ≈ 0.017, so
+a true cost of −0.02 reads `SMALL` and −0.09 reads `LARGE`; the plausible effect (−0.01 to −0.05) is
+resolvable except within ~0.02 of the margin. E2: ~36 studies; `REFUSES USABLE STUDIES` needs ≥ 24
+of 36 usable (observed ≥ 0.67), plausible if thick slabs cost ≤ 0.08 WT Dice as on the ladder;
+`REFUSAL JUSTIFIED` needs ≤ 12 of 36. With fewer refusals the verdict is more often inconclusive;
+that is stated now.
+
+### Cost
+
+~6 min/study CPU × (90 + ~36 overridden) ≈ 12.6 CPU-h, run in batches, one heavy job at a time.
+Kaggle extraction kernel: CPU only, no GPU quota. Disk: only the atlas-space T1CE, the brain mask
+and the masks are kept per study (~15 MB), not the full intermediates (~700 MB).
+
+### What would make this invalid
+
+- Changing the carry method, the carry-QC threshold, the margins or the usable bar after any
+  carried-reference Dice exists.
+- Excluding a study after download other than by the carry-QC rule above.
+- Changing the deployed thick-slice rule on anything other than E2's verdict.
