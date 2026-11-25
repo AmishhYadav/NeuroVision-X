@@ -1,0 +1,92 @@
+{
+  "status_label": "COUNTERFACTUAL / DESCRIPTIVE -- literature annotation rate x k, not measured",
+  "git_sha": "a6b2059015b4619458234f75831f58e78a0e973d",
+  "timestamp_utc": "2026-11-25T02:35:00.419716+00:00",
+  "config": {
+    "out_dir": "outputs/recalibration_cost",
+    "regions": [
+      "WT",
+      "TC",
+      "ET"
+    ],
+    "alphas": [
+      0.05,
+      0.1,
+      0.2
+    ],
+    "methods": [
+      "crc",
+      "rcps"
+    ],
+    "delta": 0.1,
+    "rcps_order_seed": 42,
+    "empty_by_region": {
+      "ET": "zero",
+      "TC": "exclude",
+      "WT": "exclude"
+    },
+    "k_grid": [
+      5,
+      10,
+      15,
+      20,
+      25,
+      30,
+      40,
+      50,
+      "half"
+    ],
+    "min_holdout": 10,
+    "n_splits": 1000,
+    "seed": 42,
+    "min_feasible_rate": 0.9,
+    "minutes_per_case": 60.0,
+    "preannotation_speedup": 2.21,
+    "models": {
+      "neurovision": {
+        "grid": "extended",
+        "curves": {
+          "test": "results/conformal_v2/curves/neurovision/eval_test/curves.npz",
+          "ssa": "results/conformal_v2/curves/neurovision/eval_ssa_neurovision/curves.npz",
+          "ped": "results/conformal_v2/curves/neurovision/eval_ped_neurovision/curves.npz"
+        }
+      },
+      "baseline_unet3d": {
+        "grid": "extended",
+        "curves": {
+          "test": "results/conformal_v2/curves/baseline_unet3d/eval_test_baseline_unet3d/curves.npz",
+          "ssa": "results/conformal_v2/curves/baseline_unet3d/eval_ssa_baseline_unet3d/curves.npz",
+          "ped": "results/conformal_v2/curves/baseline_unet3d/eval_ped_baseline_unet3d/curves.npz"
+        }
+      },
+      "nnunet_gatea": {
+        "grid": "extended",
+        "curves": {
+          "test": "results/conformal_v2_nnunet/curves/nnunet_gatea/eval_test/curves.npz",
+          "ssa": "results/conformal_v2_nnunet/curves/nnunet_gatea/eval_ssa/curves.npz",
+          "ped": "results/conformal_v2_nnunet/curves/nnunet_gatea/eval_ped/curves.npz"
+        }
+      }
+    },
+    "frozen_realised": [
+      "results/conformal_v2/realised.csv",
+      "results/conformal_v2_nnunet/realised.csv"
+    ]
+  },
+  "input_sha256": {
+    "results/conformal_v2/curves/neurovision/eval_test/curves.npz": "9777088f3bb16efdbab70e0dff571b5a4c4fd2e4e208a8dd758a622ee756bae9",
+    "results/conformal_v2/curves/neurovision/eval_ssa_neurovision/curves.npz": "e60f24b9a80783ac37741856d8490b28f7d689c71116b529b148dd5b90dedef8",
+    "results/conformal_v2/curves/neurovision/eval_ped_neurovision/curves.npz": "dc6dcb02d7c5e2c55c0f3cf70e390fcbd497fe773c34d03cbf4a6de57fa6c00a",
+    "results/conformal_v2/curves/baseline_unet3d/eval_test_baseline_unet3d/curves.npz": "43a309725ed1f41e5e8b2238673f7d7200bd4752abff4ace4260e88a26ac493a",
+    "results/conformal_v2/curves/baseline_unet3d/eval_ssa_baseline_unet3d/curves.npz": "461b32518ccd4c2f719db8f0da759daeb98b948ea6712b3600055e43fd2b53af",
+    "results/conformal_v2/curves/baseline_unet3d/eval_ped_baseline_unet3d/curves.npz": "53ce569876b3e429878757c4b49faf3b67657d2235d2c6428f24c056561b5b95",
+    "results/conformal_v2_nnunet/curves/nnunet_gatea/eval_test/curves.npz": "b3b00e26730534ca75d89fd86e722669caa037d2a7ead4f8fb2c2589993071c5",
+    "results/conformal_v2_nnunet/curves/nnunet_gatea/eval_ssa/curves.npz": "ea7133c747e282c94bf5bc0f79a82b73468d224590f559f979644f504a678f6d",
+    "results/conformal_v2_nnunet/curves/nnunet_gatea/eval_ped/curves.npz": "5b405b3d1f9aa400fa9d76d662195a82a74345fe997b16b371ac3a85e165f03a",
+    "results/conformal_v2/realised.csv": "79a95e9fb341e23417714d2bce2305572f4529bd3045ec9bd7004f29924f1524",
+    "results/conformal_v2_nnunet/realised.csv": "fa36079e3f44ef648dbfb2370eaca5810d5e4401ca010a442a8d89d456b2ef0d"
+  },
+  "n_results": 1404000,
+  "control_failures": [],
+  "runtime_s": 892.413
+}
