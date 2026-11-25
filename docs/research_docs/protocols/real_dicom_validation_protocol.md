@@ -173,3 +173,10 @@ and the masks are kept per study (~15 MB), not the full intermediates (~700 MB).
   carried-reference Dice exists.
 - Excluding a study after download other than by the carry-QC rule above.
 - Changing the deployed thick-slice rule on anything other than E2's verdict.
+
+**Erratum to Amendment 1 (2026-11-25, after registration `w3.4-prereg` / Zenodo 10.5281/zenodo.24519277,
+before any W3.4 study has run or been downloaded).** The power line's E2 counts were wrong: at n = 36
+the Clopper–Pearson 95% lower bound exceeds 0.5 only from **25 of 36** (24/36 gives 0.490), and the
+upper bound falls below 0.5 only at **≤ 11 of 36** (12/36 gives 0.510). The decision rule itself
+(lower bound > 0.5 / upper bound < 0.5) is unchanged; only these illustrative counts are corrected.
+Caught by the endpoints module's hand-value test (`a04c91c`).
