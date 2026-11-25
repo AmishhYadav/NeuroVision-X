@@ -36,7 +36,7 @@ cost"), and what labelling those cases costs a site in annotator time.
   shows what recalibration buys and what it costs in over-segmentation.
 - **Annotation time:** k needed × minutes per case. Primary: **60 min** per case for manual
   BraTS-style sub-region segmentation (AJNR 2022;43(1):24, "approximately 1 hour" per case,
-  verified against the article before quoting). Sensitivity: correcting a model's pre-annotation
+  verified 2026-11-25 in the full text: Lotan E et al., AJNR 2022;43(1):24–32, doi 10.3174/ajnr.A7363 — "The average time for manual segmentation of the tumor subregions per each case was approximately 1 hour"; 102 cases, ITK-SNAP 3.6, BraTS protocol WT/TC/ET, consensus review by two neuroradiologists). Sensitivity: correcting a model's pre-annotation
   instead of drawing from scratch, **2.21× faster** (Shirokikh et al., arXiv 1909.02799, prospective
   radiosurgery study; a different task — single-target contours — so it is stated as a sensitivity
   bound, not a measured glioma figure).
