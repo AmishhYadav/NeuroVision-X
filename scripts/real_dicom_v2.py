@@ -701,6 +701,7 @@ def process_variant(
     run_fn: RunClinicalFn,
     carry_fn: CarryFn,
     job_map: Mapping[str, str],
+    atlas_name: str | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Runs one variant, or loads its parsed `result.json` (resume).
 
@@ -718,6 +719,7 @@ def process_variant(
             logger.warning("real_dicom_v2: unparseable %s (%s); re-running.", result_file, exc)
     shutil.rmtree(run_dir(vcfg, spec.case_id, variant), ignore_errors=True)
     row = _run_variant(spec, variant, vcfg, run_fn, carry_fn, job_map)
+    row["brainles_atlas"] = atlas_name  # provenance: which pinned atlas copy this run used
     p12._write_result_atomic(_jsonable(row), result_file)
     return row, True
 
@@ -752,11 +754,59 @@ def mirrored_self_test(gt_root: Path, specs: Sequence[p12.CaseSpec]) -> None:
     )
 
 
+def pin_brainles_atlases() -> str:
+    """Pins brainles_preprocessing's atlas lookup to the LOCAL copy, so no network call is made.
+
+    Why: `AtlasCentricPreprocessor` calls `fetch_atlases()` ->
+    `ZenodoRecord._get_metadata_and_archive_url`, which does `requests.get(zenodo.org/api/...)`
+    and reads `data["links"]["archive"]`. Zenodo's API response changed, that raises KeyError
+    (only `RequestException` is caught), and every clinical job crashed at preprocessing. The
+    atlases are already on disk -- the exact copy P1.2 used -- so this pre-seeds the library's own
+    process-level cache, `ZenodoRecord._cache[(record_id, str(target_dir))]`, which
+    `ZenodoRecord.fetch` consults before any network access.
+
+    The clinical job runs in THIS process (`run_study` -> `clinical_jobs.run_clinical_job`
+    called directly -> `preprocess_clinical_study` -> `AtlasCentricPreprocessor`), so the
+    class-level cache is seen. The installed package is not modified.
+
+    Returns:
+        The pinned atlas folder name, e.g. `15236131_v2.0.0`.
+
+    Raises:
+        FileNotFoundError: No local atlas folder with files, or it lacks `brats_sri24.nii`.
+    """
+    # Lazy: brainles_preprocessing lives only in .venv-clinical.
+    from brainles_preprocessing.utils import zenodo
+
+    record = zenodo.ZenodoRecord(
+        record_id=zenodo.ATLASES_RECORD_ID, target_dir=zenodo.ATLASES_FOLDER, label="atlases"
+    )
+    folders = list(zenodo.ATLASES_FOLDER.glob(record._glob_pattern()))
+    name = record._get_latest_version_folder_name(folders)  # latest version that has files
+    if name is None:
+        raise FileNotFoundError(
+            f"real_dicom_v2: no local brainles atlas folder {record._glob_pattern()!r} with files "
+            f"under {zenodo.ATLASES_FOLDER}; refusing to start (it would try the network)."
+        )
+    folder = zenodo.ATLASES_FOLDER / name
+    if not (folder / "brats_sri24.nii").is_file():
+        raise FileNotFoundError(f"real_dicom_v2: {folder} has no brats_sri24.nii.")
+    zenodo.ZenodoRecord._cache[(zenodo.ATLASES_RECORD_ID, str(zenodo.ATLASES_FOLDER))] = folder
+    logger.info(
+        "real_dicom_v2: pinned brainles atlases to local %s (%s). Reason: Zenodo's API response "
+        "changed and crashes the library's metadata lookup; this is the exact copy P1.2 used.",
+        name,
+        folder,
+    )
+    return name
+
+
 def run_stage(
     vcfg: V2Config,
     *,
     run_fn: RunClinicalFn = run_clinical_path_v2,
     carry_fn: CarryFn = carry_label,
+    pin_fn: Callable[[], str] = pin_brainles_atlases,
 ) -> list[p12.CaseSpec]:
     """Runs every study (resumable, one at a time): deployed run, plus override if thick-slice.
 
@@ -767,12 +817,14 @@ def run_stage(
         vcfg: Resolved config.
         run_fn: Clinical-path seam (tests pass a fake).
         carry_fn: Carry seam (tests pass a fake).
+        pin_fn: Atlas-pinning seam (tests pass a fake; real one needs `.venv-clinical`).
 
     Returns:
         The specs, in run order.
     """
     specs = load_specs(vcfg.cases_files, vcfg.expected_n_cases)
     check_zips_present(specs, vcfg.zips_dir)
+    atlas_name = pin_fn()  # before any case: aborts here, not 5 minutes into study one
     if not vcfg.p12_job_map.is_file():
         raise FileNotFoundError(f"real_dicom_v2: P1.2 job map missing at {vcfg.p12_job_map}.")
     job_map = {str(k): str(v) for k, v in read_json(vcfg.p12_job_map).items()}
@@ -787,9 +839,11 @@ def run_stage(
     n_ran = 0
     for i, spec in enumerate(specs):
         t0 = time.monotonic()
-        deployed, ran = process_variant(spec, DEPLOYED, vcfg, run_fn, carry_fn, job_map)
+        deployed, ran = process_variant(spec, DEPLOYED, vcfg, run_fn, carry_fn, job_map, atlas_name)
         if deployed.get("thick_slice_refusal"):
-            _, ran_override = process_variant(spec, OVERRIDE, vcfg, run_fn, carry_fn, job_map)
+            _, ran_override = process_variant(
+                spec, OVERRIDE, vcfg, run_fn, carry_fn, job_map, atlas_name
+            )
             ran = ran or ran_override
         if ran:
             seconds_spent += time.monotonic() - t0
@@ -875,6 +929,7 @@ def build_per_case_frame(specs: Sequence[p12.CaseSpec], vcfg: V2Config) -> pd.Da
             "rotation_deg": num(dep, "rotation_deg"),
             "bridge_stored_mask": bool(dep.get("bridge_stored_mask")),
             "bridge_wt_dice": num(dep, "bridge_wt_dice"),
+            "brainles_atlas": dep.get("brainles_atlas"),
             "error": dep.get("error"),
             "override_error": ov.get("error"),
         }
@@ -995,6 +1050,7 @@ def summarise_stage(
                 "timestamp_utc": datetime.now(UTC).isoformat(),
                 "config": OmegaConf.to_container(cfg.analysis.real_dicom_v2, resolve=True),
                 "counts": counts,
+                "brainles_atlas": sorted({str(a) for a in df["brainles_atlas"].dropna()}),
                 "input_sha256": {
                     **{f"cases_file:{p.name}": _sha256(p) for p in vcfg.cases_files},
                     f"research_per_case:{vcfg.research_per_case.name}": _sha256(
@@ -1104,6 +1160,7 @@ def run_v2(
     *,
     run_fn: RunClinicalFn = run_clinical_path_v2,
     carry_fn: CarryFn = carry_label,
+    pin_fn: Callable[[], str] = pin_brainles_atlases,
 ) -> dict[str, Path]:
     """Runs the requested stage(s) of the W3.4 protocol.
 
@@ -1118,7 +1175,7 @@ def run_v2(
     vcfg = resolve_config(cfg)
     specs: list[p12.CaseSpec] = []
     if vcfg.stage in ("run", "all"):
-        specs = run_stage(vcfg, run_fn=run_fn, carry_fn=carry_fn)
+        specs = run_stage(vcfg, run_fn=run_fn, carry_fn=carry_fn, pin_fn=pin_fn)
     if vcfg.stage in ("summarise", "all"):
         specs = specs or load_specs(vcfg.cases_files, vcfg.expected_n_cases)
         return summarise_stage(specs, vcfg, cfg)

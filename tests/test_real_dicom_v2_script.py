@@ -243,6 +243,7 @@ def _setup(
 
 
 def _run(cfg: Any, fake: FakeClinical, **kw: Any) -> dict[str, Path]:
+    kw.setdefault("pin_fn", lambda: "15236131_v2.0.0")
     return v2.run_v2(cfg, run_fn=fake, carry_fn=_fake_carry, **kw)
 
 
@@ -627,3 +628,81 @@ def test_stage_must_be_valid(tmp_path: Path) -> None:
     cfg, _, _ = _setup(tmp_path, {"00001": "ok"}, extra={"stage": "bogus"})
     with pytest.raises(ValueError, match="stage"):
         v2.resolve_config(cfg)
+
+
+# ---------------------------------------------------------------------------
+# brainles atlas pinning (no network)
+# ---------------------------------------------------------------------------
+
+
+def _fake_zenodo(monkeypatch: pytest.MonkeyPatch, atlases: Path) -> Any:
+    """Installs a fake `brainles_preprocessing.utils.zenodo` module pointing at `atlases`."""
+    import sys
+    import types
+
+    class FakeRecord:
+        _cache: dict[tuple[str, str], Path] = {}
+
+        def __init__(self, record_id: str, target_dir: Path, label: str = "") -> None:
+            self.record_id = record_id
+
+        def _glob_pattern(self) -> str:
+            return f"{self.record_id}_v*.*.*"
+
+        def _get_latest_version_folder_name(self, folders: list[Path]) -> str | None:
+            usable = [f for f in sorted(folders) if any(f.iterdir())]
+            return usable[-1].name if usable else None
+
+    mod = types.ModuleType("brainles_preprocessing.utils.zenodo")
+    mod.ZenodoRecord = FakeRecord  # type: ignore[attr-defined]
+    mod.ATLASES_RECORD_ID = "15236131"  # type: ignore[attr-defined]
+    mod.ATLASES_FOLDER = atlases  # type: ignore[attr-defined]
+    for name in ("brainles_preprocessing", "brainles_preprocessing.utils"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    sys.modules["brainles_preprocessing.utils"].zenodo = mod  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "brainles_preprocessing.utils.zenodo", mod)
+    return mod
+
+
+def test_pin_brainles_atlases_seeds_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    atlases = tmp_path / "atlases"
+    old, new = atlases / "15236131_v1.0.0", atlases / "15236131_v2.0.0"
+    for folder in (old, new):
+        folder.mkdir(parents=True)
+        (folder / "brats_sri24.nii").write_bytes(b"x")
+    mod = _fake_zenodo(monkeypatch, atlases)
+    assert v2.pin_brainles_atlases() == "15236131_v2.0.0"
+    assert mod.ZenodoRecord._cache[("15236131", str(atlases))] == new
+
+
+def test_pin_brainles_atlases_aborts_when_local_copy_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    atlases = tmp_path / "atlases"
+    atlases.mkdir()
+    mod = _fake_zenodo(monkeypatch, atlases)
+    with pytest.raises(FileNotFoundError, match="no local brainles atlas"):
+        v2.pin_brainles_atlases()
+    assert mod.ZenodoRecord._cache == {}
+    # A folder with files but without brats_sri24.nii also aborts.
+    (atlases / "15236131_v2.0.0").mkdir()
+    (atlases / "15236131_v2.0.0" / "other.nii").write_bytes(b"x")
+    with pytest.raises(FileNotFoundError, match="brats_sri24.nii"):
+        v2.pin_brainles_atlases()
+    assert mod.ZenodoRecord._cache == {}
+
+
+def test_atlas_pinned_before_any_case_and_recorded(tmp_path: Path) -> None:
+    cfg, fake, out = _setup(tmp_path, {"00001": "ok"})
+
+    def failing_pin() -> str:
+        raise FileNotFoundError("no atlas")
+
+    with pytest.raises(FileNotFoundError):
+        _run(cfg, fake, pin_fn=failing_pin)
+    assert fake.calls == []
+
+    _run(cfg, fake)
+    assert _result(out, fake.cases["00001"], "deployed")["brainles_atlas"] == "15236131_v2.0.0"
