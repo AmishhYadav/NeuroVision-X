@@ -3610,3 +3610,74 @@ evidence about the setup, and forgetting it means repeating it.
     on `neurovision`'s (0.72), as expected of a model trained on another
     model's errors. Test is unresolved with 7 unusable cases. Exploratory,
     one model, transferred QC; not a registered result.
+
+74. **W3.5 THE COST OF LOCAL RECALIBRATION (DESCRIPTIVE / EXPLORATORY) --
+    A SITE NEEDS ~5 / 15 / 25–50 LABELLED CASES FOR α 0.20 / 0.10 / 0.05
+    UNDER CRC AND ABOUT TWICE THAT UNDER RCPS; THE LOW-α MASKS IT BUYS ARE
+    HEAVILY INFLATED; PED TUMOUR CORE AND ET CANNOT BE RESTORED AT ANY k
+    (2026-11-25, MasterPlan W3.5).** Protocol
+    `protocols/recalibration_cost_protocol.md` (`6e73782`, written before
+    any RCPS number; labelled descriptive, not a confirmatory family).
+    Counterfactual: what a new site would need, never external validation.
+
+    **Run.** `scripts/recalibration_cost.py` at `c763243` on the tracked
+    conformal v2 curves (no inference), 3 models × {test, SSA, PED} ×
+    {WT, TC, ET} × α {0.05, 0.10, 0.20} × {CRC, RCPS (WSR, δ 0.1)} × k grid
+    {5…50, half}, 1,000 seeded splits per (cell, k), the same splits for
+    both methods; 1,404,000 fits, ~10 min CPU, EXIT 0. Outputs
+    `results/recalibration_cost/` (`k_needed.csv`, `splits_summary.csv`,
+    `cost_table.md`, `run_meta.json`). **A first run was discarded:** my
+    config put nnU-Net on the v1 threshold grid, but its W2.6 curves are on
+    the 73-point extended grid, and the frozen-row join did not key on grid
+    (duplicate nnU-Net rows). Config fixed (`6823918`), join fixed and
+    tested (`c763243`), full re-run; the `neurovision` and baseline rows
+    did not change. **Control:** CRC at k = half RESTORED on BraTS test for
+    WT and TC at every α, all three models. **Bridge to C24:** `neurovision`
+    SSA WT α 0.10 CRC k = 10: feasible in 85.1% of splits, held-out risk
+    0.0267 (v1, C24: 82.7%, 0.0261).
+
+    **k needed** (smallest grid k with RESTORED and ≥ 90% of splits
+    feasible), SSA / PED:
+
+    | region, α | CRC: `neurovision` / baseline / nnU-Net | RCPS: same order |
+    |---|---|---|
+    | WT 0.20 | SSA 5 / 5 / 5 · PED 5 / 5 / 5 | SSA 15 / 15 / 20 · PED 20 / 15 / 15 |
+    | WT 0.10 | SSA 15 / 15 / 20 · PED 15 / 15 / 15 | SSA 30 / 30 / 50 · PED 40 / 30 / 40 |
+    | WT 0.05 | SSA 30 / 25 / 40 · PED 40 / 25 / 40 | not restorable on the grid (all) |
+    | TC 0.20 | SSA 10 / 5 / 15 | SSA 20 / 20 / 30 |
+    | TC 0.10 | SSA 25 / 20 / 40 | SSA 50 / 40 / — |
+    | TC 0.05 | SSA 50 / 40 / — | — |
+    | ET (SSA) | α 0.20: 25 / 10 / 20; α 0.10 baseline 30 only | α 0.20 baseline 25 only |
+    | PED TC, PED ET | not restorable, any model, any method, any α | |
+
+    **Annotator time** (1 h per case for manual BraTS sub-region
+    segmentation, Lotan et al., AJNR 2022, verified verbatim): the table's k
+    in hours — 5–50 h per site; with a model pre-annotation corrected
+    instead of drawn (2.21× faster, Shirokikh et al. 2019, a different task,
+    sensitivity only) 2–23 h. Literature rate × k, not measured.
+
+    **Mask cost** (median over restorable SSA/PED cells, held-out, at k
+    needed; frozen v2 threshold beside it):
+
+    | | Dice recal / frozen | volume ratio recal |
+    |---|---|---|
+    | CRC α 0.05 | 0.63 / 0.89 | 2.20 |
+    | CRC α 0.10 | 0.83 / 0.91 | 1.35 |
+    | CRC α 0.20 | 0.86 / 0.86 | 1.10 |
+    | RCPS α 0.10 | 0.67 / 0.91 | 1.99 |
+    | RCPS α 0.20 | 0.85 / 0.88 | 1.22 |
+
+    **Reading.** Restoring the bound is cheap in labels at α 0.20 (five
+    cases, a working day of annotation) and costs nothing in mask quality
+    there. At α 0.10 it costs 15–25 cases and the mask grows by a third; at
+    α 0.05 it costs 25–50 cases and the restored mask is about twice the
+    tumour's size (Dice 0.63): the guarantee is bought by over-segmenting.
+    RCPS's high-probability version needs about twice CRC's cases at every
+    α and is not reachable at α 0.05 within 50 cases. The stronger model
+    does not need fewer cases: nnU-Net needs as many or more than the
+    in-house models (its SSA TC at α 0.05 is not restorable), because its
+    shifted-cohort miss floor is not lower. PED tumour core and ET stay
+    unrestorable, as C24 found for TC: no number of local labels repairs a
+    label-definition change. Caveats: counterfactual Monte Carlo over
+    within-cohort splits; SSA has 60 and PED 99 cases, so the k grid stops
+    at 50; annotation hours are a literature rate.
