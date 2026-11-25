@@ -180,3 +180,15 @@ the Clopper–Pearson 95% lower bound exceeds 0.5 only from **25 of 36** (24/36 
 upper bound falls below 0.5 only at **≤ 11 of 36** (12/36 gives 0.510). The decision rule itself
 (lower bound > 0.5 / upper bound < 0.5) is unchanged; only these illustrative counts are corrected.
 Caught by the endpoints module's hand-value test (`a04c91c`).
+
+**Implementation note to Amendment 1 (2026-11-25, before any valid carried-reference Dice exists).**
+On the first real study (BraTS2021_00032, overridden run) the carry registration diverged (identity
+rotation, translation ~10⁷ mm, empty carried label, carry-QC 0 — recorded, then discarded as a
+computation failure, not a measurement). Cause: the BraTS-preprocessed T1CE is z-scored, so its
+background value 0 lies inside the brain's intensity range. Fix, applied to every study: before
+registration only, the non-zero voxels of both images are rescaled to [0, 1] by their own 0.5 / 99.5
+percentiles (background stays 0); the label and brain mask are carried from the original image. The
+transform model (ANTs `Rigid`, mutual information, fixed seed), the carry-QC rule (Dice < 0.90) and
+every endpoint are unchanged. A divergence guard now records an implausible transform (translation
+> 50 mm, or an empty carried label) as a carry failure, which falls under the existing carry-QC
+exclusion. On that study the fixed carry gives translation (2.4, −9.6, −4.6) mm and carry-QC 0.961.
