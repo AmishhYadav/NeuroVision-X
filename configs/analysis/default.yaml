@@ -1453,7 +1453,7 @@ recalibration_cost:
   min_feasible_rate: 0.90
   minutes_per_case: 60.0        # Lotan et al., AJNR 2022;43(1):24 -- "approximately 1 hour"
   preannotation_speedup: 2.21   # Shirokikh et al., arXiv 1909.02799 (sensitivity only)
-  # grid per model as in results/conformal_v2/run_meta.json (model_grids)
+  # grid per model: the grid each model's curves were written on (run_meta.json model_grids of the run that made them)
   models:
     neurovision:
       grid: extended
@@ -1468,7 +1468,7 @@ recalibration_cost:
         ssa: results/conformal_v2/curves/baseline_unet3d/eval_ssa_baseline_unet3d/curves.npz
         ped: results/conformal_v2/curves/baseline_unet3d/eval_ped_baseline_unet3d/curves.npz
     nnunet_gatea:
-      grid: v1
+      grid: extended   # W2.6 curves are on the 73-point extended grid (results/conformal_v2_nnunet/run_meta.json)
       curves:
         test: results/conformal_v2_nnunet/curves/nnunet_gatea/eval_test/curves.npz
         ssa: results/conformal_v2_nnunet/curves/nnunet_gatea/eval_ssa/curves.npz
