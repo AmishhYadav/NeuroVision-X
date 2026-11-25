@@ -46,10 +46,11 @@ def _make_block(tmp_path: Path, test_miss: float = 0.0, ped_miss: float = 0.9) -
         [
             # (model, cohort, region, alpha, guarantee, ...) -- ssa/crc present and feasible,
             # ssa/rcps infeasible (NaN metrics), everything else absent.
-            dict(model="m1", cohort="ssa", region="WT", alpha=0.2, guarantee="crc",
+            dict(model="m1", grid="extended", cohort="ssa", region="WT", alpha=0.2, guarantee="crc",
                  verdict="VIOLATED", mean_miss_rate=0.3, precision_median=0.5,
                  dice_median=0.6, volume_ratio_median=1.5),
-            dict(model="m1", cohort="ssa", region="WT", alpha=0.2, guarantee="rcps",
+            dict(model="m1", grid="extended", cohort="ssa", region="WT", alpha=0.2,
+                 guarantee="rcps",
                  verdict="infeasible", mean_miss_rate=np.nan, precision_median=np.nan,
                  dice_median=np.nan, volume_ratio_median=np.nan),
         ]
@@ -158,3 +159,23 @@ def test_hydra_config_resolves_and_n_splits_override() -> None:
         cfg = compose(config_name="config", overrides=["analysis.recalibration_cost.n_splits=3"])
     block = OmegaConf.to_container(cfg.analysis.recalibration_cost, resolve=True)
     assert block["n_splits"] == 3 and block["delta"] == cfg.analysis.conformal_v2.delta
+
+
+def test_join_frozen_keeps_only_configured_grid() -> None:
+    """A model in two frozen CSVs on different grids gets exactly one row: the configured grid's."""
+    k = pd.DataFrame(dict(model=["m1"], cohort=["ssa"], region=["WT"], alpha=[0.2], method=["crc"]))
+    cols = dict(mean_miss_rate=0.1, precision_median=0.5, volume_ratio_median=1.0)
+    frozen = pd.DataFrame(
+        [
+            dict(model="m1", grid="v1", cohort="ssa", region="WT", alpha=0.2, guarantee="crc",
+                 verdict="holds", dice_median=0.1, **cols),
+            dict(model="m1", grid="extended", cohort="ssa", region="WT", alpha=0.2,
+                 guarantee="crc", verdict="VIOLATED", dice_median=0.9, **cols),
+        ]
+    )  # fmt: skip
+    out = script.join_frozen(k, frozen, {"m1": "extended"})
+    assert len(out) == 1
+    assert out.iloc[0]["frozen_dice_median"] == pytest.approx(0.9)
+    # Same grid twice is a real duplicate and must raise, naming the key.
+    with pytest.raises(ValueError, match="m1"):
+        script.join_frozen(k, pd.concat([frozen, frozen]), {"m1": "extended"})

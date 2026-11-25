@@ -135,12 +135,20 @@ def load_all_curves(
     return by_cell, paths
 
 
-def join_frozen(k_table: pd.DataFrame, frozen: pd.DataFrame) -> pd.DataFrame:
+def join_frozen(
+    k_table: pd.DataFrame, frozen: pd.DataFrame, grid_by_model: dict[str, str]
+) -> pd.DataFrame:
     """Left-joins the frozen v2 realised rows onto the k_needed table.
 
-    Matches on model, cohort, region, alpha and `guarantee == method`. Cells with no frozen row,
-    or whose frozen fit was infeasible, get NaN in the metric columns.
+    Matches on model, cohort, region, alpha and `guarantee == method`. Only frozen rows whose
+    `grid` equals the model's configured grid are kept: a model can appear in two frozen CSVs
+    fitted on different threshold grids, and joining both would duplicate its rows. Cells with no
+    frozen row, or whose frozen fit was infeasible, get NaN in the metric columns.
+
+    Raises:
+        ValueError: The merge produced duplicate (model, cohort, region, alpha, method) keys.
     """
+    frozen = frozen[frozen["grid"] == frozen["model"].map(grid_by_model)]
     keep = frozen[["model", "cohort", "region", "alpha", "guarantee", *_FROZEN_COLUMNS]].copy()
     keep = keep.rename(columns={**_FROZEN_COLUMNS, "guarantee": "method"})
     # Round alpha so 0.1 read from CSV and 0.1 from config compare equal.
@@ -152,6 +160,13 @@ def join_frozen(k_table: pd.DataFrame, frozen: pd.DataFrame) -> pd.DataFrame:
         on=["model", "cohort", "region", "_alpha_key", "method"],
         how="left",
     )
+    key = ["model", "cohort", "region", "_alpha_key", "method"]
+    dup = merged[merged.duplicated(key, keep=False)]
+    if not dup.empty:
+        raise ValueError(
+            "join_frozen: duplicate keys after merge: "
+            + "; ".join(sorted({str(tuple(r)) for r in dup[key].itertuples(index=False)}))
+        )
     return merged.drop(columns="_alpha_key")
 
 
@@ -278,7 +293,9 @@ def run_recalibration_cost(block_cfg: Any, repo_root: Path) -> dict[str, Path]:
         for k in k_table["k_needed"]
     ]
     frozen = pd.concat([pd.read_csv(p) for p in frozen_paths], ignore_index=True)
-    k_table = join_frozen(k_table, frozen)
+    k_table = join_frozen(
+        k_table, frozen, {str(m): str(c["grid"]) for m, c in block["models"].items()}
+    )
 
     ensure_dir(out_dir)
     paths = {
