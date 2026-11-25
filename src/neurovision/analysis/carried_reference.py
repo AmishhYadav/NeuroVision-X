@@ -33,6 +33,8 @@ from neurovision.analysis.real_dicom_scoring import region_masks, uncrop_to_full
 from neurovision.metrics import REGION_NAMES, dice_score
 
 __all__ = [
+    "CarryDivergedError",
+    "rescale_brain_intensities",
     "CarryResult",
     "brats_reference_on_grid",
     "carry_label",
@@ -44,6 +46,55 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 _THREAD_ENV = "ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS"
+# A real pose difference is a few mm; anything beyond this is a diverged optimiser.
+_MAX_TRANSLATION_MM = 50.0
+
+
+class CarryDivergedError(RuntimeError):
+    """The registration diverged (absurd translation or empty carried label)."""
+
+
+def rescale_brain_intensities(
+    img: np.ndarray, *, lo_pct: float = 0.5, hi_pct: float = 99.5
+) -> np.ndarray:
+    """Maps the nonzero (brain) voxels of `img` to [0, 1]; zeros stay exactly 0.
+
+    Mutual-information registration diverged on the first real case because the
+    BraTS T1CE is z-scored (about -3.4 to 14) while ours is in [0, 1]. Both images
+    are therefore rescaled before registering. Percentile clipping stops a few
+    bright voxels from squashing the rest. The defaults were fixed 2026-11-25 after
+    the first real case diverged; see the protocol implementation note.
+
+    Args:
+        img: `(D, H, W)` image, zero outside the brain.
+        lo_pct: Lower percentile of the nonzero voxels, mapped to 0.
+        hi_pct: Upper percentile of the nonzero voxels, mapped to 1.
+
+    Returns:
+        float32 `(D, H, W)` array; all zeros if `img` has no nonzero voxel.
+    """
+    img = np.asarray(img, dtype=np.float32)
+    out = np.zeros_like(img)
+    brain = img != 0
+    if not brain.any():
+        return out
+    lo, hi = np.percentile(img[brain], [lo_pct, hi_pct])
+    if hi <= lo:  # flat brain: nothing to stretch
+        out[brain] = 1.0
+        return out
+    out[brain] = np.clip((img[brain] - lo) / (hi - lo), 0.0, 1.0)
+    return out
+
+
+def _check_not_diverged(
+    translation: tuple[float, ...], carried_label: np.ndarray, moving_label: np.ndarray
+) -> None:
+    """Raises `CarryDivergedError` for an absurd translation or a vanished label."""
+    norm = float(np.linalg.norm(translation))
+    if norm > _MAX_TRANSLATION_MM:
+        raise CarryDivergedError(f"translation {norm:.1f} mm exceeds {_MAX_TRANSLATION_MM} mm")
+    if not carried_label.any() and moving_label.any():
+        raise CarryDivergedError("carried label is empty although the moving label is not")
 
 
 @dataclass(frozen=True)
@@ -150,6 +201,7 @@ def carry_label(
     Raises:
         ImportError: If `ants` is unavailable (it lives only in `.venv-clinical`).
         ValueError: If moving image and label shapes differ.
+        CarryDivergedError: If the registration diverged.
     """
     ants = _import_ants()
     if moving_image.shape != moving_label.shape:
@@ -160,8 +212,11 @@ def carry_label(
     def to_ants(arr: np.ndarray):  # noqa: ANN202
         return ants.from_numpy(np.ascontiguousarray(arr, dtype=np.float32), spacing=list(spacing))
 
+    # Registration sees rescaled copies; the label and brain mask come from the
+    # ORIGINAL moving image, and the output grid is the fixed image's.
     fixed = to_ants(fixed_image)
-    moving = to_ants(moving_image)
+    fixed_reg = to_ants(rescale_brain_intensities(fixed_image))
+    moving_reg = to_ants(rescale_brain_intensities(moving_image))
     label_img = to_ants(moving_label)
     brain_img = to_ants(moving_image != 0)
 
@@ -170,8 +225,8 @@ def carry_label(
     os.environ[_THREAD_ENV] = "1"
     try:
         reg = ants.registration(
-            fixed=fixed,
-            moving=moving,
+            fixed=fixed_reg,
+            moving=moving_reg,
             type_of_transform="Rigid",
             aff_metric="mattes",
             random_seed=seed,
@@ -209,8 +264,10 @@ def carry_label(
         translation,
         np.degrees(np.arccos(cos_theta)),
     )
+    carried_label = np.rint(carried_label).astype(moving_label.dtype)
+    _check_not_diverged(translation, carried_label, moving_label)
     return CarryResult(
-        carried_label=np.rint(carried_label).astype(moving_label.dtype),
+        carried_label=carried_label,
         carried_brain_mask=carried_brain > 0.5,
         translation_mm=translation,  # type: ignore[arg-type]
         rotation_deg=float(np.degrees(np.arccos(cos_theta))),

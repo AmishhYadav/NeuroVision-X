@@ -148,3 +148,52 @@ def test_import_has_no_toplevel_ants():
         "    raise SystemExit('no ImportError')\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_rescale_hand_values():
+    img = np.zeros((2, 2, 2), np.float32)
+    img[0, 0, :] = [-1.0, 3.0]
+    out = cr.rescale_brain_intensities(img, lo_pct=0, hi_pct=100)
+    assert out[0, 0, 0] == 0.0 and out[0, 0, 1] == 1.0
+    assert (out[1] == 0).all()  # background stays 0
+    assert not cr.rescale_brain_intensities(np.zeros((2, 2, 2))).any()
+    wide = cr.rescale_brain_intensities(img + 100 * (img != 0), lo_pct=0, hi_pct=50)
+    assert wide.min() >= 0.0 and wide.max() <= 1.0
+
+
+def test_zscored_moving_converges():
+    pytest.importorskip("ants")
+    fixed, true_label = _brain(shift=(3, -2, 1))
+    fixed = (fixed - fixed[fixed != 0].min()) / np.ptp(fixed[fixed != 0])  # [0, 1] like ours
+    moving, label = _brain()
+    brain = moving != 0
+    z = moving.copy()
+    z[brain] = (moving[brain] - moving[brain].mean()) / moving[brain].std() * 3.0 - 0.5
+    assert z.min() < 0 and z.max() > 1  # z-scored range, background 0 inside it
+    res = cr.carry_label(z, label, fixed)
+    assert _dice(res.carried_label, true_label) >= 0.95
+    assert np.allclose(res.translation_mm, (-3, 2, -1), atol=1.0)
+
+
+def test_divergence_guard():
+    lab = np.ones((3, 3, 3), np.int16)
+    with pytest.raises(cr.CarryDivergedError):
+        cr._check_not_diverged((1e6, 0.0, 0.0), lab, lab)
+    with pytest.raises(cr.CarryDivergedError):
+        cr._check_not_diverged((1.0, 0.0, 0.0), np.zeros_like(lab), lab)
+    cr._check_not_diverged((1.0, 0.0, 0.0), lab, lab)  # fine
+    cr._check_not_diverged((1.0, 0.0, 0.0), np.zeros_like(lab), np.zeros_like(lab))
+
+
+def test_carry_label_raises_on_forced_bad_transform(monkeypatch):
+    ants = pytest.importorskip("ants")
+    img, label = _brain()
+    real = ants.apply_transforms
+
+    def empty_result(*args, **kwargs):
+        out = real(*args, **kwargs)
+        return out * 0
+
+    monkeypatch.setattr(ants, "apply_transforms", empty_result)
+    with pytest.raises(cr.CarryDivergedError):
+        cr.carry_label(img, label, img)
