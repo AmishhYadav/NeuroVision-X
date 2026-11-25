@@ -1434,3 +1434,46 @@ severity_ladder_analysis:
   stand_in_age_years: 40           # same as analysis.error_budget's test cohort
   # OOD: frozen model and cuts from the P1.4 run (fitted on clean train/val only).
   ood_dir: outputs/ood
+
+recalibration_cost:
+  # W3.5 -- docs/research_docs/protocols/recalibration_cost_protocol.md (DESCRIPTIVE /
+  # EXPLORATORY, fixed before any RCPS local-recalibration number). Consumed by
+  # scripts/recalibration_cost.py. Reads the TRACKED conformal v2 curves; no inference.
+  out_dir: outputs/recalibration_cost
+  regions: [WT, TC, ET]
+  alphas: [0.05, 0.10, 0.20]
+  methods: [crc, rcps]
+  delta: ${analysis.conformal_v2.delta}
+  rcps_order_seed: ${analysis.conformal_v2.rcps_order_seed}
+  empty_by_region: ${analysis.conformal_v2.empty}
+  k_grid: [5, 10, 15, 20, 25, 30, 40, 50, half]
+  min_holdout: 10
+  n_splits: 1000
+  seed: 42
+  min_feasible_rate: 0.90
+  minutes_per_case: 60.0        # Lotan et al., AJNR 2022;43(1):24 -- "approximately 1 hour"
+  preannotation_speedup: 2.21   # Shirokikh et al., arXiv 1909.02799 (sensitivity only)
+  # grid per model as in results/conformal_v2/run_meta.json (model_grids)
+  models:
+    neurovision:
+      grid: extended
+      curves:
+        test: results/conformal_v2/curves/neurovision/eval_test/curves.npz
+        ssa: results/conformal_v2/curves/neurovision/eval_ssa_neurovision/curves.npz
+        ped: results/conformal_v2/curves/neurovision/eval_ped_neurovision/curves.npz
+    baseline_unet3d:
+      grid: extended
+      curves:
+        test: results/conformal_v2/curves/baseline_unet3d/eval_test_baseline_unet3d/curves.npz
+        ssa: results/conformal_v2/curves/baseline_unet3d/eval_ssa_baseline_unet3d/curves.npz
+        ped: results/conformal_v2/curves/baseline_unet3d/eval_ped_baseline_unet3d/curves.npz
+    nnunet_gatea:
+      grid: v1
+      curves:
+        test: results/conformal_v2_nnunet/curves/nnunet_gatea/eval_test/curves.npz
+        ssa: results/conformal_v2_nnunet/curves/nnunet_gatea/eval_ssa/curves.npz
+        ped: results/conformal_v2_nnunet/curves/nnunet_gatea/eval_ped/curves.npz
+  # frozen v2 rows (fitted on val, applied per cohort) for the "what recalibration buys" column
+  frozen_realised:
+    - results/conformal_v2/realised.csv
+    - results/conformal_v2_nnunet/realised.csv
