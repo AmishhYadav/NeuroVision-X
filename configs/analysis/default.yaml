@@ -1477,3 +1477,30 @@ recalibration_cost:
   frozen_realised:
     - results/conformal_v2/realised.csv
     - results/conformal_v2_nnunet/realised.csv
+
+real_dicom_v2:
+  # W3.4 -- docs/research_docs/protocols/real_dicom_validation_protocol.md, Amendment 1
+  # (registered: release w3.4-prereg, Zenodo 10.5281/zenodo.24519277) + its erratum.
+  # Consumed by scripts/real_dicom_v2.py (runs in .venv-clinical). NOT external validation.
+  cases_files:
+    - configs/data/rsna_validation_cases.yaml      # frozen P1.2 sample (40; pilot NOT run)
+    - configs/data/rsna_validation_cases_v2.yaml   # the 50 unsampled eligible studies
+  zips_dir: ${analysis.real_dicom_validation.zips_dir}
+  out_dir: outputs/real_dicom_v2
+  gt_root: ${analysis.real_dicom_validation.gt_root}
+  research_per_case: ${analysis.real_dicom_validation.research_per_case}
+  role_by_folder: ${analysis.real_dicom_validation.role_by_folder}
+  usable_threshold: ${analysis.real_dicom_validation.usable_threshold}
+  carry_qc_threshold: 0.90     # Amendment 1, (a)
+  e1_margin: 0.05              # Amendment 1, E1
+  bridge_min_dice: 0.99        # Amendment 1, (c): re-run vs stored P1.2 mask, WT Dice
+  n_boot: 10000
+  seed: 42
+  carry_seed: 42               # ANTs rigid registration random_seed
+  # (b): the ONLY two settings changed for the overridden run; raised so they cannot fire.
+  override:
+    spacing_max_mm: 1000.0
+    anisotropy_refuse_ratio: 1000.0
+  # Bridge to P1.2: stored atlas-space masks of the 40 sampled studies.
+  p12_job_map: outputs/real_dicom_validation/r3/job_map.json
+  p12_jobs_dir: outputs/real_dicom_validation/jobs
