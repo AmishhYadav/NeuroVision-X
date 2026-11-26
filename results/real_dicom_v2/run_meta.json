@@ -1,0 +1,55 @@
+{
+  "note": "test-split BraTS 2021 patients via RSNA DICOM -- carried-reference front-end cost and thick-slice refusal check, NOT external validation.",
+  "git_sha": "e3e1ccff1c48b076e863a0fc494809b95dd56007",
+  "timestamp_utc": "2026-11-26T07:13:02.950597+00:00",
+  "config": {
+    "cases_files": [
+      "configs/data/rsna_validation_cases.yaml",
+      "configs/data/rsna_validation_cases_v2.yaml"
+    ],
+    "zips_dir": "data/rsna/studies",
+    "out_dir": "outputs/real_dicom_v2",
+    "gt_root": "data/preprocessed/brats",
+    "research_per_case": "outputs/neurovision/eval_test/per_case_metrics.csv",
+    "role_by_folder": {
+      "FLAIR": "flair",
+      "T1w": "t1",
+      "T1wCE": "t1ce",
+      "T2w": "t2"
+    },
+    "usable_threshold": 0.7,
+    "carry_qc_threshold": 0.9,
+    "e1_margin": 0.05,
+    "bridge_min_dice": 0.99,
+    "n_boot": 10000,
+    "seed": 42,
+    "carry_seed": 42,
+    "override": {
+      "spacing_max_mm": 1000.0,
+      "anisotropy_refuse_ratio": 1000.0
+    },
+    "p12_job_map": "outputs/real_dicom_validation/r3/job_map.json",
+    "p12_jobs_dir": "outputs/real_dicom_validation/jobs",
+    "stage": "summarise"
+  },
+  "counts": {
+    "n_studies": 90,
+    "n_done": 52,
+    "n_refused": 38,
+    "n_failed": 0,
+    "n_thick_slice_refusals": 35,
+    "n_override_runs": 35,
+    "n_deployed_with_mask": 55,
+    "n_carry_qc_failed": 18,
+    "n_mirrored": 0,
+    "n_bridge_stored_masks": 22
+  },
+  "brainles_atlas": [
+    "15236131_v2.0.0"
+  ],
+  "input_sha256": {
+    "cases_file:rsna_validation_cases.yaml": "6f0087988ab5030d650179aab5633bc9444758126c91960b3eb7ecc3f0120e42",
+    "cases_file:rsna_validation_cases_v2.yaml": "732f80bf68a76fa2fdccee50d1272f67a13bb267439426045d5082d76170c19b",
+    "research_per_case:per_case_metrics.csv": "ae7dcd91b02d99cf50dfdf10f51d59f0f656faa1d3901889b99e08d79bb64bb5"
+  }
+}

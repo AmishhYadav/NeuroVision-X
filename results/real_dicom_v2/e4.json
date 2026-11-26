@@ -1,0 +1,25 @@
+{
+  "endpoint": "E4",
+  "label": "post-hoc variant",
+  "reference": "carried",
+  "n_thick_slice": 35,
+  "n_thick_slice_accepted": 31,
+  "n": 57,
+  "n_accepted": 51,
+  "n_carry_qc_excluded": 33,
+  "p_accepted_and_usable": [
+    0.7894736842105263,
+    0.6842105263157895,
+    0.8947368421052632
+  ],
+  "p_usable_given_accepted": [
+    0.8823529411764706,
+    0.7843137254901961,
+    0.9607843137254902
+  ],
+  "p_silent_failure": [
+    0.10526315789473684,
+    0.03508771929824561,
+    0.19298245614035087
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "endpoint": "E2",
+  "usable_threshold": 0.7,
+  "carry_qc_threshold": 0.9,
+  "conf": 0.95,
+  "n_thick": 35,
+  "n_excluded": 15,
+  "excluded_case_ids": [
+    "BraTS2021_00077",
+    "BraTS2021_00134",
+    "BraTS2021_00403",
+    "BraTS2021_00583",
+    "BraTS2021_00734",
+    "BraTS2021_00780",
+    "BraTS2021_00789",
+    "BraTS2021_00002",
+    "BraTS2021_00019",
+    "BraTS2021_00098",
+    "BraTS2021_00124",
+    "BraTS2021_00401",
+    "BraTS2021_00466",
+    "BraTS2021_00470",
+    "BraTS2021_00727"
+  ],
+  "carried": {
+    "k": 18,
+    "n": 20,
+    "fraction": 0.9,
+    "ci_lo": 0.6830172859809176,
+    "ci_hi": 0.9876514728297052
+  },
+  "atlas_descriptive": {
+    "k": 11,
+    "n": 35,
+    "fraction": 0.3142857142857143,
+    "ci_lo": 0.16851715074700252,
+    "ci_hi": 0.49288000031517487
+  },
+  "verdict": "REFUSES USABLE STUDIES"
+}

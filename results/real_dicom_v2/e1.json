@@ -1,0 +1,57 @@
+{
+  "endpoint": "E1",
+  "margin": 0.05,
+  "carry_qc_threshold": 0.9,
+  "n_population": 37,
+  "n_excluded_carry_qc": 18,
+  "excluded_carry_qc_case_ids": [
+    "BraTS2021_00185",
+    "BraTS2021_00230",
+    "BraTS2021_00247",
+    "BraTS2021_00283",
+    "BraTS2021_00320",
+    "BraTS2021_00620",
+    "BraTS2021_00628",
+    "BraTS2021_00651",
+    "BraTS2021_00679",
+    "BraTS2021_00694",
+    "BraTS2021_00724",
+    "BraTS2021_00156",
+    "BraTS2021_00199",
+    "BraTS2021_00233",
+    "BraTS2021_00606",
+    "BraTS2021_00631",
+    "BraTS2021_00646",
+    "BraTS2021_00715"
+  ],
+  "per_region": [
+    {
+      "region": "ET",
+      "n": 37,
+      "median_diff": -0.05840569734573364,
+      "median_diff_lo": -0.07365846633911133,
+      "median_diff_hi": -0.0457632541656493,
+      "mean_diff": -0.10772480594145284,
+      "wilcoxon_pvalue": 1.680295787277147e-07
+    },
+    {
+      "region": "TC",
+      "n": 37,
+      "median_diff": -0.028057098388671764,
+      "median_diff_lo": -0.04653292894363403,
+      "median_diff_hi": -0.022436439990997314,
+      "mean_diff": -0.07756911338986577,
+      "wilcoxon_pvalue": 8.744622332222098e-06
+    },
+    {
+      "region": "WT",
+      "n": 37,
+      "median_diff": -0.034227192401885986,
+      "median_diff_lo": -0.05645549297332775,
+      "median_diff_hi": -0.025038540363311768,
+      "mean_diff": -0.06514081922737328,
+      "wilcoxon_pvalue": 2.0372681319713593e-10
+    }
+  ],
+  "verdict": "INCONCLUSIVE"
+}

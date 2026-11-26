@@ -1,0 +1,2 @@
+Wed Nov 25 02:36:16 UTC 2026 removed BraTS2021_00032/override/result.json: status=failed at clinical_preprocessing caused by brainles fetch_atlases KeyError 'archive' (Zenodo API change), an environment crash, not a study outcome; to be re-run
+Wed Nov 25 02:44:36 UTC 2026 removed BraTS2021_00032/override/result.json: carry registration diverged (z-scored moving image), computation failure; re-run after fix
